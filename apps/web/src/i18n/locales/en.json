@@ -1,0 +1,189 @@
+{
+  "brand": {
+    "main": "Root",
+    "sub": "ریشه"
+  },
+  "nav": {
+    "about": "About Us",
+    "studio": "Root Studio",
+    "cast": "Root Cast",
+    "journey": "Journey",
+    "portal": "Portal",
+    "locked": "Coming later"
+  },
+  "landing": {
+    "eyebrowPrefix": "In search of ",
+    "eyebrowHighlight": "beauty",
+    "heroTitle": "Make a life worth living",
+    "heroDescriptor": "A platform for knowing and growing yourself — no rush, no lock-in, no game played with your attention.",
+    "cta": "Start where you are",
+    "rootCast": "Root Cast",
+    "growthHeading": "Where Root grows",
+    "growth": {
+      "coaching": {
+        "title": "Coaching",
+        "desc": "Companionship in knowing yourself, toward a life you actually chose."
+      },
+      "peace": {
+        "title": "Communication & Peacebuilding",
+        "desc": "Conversation that builds bridges, the skill of listening and real relationship."
+      },
+      "education": {
+        "title": "Education",
+        "desc": "A mind that grows, not one that is filled."
+      }
+    }
+  },
+  "about": {
+    "eyebrow": "About Us",
+    "thesisA": "The person authors their own life — in search of ",
+    "thesisBeauty": "beauty",
+    "thesisB": ". Root never authors it for them.",
+    "gistBody": "Root is a platform for knowing and growing yourself — no rush, no lock-in, no game played with your attention. It's young and grows slowly: today it works closely with a small number of people, and the rest of the family — Root Cast, Journey, Root Studio — arrives when it's ready, not before.",
+    "clientsEyebrow": "Clients",
+    "clientsTitle": "Already working with us?",
+    "clientsBody": "Track your contract, approve designs, and see what you owe — all in one quiet place.",
+    "clientsCta": "Open the portal"
+  },
+  "footer": {
+    "descriptor": "Root, in search of beauty. A platform for knowing and growing yourself.",
+    "refusal": "No streaks. No lock-in. No game with your attention.",
+    "copyright": "© 2026 Root"
+  },
+  "auth": {
+    "signInTitle": "Sign in",
+    "signInLede": "The portal is for people already working with Root. If you have an invite, use the link we sent you.",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "forgot": "Forgot your password?",
+    "backToSite": "Back to the site",
+    "inviteTitle": "Set your password",
+    "inviteLede": "Welcome. Choose a password and your account is ready.",
+    "fullName": "Full name",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "activate": "Activate my account",
+    "resetRequestTitle": "Reset your password",
+    "resetRequestLede": "Give us the email on your account and we'll send a reset link.",
+    "sendResetLink": "Send reset link",
+    "resetSent": "If that email has an account, a reset link is on its way.",
+    "resetTitle": "Choose a new password",
+    "resetCta": "Save the new password",
+    "errInvalid": "That email and password don't match.",
+    "errMismatch": "The two passwords don't match.",
+    "errShort": "Use at least 10 characters.",
+    "errTokenBad": "This link is no longer valid. Ask Root for a new one.",
+    "errGeneric": "Something went wrong. Try again."
+  },
+  "portal": {
+    "workspace": "Workspace",
+    "navContracts": "Contracts",
+    "navServices": "Services",
+    "navBilling": "Billing",
+    "navSupport": "Support",
+    "navAdmin": "Admin",
+    "soon": "Soon",
+    "signOut": "Sign out",
+    "loading": "Loading…",
+    "errorTitle": "That didn't load",
+    "retry": "Try again"
+  },
+  "contracts": {
+    "pageTitle": "Your contracts",
+    "pageLede": "Track the status of each contract and step in to review.",
+    "colContract": "Contract",
+    "colStatus": "Status",
+    "colAmount": "Amount",
+    "colUpdated": "Last update",
+    "view": "View",
+    "emptyMsg": "No contracts with this status.",
+    "emptyAll": "No contracts yet. Root will publish one here when it's ready.",
+    "toman": "Toman"
+  },
+  "status": {
+    "ALL": "All",
+    "DRAFT": "Draft",
+    "WAITING_ON_CUSTOMER": "Waiting on Customer",
+    "WAITING_ON_ROOT": "Waiting on Root",
+    "IN_PROGRESS": "In Progress",
+    "FINAL_REVIEW": "Final Review",
+    "DONE": "Done",
+    "DISCARDED": "Discarded"
+  },
+  "detail": {
+    "s1Title": "Design selection & approval",
+    "s1Help": "Choose one concept, then approve each page design one by one. Approving the contract stays locked until every page is approved. Commenting is open at every stage.",
+    "chosen": "Chosen",
+    "pagesTitle": "Page designs",
+    "designComplete": "Design approved & complete",
+    "approve": "Approve",
+    "approved": "Approved",
+    "progress": "{{done}} of {{total}} pages approved",
+    "s2Title": "Contract body",
+    "s2Help": "Fourteen articles and Appendix 1. Tap any article to read it. Approving the contract unlocks once the design is complete.",
+    "approveContract": "Approve contract",
+    "contractApprovedLabel": "✓ Contract approved",
+    "contractLockNote": "Complete and approve the design first.",
+    "articlePlaceholder": "The full text of this article appears here in the signed contract.",
+    "s3Title": "Scope checklist (Appendix 1)",
+    "s3Help": "The features this contract covers. Tick each item as you review it.",
+    "s4Title": "E-signature",
+    "s4Help": "Signing becomes available after the contract is approved. This is the final step.",
+    "signLabel": "Full name",
+    "signPlaceholder": "Type your full name",
+    "signCta": "Sign & finalize",
+    "signLockNote": "Signing unlocks after the contract is approved.",
+    "signedAt": "Signed",
+    "s5Title": "Comments & feedback",
+    "s5Help": "You can comment at any stage — on the designs or on the contract.",
+    "commentPlaceholder": "Write a note…",
+    "commentCta": "Post comment",
+    "statusCap": "Status",
+    "historyCap": "History",
+    "gate1": "Design approved & complete",
+    "gate2": "Contract approved",
+    "gate3": "Signed",
+    "gate1sub": "One concept + all pages",
+    "gate2sub": "After the design is complete",
+    "gate3sub": "Final step",
+    "you": "You",
+    "root": "Root",
+    "concept": "Concept {{id}}"
+  },
+  "pages": {
+    "home": "Landing",
+    "about": "About Us",
+    "contracts": "Contracts",
+    "portal": "Portal login"
+  },
+  "log": {
+    "created": "created the contract",
+    "published": "published it to you",
+    "chose": "chose concept {{arg}}",
+    "approvedPage": "approved the “{{arg}}” page",
+    "unapprovedPage": "un-approved the “{{arg}}” page",
+    "designComplete": "design approved & complete",
+    "approvedContract": "approved the contract",
+    "signed": "signed the contract",
+    "comment": "left a comment",
+    "scopeOn": "ticked “{{arg}}”",
+    "scopeOff": "un-ticked “{{arg}}”",
+    "statusChanged": "moved the status to {{arg}}",
+    "justNow": "Just now"
+  },
+  "stub": {
+    "servicesTitle": "Services",
+    "servicesBody": "The first service — bulk product import into your store — is being built. It will appear here when it's genuinely finished, not before.",
+    "billingTitle": "Billing",
+    "billingBody": "Your statement and balance will live here.",
+    "supportTitle": "Support",
+    "supportBody": "Tickets and replies will live here.",
+    "comingLater": "Coming later"
+  },
+  "notFound": {
+    "title": "Nothing here",
+    "body": "That address doesn't lead anywhere.",
+    "cta": "Back to the landing"
+  }
+}

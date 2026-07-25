@@ -1,0 +1,88 @@
+/* Landing + About — page-specific layout only.
+   Every colour, size, space and radius here is a token. */
+
+.shell { min-block-size: 100vh; display: flex; flex-direction: column; }
+
+/* ---- Nav: the locked slots ---------------------------------------------
+   The name is present but unreadable, with the lock sitting on top of the
+   blurred text. Intentional brand language, not a placeholder. */
+.nav-link { position: relative; }
+.nav-link-locked .nav-label { filter: blur(4.5px); opacity: 0.5; user-select: none; }
+.nav-link-locked .lock { position: absolute; inset-block-start: 50%; inset-inline-start: 50%; transform: translate(-50%, -50%); }
+.nav-brand-link { text-decoration: none; color: inherit; }
+
+/* ---- Landing hero ------------------------------------------------------ */
+.hero { display: flex; align-items: flex-start; padding-block: var(--space-24); padding-inline: var(--space-12); }
+.hero-main { flex: 0 0 60%; max-inline-size: 60%; display: flex; flex-direction: column; gap: var(--space-6); padding-inline-end: var(--space-6); }
+.hero-gap { flex: 0 0 20%; }
+.hero-side { flex: 0 0 20%; max-inline-size: 20%; }
+
+.hero-tagline { font-size: var(--text-h3); font-weight: var(--weight-semibold); margin: 0; }
+.hero-title { line-height: var(--leading-tight); font-weight: var(--weight-bold); letter-spacing: -0.02em; margin: 0; }
+.hero-title-en { font-size: var(--text-display); }
+.hero-title-fa { font-size: var(--text-h2); letter-spacing: normal; }
+.hero-lead { margin: 0; max-inline-size: 52ch; }
+
+.side-panel { block-size: 280px; justify-content: space-between; }
+.side-panel .ghost { font-size: var(--text-body-lg); font-weight: var(--weight-semibold); filter: blur(2.5px); opacity: 0.55; }
+.side-panel .ghost-note { margin-block-start: var(--space-2); }
+
+/* ---- Landing: where Root grows ----------------------------------------- */
+.growth { padding-block: 0 var(--space-24); padding-inline: var(--space-12); }
+.growth-heading { margin: 0 0 var(--space-6); }
+.growth-grid { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.growth-grid p { margin: 0; }
+
+/* ---- About ------------------------------------------------------------- */
+.about { flex: 1; inline-size: 100%; max-inline-size: 1040px; margin-inline: auto; padding-block: var(--space-24); padding-inline: var(--space-12); display: flex; flex-direction: column; gap: var(--space-16); }
+.gist { max-inline-size: 64ch; }
+.gist .gist-eyebrow { margin: 0; }
+.gist .gist-title { margin: var(--space-4) 0 0; }
+.gist .gist-body { margin: var(--space-6) 0 0; }
+
+.clients-cta { border-radius: 24px; padding: var(--space-16); }
+.clients-cta .clients-eyebrow { margin: 0; color: #CBB9A6; }
+.clients-cta .clients-title { margin: var(--space-6) 0 0; }
+.clients-cta .clients-body { margin: var(--space-6) 0 0; max-inline-size: 46ch; font-size: var(--text-body-lg); line-height: var(--leading-body); color: var(--indigo-200); }
+.clients-cta .clients-btn { margin-block-start: var(--space-8); }
+
+/* ---- Footer ------------------------------------------------------------ */
+.footer-grid { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--space-6); }
+.footer-col { max-inline-size: 340px; }
+.footer-brand { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); font-weight: var(--weight-bold); margin: 0; }
+.footer-dot { inline-size: 9px; block-size: 9px; border-radius: 50%; background: var(--color-rule-strong); flex: none; }
+.footer-descriptor { margin: var(--space-1) 0 0; }
+.footer-refusal { margin: 0; font-style: italic; max-inline-size: 220px; }
+.footer-rule { margin-block: var(--space-4); }
+.footer-copy { margin: 0; }
+
+/* ---- Auth (portal login, invite, reset) --------------------------------
+   A standalone page, not a modal: it gates a whole app area and needs
+   redirect-after-login, invite acceptance and reset flows. */
+.auth { flex: 1; display: flex; align-items: center; justify-content: center; padding: var(--space-12) var(--space-6); }
+.auth-card { inline-size: 100%; max-inline-size: 420px; display: flex; flex-direction: column; gap: var(--space-6); }
+.auth-head { display: flex; flex-direction: column; gap: var(--space-2); }
+.auth-head h1 { margin: 0; }
+.auth-head p { margin: 0; }
+.auth-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.auth-foot { display: flex; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.auth-notice { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--cyan-50); border: 1px solid var(--cyan-200); font-size: var(--text-small); }
+.auth-error { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--clay-50); border: 1px solid var(--clay-200); font-size: var(--text-small); color: var(--color-error); }
+
+/* ---- Not found --------------------------------------------------------- */
+.notfound { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); padding: var(--space-24) var(--space-6); text-align: center; }
+
+/* ---- Responsive -------------------------------------------------------- */
+@media (max-width: 600px) {
+  .hero { flex-direction: column; gap: var(--space-12); }
+  .hero-main { flex: 1 1 auto; max-inline-size: 100%; padding-inline-end: 0; }
+  .hero-gap { display: none; }
+  .hero-side { flex: 1 1 auto; max-inline-size: 100%; }
+}
+@media (max-width: 768px) {
+  .nav { flex-wrap: wrap; gap: var(--space-4); padding-inline: var(--space-6); }
+  .hero, .growth { padding-inline: var(--space-6); }
+  .about { padding-inline: var(--space-6); }
+  .clients-cta { padding: var(--space-12); }
+  .footer { padding-inline: var(--space-6); }
+}

@@ -1,0 +1,186 @@
+/* ============================================================================
+   Root · ریشه — Design Tokens
+   Palette: Blueprint — chalk ground, indigo ink, clay action, cyan line,
+   and gold for beauty.
+
+   DERIVED FROM THE BUILD, not from an exploration. Every named colour below
+   is taken from "Root Landing.dc.html" in the Root website layout project.
+   Two values are corrected for contrast (marked ⚠ below); everything else
+   is as-built.
+
+   Type scale, spacing, weights and motion are carried over unchanged from
+   root-website-requirements_2.md §9.1. That document's warm colour layer
+   (grey ramp + clay #B25C3B) is superseded here.
+
+   Components reference the SEMANTIC names — never the raw ramps.
+   ========================================================================= */
+
+:root {
+  color-scheme: light;
+
+  /* ---- Raw: neutral ramp (cool, indigo-tinted — drafting paper) --------
+     100 / 200 / 300 / 400 / 700 are as-built from the landing. */
+  --neutral-50:  #F5F7F8;
+  --neutral-100: #EDEFF0;   /* chalk — the page ground            (as-built) */
+  --neutral-200: #E1E5E9;   /* footer ground                      (as-built) */
+  --neutral-300: #DCE2E7;   /* panel fill                         (as-built) */
+  --neutral-400: #C7CDD3;   /* hairline                           (as-built) */
+  --neutral-500: #A3ADB8;
+  --neutral-600: #7A8798;
+  --neutral-700: #5A6A82;   /* slate — muted text                 (as-built) */
+  --neutral-800: #3A4759;
+  --neutral-900: #232D3B;
+
+  /* ---- Raw: indigo ramp (the ink) ---- */
+  --indigo-50:  #EAEEF4;
+  --indigo-100: #D3DBE7;
+  --indigo-200: #A8B7CD;
+  --indigo-300: #7B8FAF;
+  --indigo-400: #4C6689;
+  --indigo-500: #1E3557;   /* indigo — text and dark grounds      (as-built) */
+  --indigo-600: #1A2E4B;
+  --indigo-700: #16263E;
+  --indigo-800: #111D30;
+  --indigo-900: #0C1521;
+
+  /* ---- Raw: clay ramp (the action) ---- */
+  --clay-50:  #FBEDEB;
+  --clay-100: #F5D8D3;
+  --clay-200: #E7A79D;
+  --clay-300: #D4776A;
+  --clay-400: #C24B3A;   /* as-built. 4.19:1 on chalk — NON-TEXT ONLY */
+  --clay-500: #A83E2F;   /* ⚠ corrected: 5.4:1 — use when it carries a label */
+  --clay-600: #8B3225;
+
+  /* ---- Raw: cyan ramp (the drafting line) ---- */
+  --cyan-50:  #EDF4F6;
+  --cyan-100: #D7E7EC;
+  --cyan-200: #B0CFD8;
+  --cyan-300: #88B5C2;
+  --cyan-400: #5E93A6;   /* as-built. 3.4:1 on white — NOT a text colour */
+  --cyan-500: #4E7D8E;
+  --cyan-600: #3F6675;   /* lowest rung safe for body text */
+  --cyan-700: #33535F;
+
+  /* ---- Raw: gold ramp (beauty) ----
+     The most brand-loaded colour in the system: it carries the word
+     "beauty" in the tagline and marks what is not yet open. */
+  --gold-100: #F2E7C9;
+  --gold-200: #E5D09B;
+  --gold-300: #D4B366;
+  --gold-400: #C79A3E;   /* as-built. 2.2:1 on chalk — decorative fills only */
+  --gold-500: #A9851F;   /* ⚠ corrected: 3.0:1 — large text and icons */
+  --gold-600: #8A6C18;   /* body-text rung */
+
+  /* ---- Semantic: surface ---- */
+  --color-bg:       var(--neutral-100);  /* chalk — the page */
+  --color-panel:    var(--neutral-300);  /* tinted panels, quiet blocks */
+  --color-footer:   var(--neutral-200);  /* footer ground */
+  --color-raised:   var(--neutral-50);   /* menus, popovers — the rare lift */
+  --color-inverse:  var(--indigo-500);   /* dark statement sections */
+
+  /* ---- Semantic: text ---- */
+  --color-text:         var(--indigo-500);
+  --color-text-muted:   var(--neutral-700);
+  --color-text-subtle:  var(--neutral-600);
+  --color-text-inverse: var(--neutral-100);
+  --color-beauty:       var(--gold-500);  /* the tagline highlight */
+
+  /* ---- Semantic: line ---- */
+  --color-border:        var(--neutral-400);
+  --color-border-strong: var(--neutral-500);
+  --color-rule:          var(--cyan-400);   /* decorative rules and focus */
+  --color-rule-strong:   var(--clay-400);   /* the 3px card top-rule */
+
+  /* ---- Semantic: action ----
+     Clay is the action colour on this brand, not a rare mark. Indigo is
+     the ink you read; clay is the thing you press. */
+  --color-accent:       var(--clay-500);
+  --color-accent-hover: var(--clay-600);
+  --color-accent-soft:  var(--clay-50);
+  --color-secondary:    var(--cyan-600);
+  --color-secondary-soft: var(--cyan-50);
+
+  /* ---- Semantic: state ----
+     NOTE: clay is already the action colour, so destructive actions are
+     NOT distinguished by hue. They are distinguished by copy and by a
+     confirmation step. See components/buttons. */
+  --color-locked:  var(--gold-500);   /* "coming later" */
+  --color-error:   var(--clay-600);   /* darker than the action, on purpose */
+  --color-focus:   var(--cyan-400);
+
+  /* ---- Typography ---- */
+  --font-latin:   'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-persian: 'Vazirmatn', 'Inter', system-ui, sans-serif;
+  --font-sans:    var(--font-latin);
+  --font-mono:    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  /* ---- Type scale (§9.1, unchanged — do NOT freestyle sizes) ---- */
+  --text-caption: 0.8125rem;  /* 13px */
+  --text-small:   0.875rem;   /* 14px */
+  --text-body:    1rem;       /* 16px */
+  --text-body-lg: 1.125rem;   /* 18px */
+  --text-h3:      1.5rem;     /* 24px */
+  --text-h2:      2rem;       /* 32px */
+  --text-h1:      3rem;       /* 48px */
+  --text-display: 4rem;       /* 64px — hero only */
+
+  /* ---- Line height (Latin; Persian overridden below) ---- */
+  --leading-tight: 1.15;
+  --leading-snug:  1.35;
+  --leading-body:  1.55;
+
+  /* ---- Weights ---- */
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;   /* logo and hero only */
+
+  /* ---- Spacing scale (base unit 4px) ---- */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-24: 6rem;
+  --space-32: 8rem;
+
+  /* ---- Layout ---- */
+  --content-max: 1200px;
+  --page-gutter: var(--space-6);
+
+  /* ---- Radius (as-built — the landing uses 10 / 16, not §9.1's 6 / 12) -- */
+  --radius-sm:   10px;
+  --radius-md:   16px;
+  --radius-full: 999px;
+
+  /* ---- Shadows (cool-tinted, very soft) ---- */
+  --shadow-sm: 0 1px 2px rgba(30, 53, 87, 0.06);
+  --shadow-md: 0 6px 24px rgba(30, 53, 87, 0.08);
+  --shadow-lg: 0 16px 48px rgba(30, 53, 87, 0.10);
+
+  /* ---- Motion (subtle only) ---- */
+  --dur-fast: 150ms;
+  --dur-base: 250ms;
+  --dur-slow: 400ms;
+  --ease:     cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---- Breakpoints (reference) — sm 640 · md 768 · lg 1024 · xl 1280 ---- */
+}
+
+/* Persian is the default language of the product, not a translation.
+   Only the family and the leading change; every component is otherwise
+   identical, and mirrors via logical properties. */
+:lang(fa) {
+  --font-sans:     var(--font-persian);
+  --leading-body:  1.8;
+  --leading-snug:  1.5;
+  --leading-tight: 1.3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; }
+}

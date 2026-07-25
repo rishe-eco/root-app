@@ -1,0 +1,19 @@
+{
+  "name": "root-website",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Root (ریشه) — public site + customer portal. Persian-first, bilingual, RTL.",
+  "workspaces": [
+    "apps/web",
+    "apps/api"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "build": "npm run build --workspace=apps/web",
+    "typecheck": "npm run typecheck --workspace=apps/web && npm run typecheck --workspace=apps/api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

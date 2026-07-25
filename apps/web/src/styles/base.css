@@ -1,0 +1,21 @@
+/* Global reset + the two things every screen shares.
+   Everything else is page-specific layout on top of kit.css. */
+
+body { margin: 0; }
+* { box-sizing: border-box; }
+
+#app { min-block-size: 100vh; }
+
+/* Persian must never be letter-spaced or uppercased — both silently break
+   the connected script. kit.css uses `.t-eyebrow` with both, so undo them
+   for Persian rather than forking the component. */
+:lang(fa) .t-eyebrow,
+:lang(fa) .side-cap,
+:lang(fa) .rail-cap {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* Numbers read better in Latin figures inside tables even in Persian copy,
+   but the surrounding text stays Persian. Applied per-cell, not globally. */
+.num-latin { font-family: var(--font-latin); font-variant-numeric: tabular-nums; }

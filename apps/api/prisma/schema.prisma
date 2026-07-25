@@ -1,0 +1,366 @@
+// Root website — data model.
+//
+// Role-aware from day one (customer / admin). Per the v3 overview §4 this is
+// the decision that makes deferring the admin UI safe: breaking changes come
+// from a single-role data model, not from a missing screen.
+//
+// Postgres (decided, v3 §3) — a multi-customer portal with concurrent logins
+// and uploads wants it, and Prisma keeps the engine a config detail.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// People & access
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum UserState {
+  INVITED // invite issued, password not yet set
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  role         Role      @default(CUSTOMER)
+  state        UserState @default(INVITED)
+  passwordHash String?
+
+  // Company/brand this customer belongs to, shown as the sub-line in the
+  // contracts table. Null for admins.
+  clientName String?
+
+  // Preferred locale, so notifications can go out in the right language.
+  locale String @default("fa")
+
+  contracts     Contract[]     @relation("CustomerContracts")
+  comments      Comment[]
+  changeLogs    ChangeLog[]
+  signatures    Signature[]
+  tokens        AuthToken[]
+  billingEntry  BillingEntry[]
+  tickets       Ticket[]
+  ticketMessage TicketMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role, state])
+}
+
+enum TokenPurpose {
+  INVITE
+  PASSWORD_RESET
+}
+
+/// Single-use, expiring links. Only the hash is stored — the raw token exists
+/// once, in the link handed to the customer.
+model AuthToken {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   TokenPurpose
+  tokenHash String       @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  createdAt DateTime     @default(now())
+
+  @@index([userId, purpose])
+}
+
+// ---------------------------------------------------------------------------
+// Contracts
+// ---------------------------------------------------------------------------
+
+/// Permissive by design (v3 §8): a contract does not march through these in
+/// order — it moves back and forth as the work actually goes. WOC and WOR are
+/// a "whose court is the ball in" toggle, not stages. No rigid state machine.
+enum ContractStatus {
+  DRAFT
+  WAITING_ON_CUSTOMER
+  WAITING_ON_ROOT
+  IN_PROGRESS
+  FINAL_REVIEW
+  DONE
+  DISCARDED
+}
+
+model Contract {
+  id     String @id @default(cuid())
+  /// Human reference shown to the customer, e.g. RC-2026-014.
+  ref    String @unique
+  titleFa String
+  titleEn String
+
+  customerId String
+  customer   User   @relation("CustomerContracts", fields: [customerId], references: [id])
+
+  status ContractStatus @default(DRAFT)
+
+  /// Toman. Integer — no sub-unit in practice, and no float rounding.
+  amount BigInt?
+
+  /// Set when Root hands it over; until then the customer cannot see it.
+  publishedAt DateTime?
+
+  contractApprovedAt DateTime?
+
+  concepts   DesignConcept[]
+  scopeItems ScopeItem[]
+  articles   Article[]
+  comments   Comment[]
+  changeLogs ChangeLog[]
+  signature  Signature?
+  billing    BillingEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, status])
+}
+
+/// A whole design direction (1a / 1b / 1c). Exactly one may be chosen; choosing
+/// a different one resets the page approvals beneath it.
+model DesignConcept {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  /// Short id shown on the card: "1a", "1b", "1c".
+  key      String
+  labelFa  String
+  labelEn  String
+  /// Uploaded preview. Null until Root uploads one — the UI falls back to the
+  /// placeholder browser-chrome block.
+  imageUrl String?
+  position Int     @default(0)
+
+  chosenAt DateTime?
+
+  pages PageDesign[]
+
+  @@unique([contractId, key])
+}
+
+/// One page's design under a concept (Landing, About, Contracts, Portal login).
+model PageDesign {
+  id        String        @id @default(cuid())
+  conceptId String
+  concept   DesignConcept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  key      String
+  labelFa  String
+  labelEn  String
+  imageUrl String?
+  position Int     @default(0)
+
+  approvedAt DateTime?
+
+  @@unique([conceptId, key])
+}
+
+/// Appendix 1 rendered as tickable items. Never gated — the customer can tick
+/// these at any point.
+model ScopeItem {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  key     String
+  labelFa String
+  labelEn String
+  position Int @default(0)
+
+  checkedAt DateTime?
+
+  @@unique([contractId, key])
+}
+
+/// The fourteen articles plus Appendix 1. Body text is optional so a contract
+/// can be published with the structure in place and the text filled in later.
+model Article {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  number  Int
+  titleFa String
+  titleEn String
+  bodyFa  String?
+  bodyEn  String?
+
+  @@unique([contractId, number])
+}
+
+enum CommentTarget {
+  DESIGN
+  CONTRACT
+}
+
+/// Free at all times, on designs and on the contract. Never gated.
+model Comment {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  target CommentTarget @default(CONTRACT)
+  body   String
+
+  createdAt DateTime @default(now())
+
+  @@index([contractId, createdAt])
+}
+
+model Signature {
+  id         String   @id @default(cuid())
+  contractId String   @unique
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  signerId String
+  signer   User   @relation(fields: [signerId], references: [id])
+
+  /// The name as typed, kept verbatim — it is the signature.
+  typedName String
+  method    String @default("TYPED")
+  ip        String?
+  userAgent String?
+
+  signedAt DateTime @default(now())
+}
+
+/// Every meaningful action, with actor and timestamp. Cheap to capture now and
+/// expensive to reconstruct later; this is what the admin review-flagging queue
+/// reads (v3 §5.4.6). The sequence of statuses alone won't say why a contract
+/// bounced — the logged actions and their actors will.
+enum ChangeAction {
+  CREATED
+  PUBLISHED
+  CHOSE_CONCEPT
+  APPROVED_PAGE
+  UNAPPROVED_PAGE
+  DESIGN_COMPLETE
+  APPROVED_CONTRACT
+  SIGNED
+  COMMENTED
+  SCOPE_ON
+  SCOPE_OFF
+  STATUS_CHANGED
+}
+
+model ChangeLog {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  actorId String
+  actor   User   @relation(fields: [actorId], references: [id])
+
+  action ChangeAction
+  /// The one variable part of the sentence — a concept key, a page label, a
+  /// status. Rendered into the locale string on the client.
+  arg    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([contractId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Billing & Support — modelled now, surfaced in a later phase
+// ---------------------------------------------------------------------------
+
+enum BillingSource {
+  CONTRACT
+  SERVICE
+  TICKET
+}
+
+/// Record-keeping only — no payment gateway. Charges are created and marked
+/// paid by Root. Separate from Hesab: this is purely "here is what you owe us".
+model BillingEntry {
+  id         String @id @default(cuid())
+  customerId String
+  customer   User   @relation(fields: [customerId], references: [id])
+
+  contractId String?
+  contract   Contract? @relation(fields: [contractId], references: [id])
+
+  source      BillingSource
+  descriptionFa String
+  descriptionEn String
+  /// Toman.
+  amount      BigInt
+  issuedAt    DateTime  @default(now())
+  paidAt      DateTime?
+
+  @@index([customerId, paidAt])
+}
+
+enum TicketType {
+  CHANGE_REQUEST
+  BUG
+  QUESTION
+}
+
+enum TicketUrgency {
+  URGENT
+  NOT_URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model Ticket {
+  id         String @id @default(cuid())
+  customerId String
+  customer   User   @relation(fields: [customerId], references: [id])
+
+  type    TicketType
+  urgency TicketUrgency @default(NOT_URGENT)
+  status  TicketStatus  @default(OPEN)
+  subject String
+
+  /// Root marks a ticket billable for a major change request; that is what
+  /// creates the Billing charge.
+  billable Boolean @default(false)
+
+  messages TicketMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, status])
+}
+
+model TicketMessage {
+  id       String @id @default(cuid())
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  body     String
+
+  createdAt DateTime @default(now())
+}
