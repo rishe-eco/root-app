@@ -1,6 +1,5 @@
-import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useLocale, lp } from '@/lib/locale';
+import { useLocale } from '@/lib/locale';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import Lock from '@/components/Lock';
@@ -27,11 +26,8 @@ export default function Landing() {
           </p>
           <h1 className={heroCls}>{t('landing.heroTitle')}</h1>
           <p className="t-lead hero-lead">{t('landing.heroDescriptor')}</p>
-          <div>
-            <Link className="btn btn-primary btn-lg" to={lp(locale, '/about')}>
-              {t('landing.cta')}
-            </Link>
-          </div>
+          {/* The hero CTA is hidden until its destination is decided. The copy
+              stays in the locale files (landing.cta) so it is one line back. */}
         </div>
 
         <div className="hero-gap" />

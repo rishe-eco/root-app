@@ -163,8 +163,9 @@ need a fix.
    detail use your copy verbatim from the prototypes. The auth screens, the
    admin, the stub sections and the empty states are my drafts in both
    languages — read them.
-4. **The landing CTA** ("Start where you are") points at About, since About is
-   what holds the path to the portal. Say if it should go elsewhere.
+4. **The landing CTA** is hidden — the hero ends at the lead paragraph. Its
+   copy is still in the locale files under `landing.cta`, so bringing it back
+   is one line in `pages/Landing.tsx` once its destination is decided.
 5. **Locked slot behaviour.** The routes exist and say "coming later"; the nav
    does not link to them. Confirm that is the intent, or make them inert.
 
