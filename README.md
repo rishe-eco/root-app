@@ -4,9 +4,11 @@ The public front (Landing, About Us) plus the authenticated customer portal
 (Contracts list and the interactive contract detail). Persian-first, bilingual,
 full RTL.
 
-**Source of truth:** `../Working/root-website-v3-overview.md` (the application
-layer) and `../Working/root-website-requirements_2.md` (process, type scale,
-spacing, i18n rules). Where the two disagree about **colour**, neither wins —
+**Source of truth:** `ecosystem/working/root-website-v3-overview.md` (the
+application layer) and `ecosystem/working/root-website-requirements_2.md`
+(process, type scale, spacing, i18n rules), both in the
+[`rishe-eco/root-sot`](https://github.com/rishe-eco/root-sot) docs repo — locally
+at `../root-sot/`. Where the two disagree about **colour**, neither wins —
 `apps/web/src/styles/tokens.css` does; see "Design system" below.
 
 ---
@@ -171,5 +173,11 @@ need a fix.
 
 ## Repo
 
-This is its own git repo, nested inside the RootSOT documents repo, so code and
-canon stay separate. It has no remote — nothing has been pushed anywhere.
+`rishe-eco/root-app` — code only; the canon and specs live in the sibling
+[`rishe-eco/root-sot`](https://github.com/rishe-eco/root-sot) docs repo, so the
+two stay separate.
+
+*Renamed 2026-07-29.* This was `root-website`, developed standalone and then
+nested inside the docs folder. It moved out to `E:\_root\root-app` alongside its
+siblings, adopting the planned `root-app` name; the branch was renamed `master`
+→ `main` to match them. The three commits of history are unchanged.
