@@ -1,4 +1,16 @@
+import { loadEnvFile } from 'node:process';
 import { z } from 'zod';
+
+// Load apps/api/.env into process.env before we validate it. The Prisma CLI
+// loads .env on its own, which is why migrate and seed work without this — but
+// the server process does not, so it must ask. Native (Node >=20.12); no
+// dotenv dependency. Missing file is fine: in production the vars are injected
+// by the environment and there is no file to read.
+try {
+  loadEnvFile();
+} catch (err) {
+  if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+}
 
 /**
  * Fail loudly at boot rather than mysteriously at the first request. In
