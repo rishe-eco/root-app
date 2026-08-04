@@ -72,7 +72,20 @@ export default function ContractDetail() {
 
   const { gate } = contract;
   const chosen = contract.concepts.find((c) => c.chosen) ?? null;
-  const title = pick(contract, 'title', locale);
+
+  /* The heading has to name the same document as the articles under it.
+     `contract.articles` comes out of the frozen snapshot, so the title comes
+     from the revision too — the identically named fields on Contract are Root's
+     working draft and can already have moved on. Publishing and then renaming
+     used to leave a draft title sitting above published text, which is what
+     `ContractPrint` has always avoided by reading only from the revision.
+
+     `revision` is null in two cases: nothing published yet, and a backfilled v1
+     that `npm run backfill` has not sealed. Neither has a frozen title to show,
+     so the draft stands in — alongside an empty article list, since `articles`
+     comes from the same absent snapshot. The screen is then honestly empty
+     rather than mixing the two. */
+  const title = pick(contract.revision ?? contract, 'title', locale);
 
   /* Every mutation returns the whole contract, so the gate, the status and
      the history all move together — the client never recomputes them. */

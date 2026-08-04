@@ -95,19 +95,25 @@ export default function Contracts() {
                 ) : (
                   rows.map((c) => {
                     const href = lp(locale, `/app/contracts/${c.id}`);
+                    /* Same rule as the detail screen: a row names the published
+                       document — its frozen title and its frozen fee — not
+                       Root's draft of them. The draft stands in only when there
+                       is no sealed revision to read, which here means a
+                       backfilled v1 awaiting `npm run backfill`. */
+                    const doc = c.revision ?? c;
                     return (
                       <tr key={c.id} className="crow" onClick={() => navigate(href)}>
                         <td>
-                          <div className="cname">{pick(c, 'title', locale)}</div>
+                          <div className="cname">{pick(doc, 'title', locale)}</div>
                           <div className="cclient">{c.customer.clientName ?? c.customer.name}</div>
                         </td>
                         <td>
                           <StatusBadge status={c.status} />
                         </td>
                         <td className="col-amount">
-                          {c.amount ? (
+                          {doc.amount ? (
                             <span className="num-latin">
-                              {formatAmount(c.amount, locale)} {t('contracts.toman')}
+                              {formatAmount(doc.amount, locale)} {t('contracts.toman')}
                             </span>
                           ) : (
                             '—'

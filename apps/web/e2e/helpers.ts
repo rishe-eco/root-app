@@ -36,6 +36,25 @@ export function resetTestDatabase() {
   });
 }
 
+/**
+ * Renames the contract's *draft* title, leaving the published revision alone.
+ *
+ * There is no mutation for this — nothing in the GraphQL surface edits a
+ * contract's title after `createContract` — so it goes in as SQL. That is also
+ * the honest reproduction: the drift this sets up is exactly what a direct
+ * database edit, or the `updateContract` the admin screen will eventually want,
+ * would produce.
+ */
+export function renameContractDraft(titleEn: string) {
+  if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
+  execFileSync('npx', ['prisma', 'db', 'execute', '--stdin', '--url', TEST_DATABASE_URL], {
+    cwd: API_DIR,
+    input: `UPDATE "Contract" SET "titleEn" = '${titleEn.replace(/'/g, "''")}' WHERE "ref" = '${CONTRACT_REF}';`,
+    stdio: 'pipe',
+    timeout: 60_000,
+  });
+}
+
 /** Signs in through the real form, so the session cookie is set the real way. */
 export async function signIn(page: Page, who: { email: string; password: string }, lang = 'en') {
   await page.goto(`/${lang}/portal`);

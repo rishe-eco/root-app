@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { CUSTOMER, CONTRACT_TITLE, resetTestDatabase, signIn } from './helpers';
+import {
+  CUSTOMER,
+  CONTRACT_TITLE,
+  renameContractDraft,
+  resetTestDatabase,
+  signIn,
+} from './helpers';
 
 /**
  * The gate, driven the way a customer drives it.
@@ -179,4 +185,37 @@ test('the printable contract shows the published revision and its hash', async (
   const articles = page.locator('.doc-art');
   expect(await articles.count()).toBeGreaterThan(0);
   await expect(articles.first().locator('.doc-art-body')).toBeVisible();
+});
+
+test('renaming the draft after publishing does not change what the customer reads', async ({
+  page,
+}) => {
+  /*
+   * The screen used to disagree with itself. Its heading came from
+   * `contract.titleFa/titleEn` — Root's working draft — while the articles
+   * underneath came from the frozen snapshot of the published revision. Nobody
+   * noticed because nobody had renamed a contract after publishing it.
+   *
+   * So: publish, rename the draft, and check that the customer still reads one
+   * document rather than a draft title over published text. The print view was
+   * already correct and has its own test above; this is the detail screen and
+   * the list, which were not.
+   */
+  resetTestDatabase();
+  renameContractDraft('DRAFT RENAME — NOT PUBLISHED');
+
+  await signIn(page, CUSTOMER);
+
+  // The list names the published document.
+  await expect(page.getByText(CONTRACT_TITLE)).toBeVisible();
+  await expect(page.getByText('DRAFT RENAME — NOT PUBLISHED')).toHaveCount(0);
+
+  await openFirstContract(page);
+
+  // And so does the heading, directly above articles from that same snapshot.
+  await expect(page.locator('.detail-head h1')).toHaveText(CONTRACT_TITLE);
+  await expect(page.getByText('DRAFT RENAME — NOT PUBLISHED')).toHaveCount(0);
+
+  // The crumb trail is the same title, for the same reason.
+  await expect(page.locator('.crumb-now')).toHaveText(CONTRACT_TITLE);
 });
