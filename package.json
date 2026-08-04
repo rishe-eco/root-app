@@ -11,7 +11,10 @@
     "dev": "npm run dev --workspace=apps/web",
     "dev:api": "npm run dev --workspace=apps/api",
     "build": "npm run build --workspace=apps/web",
-    "typecheck": "npm run typecheck --workspace=apps/web && npm run typecheck --workspace=apps/api"
+    "typecheck": "npm run typecheck --workspace=apps/web && npm run typecheck --workspace=apps/api",
+    "test": "npm run test --workspace=apps/api",
+    "e2e": "npm run e2e --workspace=apps/web",
+    "test:integration": "npm run test:integration --workspace=apps/api"
   },
   "engines": {
     "node": ">=20"

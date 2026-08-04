@@ -1,0 +1,83 @@
+# The API and its database, as they run on the VPS.
+#
+#   cp .env.production.example .env      # then fill it in — nothing has a safe default
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# The web app is NOT here. It is built on your machine and uploaded as static
+# files, which host Nginx serves directly — see deploy/README.md. Two reasons:
+# `vite build` is the step most likely to exhaust a small VPS's memory, and
+# putting a second Nginx in a container behind the host's Nginx would add a
+# proxy hop whose only lasting effect is to make TRUST_PROXY_HOPS harder to get
+# right.
+#
+# docker-compose.yml (no suffix) is the development file and brings up Postgres
+# alone, for `npm run dev` on the host. The two are separate rather than
+# layered because they disagree about what matters most: the dev file publishes
+# Postgres on :5432 for a host-side Prisma CLI, and this one does not publish
+# it at all.
+
+name: root
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - root_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No `ports:`. The database is reachable only from the compose network.
+    # To open a psql on the server:
+    #   docker compose -f docker-compose.prod.yml exec db psql -U root root_website
+
+  api:
+    build:
+      context: . # the repo root — npm workspaces resolve through it
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy # the entrypoint migrates immediately; it cannot wait
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # `db` is the service name — Docker's DNS resolves it on this network.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      # The public origin. Invite and reset links are built from it, so a wrong
+      # value produces links that go nowhere — and it is also the CORS allow
+      # list, though in this topology the browser never crosses an origin.
+      APP_ORIGIN: ${APP_ORIGIN}
+      # One: host Nginx, and nothing else. Express counts hops back from the
+      # socket, and req.ip is what gets written to Signature.ip on a legal
+      # signing record — so this number is load-bearing, not cosmetic.
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      COOKIE_NAME: ${COOKIE_NAME:-root_session}
+      SESSION_DAYS: ${SESSION_DAYS:-14}
+      INVITE_DAYS: ${INVITE_DAYS:-14}
+      RESET_HOURS: ${RESET_HOURS:-2}
+      # No default, deliberately: the API refuses to boot in production without
+      # it. See .env.production.example.
+      STORAGE_DIR: ${STORAGE_DIR}
+      PUBLIC_FILES_BASE: ${PUBLIC_FILES_BASE}
+    # Loopback only. Host Nginx proxies to it; nothing reaches it from outside.
+    ports:
+      - '127.0.0.1:${API_PORT:-4000}:4000'
+    volumes:
+      # A bind mount, not a named volume, and mounted at the *same* path inside
+      # as out. Host Nginx serves the public class straight off this directory,
+      # so it has to be a real path on the host — a named volume would live
+      # inside Docker's own storage where Nginx has no business reaching.
+      # Mounting it at the identical path means STORAGE_DIR is one value that
+      # is true on both sides, rather than two that must be kept in step.
+      - ${STORAGE_DIR}:${STORAGE_DIR}
+
+volumes:
+  root_pgdata:

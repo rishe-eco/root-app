@@ -18,13 +18,6 @@ at `../root-sot/`. Where the two disagree about **colour**, neither wins —
 ```bash
 npm install
 
-# See the whole thing without a database (in-memory data, port 5174)
-npm run dev:demo --workspace=apps/web
-```
-
-That is the fastest way to review what exists. For the real stack:
-
-```bash
 docker compose up -d db                 # Postgres on :5432
 
 cp apps/api/.env.example apps/api/.env  # then fill in JWT_SECRET
@@ -33,12 +26,74 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 npm run prisma:migrate --workspace=apps/api   # create the schema
 npm run seed --workspace=apps/api             # one contract + two accounts
 
+# Only on a database that predates the revisions migration. The migration
+# backfills v1 of both lineages but leaves the contract snapshot unsealed,
+# because canonical hashing lives in src/lib/revision.ts and must not be
+# forked into SQL. No-op on a fresh database.
+npm run backfill --workspace=apps/api
+
 npm run dev:api                         # API   → http://localhost:4000/graphql
 npm run dev                             # Web   → http://localhost:5173
 ```
 
 Seeded accounts are `admin@root.local` and `nahal@example.com`, both with the
 password `change-me-please`. **Change them before this touches anything real.**
+
+---
+
+## Deployment
+
+Full runbook in [`deploy/README.md`](deploy/README.md). The shape:
+
+```
+browser ──TLS──▶ host Nginx ──┬──▶ /srv/root/current   (static files)
+                              └──▶ 127.0.0.1:4000      (api container) ──▶ db container
+```
+
+The API and Postgres run in Docker on the server. The web app is **built on
+your machine** and uploaded as static files — `vite build` is the step most
+likely to exhaust a small VPS's memory, and its output needs no runtime.
+
+```bash
+./deploy/release-web.sh you@your-vps      # from your machine
+# and on the server:
+cd /srv/root/app && git pull && docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Four things about this are decisions, not defaults:
+
+- **One origin, not two.** Host Nginx serves the SPA and proxies `/graphql` to
+  the API on loopback. The session is an httpOnly `SameSite=Lax` cookie, so an
+  API on its own subdomain would be cross-site and the browser would drop it —
+  every customer silently logged out, with nothing to explain it. This is the
+  production counterpart of the dev proxy in `vite.config.ts`, and it is why
+  `VITE_GRAPHQL_URL` stays unset.
+- **Host Nginx is the only proxy in the chain**, so `TRUST_PROXY_HOPS=1`. That
+  number decides what `req.ip` reports, and `req.ip` is written to
+  `Signature.ip` on a legal signing record. A second Nginx in a container was
+  the earlier design; it bought nothing and made this number easy to get wrong.
+- **Releases are directories and `current` is a symlink**, swapped with an
+  atomic rename. Rsyncing into the live directory would serve, for a few
+  seconds, an index.html naming assets that have not arrived yet. The symlink
+  also records which commit is live and keeps the previous one for rollback.
+- **Migrations run at container start**, in `apps/api/docker-entrypoint.sh`. A
+  failed migration means the API refuses to boot, which is the intent: a server
+  running against a schema it does not expect is worse than one that is down.
+  `migrate deploy` only applies committed files — it never generates, never
+  resets.
+
+Seeding is *not* automatic and must not be run in production — it creates two
+accounts whose password is in this repository. Use `create-admin` instead:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T api \
+  npx tsx prisma/create-admin.ts you@example.com "Your Name"   # password on stdin
+```
+
+`docker-compose.yml` (no suffix) is the development file and brings up Postgres
+alone, for `npm run dev` on the host. The two are separate rather than layered
+because they disagree about the thing that matters: the dev file publishes
+:5432 for a host-side Prisma CLI, and the production one publishes nothing.
 
 ---
 
@@ -53,11 +108,67 @@ apps/web        Vite + React + TypeScript
   src/portal    auth screens, app shell, contracts, contract detail
   src/admin     the thin operational admin
 apps/api        Express + Apollo Server + Prisma
-  prisma        schema.prisma, seed.ts
-  src/graphql   SDL + resolvers
+  prisma        schema.prisma, seed.ts, create-admin.ts
+  src/graphql   typeDefs.ts  the SDL, one template literal
+                resolvers/   split by who is acting, not by model:
+                             contracts.ts  loading, the visibility rule, the log
+                             fields.ts     what a row looks like over the wire
+                             query.ts      reads
+                             auth.ts       sign-in and the link-token flows
+                             customer.ts   the gated actions on your contract
+                             admin.ts      invites, drafts, publishing
   src/auth      password hashing, session and link tokens
-  src/lib       gate.ts — the approval rule, in one place
+  src/lib       gate.ts      the approval rule, in one place
+                revision.ts  contract snapshots + canonical hashing
+                design.ts    what "unchanged" means between design revisions
+                logging.ts   which errors are faults and which are outcomes
+                storage.ts   where bytes live — local disk behind an interface
+                files.ts     what may be uploaded, and what it is allowed to be
+  src/routes    files.ts     POST /upload and GET /files/:id, outside GraphQL
+  Dockerfile    two-stage build on Debian — Prisma's engine wants glibc
+  docker-entrypoint.sh        migrate, then start
+deploy          README.md            the VPS runbook
+                release-web.sh       build here, upload, swap the symlink
+                nginx/               host Nginx site + security headers
+docker-compose.yml            development: Postgres alone
+docker-compose.prod.yml       the server: db + api
 ```
+
+## Tests
+
+Three layers, three commands, in ascending order of what they need.
+
+```bash
+npm test              # unit — pure functions, no database, ~0.5s
+npm run test:integration   # resolvers against Postgres  (needs root_website_test)
+npm run e2e           # the browser, against the built app
+```
+
+**Unit** (`apps/api/src/lib/*.test.ts`) covers the things that would be
+expensive to get wrong quietly: canonical hashing, the design carry-forward
+rule, the gate, what an error is allowed to tell a client, and one test that
+reads all five files `ChangeAction` lives in and asserts they agree.
+
+**Integration** (`apps/api/src/test/`) runs the real resolvers against a real
+database — ownership, roles, and which refusal code comes back for each way of
+asking too early. It refuses to start unless `DATABASE_URL` names a `*_test`
+database, because it truncates every table it finds. Create it once with:
+
+```bash
+createdb root_website_test
+DATABASE_URL="postgresql://root:root@localhost:5432/root_website_test?schema=public" \
+  npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+```
+
+**End-to-end** (`apps/web/e2e/`) drives the built app in a browser: the whole
+gate flow as a customer, the admin, and the bilingual/RTL front. It starts its
+own API on 4101 and preview server on 4173 against `root_website_test`, so it
+never touches the dev servers or the dev database.
+
+> **Playwright's browser download is geo-blocked from here** — the CDN answers
+> `403 … not available in your location`. `playwright.config.ts` therefore sets
+> `channel: 'chrome'` and drives the Chrome already installed on the machine.
+> Nothing needs downloading; the browser version is whatever is installed.
 
 ## Design system
 
@@ -93,6 +204,80 @@ the scope checklist are **never** gated.
 This is computed and enforced in `apps/api/src/lib/gate.ts` and re-derived on
 every read. The client's copy of the rule is a convenience for rendering — a
 request that skips a step is refused by the server.
+
+## Revisions
+
+A contract grows **two independent chains of revisions** — one for the text,
+one for the design — and they advance on separate clocks. Approval and
+signature attach to a specific revision, never to the contract in the abstract,
+so "you approved v1, this is v2" is something the model can actually say.
+
+- **`ContractRevision`** is an immutable JSON snapshot plus a sha256
+  `contentHash` — a legal document, and a hash is what a signature should stand
+  against. The editable draft is the `Article` rows still on `Contract`;
+  publishing freezes them. Once a revision is **signed** it is terminal:
+  changes go in as **amendments**, because re-issuing a signed agreement would
+  muddy which text is in force from when.
+- **`DesignRevision`** stays relational — the customer approves pages one at a
+  time. The draft is a revision with no `publishedAt`. On publish, approvals
+  **carry forward** for pages whose image has not moved, so a one-page tweak
+  asks for one re-approval rather than four.
+
+The gate reads the *current* revisions and is otherwise unchanged. Spec:
+`root-sot/ecosystem/working/root-website-versioning-and-admin.md`.
+
+## Files
+
+Uploads live on local disk behind an interface (`lib/storage.ts`), so object
+storage later is a second implementation rather than a rewrite. They do **not**
+go through GraphQL: `POST /upload` and `GET /files/:id` are plain Express
+routes authenticated by the same session cookie, so Apollo stays JSON-only.
+
+**Every file is public or private, and the split is structural, not a flag
+checked at read time.** It is in the storage key's first path segment, on the
+row, in a CHECK constraint, and in which of the two things serves the bytes:
+
+- **Public** — Nginx serves it straight off `STORAGE_DIR/public/`, no Node
+  involved. Nothing produces these yet; the Research Lab's hosted texts will.
+- **Private** — every request goes through the API, which applies the same rule
+  `loadForActor` applies to the contract: your own contract, and published.
+  Admins see everything. A file whose contract is missing cannot exist — the
+  database refuses the row, because a private file nobody owns is one nobody
+  can ever be authorised to read.
+
+What a file *is* comes from its own leading bytes, never from the browser's
+`Content-Type` or the filename. Per-class limits and type allowlists live in
+`lib/files.ts`; **SVG is accepted nowhere**, because it can carry script and
+these are served from our own origin.
+
+An image attaches to a concept or page through `setConceptImage` /
+`setPageImage`, which write `imageUrl` and `imageFileId` together. Re-uploading
+therefore changes `imageUrl`, which is exactly what makes `design.ts` treat the
+page as changed and drop its approval — carry-forward starts working for a
+reason rather than by accident.
+
+## The printable contract
+
+`/:lang/app/contracts/:id/print` renders the contract as a document, and a
+**Download PDF** action on the detail screen opens it. The PDF itself comes
+from the browser's own print dialog — there is no renderer on the server.
+
+That is a Persian decision more than a convenience one. Setting Arabic-script
+text needs contextual shaping; the pure-JS PDF libraries have none and would
+produce disconnected, reversed letters, which in a legal document is not a
+formatting flaw. A browser shapes it correctly, so the question was only ever
+*which* browser. A headless one in the API image is the eventual answer for
+PDFs Root generates itself — to email, or to archive — and it will render this
+same route rather than a second document that could disagree with it.
+
+**The page renders `contract.revision`, not the contract.** Title, fee and
+articles all come out of the frozen snapshot, because `contentHash` is what a
+signature attests to and a printed page must not show words the hash does not
+cover. The fields of the same name on `Contract` are Root's working draft and
+can already differ. Every sheet carries the reference, the revision number and
+the full sha256, via a table `tfoot` — the one construct browsers both repeat
+per page *and* reserve space for. A `position: fixed` footer repeats too, but
+prints over the content, which put the strip across the signature.
 
 ## Change tracking
 
@@ -136,22 +321,64 @@ browser in both languages — concept choice, four page approvals, contract
 approval and the e-signature unlocking in order. Both workspaces typecheck and
 the web app builds clean.
 
+**Revisions, run against a real database — 2026-08-02**
+
+The revision layer described above is built and exercised end to end:
+`migrate deploy` applies both migrations and `migrate diff` reports **no drift**
+between the result and `schema.prisma`. The portal flow was driven in the
+browser in both languages — concept choice, four page approvals, contract
+approval, e-signature — and the client-facing GraphQL surface is unchanged,
+which was the acceptance test.
+
+Also exercised directly: the signature binds to contract revision v1 with
+`signedHash` equal to that revision's `contentHash`; the CHECK constraint
+rejects a signature with neither instrument set and one with both; publishing a
+contract revision on a signed contract is refused; an admin edit to an article
+stays in the draft while the customer keeps reading the signed snapshot; and
+publishing design v2 with one changed page carried three approvals forward,
+reset the fourth, and **left the signature and contract approval untouched**.
+
+Two bugs this turned up, both fixed. `npm run seed` never loaded `.env` — it
+only ever worked as `prisma db seed`, where the Prisma CLI loads it, so the
+documented command was broken. And `setPageApproval` / `chooseConcept` refused
+once the contract was approved, a guard that made sense when there was one
+design and one contract: with independent lineages it reopened the design step
+after a new revision and then refused every action that could close it.
+
+Note the engine gap: `docker-compose.yml` pins Postgres 16 and this ran on a
+local 14. Nothing here needs 15+, but the two should be brought into line.
+
+Demo mode is gone. It mirrored the API in memory, gate rule included, and its
+stated purpose — reviewing the portal before Postgres existed — ended when the
+stack first ran on Postgres.
+
 **Not built** — reserved, not started
 
 - Services (the WooCommerce import), Billing and Support are modelled in the
   database and reserved in the nav, but the screens are honest stubs.
-- Design concept and page-design **image upload**. The schema has `imageUrl` on
-  both and the UI renders an image when one is present; the admin has no upload
-  form yet, so previews fall back to the placeholder block.
-- Creating a contract and entering article text from the admin UI — the
-  mutations exist (`createContract`, `addConcept`, `addPageDesign`,
-  `addScopeItem`, `setArticle`) but only the seed script calls them.
+- A **server-rendered PDF**. The customer can print their contract to one from
+  the browser (above); what is missing is a PDF Root can generate itself, to
+  email or to archive. That needs a headless browser in the API image, and it
+  will render the existing print route.
+- An **upload form**. The upload itself is built and tested end to end (below);
+  what is missing is a screen with a file input on it, so previews still fall
+  back to the placeholder block. Until the admin workspace lands, the only way
+  to attach an image is `POST /upload` followed by `setConceptImage`.
+- Creating a contract, entering article text, and publishing a revision from
+  the admin UI — the mutations exist (`createContract`, `addConcept`,
+  `addPageDesign`, `addScopeItem`, `setArticle`, `publishContractRevision`,
+  `publishDesignRevision`) but nothing calls them. Until the admin workspace
+  lands, editing an article changes the draft and the customer sees nothing,
+  which is correct and also unusable.
 
-**Never run here.** This machine has no Postgres and no Docker, so the API has
-never been started against a real database and the migration has never been
-generated. The schema, resolvers and seed are written and typecheck, but
-`prisma migrate dev` is the first thing to run — and the first thing likely to
-need a fix.
+**Run against a real database, 2026-08-01.** `prisma migrate dev` was generated
+against Postgres and the result is committed as `20260801120713_init`, so the
+schema is reproducible with `prisma migrate deploy`. The seed runs. One thing
+did break, and it was the boot rather than the schema: the API validated
+`process.env` but nothing populated it — the Prisma CLI loads `.env` on its own,
+which is why migrate and seed worked while the server died on the first required
+var. `apps/api/src/lib/env.ts` now calls `process.loadEnvFile()` before
+validating, tolerating a missing file so injected-env production is unaffected.
 
 ## Open questions
 

@@ -86,6 +86,44 @@ export type ChangeLogEntry = {
   createdAt: string;
 };
 
+export type Signature = {
+  id: string;
+  typedName: string;
+  signedAt: string;
+};
+
+export type Amendment = {
+  id: string;
+  ordinal: number;
+  titleFa: string;
+  titleEn: string;
+  bodyFa: string;
+  bodyEn: string;
+  contentHash: string;
+  publishedAt: string | null;
+  approvedAt: string | null;
+  signature: Signature | null;
+};
+
+/**
+ * The published revision, with its own frozen title and fee. The printable
+ * view reads these rather than the identically named fields on Contract —
+ * those are Root's working draft, and the whole point of `contentHash` is that
+ * what you print is what the hash covers.
+ */
+export type ContractRevision = {
+  id: string;
+  version: number;
+  titleFa: string;
+  titleEn: string;
+  amount: string | null;
+  contentHash: string | null;
+  publishedAt: string | null;
+  approvedAt: string | null;
+  signature: Signature | null;
+  amendments: Amendment[];
+};
+
 export type Gate = {
   designComplete: boolean;
   contractApproved: boolean;
@@ -109,7 +147,8 @@ export type Contract = {
   articles: Article[];
   comments: Comment[];
   changeLog: ChangeLogEntry[];
-  signature: { id: string; typedName: string; signedAt: string } | null;
+  signature: Signature | null;
+  revision: ContractRevision | null;
 };
 
 const USER_FIELDS = gql`
@@ -202,6 +241,37 @@ export const CONTRACT_FIELDS = gql`
       id
       typedName
       signedAt
+    }
+    revision {
+      id
+      version
+      titleFa
+      titleEn
+      amount
+      contentHash
+      publishedAt
+      approvedAt
+      signature {
+        id
+        typedName
+        signedAt
+      }
+      amendments {
+        id
+        ordinal
+        titleFa
+        titleEn
+        bodyFa
+        bodyEn
+        contentHash
+        publishedAt
+        approvedAt
+        signature {
+          id
+          typedName
+          signedAt
+        }
+      }
     }
   }
 `;

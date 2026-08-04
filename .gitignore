@@ -4,11 +4,17 @@ build/
 .env
 .env.*
 !.env.example
+!.env.production.example
 *.local
 .DS_Store
 coverage/
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal
-apps/api/uploads/
+# STORAGE_DIR's development default. Real uploads, never in the repo.
+apps/api/storage/
 .vite/
 *.tsbuildinfo
+test-results/
+playwright-report/
+blob-report/
+.playwright/

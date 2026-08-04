@@ -5,14 +5,19 @@ import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@apollo/server/express4';
 
 import { env } from './lib/env.js';
+import { errorLogging, formatError } from './lib/logging.js';
 import { prisma } from './lib/prisma.js';
 import { typeDefs } from './graphql/typeDefs.js';
-import { resolvers } from './graphql/resolvers.js';
+import { resolvers } from './graphql/resolvers/index.js';
 import { buildContext, type Context } from './context.js';
+import { ensureStorageReady } from './lib/storage.js';
+import { filesRouter, filesErrorHandler } from './routes/files.js';
 
 const app = express();
 
-app.set('trust proxy', 1); // behind host Nginx for TLS termination
+// Not a constant, because the right number depends on the deployment shape
+// and getting it wrong corrupts `Signature.ip` silently. See env.ts.
+app.set('trust proxy', env.TRUST_PROXY_HOPS);
 app.use(cookieParser());
 app.use(
   cors({
@@ -20,6 +25,16 @@ app.use(
     credentials: true,
   }),
 );
+
+// Before the first request, not on the first upload — the same reason env.ts
+// validates at boot. A STORAGE_DIR that cannot be created is a deployment
+// mistake, and it should stop the process rather than surface as one broken
+// upload weeks later.
+await ensureStorageReady();
+
+// Mounted ahead of /graphql and outside express.json: these carry multipart
+// bodies and binary responses, neither of which that middleware should see.
+app.use(filesRouter);
 
 app.get('/health', async (_req, res) => {
   try {
@@ -35,6 +50,14 @@ const server = new ApolloServer<Context>({
   resolvers,
   // Stack traces are for the server log, not for the client.
   includeStacktraceInErrorResponses: env.NODE_ENV !== 'production',
+  // Apollo leaves this on everywhere. The schema names every field of a
+  // customer's contract, so in production it is a map handed to anyone who
+  // asks; in development it is what makes Sandbox usable.
+  introspection: env.NODE_ENV !== 'production',
+  // …and the log the stack traces above are for.
+  plugins: [errorLogging],
+  // Apollo does not mask error messages on its own — see logging.ts.
+  formatError,
 });
 
 await server.start();
@@ -46,6 +69,10 @@ app.use(
     context: async ({ req, res }) => buildContext(req, res),
   }),
 );
+
+// Last, so it sees errors thrown by the file routes above. Express picks an
+// error handler by its four-argument shape, and only after every route.
+app.use(filesErrorHandler);
 
 app.listen(env.PORT, () => {
   console.info(`Root API listening on http://localhost:${env.PORT}/graphql`);

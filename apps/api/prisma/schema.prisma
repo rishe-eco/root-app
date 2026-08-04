@@ -46,7 +46,7 @@ model User {
   // Preferred locale, so notifications can go out in the right language.
   locale String @default("fa")
 
-  contracts     Contract[]     @relation("CustomerContracts")
+  contracts     Contract[]      @relation("CustomerContracts")
   comments      Comment[]
   changeLogs    ChangeLog[]
   signatures    Signature[]
@@ -54,6 +54,7 @@ model User {
   billingEntry  BillingEntry[]
   tickets       Ticket[]
   ticketMessage TicketMessage[]
+  uploads       StoredFile[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -100,9 +101,9 @@ enum ContractStatus {
 }
 
 model Contract {
-  id     String @id @default(cuid())
+  id      String @id @default(cuid())
   /// Human reference shown to the customer, e.g. RC-2026-014.
-  ref    String @unique
+  ref     String @unique
   titleFa String
   titleEn String
 
@@ -112,20 +113,29 @@ model Contract {
   status ContractStatus @default(DRAFT)
 
   /// Toman. Integer — no sub-unit in practice, and no float rounding.
+  /// This is the *draft* fee; a published revision carries its own frozen copy.
   amount BigInt?
 
   /// Set when Root hands it over; until then the customer cannot see it.
   publishedAt DateTime?
 
-  contractApprovedAt DateTime?
+  /// The live published pair. The two lineages advance on separate clocks —
+  /// publishing a design revision never touches the contract's approval or
+  /// signature, and vice versa. Null before the first revision is published.
+  currentContractRevisionId String?           @unique
+  currentContractRevision   ContractRevision? @relation("CurrentContractRevision", fields: [currentContractRevisionId], references: [id])
+  currentDesignRevisionId   String?           @unique
+  currentDesignRevision     DesignRevision?   @relation("CurrentDesignRevision", fields: [currentDesignRevisionId], references: [id])
 
-  concepts   DesignConcept[]
+  contractRevisions ContractRevision[] @relation("ContractRevisions")
+  designRevisions   DesignRevision[]   @relation("ContractDesignRevisions")
+
   scopeItems ScopeItem[]
   articles   Article[]
   comments   Comment[]
   changeLogs ChangeLog[]
-  signature  Signature?
   billing    BillingEntry[]
+  files      StoredFile[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -133,27 +143,135 @@ model Contract {
   @@index([customerId, status])
 }
 
-/// A whole design direction (1a / 1b / 1c). Exactly one may be chosen; choosing
-/// a different one resets the page approvals beneath it.
-model DesignConcept {
+// ---------------------------------------------------------------------------
+// Revisions — two independent lineages from one contract
+// ---------------------------------------------------------------------------
+//
+// Where the draft lives is deliberately different on each side, because the
+// storage is:
+//
+//   Contract — a legal document. A published revision is an immutable JSON
+//     snapshot with a hash, which is exactly what a signature should attest to.
+//     The *draft* is the mutable `Article` rows (plus title/amount) still
+//     hanging off `Contract`; publishing serializes them into a revision.
+//
+//   Design — interactive. The customer approves pages one at a time, so it
+//     stays relational and a revision is simply the rows sharing a
+//     `designRevisionId`. The *draft* is a DesignRevision with `publishedAt`
+//     null, edited in place until it is published.
+//
+// Both are immutable once published. Editing always produces the next draft.
+
+/// One frozen version of the contract text. Immutable once published; a
+/// signature binds here, never to the contract in the abstract.
+model ContractRevision {
   id         String   @id @default(cuid())
   contractId String
-  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contract   Contract @relation("ContractRevisions", fields: [contractId], references: [id], onDelete: Cascade)
+
+  version Int
+
+  /// Canonically serialized: stable key order, the fee as a decimal string
+  /// (BigInt does not survive JSON), dates as ISO-8601. See lib/revision.ts —
+  /// without a canonical form the same contract hashes two ways and the hash
+  /// attests to nothing.
+  ///
+  /// Null means **unsealed**: the row was created by the backfill migration,
+  /// which cannot canonicalize in SQL without forking that logic. `npm run
+  /// backfill` fills it. Publishing always sets both, so null only ever
+  /// appears on a backfilled v1, and signing refuses an unsealed revision.
+  snapshot    Json?
+  /// sha256 of the canonical snapshot, hex. What the signature stands against.
+  contentHash String?
+
+  publishedAt  DateTime?
+  approvedAt   DateTime?
+  /// Set when a later revision replaces this one. A *signed* revision is
+  /// terminal and is never superseded — changes after signature are amendments.
+  supersededAt DateTime?
+
+  signature  Signature?
+  amendments Amendment[]
+  currentFor Contract?   @relation("CurrentContractRevision")
+
+  createdAt DateTime @default(now())
+
+  @@unique([contractId, version])
+}
+
+/// One version of the design: its concepts, their pages, and the approvals
+/// held inside it.
+model DesignRevision {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation("ContractDesignRevisions", fields: [contractId], references: [id], onDelete: Cascade)
+
+  version Int
+
+  publishedAt  DateTime?
+  supersededAt DateTime?
+
+  concepts   DesignConcept[]
+  currentFor Contract?       @relation("CurrentDesignRevision")
+
+  createdAt DateTime @default(now())
+
+  @@unique([contractId, version])
+}
+
+/// Layered on top of a *signed* base revision rather than replacing it —
+/// paper contracts are not re-issued, they get an addendum both parties sign.
+/// The effective contract is the signed base plus every accepted amendment in
+/// ordinal order; the base's signature is never invalidated.
+model Amendment {
+  id                 String           @id @default(cuid())
+  contractRevisionId String
+  contractRevision   ContractRevision @relation(fields: [contractRevisionId], references: [id], onDelete: Cascade)
+
+  /// A1, A2, … in order.
+  ordinal Int
+
+  titleFa String
+  titleEn String
+  bodyFa  String
+  bodyEn  String
+
+  contentHash String
+
+  publishedAt DateTime?
+  approvedAt  DateTime?
+
+  signature Signature?
+
+  createdAt DateTime @default(now())
+
+  @@unique([contractRevisionId, ordinal])
+}
+
+/// A whole design direction (1a / 1b / 1c). Exactly one may be chosen; choosing
+/// a different one within a revision resets the page approvals beneath it.
+model DesignConcept {
+  id               String         @id @default(cuid())
+  designRevisionId String
+  designRevision   DesignRevision @relation(fields: [designRevisionId], references: [id], onDelete: Cascade)
 
   /// Short id shown on the card: "1a", "1b", "1c".
   key      String
   labelFa  String
   labelEn  String
   /// Uploaded preview. Null until Root uploads one — the UI falls back to the
-  /// placeholder browser-chrome block.
-  imageUrl String?
-  position Int     @default(0)
+  /// placeholder browser-chrome block. Set from `imageFile`, never by hand:
+  /// see the note on PageDesign.imageUrl for why both fields exist.
+  imageUrl    String?
+  imageFileId String?
+  imageFile   StoredFile? @relation("ConceptImage", fields: [imageFileId], references: [id], onDelete: Restrict)
+  position    Int         @default(0)
 
   chosenAt DateTime?
 
   pages PageDesign[]
 
-  @@unique([contractId, key])
+  @@unique([designRevisionId, key])
 }
 
 /// One page's design under a concept (Landing, About, Contracts, Portal login).
@@ -162,15 +280,98 @@ model PageDesign {
   conceptId String
   concept   DesignConcept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
 
-  key      String
-  labelFa  String
-  labelEn  String
-  imageUrl String?
-  position Int     @default(0)
+  key     String
+  labelFa String
+  labelEn String
+
+  /// Why two fields for one image.
+  ///
+  /// `imageUrl` is what the client renders *and* what `lib/design.ts` compares
+  /// to decide whether a page changed between revisions — so it has to be a
+  /// plain, stable string. `imageFileId` is the referential half: it lets the
+  /// database answer "is this file still in use", and `onDelete: Restrict`
+  /// makes deleting an image a published revision depends on impossible rather
+  /// than merely discouraged.
+  ///
+  /// They are written together and only together (`lib/files.ts`), with
+  /// `imageUrl` derived as `/files/<id>`. A null `imageFileId` beside a set
+  /// `imageUrl` is legal and means an externally hosted image — the only shape
+  /// available before uploads existed.
+  imageUrl    String?
+  imageFileId String?
+  imageFile   StoredFile? @relation("PageImage", fields: [imageFileId], references: [id], onDelete: Restrict)
+  position    Int         @default(0)
 
   approvedAt DateTime?
 
   @@unique([conceptId, key])
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+//
+// The bytes live on disk (`lib/storage.ts`); this table is the part the
+// database has to know about, which is *who may read them*. A file record
+// without an owner cannot be authorised, so the two visibilities are not
+// cosmetic:
+//
+//   PRIVATE — belongs to exactly one contract. Served by the API only after
+//     checking the caller is that contract's customer, or an admin.
+//   PUBLIC  — served straight off disk by Nginx, never through Node.
+//
+// Both exist from the first migration on purpose (build plan §F1): the split
+// is what decides the storage key, and retrofitting it means re-keying every
+// file already written.
+
+enum FileVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+/// What kind of thing this is — which sets the size limit and the accepted
+/// types (`lib/files.ts`). Not the same axis as visibility: the Research Lab
+/// keeps a per-entry public/private flag, so a research text can be either.
+enum FileClass {
+  /// Concept and page previews for a contract's design. Customer-private.
+  DESIGN_IMAGE
+  /// Hosted full text in the Research Lab. Not yet produced by anything.
+  RESEARCH_TEXT
+}
+
+model StoredFile {
+  id String @id @default(cuid())
+
+  /// Opaque path within STORAGE_DIR, assigned by the storage layer. Never
+  /// derived from the uploaded filename — that string is attacker-controlled.
+  key String @unique
+
+  class      FileClass
+  visibility FileVisibility
+
+  /// The type the server determined, not the one the client claimed.
+  mime  String
+  bytes Int
+  /// Only ever echoed back in a download filename, never used as a path.
+  originalName String
+
+  /// The ownership edge the private check reads. Null for PUBLIC files;
+  /// required for PRIVATE ones — enforced by a CHECK constraint in the
+  /// migration, because a private file nobody owns is one nobody can ever
+  /// be authorised to read.
+  contractId String?
+  contract   Contract? @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+
+  conceptImages DesignConcept[] @relation("ConceptImage")
+  pageImages    PageDesign[]    @relation("PageImage")
+
+  createdAt DateTime @default(now())
+
+  @@index([contractId])
+  @@index([class, visibility])
 }
 
 /// Appendix 1 rendered as tickable items. Never gated — the customer can tick
@@ -180,18 +381,20 @@ model ScopeItem {
   contractId String
   contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
-  key     String
-  labelFa String
-  labelEn String
-  position Int @default(0)
+  key      String
+  labelFa  String
+  labelEn  String
+  position Int    @default(0)
 
   checkedAt DateTime?
 
   @@unique([contractId, key])
 }
 
-/// The fourteen articles plus Appendix 1. Body text is optional so a contract
-/// can be published with the structure in place and the text filled in later.
+/// The fourteen articles plus Appendix 1, as the editable **draft**. Body text
+/// is optional so a contract can be published with the structure in place and
+/// the text filled in later. What a customer reads is the snapshot inside the
+/// current ContractRevision, not these rows.
 model Article {
   id         String   @id @default(cuid())
   contractId String
@@ -228,19 +431,34 @@ model Comment {
   @@index([contractId, createdAt])
 }
 
+/// Binds to a **contract revision or an amendment**, exactly one of the two —
+/// enforced by a CHECK constraint, since Prisma cannot express it. It used to
+/// bind to the contract, which was the one constraint versioning genuinely
+/// breaks: amendments each carry their own signature, so one-per-contract is
+/// wrong. Unique on each side keeps one signature per instrument.
 model Signature {
-  id         String   @id @default(cuid())
-  contractId String   @unique
-  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
+
+  contractRevisionId String?           @unique
+  contractRevision   ContractRevision? @relation(fields: [contractRevisionId], references: [id], onDelete: Cascade)
+
+  amendmentId String?    @unique
+  amendment   Amendment? @relation(fields: [amendmentId], references: [id], onDelete: Cascade)
 
   signerId String
   signer   User   @relation(fields: [signerId], references: [id])
 
   /// The name as typed, kept verbatim — it is the signature.
   typedName String
-  method    String @default("TYPED")
+  method    String  @default("TYPED")
   ip        String?
   userAgent String?
+
+  /// The hash the signer actually attested to, copied at signing time. Kept
+  /// here as well as on the revision so tampering is detectable from the
+  /// signature alone. Null on a signature made before content hashing existed
+  /// — back-dating one would be a claim nobody made.
+  signedHash String?
 
   signedAt DateTime @default(now())
 }
@@ -262,6 +480,12 @@ enum ChangeAction {
   SCOPE_ON
   SCOPE_OFF
   STATUS_CHANGED
+  CONTRACT_REVISED
+  DESIGN_REVISED
+  CONTRACT_AMENDED
+  RE_APPROVED
+  RE_SIGNED
+  AMENDMENT_SIGNED
 }
 
 model ChangeLog {
@@ -302,13 +526,13 @@ model BillingEntry {
   contractId String?
   contract   Contract? @relation(fields: [contractId], references: [id])
 
-  source      BillingSource
+  source        BillingSource
   descriptionFa String
   descriptionEn String
   /// Toman.
-  amount      BigInt
-  issuedAt    DateTime  @default(now())
-  paidAt      DateTime?
+  amount        BigInt
+  issuedAt      DateTime      @default(now())
+  paidAt        DateTime?
 
   @@index([customerId, paidAt])
 }

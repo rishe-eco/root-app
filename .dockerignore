@@ -1,0 +1,34 @@
+# The build context is the whole workspace, because npm workspaces need the
+# root manifest and lockfile. Everything a build does not read stays out — not
+# for size, but because a copied .env would bake a secret into an image layer
+# and no later RUN could remove it.
+
+node_modules
+**/node_modules
+dist
+build
+**/dist
+**/build
+.vite
+**/*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+*.local
+
+.git
+.gitignore
+.github
+.claude
+
+# Runbook, host Nginx config and the release script — they run on the server or
+# on your machine, never inside a container.
+deploy/
+
+# The images are built from source, never from a running checkout's artifacts.
+apps/api/uploads/
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+coverage
+.DS_Store

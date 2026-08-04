@@ -6,8 +6,18 @@
  * left empty on purpose, so the placeholder shows until the real contract text
  * is pasted in.
  */
+import { loadEnvFile } from 'node:process';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { buildContractSnapshot, contentHash } from '../src/lib/revision.js';
+
+// Run directly by `npm run seed`, which is not the Prisma CLI and so does not
+// load .env for us. Same reason `src/lib/env.ts` does this.
+try {
+  loadEnvFile();
+} catch (err) {
+  if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+}
 
 const prisma = new PrismaClient();
 
@@ -96,6 +106,14 @@ async function main() {
     },
   });
 
+  // v1 of the design lineage: published, and the live one. Concepts and their
+  // pages hang off the revision, not off the contract.
+  const designRevision = await prisma.designRevision.upsert({
+    where: { contractId_version: { contractId: contract.id, version: 1 } },
+    update: {},
+    create: { contractId: contract.id, version: 1, publishedAt: contract.publishedAt },
+  });
+
   for (const [i, [key, labelFa, labelEn]] of (
     [
       ['1a', 'طرح ۱a', 'Concept 1a'],
@@ -104,9 +122,9 @@ async function main() {
     ] as Array<[string, string, string]>
   ).entries()) {
     const concept = await prisma.designConcept.upsert({
-      where: { contractId_key: { contractId: contract.id, key } },
+      where: { designRevisionId_key: { designRevisionId: designRevision.id, key } },
       update: {},
-      create: { contractId: contract.id, key, labelFa, labelEn, position: i },
+      create: { designRevisionId: designRevision.id, key, labelFa, labelEn, position: i },
     });
 
     for (const [j, [pk, pFa, pEn]] of PAGES.entries()) {
@@ -140,6 +158,31 @@ async function main() {
       },
     });
   }
+
+  // v1 of the contract lineage: the articles just written, frozen and hashed.
+  // Seeding it here rather than leaning on the backfill keeps a fresh database
+  // and a migrated one in the same state.
+  const articles = await prisma.article.findMany({ where: { contractId: contract.id } });
+  const snapshot = buildContractSnapshot(contract, articles);
+  const contractRevision = await prisma.contractRevision.upsert({
+    where: { contractId_version: { contractId: contract.id, version: 1 } },
+    update: {},
+    create: {
+      contractId: contract.id,
+      version: 1,
+      snapshot,
+      contentHash: contentHash(snapshot),
+      publishedAt: contract.publishedAt,
+    },
+  });
+
+  await prisma.contract.update({
+    where: { id: contract.id },
+    data: {
+      currentContractRevisionId: contractRevision.id,
+      currentDesignRevisionId: designRevision.id,
+    },
+  });
 
   const logCount = await prisma.changeLog.count({ where: { contractId: contract.id } });
   if (logCount === 0) {

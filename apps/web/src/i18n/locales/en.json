@@ -149,7 +149,34 @@
     "gate3sub": "Final step",
     "you": "You",
     "root": "Root",
-    "concept": "Concept {{id}}"
+    "concept": "Concept {{id}}",
+    "downloadPdf": "Download PDF"
+  },
+  "print": {
+    "back": "Back to contract",
+    "cta": "Print / Save as PDF",
+    "hint": "In the print dialog, set the destination to “Save as PDF”.",
+    "kind": "Contract",
+    "ref": "Reference",
+    "revision": "Revision",
+    "published": "Published",
+    "fee": "Fee",
+    "toman": "{{amount}} Toman",
+    "parties": "Parties",
+    "provider": "Provider",
+    "client": "Client",
+    "articles": "Articles",
+    "articleEmpty": "This article carries no text in this revision.",
+    "amendments": "Amendments",
+    "hash": "Hash",
+    "signedBy": "Signed by {{name}}",
+    "signature": "Signature",
+    "signedOn": "Signed on {{date}}",
+    "signedMethod": "Signed electronically by typed name.",
+    "unsigned": "This revision has not been signed.",
+    "unsealed": "unsealed revision — no content hash",
+    "printedFor": "Printed for {{name}}",
+    "unpublished": "This contract has no published revision yet, so there is nothing to print."
   },
   "pages": {
     "home": "Landing",
@@ -170,6 +197,12 @@
     "scopeOn": "ticked “{{arg}}”",
     "scopeOff": "un-ticked “{{arg}}”",
     "statusChanged": "moved the status to {{arg}}",
+    "contractRevised": "published contract {{arg}}",
+    "designRevised": "published design {{arg}}",
+    "contractAmended": "issued amendment {{arg}}",
+    "reApproved": "re-approved the contract",
+    "reSigned": "re-signed the contract",
+    "amendmentSigned": "signed amendment {{arg}}",
     "justNow": "Just now"
   },
   "stub": {

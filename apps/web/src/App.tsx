@@ -12,6 +12,7 @@ import ResetPassword from '@/portal/ResetPassword';
 import PortalLayout from '@/portal/PortalLayout';
 import Contracts from '@/portal/Contracts';
 import ContractDetail from '@/portal/ContractDetail';
+import ContractPrint from '@/portal/ContractPrint';
 import Stub from '@/portal/Stub';
 import Admin from '@/admin/Admin';
 
@@ -50,6 +51,10 @@ export default function App() {
           <Route index element={<Navigate to="contracts" replace />} />
           <Route path="contracts" element={<Contracts />} />
           <Route path="contracts/:id" element={<ContractDetail />} />
+          {/* Inside the portal, so it inherits the same session check — a
+              printable contract is no less private than the screen it came
+              from. The chrome around it is hidden at print time, not here. */}
+          <Route path="contracts/:id/print" element={<ContractPrint />} />
           <Route path="services" element={<Stub section="services" />} />
           <Route path="billing" element={<Stub section="billing" />} />
           <Route path="support" element={<Stub section="support" />} />

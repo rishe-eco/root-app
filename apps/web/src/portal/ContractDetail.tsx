@@ -115,6 +115,12 @@ export default function ContractDetail() {
       SCOPE_ON: 'scopeOn',
       SCOPE_OFF: 'scopeOff',
       STATUS_CHANGED: 'statusChanged',
+      CONTRACT_REVISED: 'contractRevised',
+      DESIGN_REVISED: 'designRevised',
+      CONTRACT_AMENDED: 'contractAmended',
+      RE_APPROVED: 'reApproved',
+      RE_SIGNED: 'reSigned',
+      AMENDMENT_SIGNED: 'amendmentSigned',
     }[e.action];
 
     // The one variable part of the sentence is localized here, not stored.
@@ -177,7 +183,19 @@ export default function ContractDetail() {
       <div className="detail">
         <div className="detail-main">
           <div className="detail-head">
-            <h1 className="t-h2">{title}</h1>
+            <div className="detail-head-row">
+              <h1 className="t-h2">{title}</h1>
+              {/* Only once there is a published revision — the printable view
+                  renders that, and refuses to stand in for it when absent. */}
+              {contract.revision ? (
+                <Link
+                  className="btn btn-secondary btn-sm"
+                  to={lp(locale, `/app/contracts/${contract.id}/print`)}
+                >
+                  {t('detail.downloadPdf')}
+                </Link>
+              ) : null}
+            </div>
             <p className="t-lead">
               {contract.customer.clientName ?? contract.customer.name} ·{' '}
               <span className="num-latin">{contract.ref}</span>

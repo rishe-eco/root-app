@@ -1,0 +1,157 @@
+/* Print — the contract as a document.
+
+   Two renderings of one markup: a paper-like preview on screen, and the sheet
+   itself on paper. The document is deliberately plainer than the app — near
+   monochrome, hairline rules, no fills — because it has to survive a cheap
+   office printer and a photocopier, and because the app's chalk ground would
+   either waste toner or be dropped by the browser's "background graphics" box
+   and change the layout with it.
+
+   Everything is a token, and every inline/block property is logical, so the
+   sheet mirrors for Persian the way the rest of the product does. */
+
+/* ---- Screen: the sheet in its holder ----------------------------------- */
+
+.printview { padding: var(--space-8); display: flex; flex-direction: column; gap: var(--space-6); align-items: center; }
+
+.printbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; inline-size: 100%; max-inline-size: 210mm; }
+.printbar-hint { color: var(--color-text-muted); }
+
+.doc {
+  inline-size: 100%;
+  max-inline-size: 210mm;
+  background: #fff;
+  color: var(--indigo-900);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-16) var(--space-12);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+}
+
+/* ---- The document itself (shared by screen and paper) ------------------ */
+
+.doc-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); border-block-end: 2px solid var(--indigo-900); padding-block-end: var(--space-3); }
+.doc-brand { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-body-lg); font-weight: var(--weight-bold); }
+.doc-brand .dot { inline-size: 9px; block-size: 9px; border-radius: 50%; background: currentColor; align-self: center; flex: none; }
+.doc-brand-sub { font-size: var(--text-small); font-weight: var(--weight-regular); }
+.doc-kind { font-size: var(--text-small); text-transform: uppercase; letter-spacing: 0.12em; }
+
+.doc-title { font-size: var(--text-h2); line-height: var(--leading-tight); margin: var(--space-8) 0 var(--space-6); }
+
+.doc-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3) var(--space-8); margin: 0 0 var(--space-12); }
+.doc-fact { display: flex; gap: var(--space-3); align-items: baseline; border-block-end: 1px solid var(--neutral-300); padding-block-end: var(--space-2); }
+.doc-fact dt { font-size: var(--text-caption); text-transform: uppercase; letter-spacing: 0.06em; color: var(--neutral-700); flex: none; }
+.doc-fact dd { margin: 0; font-weight: var(--weight-medium); }
+
+.doc-sec { margin-block-end: var(--space-12); }
+.doc-h { font-size: var(--text-caption); text-transform: uppercase; letter-spacing: 0.12em; color: var(--neutral-700); font-weight: var(--weight-semibold); margin: 0 0 var(--space-4); padding-block-end: var(--space-2); border-block-end: 1px solid var(--neutral-300); }
+
+.doc-party { display: flex; gap: var(--space-4); align-items: baseline; padding-block: var(--space-2); }
+.doc-party-role { font-size: var(--text-small); color: var(--neutral-700); min-inline-size: 8em; flex: none; }
+.doc-party-name { font-weight: var(--weight-semibold); }
+
+.doc-art { margin-block-end: var(--space-6); }
+.doc-art-h { font-size: var(--text-body); font-weight: var(--weight-semibold); margin: 0 0 var(--space-2); line-height: var(--leading-snug); }
+.doc-art-h .num-latin { color: var(--neutral-700); }
+.doc-art-body { margin: 0; white-space: pre-wrap; }
+.doc-art-empty { color: var(--neutral-600); font-style: italic; }
+.doc-art-meta { margin: var(--space-2) 0 0; font-size: var(--text-caption); color: var(--neutral-700); word-break: break-all; }
+
+.doc-sign-name { font-family: 'Vazirmatn Variable', 'Vazirmatn', cursive; font-size: var(--text-h3); margin: 0 0 var(--space-2); }
+.doc-sign-meta { margin: 0; font-size: var(--text-small); color: var(--neutral-700); }
+
+/* The printing frame. It carries no look of its own — the borders are
+   collapsed and the cells unpadded — so the document inside lays out exactly
+   as it would in ordinary flow. See ContractPrint.tsx for why it is a table. */
+.doc-sheet { inline-size: 100%; border-collapse: collapse; }
+.doc-sheet > tbody > tr > td,
+.doc-sheet > tfoot > tr > td { padding: 0; border: 0; vertical-align: top; }
+
+.doc-verify {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: baseline;
+  font-size: 0.6875rem;
+  color: var(--neutral-700);
+  border-block-start: 1px solid var(--neutral-300);
+  padding-block-start: var(--space-2);
+}
+/* The hash is the long one; let it wrap rather than push the rest off. */
+.doc-verify-hash { word-break: break-all; }
+
+/* ---- Paper ------------------------------------------------------------- */
+
+@page {
+  size: A4;
+  margin: 16mm 15mm;
+}
+
+@media print {
+  /* The app is not part of the document. */
+  .side,
+  .topbar,
+  .printbar {
+    display: none !important;
+  }
+
+  html,
+  body,
+  .portal,
+  .work {
+    background: #fff !important;
+    display: block !important;
+    min-block-size: 0 !important;
+  }
+
+  .printview { padding: 0; display: block; }
+
+  .doc {
+    max-inline-size: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+    /* Points, not pixels — the reader is paper. */
+    font-size: 10.5pt;
+  }
+
+  .doc-title { font-size: 18pt; }
+  .doc-h { font-size: 8pt; }
+  .doc-art-h { font-size: 10.5pt; }
+  .doc-sign-name { font-size: 15pt; }
+  .doc-art-meta,
+  .doc-verify { font-size: 7.5pt; }
+
+  /* An article split across a page boundary is the one break that actually
+     hurts a contract — a clause you have to turn the page to finish reading is
+     a clause that gets misread. Headings never end a page alone. */
+  .doc-art,
+  .doc-fact,
+  .doc-party,
+  .doc-signature {
+    break-inside: avoid;
+  }
+
+  .doc-h,
+  .doc-art-h {
+    break-after: avoid;
+  }
+
+  .doc-art-body {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* What makes the strip repeat. `position: fixed` repeats too, but it paints
+     over the content rather than displacing it, and a strip printed across the
+     signature is worse than no strip at all. A footer row is reserved space. */
+  .doc-sheet > tfoot { display: table-footer-group; }
+  .doc-verify { margin-block-start: var(--space-4); }
+
+  /* Never break a URL out of the flow; there are none in the body, but a
+     pasted one in an article should not widen the sheet. */
+  .doc-art-body { overflow-wrap: anywhere; }
+}

@@ -69,6 +69,7 @@
 .detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-6); align-items: start; padding: var(--space-8); max-inline-size: 1240px; }
 .detail-main { display: flex; flex-direction: column; gap: var(--space-6); min-inline-size: 0; }
 .detail-head h1 { margin: 0; }
+.detail-head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .detail-head p { margin: var(--space-2) 0 0; }
 .rail { display: flex; flex-direction: column; gap: var(--space-6); position: sticky; inset-block-start: var(--space-6); }
 
