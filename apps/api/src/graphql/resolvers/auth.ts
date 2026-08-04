@@ -28,7 +28,7 @@ export const authMutations = {
     if (!user || !user.passwordHash || user.state !== 'ACTIVE') throw bad();
     if (!(await verifyPassword(args.password, user.passwordHash))) throw bad();
 
-    setSessionCookie(ctx.res, signSession({ sub: user.id, role: user.role }));
+    setSessionCookie(ctx.res, signSession({ sub: user.id }));
     return { user };
   },
 
@@ -75,7 +75,7 @@ export const authMutations = {
       prisma.authToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
     ]);
 
-    setSessionCookie(ctx.res, signSession({ sub: user.id, role: user.role }));
+    setSessionCookie(ctx.res, signSession({ sub: user.id }));
     return { user };
   },
 
@@ -133,7 +133,7 @@ export const authMutations = {
       prisma.authToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
     ]);
 
-    setSessionCookie(ctx.res, signSession({ sub: user.id, role: user.role }));
+    setSessionCookie(ctx.res, signSession({ sub: user.id }));
     return { user };
   },
 };

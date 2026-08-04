@@ -35,7 +35,7 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-const get = (id: string, opts: { as?: { id: string; role: 'ADMIN' | 'CUSTOMER' } | null; download?: boolean } = {}) =>
+const get = (id: string, opts: { as?: { id: string } | null; download?: boolean } = {}) =>
   fetch(`${base}/files/${id}${opts.download ? '?download=1' : ''}`, {
     headers: opts.as ? { cookie: cookieFor(opts.as) } : {},
     redirect: 'manual',

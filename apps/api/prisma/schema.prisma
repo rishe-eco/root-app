@@ -20,9 +20,23 @@ datasource db {
 // People & access
 // ---------------------------------------------------------------------------
 
+/// A person holds a *set* of these, never one (build plan F3). The set exists
+/// because the three surfaces arrived wanting different people: the Library
+/// wants a contributor, the Review Room wants a reviewer, and some hold both.
+///
+/// A role is never tested directly outside `lib/capabilities.ts` — it is an
+/// input to the capability table and nothing else. Testing a role works right
+/// up until someone holds two, and then every `===` silently inverts.
 enum Role {
+  /// Object-scoped only: their own contract, once published. Maps to the empty
+  /// capability set, which is not a demotion — see lib/capabilities.ts.
   CUSTOMER
   ADMIN
+  /// Writes Library entries. Deliberately *not* implied by REVIEWER.
+  CONTRIBUTOR
+  /// The Review Room and nothing else. This is the one role handed to someone
+  /// outside Root, so it is the one that has to stay least-privilege.
+  REVIEWER
 }
 
 enum UserState {
@@ -35,7 +49,10 @@ model User {
   id           String    @id @default(cuid())
   email        String    @unique
   name         String
-  role         Role      @default(CUSTOMER)
+  /// Non-empty, enforced by a CHECK constraint in the migration — Prisma
+  /// cannot express it, and a user with no roles is one no capability check
+  /// can ever admit.
+  roles        Role[]    @default([CUSTOMER])
   state        UserState @default(INVITED)
   passwordHash String?
 
@@ -59,7 +76,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([role, state])
+  /// GIN, because the only role-shaped read in the app is `allCustomers`, and
+  /// under a set that is array containment (`roles has CUSTOMER` → `@>`),
+  /// which no b-tree answers. `state` is dropped from the index rather than
+  /// carried over: it is written in four places and filtered in none, so it
+  /// was already a dead second column before the array made it impossible.
+  @@index([roles(ops: ArrayOps)], type: Gin)
 }
 
 enum TokenPurpose {

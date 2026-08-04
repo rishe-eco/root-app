@@ -57,7 +57,7 @@ async function main() {
   // existing account is not something a create command should ever do.
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    console.error(`${email} already exists (role ${existing.role}, state ${existing.state}).`);
+    console.error(`${email} already exists (roles ${existing.roles.join(', ')}, state ${existing.state}).`);
     process.exit(1);
   }
 
@@ -65,7 +65,7 @@ async function main() {
     data: {
       email,
       name: nameArg,
-      role: 'ADMIN',
+      roles: ['ADMIN'],
       state: 'ACTIVE',
       passwordHash: await hashPassword(password),
     },

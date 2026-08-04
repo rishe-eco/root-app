@@ -1,6 +1,23 @@
 import { gql } from '@apollo/client';
 
-export type Role = 'CUSTOMER' | 'ADMIN';
+export type Role = 'CUSTOMER' | 'ADMIN' | 'CONTRIBUTOR' | 'REVIEWER';
+
+/**
+ * Mirrors the server's `lib/capabilities.ts`. The UI branches on these and
+ * never on `roles` — a person may hold several, so any `role === '…'` on this
+ * side is wrong in the same way it was on the server, only quieter.
+ */
+export type Capability =
+  | 'contracts.manage'
+  | 'customers.manage'
+  | 'library.write'
+  | 'library.publish'
+  | 'library.editTree'
+  | 'review.participate'
+  | 'review.admin';
+
+export const can = (user: Pick<User, 'capabilities'> | null | undefined, cap: Capability) =>
+  user?.capabilities.includes(cap) ?? false;
 
 export type ContractStatus =
   | 'DRAFT'
@@ -29,7 +46,8 @@ export type User = {
   id: string;
   email: string;
   name: string;
-  role: Role;
+  roles: Role[];
+  capabilities: Capability[];
   clientName: string | null;
   locale: string;
 };
@@ -72,7 +90,7 @@ export type Article = {
 
 export type Comment = {
   id: string;
-  author: Pick<User, 'id' | 'name' | 'role'>;
+  author: Pick<User, 'id' | 'name'>;
   target: 'DESIGN' | 'CONTRACT';
   body: string;
   createdAt: string;
@@ -80,7 +98,7 @@ export type Comment = {
 
 export type ChangeLogEntry = {
   id: string;
-  actor: Pick<User, 'id' | 'name' | 'role'>;
+  actor: Pick<User, 'id' | 'name'>;
   action: ChangeAction;
   arg: string | null;
   createdAt: string;
@@ -156,7 +174,8 @@ const USER_FIELDS = gql`
     id
     email
     name
-    role
+    roles
+    capabilities
     clientName
     locale
   }
@@ -223,7 +242,6 @@ export const CONTRACT_FIELDS = gql`
       author {
         id
         name
-        role
       }
     }
     changeLog {
@@ -234,7 +252,6 @@ export const CONTRACT_FIELDS = gql`
       actor {
         id
         name
-        role
       }
     }
     signature {

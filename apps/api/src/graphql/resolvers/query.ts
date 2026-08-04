@@ -1,12 +1,12 @@
 import type { ContractStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { requireUser, requireRole, type Context } from '../../context.js';
+import { requireUser, requireCapability, type Context } from '../../context.js';
 import { contractInclude, loadForActor } from './contracts.js';
 
 /**
  * Reads. Every one of them starts by establishing who is asking — a customer's
  * queries are scoped to their own published contracts in the `where` clause,
- * and the two admin queries are guarded by role rather than by filter.
+ * and the two staff queries are guarded by a capability rather than by filter.
  */
 export const Query = {
   me: (_p: unknown, _a: unknown, ctx: Context) => ctx.user,
@@ -38,12 +38,17 @@ export const Query = {
     loadForActor(args.id, requireUser(ctx)),
 
   allContracts: async (_p: unknown, _a: unknown, ctx: Context) => {
-    requireRole(ctx, 'ADMIN');
+    requireCapability(ctx, 'contracts.manage');
     return prisma.contract.findMany({ include: contractInclude, orderBy: { updatedAt: 'desc' } });
   },
 
   allCustomers: async (_p: unknown, _a: unknown, ctx: Context) => {
-    requireRole(ctx, 'ADMIN');
-    return prisma.user.findMany({ where: { role: 'CUSTOMER' }, orderBy: { createdAt: 'desc' } });
+    requireCapability(ctx, 'customers.manage');
+    // `has`, not equality: a person may hold CUSTOMER alongside other roles.
+    // This is the containment read the GIN index on User.roles exists for.
+    return prisma.user.findMany({
+      where: { roles: { has: 'CUSTOMER' } },
+      orderBy: { createdAt: 'desc' },
+    });
   },
 };

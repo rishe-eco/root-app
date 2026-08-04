@@ -62,14 +62,14 @@ export async function seedFixture() {
   const publishedAt = new Date('2026-07-01T09:00:00Z');
 
   const admin = await prisma.user.create({
-    data: { email: 'admin@test.local', name: 'Root', role: 'ADMIN', state: 'ACTIVE', passwordHash },
+    data: { email: 'admin@test.local', name: 'Root', roles: ['ADMIN'], state: 'ACTIVE', passwordHash },
   });
   const customer = await prisma.user.create({
     data: {
       email: 'customer@test.local',
       name: 'Customer',
       clientName: 'Test Studio',
-      role: 'CUSTOMER',
+      roles: ['CUSTOMER'],
       state: 'ACTIVE',
       passwordHash,
     },
@@ -79,7 +79,7 @@ export async function seedFixture() {
     data: {
       email: 'stranger@test.local',
       name: 'Stranger',
-      role: 'CUSTOMER',
+      roles: ['CUSTOMER'],
       state: 'ACTIVE',
       passwordHash,
     },

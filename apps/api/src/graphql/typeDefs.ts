@@ -4,6 +4,8 @@ export const typeDefs = /* GraphQL */ `
   enum Role {
     CUSTOMER
     ADMIN
+    CONTRIBUTOR
+    REVIEWER
   }
 
   enum ContractStatus {
@@ -46,7 +48,17 @@ export const typeDefs = /* GraphQL */ `
     id: ID!
     email: String!
     name: String!
-    role: Role!
+    roles: [Role!]!
+    """
+    What this person may do, unioned across their roles. Plain strings rather
+    than an enum because the names are dotted ("contracts.manage") and a
+    GraphQL enum value cannot contain a dot.
+
+    **The client branches on these, never on roles.** Testing a role on the
+    client has exactly the failure the server-side table exists to prevent —
+    it just fails in a place that is harder to see.
+    """
+    capabilities: [String!]!
     clientName: String
     locale: String!
   }
