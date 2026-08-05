@@ -2,7 +2,7 @@ import { GraphQLError } from 'graphql';
 import type { ContractStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { env } from '../../lib/env.js';
-import { requireRole, type Context } from '../../context.js';
+import { requireCapability, type Context } from '../../context.js';
 import { newLinkToken } from '../../auth/tokens.js';
 import { buildContractSnapshot, contentHash } from '../../lib/revision.js';
 import { carryForward } from '../../lib/design.js';
@@ -69,7 +69,7 @@ export const adminMutations = {
     args: { email: string; name: string; clientName?: string },
     ctx: Context,
   ) => {
-    requireRole(ctx, 'ADMIN');
+    requireCapability(ctx, 'customers.manage');
     const email = args.email.trim().toLowerCase();
 
     const user = await prisma.user.upsert({
@@ -96,7 +96,7 @@ export const adminMutations = {
   },
 
   revokeInvite: async (_p: unknown, args: { userId: string }, ctx: Context) => {
-    requireRole(ctx, 'ADMIN');
+    requireCapability(ctx, 'customers.manage');
     await prisma.authToken.updateMany({
       where: { userId: args.userId, purpose: 'INVITE', usedAt: null, revokedAt: null },
       data: { revokedAt: new Date() },
@@ -117,7 +117,7 @@ export const adminMutations = {
     },
     ctx: Context,
   ) => {
-    const admin = requireRole(ctx, 'ADMIN');
+    const admin = requireCapability(ctx, 'contracts.manage');
     const { input } = args;
     const contract = await prisma.contract.create({
       data: {
@@ -143,7 +143,7 @@ export const adminMutations = {
     },
     ctx: Context,
   ) => {
-    requireRole(ctx, 'ADMIN');
+    requireCapability(ctx, 'contracts.manage');
     // Writes land in the draft revision, never in the published one the
     // customer is looking at. Publishing is what makes them visible.
     const draft = await draftDesignRevision(args.contractId);
@@ -174,7 +174,7 @@ export const adminMutations = {
     },
     ctx: Context,
   ) => {
-    requireRole(ctx, 'ADMIN');
+    requireCapability(ctx, 'contracts.manage');
     const concept = await prisma.designConcept.findUnique({
       where: { id: args.conceptId },
       include: { designRevision: true },
@@ -202,7 +202,7 @@ export const adminMutations = {
     args: { conceptId: string; fileId: string | null },
     ctx: Context,
   ) => {
-    requireRole(ctx, 'ADMIN');
+    requireCapability(ctx, 'contracts.manage');
     const concept = await prisma.designConcept.findUnique({
       where: { id: args.conceptId },
       include: { designRevision: true },
@@ -221,7 +221,7 @@ export const adminMutations = {
     args: { pageId: string; fileId: string | null },
     ctx: Context,
   ) => {
-    requireRole(ctx, 'ADMIN');
+    requireCapability(ctx, 'contracts.manage');
     const page = await prisma.pageDesign.findUnique({
       where: { id: args.pageId },
       include: { concept: { include: { designRevision: true } } },
@@ -241,7 +241,7 @@ export const adminMutations = {
     args: { contractId: string; key: string; labelFa: string; labelEn: string },
     ctx: Context,
   ) => {
-    requireRole(ctx, 'ADMIN');
+    requireCapability(ctx, 'contracts.manage');
     const count = await prisma.scopeItem.count({ where: { contractId: args.contractId } });
     await prisma.scopeItem.create({
       data: {
@@ -267,7 +267,7 @@ export const adminMutations = {
     },
     ctx: Context,
   ) => {
-    requireRole(ctx, 'ADMIN');
+    requireCapability(ctx, 'contracts.manage');
     const { contractId, number, ...rest } = args;
     await prisma.article.upsert({
       where: { contractId_number: { contractId, number } },
@@ -292,7 +292,7 @@ export const adminMutations = {
     args: { contractId: string },
     ctx: Context,
   ) => {
-    const admin = requireRole(ctx, 'ADMIN');
+    const admin = requireCapability(ctx, 'contracts.manage');
     const contract = await loadContract(args.contractId);
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -357,7 +357,7 @@ export const adminMutations = {
    * that independence is the point of two lineages.
    */
   publishDesignRevision: async (_p: unknown, args: { contractId: string }, ctx: Context) => {
-    const admin = requireRole(ctx, 'ADMIN');
+    const admin = requireCapability(ctx, 'contracts.manage');
     const contract = await loadContract(args.contractId);
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -423,7 +423,7 @@ export const adminMutations = {
   },
 
   publishContract: async (_p: unknown, args: { contractId: string }, ctx: Context) => {
-    const admin = requireRole(ctx, 'ADMIN');
+    const admin = requireCapability(ctx, 'contracts.manage');
     const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -443,7 +443,7 @@ export const adminMutations = {
     args: { contractId: string; status: ContractStatus },
     ctx: Context,
   ) => {
-    const admin = requireRole(ctx, 'ADMIN');
+    const admin = requireCapability(ctx, 'contracts.manage');
     // Permissive on purpose: from almost any status to almost any other,
     // with a manual override always available.
     await prisma.contract.update({

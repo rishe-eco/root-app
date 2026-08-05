@@ -1,6 +1,7 @@
 import { GraphQLError } from 'graphql';
 import type { ChangeAction, ContractStatus, Prisma, User } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import { can } from '../../lib/capabilities.js';
 
 /**
  * The contract-loading layer every resolver module builds on.
@@ -52,14 +53,18 @@ export const loadContract = (id: string) =>
 
 /**
  * A customer may only ever touch their own contract, and only after Root has
- * published it. Admins see everything.
+ * published it. Staff who work contracts see everything.
+ *
+ * This function is the *ownership* half of the permission model and stays that
+ * way: the one capability test here is the bypass for staff, and everything
+ * below it is an edge between this user and this row. See lib/capabilities.ts.
  */
 export async function loadForActor(id: string, user: User): Promise<FullContract> {
   const contract = await loadContract(id);
   if (!contract) {
     throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
   }
-  if (user.role === 'ADMIN') return contract;
+  if (can(user, 'contracts.manage')) return contract;
   if (contract.customerId !== user.id || contract.publishedAt === null) {
     throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
   }

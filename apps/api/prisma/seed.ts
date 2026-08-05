@@ -73,7 +73,7 @@ async function main() {
     create: {
       email: ADMIN_EMAIL,
       name: 'Root',
-      role: 'ADMIN',
+      roles: ['ADMIN'],
       state: 'ACTIVE',
       passwordHash: await bcrypt.hash(ADMIN_PASSWORD, 12),
     },
@@ -86,7 +86,7 @@ async function main() {
       email: CUSTOMER_EMAIL,
       name: 'نهال رضایی',
       clientName: 'استودیو نهال',
-      role: 'CUSTOMER',
+      roles: ['CUSTOMER'],
       state: 'ACTIVE',
       passwordHash: await bcrypt.hash(CUSTOMER_PASSWORD, 12),
     },

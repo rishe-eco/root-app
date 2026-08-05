@@ -216,7 +216,13 @@ export const customerMutations = {
     await log(contract.id, user.id, 'COMMENTED');
 
     // A customer comment puts the ball in Root's court.
-    if (user.role === 'CUSTOMER') await nudgeStatus(contract, 'WAITING_ON_ROOT');
+    //
+    // Deliberately an ownership test, not a capability one. The question here
+    // is not "may this person comment" — they already did — it is "which side
+    // of this contract just spoke", and that is an edge between this user and
+    // this row. Asking a capability would give the wrong answer for anyone who
+    // holds a staff role for unrelated reasons.
+    if (user.id === contract.customerId) await nudgeStatus(contract, 'WAITING_ON_ROOT');
     else await nudgeStatus(contract, 'WAITING_ON_CUSTOMER');
 
     return reload(contract.id);

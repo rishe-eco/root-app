@@ -15,7 +15,8 @@ import { exec, ok, stop } from './graphql.js';
  * The resolvers, against a real database.
  *
  * Two things are checked here that no unit test can reach: **who may do what**
- * (ownership and role, which live in loadForActor and requireRole), and
+ * (ownership in loadForActor, capability in requireCapability — two mechanisms
+ * that are deliberately never merged; see lib/capabilities.ts), and
  * **which refusal comes back** for each way of asking too early. The error
  * codes matter as much as the behaviour — the client branches on them.
  *
@@ -80,6 +81,42 @@ test('a customer is refused the admin queries', async () => {
 test('an admin sees every contract', async () => {
   const data = ok(await exec('{ allContracts { ref } }', { as: f.admin }));
   assert.equal((data.allContracts as unknown[]).length, 1);
+});
+
+test('a second role never costs someone the first one (build plan F3)', async () => {
+  // The regression this whole change exists to prevent. Under the old single
+  // `role` column every guard was an equality check, and equality against a
+  // *set* has no correct answer — whichever member you compared, the other
+  // half of the person's work was denied. Widening a role set must only ever
+  // widen what they may do.
+  const dual = await prisma.user.update({
+    where: { id: f.admin.id },
+    data: { roles: ['CUSTOMER', 'ADMIN'] },
+  });
+
+  ok(await exec('{ allContracts { ref } }', { as: dual }));
+  ok(await exec('{ allCustomers { email } }', { as: dual }));
+});
+
+test('a reviewer reaches neither the contract workspace nor the customer list', async () => {
+  // REVIEWER is the role handed to someone outside Root, so its blast radius
+  // is the one worth asserting rather than assuming.
+  const reviewer = await prisma.user.update({
+    where: { id: f.stranger.id },
+    data: { roles: ['REVIEWER'] },
+  });
+
+  assert.equal((await exec('{ allContracts { ref } }', { as: reviewer })).code, 'FORBIDDEN');
+  assert.equal((await exec('{ allCustomers { email } }', { as: reviewer })).code, 'FORBIDDEN');
+});
+
+test('capabilities reach the client derived, and a customer gets an empty list', async () => {
+  const asAdmin = ok(await exec('{ me { roles capabilities } }', { as: f.admin }));
+  assert.deepEqual((asAdmin.me as { roles: string[] }).roles, ['ADMIN']);
+  assert.ok((asAdmin.me as { capabilities: string[] }).capabilities.includes('contracts.manage'));
+
+  const asCustomer = ok(await exec('{ me { roles capabilities } }', { as: f.customer }));
+  assert.deepEqual((asCustomer.me as { capabilities: string[] }).capabilities, []);
 });
 
 // --- the gate, enforced on the server --------------------------------------

@@ -10,6 +10,7 @@ import {
   ME,
   PUBLISH_CONTRACT,
   SET_CONTRACT_STATUS,
+  can,
   type Contract,
   type ContractStatus,
   type User,
@@ -30,10 +31,19 @@ export default function Admin() {
   const locale = useLocale();
   const { data: meData, loading: meLoading } = useQuery<{ me: User | null }>(ME);
 
-  const isAdmin = meData?.me?.role === 'ADMIN';
-  const { data: customers } = useQuery<{ allCustomers: User[] }>(ALL_CUSTOMERS, { skip: !isAdmin });
+  // Each query is skipped on the capability its own resolver guards, rather
+  // than on one blanket "is this an admin" — so when someone holds only part
+  // of this screen's remit, the half they may use still loads.
+  const me = meData?.me;
+  const canManageContracts = can(me, 'contracts.manage');
+  const canManageCustomers = can(me, 'customers.manage');
+  // Either half is enough to be let in; the sections below gate themselves.
+  const mayUseAdmin = canManageContracts || canManageCustomers;
+  const { data: customers } = useQuery<{ allCustomers: User[] }>(ALL_CUSTOMERS, {
+    skip: !canManageCustomers,
+  });
   const { data: contracts } = useQuery<{ allContracts: Contract[] }>(ALL_CONTRACTS, {
-    skip: !isAdmin,
+    skip: !canManageContracts,
   });
 
   const [invite] = useMutation(INVITE_CUSTOMER, { refetchQueries: [{ query: ALL_CUSTOMERS }] });
@@ -47,7 +57,7 @@ export default function Admin() {
   const [error, setError] = useState<string | null>(null);
 
   if (meLoading) return <div className="content">{t('portal.loading')}</div>;
-  if (!isAdmin) return <Navigate to={lp(locale, '/portal')} replace />;
+  if (!mayUseAdmin) return <Navigate to={lp(locale, '/portal')} replace />;
 
   async function onInvite(e: FormEvent) {
     e.preventDefault();

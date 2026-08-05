@@ -7,7 +7,8 @@
  * design preview is absurd for a research PDF and vice versa (build plan §F1).
  */
 
-import type { FileClass, FileVisibility, Role } from '@prisma/client';
+import type { FileClass, FileVisibility } from '@prisma/client';
+import type { Capability } from './capabilities.js';
 
 export class UploadError extends Error {
   constructor(
@@ -60,8 +61,8 @@ export type ClassPolicy = {
   visibility: FileVisibility;
   maxBytes: number;
   accepted: AcceptedType[];
-  /** Who may upload into this class. */
-  uploaders: Role[];
+  /** What a caller must be able to do in order to upload into this class. */
+  uploader: Capability;
   /** Whether the upload must name the contract it belongs to. */
   requiresContract: boolean;
 };
@@ -78,7 +79,7 @@ export const POLICY: Record<FileClass, ClassPolicy> = {
     visibility: 'PRIVATE',
     maxBytes: 2 * 1024 * 1024,
     accepted: [PNG, JPEG, WEBP],
-    uploaders: ['ADMIN'],
+    uploader: 'contracts.manage',
     requiresContract: true,
   },
   // Nothing produces this yet — the Research Lab's R1 does. It is defined now
@@ -88,7 +89,9 @@ export const POLICY: Record<FileClass, ClassPolicy> = {
     visibility: 'PUBLIC',
     maxBytes: 25 * 1024 * 1024,
     accepted: [PDF],
-    uploaders: ['ADMIN'],
+    // A contributor's own remit, once R1 exists — the hosted full text is part
+    // of writing a Library entry, not a separate privilege.
+    uploader: 'library.write',
     requiresContract: false,
   },
 };

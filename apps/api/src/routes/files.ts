@@ -20,6 +20,7 @@ import { prisma } from '../lib/prisma.js';
 import { buildContext } from '../context.js';
 import { storage } from '../lib/storage.js';
 import { UploadError, checkSize, policyFor, safeDownloadName, sniff } from '../lib/files.js';
+import { can } from '../lib/capabilities.js';
 
 export const filesRouter: Router = Router();
 
@@ -83,7 +84,7 @@ filesRouter.post(
     }
 
     const { fileClass, policy } = policyFor(String(req.query.class ?? ''));
-    if (!policy.uploaders.includes(ctx.user.role)) {
+    if (!can(ctx.user, policy.uploader)) {
       throw new UploadError(403, 'FORBIDDEN', 'You do not have access to that.');
     }
 
@@ -195,7 +196,7 @@ filesRouter.get(
         res.status(401).json({ error: 'UNAUTHENTICATED', message: 'You need to sign in.' });
         return;
       }
-      if (ctx.user.role !== 'ADMIN') {
+      if (!can(ctx.user, 'contracts.manage')) {
         // Exactly the rule `loadForActor` applies to the contract itself: your
         // own, and published. A design image is part of a contract, so it
         // cannot be more visible than the contract that owns it.

@@ -1,4 +1,6 @@
+import type { Role as RoleName } from '@prisma/client';
 import { requireUser, type Context } from '../../context.js';
+import { can, capabilitiesOf } from '../../lib/capabilities.js';
 import { computeGate } from '../../lib/gate.js';
 import { readContractSnapshot } from '../../lib/revision.js';
 import type { FullContract } from './contracts.js';
@@ -73,7 +75,7 @@ export const ContractRevision = {
     ctx: Context,
   ) => {
     const user = requireUser(ctx);
-    if (user.role === 'ADMIN') return r.amendments;
+    if (can(user, 'contracts.manage')) return r.amendments;
     return r.amendments.filter((a) => a.publishedAt !== null);
   },
 };
@@ -88,4 +90,13 @@ export const PageDesign = {
 
 export const ScopeItem = {
   checked: (s: { checkedAt: Date | null }) => s.checkedAt !== null,
+};
+
+export const User = {
+  /**
+   * Derived, never stored. The client needs to know what to show, and the one
+   * thing it must not be handed for that purpose is a role to compare — so the
+   * union happens here, once, against the same table the server guards with.
+   */
+  capabilities: (u: { roles: RoleName[] }) => [...capabilitiesOf(u)],
 };

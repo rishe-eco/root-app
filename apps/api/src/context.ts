@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import { GraphQLError } from 'graphql';
-import type { Role, User } from '@prisma/client';
+import type { User } from '@prisma/client';
 import { prisma } from './lib/prisma.js';
+import { can, type Capability } from './lib/capabilities.js';
 import { readSession } from './auth/tokens.js';
 import { env } from './lib/env.js';
 
@@ -32,9 +33,18 @@ export function requireUser(ctx: Context): User {
   return ctx.user;
 }
 
-export function requireRole(ctx: Context, role: Role): User {
+/**
+ * The guard. It replaced `requireRole`, and the replacement is not cosmetic:
+ * `requireRole` compared one role for equality, which is the single check that
+ * cannot survive a user holding two. See lib/capabilities.ts.
+ *
+ * This is a *surface* guard only. It says the caller may use the thing at all;
+ * it says nothing about which rows they then see, which stays with the
+ * ownership edges in `loadForActor`.
+ */
+export function requireCapability(ctx: Context, capability: Capability): User {
   const user = requireUser(ctx);
-  if (user.role !== role) {
+  if (!can(user, capability)) {
     throw new GraphQLError('You do not have access to that.', {
       extensions: { code: 'FORBIDDEN' },
     });

@@ -39,8 +39,8 @@ export async function startFileServer(): Promise<{ base: string; close: () => Pr
 }
 
 /** The same cookie `buildContext` reads in production, signed the same way. */
-export function cookieFor(user: Pick<User, 'id' | 'role'>): string {
-  return `${env.COOKIE_NAME}=${signSession({ sub: user.id, role: user.role })}`;
+export function cookieFor(user: Pick<User, 'id'>): string {
+  return `${env.COOKIE_NAME}=${signSession({ sub: user.id })}`;
 }
 
 export const PNG = Buffer.from([
@@ -48,7 +48,7 @@ export const PNG = Buffer.from([
 ]);
 
 export type UploadOpts = {
-  as?: Pick<User, 'id' | 'role'> | null;
+  as?: Pick<User, 'id'> | null;
   fileClass?: string;
   contractId?: string | null;
   filename?: string;
