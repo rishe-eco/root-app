@@ -11,6 +11,7 @@ export const TEST_DATABASE_URL =
 /** The accounts prisma/seed.ts creates. */
 export const ADMIN = { email: 'admin@root.local', password: 'change-me-please' };
 export const CUSTOMER = { email: 'nahal@example.com', password: 'change-me-please' };
+export const REVIEWER = { email: 'reviewer@root.local', password: 'change-me-please' };
 export const CONTRACT_REF = 'RC-2026-014';
 /** What the contracts list actually shows — the ref is not on that screen. */
 export const CONTRACT_TITLE = 'Nahal website & portal';
@@ -55,11 +56,17 @@ export function renameContractDraft(titleEn: string) {
   });
 }
 
-/** Signs in through the real form, so the session cookie is set the real way. */
+/**
+ * Signs in through the real form, so the session cookie is set the real way.
+ *
+ * Waits for navigation away from the sign-in page rather than a fixed
+ * destination: a customer lands in `/app/`, staff land on `/desk` (F2's
+ * `homeFor`), and this helper is shared by both.
+ */
 export async function signIn(page: Page, who: { email: string; password: string }, lang = 'en') {
   await page.goto(`/${lang}/portal`);
   await page.locator('#email').fill(who.email);
   await page.locator('#password').fill(who.password);
   await page.getByRole('button', { name: /sign in|ورود/i }).click();
-  await page.waitForURL(new RegExp(`/${lang}/app/`));
+  await page.waitForURL((url) => !/\/portal\/?$/.test(url.pathname));
 }

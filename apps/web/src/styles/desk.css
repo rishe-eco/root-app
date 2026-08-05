@@ -1,0 +1,89 @@
+/**
+ * The desk's own shell grid. Not the portal's .side/.work/.topbar/.detail/
+ * .rail — those belong to a screen this one is allowed to diverge from.
+ * Every value below is a token reference; logical properties only, since the
+ * desk is a sidebar-and-main layout and that shape is exactly what breaks
+ * under a stray `left:` in Persian.
+ */
+
+.desk-shell { display: flex; min-block-size: 100vh; }
+
+.desk-side {
+  flex: 0 0 220px;
+  background: var(--color-footer);
+  border-inline-end: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-6);
+}
+
+.desk-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  color: var(--color-text);
+  padding-inline: var(--space-2);
+}
+.desk-brand .dot { inline-size: 11px; block-size: 11px; border-radius: 50%; background: var(--color-rule-strong); }
+
+.desk-nav { display: flex; flex-direction: column; gap: 2px; }
+
+.desk-link {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--text-body);
+}
+.desk-link:hover { background: var(--color-panel); color: var(--color-text); }
+.desk-link-active { background: var(--color-panel); color: var(--color-text); font-weight: var(--weight-semibold); }
+
+.desk-back { margin-block-start: auto; }
+
+.desk-main { flex: 1; display: flex; flex-direction: column; min-inline-size: 0; }
+
+.desk-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-8);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.desk-topbar-right { display: flex; align-items: center; gap: var(--space-4); }
+
+.desk-user { display: flex; align-items: center; gap: var(--space-3); }
+.desk-avatar {
+  inline-size: 34px;
+  block-size: 34px;
+  border-radius: 50%;
+  background: var(--color-inverse);
+  color: var(--color-text-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  flex: none;
+}
+
+.desk-content { padding: var(--space-8); display: flex; flex-direction: column; gap: var(--space-6); }
+
+.desk-section { display: flex; flex-direction: column; gap: var(--space-6); }
+
+.desk-muted { color: var(--color-text-muted); }
+
+.desk-code { word-break: break-all; }
+
+@media (max-width: 720px) {
+  .desk-shell { flex-direction: column; }
+  .desk-side { flex-basis: auto; flex-direction: row; align-items: center; }
+  .desk-nav { flex-direction: row; }
+  .desk-back { margin-block-start: 0; margin-inline-start: auto; }
+}

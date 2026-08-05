@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
+import { homeFor } from '@/lib/access';
 import { ME, SIGN_IN, type User } from '@/lib/queries';
 import AuthShell from './AuthShell';
 
@@ -23,15 +24,15 @@ export default function SignIn() {
   const from = (location.state as { from?: string } | null)?.from;
 
   if (!loading && data?.me) {
-    return <Navigate to={from ?? lp(locale, '/app/contracts')} replace />;
+    return <Navigate to={from ?? lp(locale, homeFor(data.me))} replace />;
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     try {
-      await signIn({ variables: { email, password }, refetchQueries: [{ query: ME }] });
-      navigate(from ?? lp(locale, '/app/contracts'), { replace: true });
+      const res = await signIn({ variables: { email, password }, refetchQueries: [{ query: ME }] });
+      navigate(from ?? lp(locale, homeFor(res.data?.signIn.user)), { replace: true });
     } catch {
       setError(t('auth.errInvalid'));
     }

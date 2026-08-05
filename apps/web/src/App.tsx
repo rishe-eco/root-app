@@ -14,7 +14,11 @@ import Contracts from '@/portal/Contracts';
 import ContractDetail from '@/portal/ContractDetail';
 import ContractPrint from '@/portal/ContractPrint';
 import Stub from '@/portal/Stub';
-import Admin from '@/admin/Admin';
+import DeskLayout from '@/desk/DeskLayout';
+import DeskHome from '@/desk/DeskHome';
+import Overview from '@/desk/Overview';
+import DeskContracts from '@/desk/Contracts';
+import Customers from '@/desk/Customers';
 
 /** `/` and any unprefixed path get sent to the visitor's best-guess locale. */
 function LocaleRedirect() {
@@ -60,8 +64,14 @@ export default function App() {
           <Route path="support" element={<Stub section="support" />} />
         </Route>
 
-        {/* Thin operational admin */}
-        <Route path="admin/*" element={<Admin />} />
+        {/* Staff shell — /admin never redirected here; that route was never
+            public, so the rename is free (F2 §1). */}
+        <Route path="desk" element={<DeskLayout />}>
+          <Route index element={<DeskHome />} />
+          <Route path="overview" element={<Overview />} />
+          <Route path="contracts" element={<DeskContracts />} />
+          <Route path="customers" element={<Customers />} />
+        </Route>
 
         <Route path="*" element={<NotFound />} />
       </Route>

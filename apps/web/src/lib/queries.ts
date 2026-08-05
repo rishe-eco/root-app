@@ -1,23 +1,7 @@
 import { gql } from '@apollo/client';
+import type { Role, Capability } from './access';
 
-export type Role = 'CUSTOMER' | 'ADMIN' | 'CONTRIBUTOR' | 'REVIEWER';
-
-/**
- * Mirrors the server's `lib/capabilities.ts`. The UI branches on these and
- * never on `roles` — a person may hold several, so any `role === '…'` on this
- * side is wrong in the same way it was on the server, only quieter.
- */
-export type Capability =
-  | 'contracts.manage'
-  | 'customers.manage'
-  | 'library.write'
-  | 'library.publish'
-  | 'library.editTree'
-  | 'review.participate'
-  | 'review.admin';
-
-export const can = (user: Pick<User, 'capabilities'> | null | undefined, cap: Capability) =>
-  user?.capabilities.includes(cap) ?? false;
+export type { Role, Capability };
 
 export type ContractStatus =
   | 'DRAFT'
@@ -164,6 +148,7 @@ export type Contract = {
   status: ContractStatus;
   amount: string | null;
   customer: Pick<User, 'id' | 'name' | 'clientName'>;
+  publishedAt: string | null;
   updatedAt: string;
   gate: Gate;
   concepts: DesignConcept[];
@@ -196,6 +181,7 @@ export const CONTRACT_FIELDS = gql`
     titleEn
     status
     amount
+    publishedAt
     updatedAt
     customer {
       id

@@ -25,6 +25,10 @@ const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@root.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'change-me-please';
 const CUSTOMER_EMAIL = process.env.SEED_CUSTOMER_EMAIL ?? 'nahal@example.com';
 const CUSTOMER_PASSWORD = process.env.SEED_CUSTOMER_PASSWORD ?? 'change-me-please';
+// F2's e2e suite is the first thing that can prove REVIEWER sees exactly one
+// desk section — the role F3 built had no surface to test until now.
+const REVIEWER_EMAIL = process.env.SEED_REVIEWER_EMAIL ?? 'reviewer@root.local';
+const REVIEWER_PASSWORD = process.env.SEED_REVIEWER_PASSWORD ?? 'change-me-please';
 
 const ARTICLES: Array<[number, string, string, string?, string?]> = [
   [1, 'طرفین', 'Parties',
@@ -89,6 +93,18 @@ async function main() {
       roles: ['CUSTOMER'],
       state: 'ACTIVE',
       passwordHash: await bcrypt.hash(CUSTOMER_PASSWORD, 12),
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: REVIEWER_EMAIL },
+    update: {},
+    create: {
+      email: REVIEWER_EMAIL,
+      name: 'Reviewer',
+      roles: ['REVIEWER'],
+      state: 'ACTIVE',
+      passwordHash: await bcrypt.hash(REVIEWER_PASSWORD, 12),
     },
   });
 

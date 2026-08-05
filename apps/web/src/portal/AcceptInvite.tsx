@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
+import { homeFor } from '@/lib/access';
 import { ACCEPT_INVITE, ME } from '@/lib/queries';
 import AuthShell from './AuthShell';
 
@@ -28,8 +29,8 @@ export default function AcceptInvite() {
     if (password !== confirm) return setError(t('auth.errMismatch'));
 
     try {
-      await accept({ variables: { token, name, password }, refetchQueries: [{ query: ME }] });
-      navigate(lp(locale, '/app/contracts'), { replace: true });
+      const res = await accept({ variables: { token, name, password }, refetchQueries: [{ query: ME }] });
+      navigate(lp(locale, homeFor(res.data?.acceptInvite.user)), { replace: true });
     } catch (err) {
       const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })
         .graphQLErrors?.[0]?.extensions?.code;
