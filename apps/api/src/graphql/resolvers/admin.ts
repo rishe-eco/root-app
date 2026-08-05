@@ -4,7 +4,7 @@ import { prisma } from '../../lib/prisma.js';
 import { env } from '../../lib/env.js';
 import { requireCapability, type Context } from '../../context.js';
 import { newLinkToken } from '../../auth/tokens.js';
-import { buildContractSnapshot, contentHash } from '../../lib/revision.js';
+import { draftState } from '../../lib/revision.js';
 import { carryForward } from '../../lib/design.js';
 import {
   conceptsInclude,
@@ -306,9 +306,8 @@ export const adminMutations = {
       );
     }
 
-    const snapshot = buildContractSnapshot(contract, contract.articles);
-    const hash = contentHash(snapshot);
-    if (current?.contentHash === hash) {
+    const { snapshot, hash, dirty } = draftState(contract, contract.articles, current);
+    if (!dirty) {
       throw new GraphQLError('Nothing has changed since the last revision.', {
         extensions: { code: 'NO_CHANGES' },
       });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildContractSnapshot, canonicalize, contentHash } from './revision.js';
+import { buildContractSnapshot, canonicalize, contentHash, draftState } from './revision.js';
 
 const article = (number: number, bodyFa: string | null = null) => ({
   number,
@@ -67,4 +67,38 @@ test('the hash is sha256 hex', () => {
     [],
   );
   assert.match(contentHash(snapshot), /^[0-9a-f]{64}$/);
+});
+
+test('draftState is dirty against a null current revision', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const { dirty } = draftState(contract, [article(1)], null);
+  assert.equal(dirty, true);
+});
+
+test('draftState is dirty against an unsealed current revision', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  // A backfilled v1 has no contentHash yet — "no hash" must read as "dirty",
+  // or the publish that would seal it can never be reached.
+  const { dirty } = draftState(contract, [article(1)], { contentHash: null });
+  assert.equal(dirty, true);
+});
+
+test('draftState is clean when the hash matches the current revision', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const articles = [article(1)];
+  const { hash } = draftState(contract, articles, null);
+  const { dirty } = draftState(contract, articles, { contentHash: hash });
+  assert.equal(dirty, false);
+});
+
+test('draftState goes dirty after an article body changes, clean again once reverted', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const { hash: published } = draftState(contract, [article(1, 'اول')], null);
+  const current = { contentHash: published };
+
+  const edited = draftState(contract, [article(1, 'دوم')], current);
+  assert.equal(edited.dirty, true);
+
+  const revertedBack = draftState(contract, [article(1, 'اول')], current);
+  assert.equal(revertedBack.dirty, false);
 });

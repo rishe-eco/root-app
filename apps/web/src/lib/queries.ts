@@ -40,7 +40,13 @@ export type ChangeAction =
   | 'COMMENTED'
   | 'SCOPE_ON'
   | 'SCOPE_OFF'
-  | 'STATUS_CHANGED';
+  | 'STATUS_CHANGED'
+  | 'CONTRACT_REVISED'
+  | 'DESIGN_REVISED'
+  | 'CONTRACT_AMENDED'
+  | 'RE_APPROVED'
+  | 'RE_SIGNED'
+  | 'AMENDMENT_SIGNED';
 
 export type User = {
   id: string;

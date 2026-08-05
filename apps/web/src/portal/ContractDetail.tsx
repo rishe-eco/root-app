@@ -230,7 +230,7 @@ export default function ContractDetail() {
                   <button
                     key={c.id}
                     type="button"
-                    disabled={busy || gate.contractApproved}
+                    disabled={busy}
                     className={`concept${c.chosen ? ' concept-chosen' : ''}${dim ? ' concept-dim' : ''}`}
                     onClick={() =>
                       run(() =>
@@ -301,7 +301,7 @@ export default function ContractDetail() {
                         <button
                           type="button"
                           className={`btn btn-sm ${p.approved ? 'btn-ghost' : 'btn-primary'}`}
-                          disabled={busy || gate.contractApproved}
+                          disabled={busy}
                           onClick={() =>
                             run(() =>
                               setPageApproval({

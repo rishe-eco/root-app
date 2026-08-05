@@ -113,6 +113,36 @@ export function buildContractSnapshot(
   };
 }
 
+export type DraftState = {
+  snapshot: ContractSnapshot;
+  /** The hash this draft would publish as. */
+  hash: string;
+  /**
+   * True when publishing would produce something different from what is live.
+   * An absent current revision counts as dirty, and so does an *unsealed* one —
+   * a backfilled v1 has no hash to compare against, and treating "no hash" as
+   * "unchanged" would refuse the very publish that seals it.
+   */
+  dirty: boolean;
+};
+
+/**
+ * The single computation behind both `ContractDraft.dirty` and
+ * `publishContractRevision`'s `NO_CHANGES` refusal. They are the same
+ * question — whether publishing this draft would produce something different
+ * from what is live — and must not be answered twice.
+ */
+export function draftState(
+  contract: ContractDraft,
+  articles: ArticleDraft[],
+  current: { contentHash: string | null } | null,
+): DraftState {
+  const snapshot = buildContractSnapshot(contract, articles);
+  const hash = contentHash(snapshot);
+  const dirty = current === null || current.contentHash === null || current.contentHash !== hash;
+  return { snapshot, hash, dirty };
+}
+
 export function buildAmendmentSnapshot(a: {
   ordinal: number;
   titleFa: string;

@@ -1,9 +1,10 @@
 import type { Role as RoleName } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
 import { computeGate } from '../../lib/gate.js';
-import { readContractSnapshot } from '../../lib/revision.js';
-import type { FullContract } from './contracts.js';
+import { draftState, readContractSnapshot } from '../../lib/revision.js';
+import { conceptsInclude, type FullContract } from './contracts.js';
 
 /**
  * Field resolvers for the object types — the layer that decides what a stored
@@ -59,6 +60,95 @@ export const Contract = {
       titleEn: snapshot.titleEn,
       amount: snapshot.amount,
     };
+  },
+
+  /**
+   * Root's working copy. Staff only — null for a customer rather than a
+   * refusal, so a query that also asks for `id` and `titleFa` still succeeds.
+   * No query of its own: `articles` is already on `c` via `contractInclude`.
+   */
+  draft: (c: FullContract, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    if (!can(user, 'contracts.manage')) return null;
+    const { hash, dirty } = draftState(c, c.articles, c.currentContractRevision);
+    return {
+      titleFa: c.titleFa,
+      titleEn: c.titleEn,
+      amount: c.amount === null ? null : c.amount.toString(),
+      articles: c.articles,
+      contentHash: hash,
+      dirty,
+    };
+  },
+
+  /**
+   * A pure read of the unpublished design revision, if one exists. Staff
+   * only. **Must never call `draftDesignRevision`** — that creates one, and a
+   * field resolver runs on every look, not just an intention to edit.
+   */
+  designDraft: async (c: FullContract, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    if (!can(user, 'contracts.manage')) return null;
+    return prisma.designRevision.findFirst({
+      where: { contractId: c.id, publishedAt: null },
+      include: conceptsInclude,
+    });
+  },
+
+  /** Newest first. Non-staff see published revisions only. */
+  contractRevisions: async (c: FullContract, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    const staff = can(user, 'contracts.manage');
+    const revisions = await prisma.contractRevision.findMany({
+      where: { contractId: c.id, ...(staff ? {} : { publishedAt: { not: null } }) },
+      orderBy: { version: 'desc' },
+      select: {
+        id: true,
+        version: true,
+        contentHash: true,
+        publishedAt: true,
+        approvedAt: true,
+        supersededAt: true,
+        signature: { select: { signedAt: true } },
+        _count: { select: { amendments: true } },
+      },
+    });
+    return revisions.map((r) => ({
+      id: r.id,
+      version: r.version,
+      contentHash: r.contentHash,
+      publishedAt: r.publishedAt,
+      approvedAt: r.approvedAt,
+      supersededAt: r.supersededAt,
+      signedAt: r.signature?.signedAt ?? null,
+      amendmentCount: r._count.amendments,
+    }));
+  },
+
+  /** Newest first. Non-staff see published revisions only. */
+  designRevisions: async (c: FullContract, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    const staff = can(user, 'contracts.manage');
+    const revisions = await prisma.designRevision.findMany({
+      where: { contractId: c.id, ...(staff ? {} : { publishedAt: { not: null } }) },
+      orderBy: { version: 'desc' },
+      select: {
+        id: true,
+        version: true,
+        publishedAt: true,
+        supersededAt: true,
+        concepts: { select: { _count: { select: { pages: true } } } },
+        _count: { select: { concepts: true } },
+      },
+    });
+    return revisions.map((r) => ({
+      id: r.id,
+      version: r.version,
+      publishedAt: r.publishedAt,
+      supersededAt: r.supersededAt,
+      conceptCount: r._count.concepts,
+      pageCount: r.concepts.reduce((sum, cpt) => sum + cpt._count.pages, 0),
+    }));
   },
 };
 

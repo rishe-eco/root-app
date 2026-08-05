@@ -185,6 +185,63 @@ export const typeDefs = /* GraphQL */ `
     totalPageCount: Int!
   }
 
+  """
+  Root's working copy: the mutable Article rows plus the title and fee on
+  Contract. Nothing here has been handed to the customer — publishing is what
+  does that.
+
+  Staff only. Null for everyone else, rather than an error: the customer's own
+  client never asks for it, and a refusal would confirm the field means something.
+  """
+  type ContractDraft {
+    titleFa: String!
+    titleEn: String!
+    "Toman, as a decimal string."
+    amount: String
+    articles: [Article!]!
+    "The hash this draft would publish as, from the same canonical form the publish path uses."
+    contentHash: String!
+    """
+    Whether publishing would change anything. This is exactly the condition
+    publishContractRevision enforces, so a disabled button and a NO_CHANGES
+    refusal cannot disagree.
+    """
+    dirty: Boolean!
+  }
+
+  """
+  The unpublished design revision, if one exists. Staff only.
+
+  **Reading this never creates one.** The draft comes into being on the first
+  edit, not on the first look — see draftDesignRevision.
+  """
+  type DesignDraft {
+    id: ID!
+    version: Int!
+    concepts: [DesignConcept!]!
+  }
+
+  "One entry in the contract lineage. A list of what happened, not a document."
+  type ContractRevisionSummary {
+    id: ID!
+    version: Int!
+    contentHash: String
+    publishedAt: DateTime
+    approvedAt: DateTime
+    supersededAt: DateTime
+    signedAt: DateTime
+    amendmentCount: Int!
+  }
+
+  type DesignRevisionSummary {
+    id: ID!
+    version: Int!
+    publishedAt: DateTime
+    supersededAt: DateTime
+    conceptCount: Int!
+    pageCount: Int!
+  }
+
   type Contract {
     id: ID!
     ref: String!
@@ -204,6 +261,13 @@ export const typeDefs = /* GraphQL */ `
     signature: Signature
     "The published revision that articles came from. Null before the first publish."
     revision: ContractRevision
+    "Staff only; null otherwise."
+    draft: ContractDraft
+    "Staff only; null otherwise."
+    designDraft: DesignDraft
+    "Both lineages, newest first. Non-staff see published revisions only."
+    contractRevisions: [ContractRevisionSummary!]!
+    designRevisions: [DesignRevisionSummary!]!
   }
 
   type StatusCount {
