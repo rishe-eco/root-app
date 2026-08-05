@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildContractSnapshot, canonicalize, contentHash, draftState } from './revision.js';
+import {
+  buildAmendmentSnapshot,
+  buildContractSnapshot,
+  canonicalize,
+  contentHash,
+  draftState,
+} from './revision.js';
 
 const article = (number: number, bodyFa: string | null = null) => ({
   number,
@@ -101,4 +107,32 @@ test('draftState goes dirty after an article body changes, clean again once reve
 
   const revertedBack = draftState(contract, [article(1, 'اول')], current);
   assert.equal(revertedBack.dirty, false);
+});
+
+test('an amendment snapshot hashes the same regardless of key order', () => {
+  // The same property already held for a contract snapshot — an amendment's
+  // contentHash is NOT NULL and sealed at creation (V2.md §3.2), so this one
+  // matters even more: nothing ever gets a second chance to seal it.
+  const a = buildAmendmentSnapshot({
+    ordinal: 1,
+    titleFa: 'الحاقیه',
+    titleEn: 'Amendment',
+    bodyFa: 'متن',
+    bodyEn: 'Body',
+  });
+  const b = {
+    bodyEn: 'Body',
+    titleEn: 'Amendment',
+    ordinal: 1,
+    bodyFa: 'متن',
+    titleFa: 'الحاقیه',
+  };
+  assert.equal(contentHash(a), contentHash(buildAmendmentSnapshot(b)));
+});
+
+test('changing an amendment body changes its hash', () => {
+  const base = { ordinal: 1, titleFa: 'ت', titleEn: 't', bodyFa: 'الف', bodyEn: 'a' };
+  const before = buildAmendmentSnapshot(base);
+  const after = buildAmendmentSnapshot({ ...base, bodyEn: 'b' });
+  assert.notEqual(contentHash(before), contentHash(after));
 });

@@ -87,3 +87,98 @@
   .desk-nav { flex-direction: row; }
   .desk-back { margin-block-start: 0; margin-inline-start: auto; }
 }
+
+/* ---- the contract workspace (V2) ---------------------------------------- */
+
+.workspace-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.workspace-tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.workspace-tab {
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--text-body);
+  border-block-end: 2px solid transparent;
+  margin-block-end: -1px;
+}
+.workspace-tab:hover { color: var(--color-text); }
+.workspace-tab-active { color: var(--color-text); border-block-end-color: var(--color-accent); font-weight: var(--weight-semibold); }
+
+.workspace-panel { display: flex; flex-direction: column; gap: var(--space-6); }
+
+.workspace-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* A record with its own Save button — no long-lived unsaved state across a
+   language switch (T8). Used for articles, concepts, pages, amendments. */
+.editor-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.editor-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.editor-card-actions { display: flex; gap: var(--space-2); align-items: center; }
+
+.editor-list { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.editor-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+@media (max-width: 720px) { .editor-grid-2 { grid-template-columns: 1fr; } }
+
+.dirty-note { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); color: var(--color-text-muted); }
+.dirty-dot { inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--gold-600); flex: none; }
+.dirty-dot-clean { background: var(--color-border-strong); }
+
+.thumb {
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+
+.dropzone {
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+}
+
+.carry-preview { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+.carry-preview-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); }
+/* The palette has no green/red ramp on purpose — state is carried by copy,
+   not hue (tokens.css). These tints stay inside clay/cyan/gold/neutral. */
+.change-tag { font-size: var(--text-caption); padding: 2px var(--space-2); border-radius: var(--radius-full); background: var(--color-panel); color: var(--color-text-muted); }
+.change-tag-added { background: var(--cyan-100); color: var(--cyan-700); }
+.change-tag-changed { background: var(--gold-100); color: var(--gold-600); }
+.change-tag-removed { background: var(--color-accent-soft); color: var(--color-error); }
+
+.live-banner {
+  border-inline-start: 3px solid var(--gold-600);
+  background: var(--color-panel);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-small);
+}
+
+.lineage-columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); }
+@media (max-width: 720px) { .lineage-columns { grid-template-columns: 1fr; } }
+.lineage-col { display: flex; flex-direction: column; gap: var(--space-2); }
+.lineage-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0; border-block-end: 1px solid var(--color-border); font-size: var(--text-small); }
+.lineage-row:last-child { border-block-end: none; }

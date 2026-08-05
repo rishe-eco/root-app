@@ -223,6 +223,13 @@ model ContractRevision {
 
 /// One version of the design: its concepts, their pages, and the approvals
 /// held inside it.
+///
+/// At most one row per contract may have `publishedAt IS NULL` — the draft
+/// Root is currently editing. Prisma's `@@unique` cannot express a partial
+/// index, so it is hand-written in the migration as
+/// `DesignRevision_one_draft_per_contract` (defect D5). Do not assume the
+/// constraint exists just because this comment says so if you are reading an
+/// older migration set — check the migration itself.
 model DesignRevision {
   id         String   @id @default(cuid())
   contractId String
@@ -259,6 +266,14 @@ model Amendment {
   bodyEn  String
 
   contentHash String
+
+  /// An optional, non-authoritative display hint (spec §5.3): the print view
+  /// still shows the sealed article untouched and renders the amendment
+  /// beside it, marked. Deliberately not a supersede — recomputing the
+  /// effective article set would make the readable contract a *computed*
+  /// document, which is the second candidate for "the document" lib/revision.ts
+  /// exists to prevent.
+  relatesToArticle Int?
 
   publishedAt DateTime?
   approvedAt  DateTime?
@@ -508,6 +523,7 @@ enum ChangeAction {
   RE_APPROVED
   RE_SIGNED
   AMENDMENT_SIGNED
+  AMENDMENT_APPROVED
 }
 
 model ChangeLog {

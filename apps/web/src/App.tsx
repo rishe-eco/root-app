@@ -19,6 +19,11 @@ import DeskHome from '@/desk/DeskHome';
 import Overview from '@/desk/Overview';
 import DeskContracts from '@/desk/Contracts';
 import Customers from '@/desk/Customers';
+import ContractWorkspace from '@/desk/workspace/ContractWorkspace';
+import WorkspaceContractTab from '@/desk/workspace/ContractTab';
+import WorkspaceDesignTab from '@/desk/workspace/DesignTab';
+import WorkspaceScopeTab from '@/desk/workspace/ScopeTab';
+import WorkspaceActivityTab from '@/desk/workspace/ActivityTab';
 
 /** `/` and any unprefixed path get sent to the visitor's best-guess locale. */
 function LocaleRedirect() {
@@ -70,6 +75,13 @@ export default function App() {
           <Route index element={<DeskHome />} />
           <Route path="overview" element={<Overview />} />
           <Route path="contracts" element={<DeskContracts />} />
+          <Route path="contracts/:id" element={<ContractWorkspace />}>
+            <Route index element={<Navigate to="contract" replace />} />
+            <Route path="contract" element={<WorkspaceContractTab />} />
+            <Route path="design" element={<WorkspaceDesignTab />} />
+            <Route path="scope" element={<WorkspaceScopeTab />} />
+            <Route path="activity" element={<WorkspaceActivityTab />} />
+          </Route>
           <Route path="customers" element={<Customers />} />
         </Route>
 

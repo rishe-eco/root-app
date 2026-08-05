@@ -314,7 +314,12 @@ Progress.
 - Contract detail: all five sections, the gate, the rail's status stepper and
   the history log.
 - Role-aware GraphQL API with the full Phase-1 mutation set.
-- Thin operational admin: issue invites, publish contracts, move status.
+- The staff shell at `/desk` (F2) and, inside it, the admin contract
+  workspace (V2): create a contract, fill in its articles from a template
+  or by hand, upload concept and page images, publish both lineages, hand
+  the contract to the customer, and — once signed — issue an amendment and
+  carry it to signature. No stage from here on needs the database or the
+  GraphQL sandbox touched by hand.
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -360,16 +365,22 @@ stack first ran on Postgres.
   the browser (above); what is missing is a PDF Root can generate itself, to
   email or to archive. That needs a headless browser in the API image, and it
   will render the existing print route.
-- An **upload form**. The upload itself is built and tested end to end (below);
-  what is missing is a screen with a file input on it, so previews still fall
-  back to the placeholder block. Until the admin workspace lands, the only way
-  to attach an image is `POST /upload` followed by `setConceptImage`.
-- Creating a contract, entering article text, and publishing a revision from
-  the admin UI — the mutations exist (`createContract`, `addConcept`,
-  `addPageDesign`, `addScopeItem`, `setArticle`, `publishContractRevision`,
-  `publishDesignRevision`) but nothing calls them. Until the admin workspace
-  lands, editing an article changes the draft and the customer sees nothing,
-  which is correct and also unusable.
+
+~~An upload form~~ and ~~creating a contract, entering article text, and
+publishing a revision from the admin UI~~ — both built by the admin contract
+workspace (V2); see "Built and working" above and the note below.
+
+**Admin contract workspace, run against a real database — 2026-08-06.** The
+full lifecycle was driven end to end in the browser, in both languages:
+create a contract, apply the article template, publish the contract
+revision, add a design concept and a page, upload a PNG to each and publish
+the design revision, hand the contract to the customer, complete the design
+and sign as the customer, then — back at the desk — issue an amendment,
+publish it, and approve and sign it as the customer. The base signature was
+untouched throughout, which is the property the two lineages (and now the
+amendment layer) exist for. `migrate diff` reports no drift; typecheck, the
+full unit and integration suites, and the e2e suite (22 specs, including the
+one driving this flow) are all green.
 
 **Run against a real database, 2026-08-01.** `prisma migrate dev` was generated
 against Postgres and the result is committed as `20260801120713_init`, so the

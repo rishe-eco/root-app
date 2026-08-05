@@ -4,6 +4,7 @@ import { requireUser, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
 import { computeGate } from '../../lib/gate.js';
 import { draftState, readContractSnapshot } from '../../lib/revision.js';
+import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
 
 /**
@@ -149,6 +150,57 @@ export const Contract = {
       conceptCount: r._count.concepts,
       pageCount: r.concepts.reduce((sum, cpt) => sum + cpt._count.pages, 0),
     }));
+  },
+};
+
+/** design.ts's kind literals are lower case; the GraphQL enum is upper case.
+ *  A total map rather than `.toUpperCase()` so a fifth literal fails loudly
+ *  at the type checker rather than producing a coincidentally-right string. */
+const PAGE_CHANGE_KIND: Record<PageChange['kind'], 'ADDED' | 'CHANGED' | 'REMOVED' | 'UNCHANGED'> = {
+  added: 'ADDED',
+  changed: 'CHANGED',
+  removed: 'REMOVED',
+  unchanged: 'UNCHANGED',
+};
+
+type DesignDraftRow = {
+  contractId: string;
+  concepts: Array<{
+    key: string;
+    chosenAt: Date | null;
+    pages: Array<{ key: string; imageUrl: string | null; approvedAt: Date | null }>;
+  }>;
+};
+
+export const DesignDraft = {
+  /**
+   * What publishing this draft would do, computed the same way the publish
+   * path does (V2.md §3.1) — a draft always shows zero approvals, because
+   * carry-forward restores them at publish time, not before. Showing the
+   * answer here is what keeps that from looking like a guess.
+   */
+  carryForward: async (draft: DesignDraftRow) => {
+    const contract = await prisma.contract.findUnique({
+      where: { id: draft.contractId },
+      select: { currentDesignRevisionId: true },
+    });
+    const previous = contract?.currentDesignRevisionId
+      ? await prisma.designRevision.findUnique({
+          where: { id: contract.currentDesignRevisionId },
+          include: conceptsInclude,
+        })
+      : null;
+
+    const { approvals, chosenConceptKey } = carryForward(previous?.concepts ?? [], draft.concepts);
+    const changes = diffDesign(previous?.concepts ?? [], draft.concepts);
+    const totalPages = draft.concepts.reduce((sum, c) => sum + c.pages.length, 0);
+
+    return {
+      chosenConceptKey,
+      carriedPageCount: approvals.length,
+      resetPageCount: totalPages - approvals.length,
+      changes: changes.map((c) => ({ ...c, kind: PAGE_CHANGE_KIND[c.kind] })),
+    };
   },
 };
 

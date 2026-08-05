@@ -71,23 +71,27 @@ export async function loadForActor(id: string, user: User): Promise<FullContract
   return contract;
 }
 
+/** Either the singleton client or a `$transaction(async (tx) => …)` handle. */
+type Db = typeof prisma | Prisma.TransactionClient;
+
 export async function log(
   contractId: string,
   actorId: string,
   action: ChangeAction,
   arg?: string | null,
+  db: Db = prisma,
 ) {
-  await prisma.changeLog.create({ data: { contractId, actorId, action, arg: arg ?? null } });
+  await db.changeLog.create({ data: { contractId, actorId, action, arg: arg ?? null } });
 }
 
 /**
  * Automatic transitions are defaults, not rails (v3 §8) — Root can always
  * override with setContractStatus. Terminal states are left alone.
  */
-export async function nudgeStatus(contract: FullContract, next: ContractStatus) {
+export async function nudgeStatus(contract: FullContract, next: ContractStatus, db: Db = prisma) {
   if (contract.status === 'DONE' || contract.status === 'DISCARDED') return;
   if (contract.status === next) return;
-  await prisma.contract.update({ where: { id: contract.id }, data: { status: next } });
+  await db.contract.update({ where: { id: contract.id }, data: { status: next } });
 }
 
 export const reload = async (id: string) => (await loadContract(id))!;

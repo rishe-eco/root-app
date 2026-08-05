@@ -4,6 +4,8 @@ import { GraphQLError } from 'graphql';
 import {
   assertCanApproveContract,
   assertCanSign,
+  assertCanApproveAmendment,
+  assertCanSignAmendment,
   computeGate,
   type GateInput,
 } from './gate.js';
@@ -185,6 +187,58 @@ test('already-signed is reported before unsealed', () => {
 });
 
 // --- the invariant nothing else enforces ------------------------------------
+
+// --- the amendment mini-gate -------------------------------------------------
+
+const amendment = (o: { published?: boolean; approved?: boolean; signed?: boolean } = {}) => ({
+  publishedAt: o.published ? AT : null,
+  approvedAt: o.approved ? AT : null,
+  signature: o.signed ? { id: 'sig_amend_1' } : null,
+});
+
+test('approving an unpublished amendment is refused', () => {
+  assert.equal(
+    codeOf(() => assertCanApproveAmendment(amendment())),
+    'AMENDMENT_UNPUBLISHED',
+  );
+});
+
+test('approving a published amendment is allowed', () => {
+  assert.equal(
+    codeOf(() => assertCanApproveAmendment(amendment({ published: true }))),
+    undefined,
+  );
+});
+
+test('approving an amendment twice is refused', () => {
+  assert.equal(
+    codeOf(() => assertCanApproveAmendment(amendment({ published: true, approved: true }))),
+    'ALREADY_APPROVED',
+  );
+});
+
+test('signing an amendment before it is approved is refused, even if published', () => {
+  assert.equal(
+    codeOf(() => assertCanSignAmendment(amendment({ published: true }))),
+    'GATE_CONTRACT_UNAPPROVED',
+  );
+});
+
+test('signing an approved amendment is allowed', () => {
+  assert.equal(
+    codeOf(() => assertCanSignAmendment(amendment({ published: true, approved: true }))),
+    undefined,
+  );
+});
+
+test('signing an amendment twice is refused', () => {
+  assert.equal(
+    codeOf(() =>
+      assertCanSignAmendment(amendment({ published: true, approved: true, signed: true })),
+    ),
+    'ALREADY_SIGNED',
+  );
+});
 
 test('with two concepts marked chosen, the gate reads the first', () => {
   // Documenting a known sharp edge rather than blessing it. computeGate takes

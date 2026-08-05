@@ -88,3 +88,41 @@ export function assertCanSign(input: GateInput) {
     });
   }
 }
+
+/**
+ * The amendment's own mini-gate: approve, then sign — without reopening the
+ * base contract. Kept beside the other two rather than inside `Gate` itself
+ * (house rule 3, and V3's note: growing `Gate` a fourth meaning makes every
+ * existing reader wonder which of two things it now answers).
+ */
+export function assertCanApproveAmendment(a: {
+  publishedAt: Date | null;
+  approvedAt: Date | null;
+}): void {
+  if (!a.publishedAt) {
+    throw new GraphQLError('This amendment has not been published yet.', {
+      extensions: { code: 'AMENDMENT_UNPUBLISHED' },
+    });
+  }
+  if (a.approvedAt) {
+    throw new GraphQLError('This amendment is already approved.', {
+      extensions: { code: 'ALREADY_APPROVED' },
+    });
+  }
+}
+
+export function assertCanSignAmendment(a: {
+  approvedAt: Date | null;
+  signature?: unknown | null;
+}): void {
+  if (!a.approvedAt) {
+    throw new GraphQLError('This amendment must be approved before it can be signed.', {
+      extensions: { code: 'GATE_CONTRACT_UNAPPROVED' },
+    });
+  }
+  if (a.signature) {
+    throw new GraphQLError('This amendment is already signed.', {
+      extensions: { code: 'ALREADY_SIGNED' },
+    });
+  }
+}

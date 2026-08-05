@@ -1,7 +1,13 @@
 import { GraphQLError } from 'graphql';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
-import { computeGate, assertCanApproveContract, assertCanSign } from '../../lib/gate.js';
+import {
+  computeGate,
+  assertCanApproveContract,
+  assertCanSign,
+  assertCanApproveAmendment,
+  assertCanSignAmendment,
+} from '../../lib/gate.js';
 import { loadForActor, log, nudgeStatus, reload } from './contracts.js';
 
 /**
@@ -189,6 +195,72 @@ export const customerMutations = {
 
     // Approved & signed -> the build is live. A default, not a rail.
     await nudgeStatus(contract, 'IN_PROGRESS');
+    return reload(contract.id);
+  },
+
+  /**
+   * The amendment's own mini-gate (V2.md §3.3): approve, then sign, without
+   * reopening the base. Ownership goes through the same `loadForActor` the
+   * rest of this file uses — an amendment is reached by id, so which
+   * contract it belongs to has to be looked up before that check can run.
+   */
+  approveAmendment: async (_p: unknown, args: { amendmentId: string }, ctx: Context) => {
+    const user = requireUser(ctx);
+    const amendment = await prisma.amendment.findUnique({
+      where: { id: args.amendmentId },
+      include: { contractRevision: { select: { contractId: true } } },
+    });
+    if (!amendment) {
+      throw new GraphQLError('No such amendment.', { extensions: { code: 'NOT_FOUND' } });
+    }
+    const contract = await loadForActor(amendment.contractRevision.contractId, user);
+    assertCanApproveAmendment(amendment);
+
+    await prisma.amendment.update({
+      where: { id: amendment.id },
+      data: { approvedAt: new Date() },
+    });
+    await log(contract.id, user.id, 'AMENDMENT_APPROVED', `A${amendment.ordinal}`);
+    return reload(contract.id);
+  },
+
+  signAmendment: async (
+    _p: unknown,
+    args: { amendmentId: string; typedName: string },
+    ctx: Context,
+  ) => {
+    const user = requireUser(ctx);
+    const amendment = await prisma.amendment.findUnique({
+      where: { id: args.amendmentId },
+      include: { contractRevision: { select: { contractId: true } }, signature: true },
+    });
+    if (!amendment) {
+      throw new GraphQLError('No such amendment.', { extensions: { code: 'NOT_FOUND' } });
+    }
+    const contract = await loadForActor(amendment.contractRevision.contractId, user);
+    assertCanSignAmendment(amendment);
+
+    const typedName = args.typedName.trim();
+    if (typedName.length < 2) {
+      throw new GraphQLError('Type your full name to sign.', {
+        extensions: { code: 'NAME_TOO_SHORT' },
+      });
+    }
+
+    await prisma.signature.create({
+      data: {
+        amendmentId: amendment.id,
+        signerId: user.id,
+        typedName,
+        // The amendment's own hash, exactly as signContract copies the
+        // revision's. The base contract's signature is untouched — this is a
+        // separate instrument, not a re-signing of the original.
+        signedHash: amendment.contentHash,
+        ip: ctx.req.ip ?? null,
+        userAgent: ctx.req.get('user-agent') ?? null,
+      },
+    });
+    await log(contract.id, user.id, 'AMENDMENT_SIGNED', `A${amendment.ordinal}`);
     return reload(contract.id);
   },
 

@@ -134,6 +134,7 @@ export default function ContractDetail() {
       RE_APPROVED: 'reApproved',
       RE_SIGNED: 'reSigned',
       AMENDMENT_SIGNED: 'amendmentSigned',
+      AMENDMENT_APPROVED: 'amendmentApproved',
     }[e.action];
 
     // The one variable part of the sentence is localized here, not stored.
