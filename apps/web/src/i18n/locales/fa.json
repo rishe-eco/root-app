@@ -258,7 +258,39 @@
     "you": "تو",
     "root": "ریشه",
     "concept": "طرح {{id}}",
-    "downloadPdf": "دریافت PDF"
+    "downloadPdf": "دریافت PDF",
+    "pending": {
+      "designBody_one": "طرح تغییر کرد — {{count}} صفحه منتظر تأیید توست.",
+      "designBody_other": "طرح تغییر کرد — {{count}} صفحه منتظر تأیید توست.",
+      "designCta": "بازبینی طرح",
+      "contractBody": "متن قرارداد به نسخه‌ی v{{to}} تغییر کرد؛ آخرین‌بار نسخه‌ی v{{from}} را تأیید کرده بودی.",
+      "contractCta": "بازبینی و تأیید",
+      "contractNote": "متن قرارداد هم به نسخه‌ی v{{to}} تغییر کرده — پس از کامل‌شدن طرح می‌توانی آن را هم تأیید کنی.",
+      "amendmentBodyApprove": "ریشه الحاقیه‌ای صادر کرد: «{{title}}».",
+      "amendmentBodySign": "الحاقیه‌ی «{{title}}» تأیید شد — برای اتمام کار، امضایش کن.",
+      "amendmentCta": "بازبینی الحاقیه",
+      "amendmentNote": "یک الحاقیه هم منتظر است، پس از تأیید طرح."
+    },
+    "versions": {
+      "cap": "نسخه‌ها",
+      "contractLineage": "قرارداد",
+      "designLineage": "طرح",
+      "signed": "امضا شد {{when}}",
+      "approved": "تأیید شد {{when}}",
+      "superseded": "جایگزین شد",
+      "published": "منتشر شد {{when}}",
+      "unsealed": "مهرنشده",
+      "awaiting_one": "{{count}} صفحه منتظر توست",
+      "awaiting_other": "{{count}} صفحه منتظر توست"
+    },
+    "amendment": {
+      "title": "الحاقیه {{label}}",
+      "help": "تغییری که پس از امضا انجام شده. امضای قرارداد اصلی دقیقاً همان‌طور که بود باقی می‌ماند.",
+      "approveCta": "تأیید الحاقیه",
+      "approvedLabel": "✓ الحاقیه تأیید شد",
+      "signCta": "امضای الحاقیه",
+      "signedAt": "امضا شد"
+    }
   },
   "print": {
     "back": "بازگشت به قرارداد",

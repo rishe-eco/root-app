@@ -1,24 +1,13 @@
-import { test, expect, type Page } from '@playwright/test';
-import { ADMIN, CUSTOMER, resetTestDatabase, signIn } from './helpers';
+import { test, expect } from '@playwright/test';
+import { ADMIN, CUSTOMER, PNG, resetTestDatabase, signIn } from './helpers';
 
 /**
  * V2's acceptance test, driven through the browser: Root takes a contract
  * from nothing to signed without touching the database or the GraphQL
- * sandbox, then issues an amendment the customer can approve and sign.
- *
- * The customer's approve/sign-amendment UI is V3's job (V2.md §2.4) — the
- * mutations are built here so this test can drive one to signature, via
- * `page.request` rather than a screen that does not exist yet.
+ * sandbox, then issues an amendment the customer approves and signs through
+ * the portal (V3's screen — see 02-contract-flow.spec.ts for the banner
+ * that leads a customer to it).
  */
-
-const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
-async function gql(page: Page, query: string, variables?: Record<string, unknown>) {
-  const res = await page.request.post('/graphql', { data: { query, variables } });
-  const body = await res.json();
-  if (body.errors) throw new Error(`GraphQL error: ${JSON.stringify(body.errors)}`);
-  return body.data;
-}
 
 test.beforeAll(() => {
   resetTestDatabase();
@@ -128,27 +117,22 @@ test('a contract goes from nothing to signed, then an amendment to signature', a
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
   await expect(page.getByText('Awaiting the customer')).toBeVisible();
 
-  // --- the customer approves and signs the amendment -------------------------
-  // No portal UI for this yet (V3) — drive the mutations directly, which is
-  // the whole point of building them ahead of the screen (V2.md §2.4).
+  // --- the customer approves and signs the amendment, through the portal -----
   await signIn(page, CUSTOMER);
-  const withAmendment = await gql(
-    page,
-    `query($id: ID!){ contract(id: $id) { revision { amendments { id ordinal } } } }`,
-    { id: contractId },
-  );
-  const amendmentId = withAmendment.contract.revision.amendments[0].id;
+  await page.goto(`/en/app/contracts/${contractId}`);
 
-  await gql(page, `mutation($id: ID!){ approveAmendment(amendmentId: $id) { id } }`, {
-    id: amendmentId,
-  });
-  const signed = await gql(
-    page,
-    `mutation($id: ID!, $n: String!){ signAmendment(amendmentId: $id, typedName: $n) { gate { signed } signature { typedName } } }`,
-    { id: amendmentId, n: 'Nahal Rezaei' },
-  );
+  await expect(page.getByText('Root issued an amendment')).toBeVisible();
+  await page.getByRole('link', { name: 'Review the amendment' }).click();
 
-  // The base signature is untouched — this is a separate instrument.
-  expect(signed.signAmendment.gate.signed).toBe(true);
-  expect(signed.signAmendment.signature.typedName).toBe('Nahal Rezaei');
+  await page.getByRole('button', { name: 'Approve amendment' }).click();
+  await expect(page.locator('#amendment-signname')).toBeVisible();
+  await page.locator('#amendment-signname').fill('Nahal Rezaei');
+  await page.getByRole('button', { name: 'Sign amendment' }).click();
+
+  // The base signature is untouched — this is a separate instrument, and its
+  // own section still reads as complete rather than reopened.
+  const amendmentSection = page.locator('.sec').filter({ has: page.getByRole('heading', { name: 'Amendment A1' }) });
+  await expect(amendmentSection.locator('.sign-done .sign-name')).toHaveText('Nahal Rezaei');
+  await expect(page.getByText('✓ Contract approved')).toBeVisible();
+  await expect(page.locator('.pending-banner')).toHaveCount(0);
 });

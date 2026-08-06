@@ -3,7 +3,7 @@ import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
 import { computeGate } from '../../lib/gate.js';
-import { draftState, readContractSnapshot } from '../../lib/revision.js';
+import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
 import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
 
@@ -151,12 +151,91 @@ export const Contract = {
       pageCount: r.concepts.reduce((sum, cpt) => sum + cpt._count.pages, 0),
     }));
   },
+
+  /**
+   * What has moved since the customer last acted (V3.md §3), computed fresh
+   * on every read — same discipline as `gate`. Three independent things, each
+   * null/empty when there is nothing to show for it; `pending` itself is null
+   * only when all three are, which is the banner's entire "show or don't"
+   * decision, made once here rather than reconstructed three separate ways
+   * on the client.
+   */
+  pending: async (c: FullContract) => {
+    const current = c.currentContractRevision;
+
+    // A · the text was revised and wants approving again. "Before" is
+    // whichever earlier revision the customer last approved (V3.md §2) — not
+    // necessarily the immediately preceding version.
+    let contractDiff:
+      | (Omit<SnapshotDiff, 'articles'> & {
+          fromVersion: number;
+          toVersion: number;
+          articles: Array<{ number: number; titleFa: string; titleEn: string; kind: string }>;
+        })
+      | null = null;
+    if (current && !current.approvedAt) {
+      const previouslyApproved = await prisma.contractRevision.findFirst({
+        where: { contractId: c.id, approvedAt: { not: null } },
+        orderBy: { version: 'desc' },
+      });
+      const after = readContractSnapshot(current.snapshot);
+      if (previouslyApproved && after) {
+        const before = readContractSnapshot(previouslyApproved.snapshot);
+        const diff = diffSnapshots(before, after);
+        contractDiff = {
+          fromVersion: previouslyApproved.version,
+          toVersion: current.version,
+          ...diff,
+          articles: diff.articles.map((a) => ({ ...a, kind: CHANGE_KIND[a.kind] })),
+        };
+      }
+    }
+
+    // B · pages of the current design revision still waiting on the
+    // customer — exactly the unapproved pages under the chosen concept
+    // (V3.md §2A). A page under a concept nobody chose is not something the
+    // customer owes attention, and this mode only exists once a revision has
+    // actually happened, so a fresh v1 design reports nothing here.
+    const revision = c.currentDesignRevision;
+    const chosen = revision?.concepts.find((cc) => cc.chosenAt !== null) ?? null;
+    const unapprovedKeys =
+      revision && revision.version > 1 && chosen
+        ? new Set(chosen.pages.filter((p) => p.approvedAt === null).map((p) => p.key))
+        : new Set<string>();
+    let designChanges: Array<{ conceptKey: string; pageKey: string; kind: PageChange['kind'] }> = [];
+    if (chosen && unapprovedKeys.size > 0) {
+      const previous = await prisma.designRevision.findFirst({
+        where: { contractId: c.id, version: revision!.version - 1 },
+        include: conceptsInclude,
+      });
+      designChanges = diffDesign(previous?.concepts ?? [], revision!.concepts).filter(
+        (ch) => ch.conceptKey === chosen.key && unapprovedKeys.has(ch.pageKey),
+      );
+    }
+
+    // C · a published amendment still waiting on approval or signature.
+    // Same publishedAt filter as ContractRevision.amendments (T7) — a
+    // different field on a different type does not inherit it.
+    const amendment =
+      current?.amendments.find((a) => a.publishedAt !== null && (!a.approvedAt || !a.signature)) ?? null;
+
+    if (!contractDiff && designChanges.length === 0 && !amendment) return null;
+    return {
+      contractDiff,
+      designChanges: designChanges.map((ch) => ({ ...ch, kind: CHANGE_KIND[ch.kind] })),
+      amendment,
+    };
+  },
 };
 
-/** design.ts's kind literals are lower case; the GraphQL enum is upper case.
- *  A total map rather than `.toUpperCase()` so a fifth literal fails loudly
- *  at the type checker rather than producing a coincidentally-right string. */
-const PAGE_CHANGE_KIND: Record<PageChange['kind'], 'ADDED' | 'CHANGED' | 'REMOVED' | 'UNCHANGED'> = {
+/**
+ * design.ts's and revision.ts's kind literals are lower case; the shared
+ * GraphQL `ChangeKind` enum is upper case. One map for both — they are the
+ * same four literals (V3.md §3.2) — rather than `.toUpperCase()`, so a fifth
+ * literal fails loudly at the type checker instead of producing a
+ * coincidentally-right string.
+ */
+const CHANGE_KIND: Record<PageChange['kind'], 'ADDED' | 'CHANGED' | 'REMOVED' | 'UNCHANGED'> = {
   added: 'ADDED',
   changed: 'CHANGED',
   removed: 'REMOVED',
@@ -199,7 +278,7 @@ export const DesignDraft = {
       chosenConceptKey,
       carriedPageCount: approvals.length,
       resetPageCount: totalPages - approvals.length,
-      changes: changes.map((c) => ({ ...c, kind: PAGE_CHANGE_KIND[c.kind] })),
+      changes: changes.map((c) => ({ ...c, kind: CHANGE_KIND[c.kind] })),
     };
   },
 };

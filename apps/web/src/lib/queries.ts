@@ -142,12 +142,13 @@ export type Gate = {
   totalPageCount: number;
 };
 
-export type PageChangeKind = 'ADDED' | 'CHANGED' | 'REMOVED' | 'UNCHANGED';
+/** Shared by a design page's change and a contract article's change. */
+export type ChangeKind = 'ADDED' | 'CHANGED' | 'REMOVED' | 'UNCHANGED';
 
 export type PageChange = {
   conceptKey: string;
   pageKey: string;
-  kind: PageChangeKind;
+  kind: ChangeKind;
 };
 
 /** What publishing the design draft would do — computed server-side, never guessed. */
@@ -196,6 +197,33 @@ export type DesignRevisionSummary = {
   pageCount: number;
 };
 
+export type ArticleChange = {
+  number: number;
+  titleFa: string;
+  titleEn: string;
+  kind: ChangeKind;
+};
+
+/** What moved in the text since the revision the customer last approved. */
+export type ContractDiff = {
+  fromVersion: number;
+  toVersion: number;
+  titleChanged: boolean;
+  amountChanged: boolean;
+  articles: ArticleChange[];
+};
+
+/**
+ * What has moved since the customer last acted, computed server-side —
+ * never guessed on the client (V3.md §3.2/T4). Null means there is nothing
+ * to show; that is the banner's entire "show or don't" decision.
+ */
+export type PendingReview = {
+  contractDiff: ContractDiff | null;
+  designChanges: PageChange[];
+  amendment: Amendment | null;
+};
+
 export type Contract = {
   id: string;
   ref: string;
@@ -214,11 +242,13 @@ export type Contract = {
   changeLog: ChangeLogEntry[];
   signature: Signature | null;
   revision: ContractRevision | null;
+  // Non-staff see published revisions only — enforced server-side, not here.
+  contractRevisions: ContractRevisionSummary[];
+  designRevisions: DesignRevisionSummary[];
+  pending: PendingReview | null;
   // Staff-only; present only on queries that select them (the workspace).
   draft?: ContractDraft | null;
   designDraft?: DesignDraft | null;
-  contractRevisions?: ContractRevisionSummary[];
-  designRevisions?: DesignRevisionSummary[];
 };
 
 const USER_FIELDS = gql`
@@ -344,6 +374,60 @@ export const CONTRACT_FIELDS = gql`
         }
       }
     }
+    contractRevisions {
+      id
+      version
+      contentHash
+      publishedAt
+      approvedAt
+      supersededAt
+      signedAt
+      amendmentCount
+    }
+    designRevisions {
+      id
+      version
+      publishedAt
+      supersededAt
+      conceptCount
+      pageCount
+    }
+    pending {
+      contractDiff {
+        fromVersion
+        toVersion
+        titleChanged
+        amountChanged
+        articles {
+          number
+          titleFa
+          titleEn
+          kind
+        }
+      }
+      designChanges {
+        conceptKey
+        pageKey
+        kind
+      }
+      amendment {
+        id
+        ordinal
+        titleFa
+        titleEn
+        bodyFa
+        bodyEn
+        contentHash
+        relatesToArticle
+        publishedAt
+        approvedAt
+        signature {
+          id
+          typedName
+          signedAt
+        }
+      }
+    }
   }
 `;
 
@@ -402,24 +486,6 @@ export const CONTRACT_WORKSPACE_FIELDS = gql`
           kind
         }
       }
-    }
-    contractRevisions {
-      id
-      version
-      contentHash
-      publishedAt
-      approvedAt
-      supersededAt
-      signedAt
-      amendmentCount
-    }
-    designRevisions {
-      id
-      version
-      publishedAt
-      supersededAt
-      conceptCount
-      pageCount
     }
   }
 `;

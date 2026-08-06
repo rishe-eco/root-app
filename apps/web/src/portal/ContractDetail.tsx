@@ -5,14 +5,18 @@ import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import {
   ADD_COMMENT,
+  APPROVE_AMENDMENT,
   APPROVE_CONTRACT,
   CHOOSE_CONCEPT,
   CONTRACT,
   SET_PAGE_APPROVAL,
   SET_SCOPE_ITEM,
+  SIGN_AMENDMENT,
   SIGN_CONTRACT,
   type ChangeLogEntry,
   type Contract,
+  type ContractRevisionSummary,
+  type DesignRevisionSummary,
   type User,
 } from '@/lib/queries';
 import { clockTime, initialOf, pick, relativeTime } from '@/lib/format';
@@ -38,10 +42,13 @@ export default function ContractDetail() {
   const [setScopeItem] = useMutation(SET_SCOPE_ITEM);
   const [signContract] = useMutation(SIGN_CONTRACT);
   const [addComment] = useMutation(ADD_COMMENT);
+  const [approveAmendment] = useMutation(APPROVE_AMENDMENT);
+  const [signAmendment] = useMutation(SIGN_AMENDMENT);
 
   const [openArticle, setOpenArticle] = useState<number | null>(null);
   const [signName, setSignName] = useState('');
   const [commentBody, setCommentBody] = useState('');
+  const [amendmentSignName, setAmendmentSignName] = useState('');
   const [busy, setBusy] = useState(false);
 
   if (loading && !data) {
@@ -73,6 +80,22 @@ export default function ContractDetail() {
   const { gate } = contract;
   const chosen = contract.concepts.find((c) => c.chosen) ?? null;
 
+  /* T1: when the design also moved, the gate refuses `approveContract` until
+     the design is complete again — so the banner's one action is always the
+     design's when both are pending, never the contract's. Contract-revised
+     and amendment-pending never co-occur (a signed contract cannot also carry
+     an unapproved revision — see V3.md §3.3), so this is the whole priority. */
+  const pending = contract.pending;
+  const pendingMode: 'design' | 'contract' | 'amendment' | null = !pending
+    ? null
+    : pending.designChanges.length > 0
+      ? 'design'
+      : pending.contractDiff
+        ? 'contract'
+        : pending.amendment
+          ? 'amendment'
+          : null;
+
   /* The heading has to name the same document as the articles under it.
      `contract.articles` comes out of the frozen snapshot, so the title comes
      from the revision too — the identically named fields on Contract are Root's
@@ -102,6 +125,16 @@ export default function ContractDetail() {
     e.preventDefault();
     if (signName.trim().length < MIN_SIGN_NAME) return;
     await run(() => signContract({ variables: { contractId: contract!.id, typedName: signName } }));
+  }
+
+  async function onSignAmendment(e: FormEvent, amendmentId: string) {
+    e.preventDefault();
+    if (amendmentSignName.trim().length < MIN_SIGN_NAME) return;
+    await run(() =>
+      signAmendment({ variables: { amendmentId, typedName: amendmentSignName } }).then(() =>
+        setAmendmentSignName(''),
+      ),
+    );
   }
 
   async function onComment(e: FormEvent) {
@@ -162,6 +195,26 @@ export default function ContractDetail() {
     return item ? pick(item, 'label', locale) : key;
   }
 
+  function contractVersionLabel(r: ContractRevisionSummary) {
+    if (r.signedAt) return t('detail.versions.signed', { when: relativeTime(r.signedAt, locale) });
+    if (r.approvedAt) return t('detail.versions.approved', { when: relativeTime(r.approvedAt, locale) });
+    if (r.supersededAt) return t('detail.versions.superseded');
+    if (r.publishedAt) return t('detail.versions.published', { when: relativeTime(r.publishedAt, locale) });
+    return t('detail.versions.unsealed');
+  }
+
+  /* The current design revision's row names how many pages still await the
+     customer rather than a bare "published" — that count is what the design
+     half of the banner already points at, so the rail agrees with it. */
+  function designVersionLabel(r: DesignRevisionSummary) {
+    const isCurrent = r.supersededAt === null && r.publishedAt !== null;
+    const remaining = gate.totalPageCount - gate.approvedPageCount;
+    if (isCurrent && remaining > 0) return t('detail.versions.awaiting', { count: remaining });
+    if (r.supersededAt) return t('detail.versions.superseded');
+    if (r.publishedAt) return t('detail.versions.published', { when: relativeTime(r.publishedAt, locale) });
+    return t('detail.versions.unsealed');
+  }
+
   const gateStep = (
     done: boolean,
     active: boolean,
@@ -196,6 +249,49 @@ export default function ContractDetail() {
 
       <div className="detail">
         <div className="detail-main">
+          {pendingMode ? (
+            <div className="pending-banner">
+              <div className="pending-banner-body">
+                {pendingMode === 'design' ? (
+                  <p className="pending-lead">
+                    {t('detail.pending.designBody', { count: pending!.designChanges.length })}
+                  </p>
+                ) : pendingMode === 'contract' ? (
+                  <p className="pending-lead">
+                    {t('detail.pending.contractBody', {
+                      from: pending!.contractDiff!.fromVersion,
+                      to: pending!.contractDiff!.toVersion,
+                    })}
+                  </p>
+                ) : (
+                  <p className="pending-lead">
+                    {pending!.amendment!.approvedAt
+                      ? t('detail.pending.amendmentBodySign', { title: pick(pending!.amendment!, 'title', locale) })
+                      : t('detail.pending.amendmentBodyApprove', { title: pick(pending!.amendment!, 'title', locale) })}
+                  </p>
+                )}
+                {pendingMode === 'design' && pending!.contractDiff ? (
+                  <p className="pending-note">
+                    {t('detail.pending.contractNote', { to: pending!.contractDiff.toVersion })}
+                  </p>
+                ) : null}
+                {pendingMode === 'design' && pending!.amendment ? (
+                  <p className="pending-note">{t('detail.pending.amendmentNote')}</p>
+                ) : null}
+              </div>
+              <a
+                className="btn btn-primary btn-sm"
+                href={pendingMode === 'design' ? '#s1' : pendingMode === 'contract' ? '#s2' : '#amendment'}
+              >
+                {pendingMode === 'design'
+                  ? t('detail.pending.designCta')
+                  : pendingMode === 'contract'
+                    ? t('detail.pending.contractCta')
+                    : t('detail.pending.amendmentCta')}
+              </a>
+            </div>
+          ) : null}
+
           <div className="detail-head">
             <div className="detail-head-row">
               <h1 className="t-h2">{title}</h1>
@@ -217,7 +313,7 @@ export default function ContractDetail() {
           </div>
 
           {/* 1 · Design selection & approval ------------------------------ */}
-          <section className="sec">
+          <section className="sec" id="s1">
             <div className="sec-head">
               <span className="sec-badge num-latin">1</span>
               <h2 className="t-h3">{t('detail.s1Title')}</h2>
@@ -322,7 +418,7 @@ export default function ContractDetail() {
           </section>
 
           {/* 2 · Contract body -------------------------------------------- */}
-          <section className="sec">
+          <section className="sec" id="s2">
             <div className="sec-head">
               <span className="sec-badge num-latin">2</span>
               <h2 className="t-h3">{t('detail.s2Title')}</h2>
@@ -451,6 +547,68 @@ export default function ContractDetail() {
             )}
           </section>
 
+          {/* The amendment, if one has been published — its own approve/sign
+              pair, never touching section 4's already-complete signature. */}
+          {contract.revision?.amendments.map((a) =>
+            a.publishedAt ? (
+              <section className="sec" id={a.id === pending?.amendment?.id ? 'amendment' : undefined} key={a.id}>
+                <div className="sec-head">
+                  <h2 className="t-h3">
+                    {t('detail.amendment.title', { label: `A${a.ordinal}` })}
+                  </h2>
+                </div>
+                <p className="sec-help">{t('detail.amendment.help')}</p>
+
+                <div className="art">
+                  <div className="art-head">
+                    <span className="art-t">{pick(a, 'title', locale)}</span>
+                  </div>
+                  <div className="art-body">{pick(a, 'body', locale)}</div>
+                </div>
+
+                {a.signature ? (
+                  <div className="sign-done">
+                    <span className="sign-name">{a.signature.typedName}</span>
+                    <span className="t-caption">
+                      {t('detail.amendment.signedAt')} · {relativeTime(a.signature.signedAt, locale)}
+                    </span>
+                  </div>
+                ) : a.approvedAt ? (
+                  <form className="sign-row" onSubmit={(e) => onSignAmendment(e, a.id)}>
+                    <div className="field sign-field">
+                      <label className="label" htmlFor="amendment-signname">
+                        {t('detail.signLabel')}
+                      </label>
+                      <input
+                        id="amendment-signname"
+                        className="input"
+                        placeholder={t('detail.signPlaceholder')}
+                        value={amendmentSignName}
+                        onChange={(e) => setAmendmentSignName(e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={busy || amendmentSignName.trim().length < MIN_SIGN_NAME}
+                    >
+                      {t('detail.amendment.signCta')}
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busy}
+                    onClick={() => run(() => approveAmendment({ variables: { amendmentId: a.id } }))}
+                  >
+                    {t('detail.amendment.approveCta')}
+                  </button>
+                )}
+              </section>
+            ) : null,
+          )}
+
           {/* 5 · Comments — never gated ----------------------------------- */}
           <section className="sec">
             <div className="sec-head">
@@ -528,6 +686,32 @@ export default function ContractDetail() {
               t('detail.gate3sub'),
               'g3',
             )}
+          </div>
+
+          {/* Two lineages, two columns — never interleaved, so it stays clear
+              which one moved (V3.md §4.2). */}
+          <div className="rail-card">
+            <p className="rail-cap">{t('detail.versions.cap')}</p>
+            <div className="lineage-columns">
+              <div className="lineage-col">
+                <p className="t-eyebrow">{t('detail.versions.contractLineage')}</p>
+                {contract.contractRevisions.map((r) => (
+                  <div key={r.id} className="lineage-row">
+                    <span className="num-latin">v{r.version}</span>
+                    <span className="t-small">{contractVersionLabel(r)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="lineage-col">
+                <p className="t-eyebrow">{t('detail.versions.designLineage')}</p>
+                {contract.designRevisions.map((r) => (
+                  <div key={r.id} className="lineage-row">
+                    <span className="num-latin">v{r.version}</span>
+                    <span className="t-small">{designVersionLabel(r)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="rail-card">

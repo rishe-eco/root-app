@@ -5,6 +5,7 @@ import {
   buildContractSnapshot,
   canonicalize,
   contentHash,
+  diffSnapshots,
   draftState,
 } from './revision.js';
 
@@ -135,4 +136,60 @@ test('changing an amendment body changes its hash', () => {
   const before = buildAmendmentSnapshot(base);
   const after = buildAmendmentSnapshot({ ...base, bodyEn: 'b' });
   assert.notEqual(contentHash(before), contentHash(after));
+});
+
+test('diffSnapshots with a null before reports every article added, and the title/amount flags as changed', () => {
+  const after = buildContractSnapshot(
+    { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: BigInt(1) },
+    [article(1), article(2)],
+  );
+  const diff = diffSnapshots(null, after);
+  assert.equal(diff.titleChanged, true);
+  assert.equal(diff.amountChanged, true);
+  assert.deepEqual(
+    diff.articles.map((a) => a.kind),
+    ['added', 'added'],
+  );
+});
+
+test('diffSnapshots reports a changed body as changed and an identical article as unchanged', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const before = buildContractSnapshot(contract, [article(1, 'اول'), article(2, 'دوم')]);
+  const after = buildContractSnapshot(contract, [article(1, 'ویرایش‌شده'), article(2, 'دوم')]);
+  const diff = diffSnapshots(before, after);
+  assert.equal(diff.articles.find((a) => a.number === 1)?.kind, 'changed');
+  assert.equal(diff.articles.find((a) => a.number === 2)?.kind, 'unchanged');
+});
+
+test('diffSnapshots reports an article present before and absent after as removed', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const before = buildContractSnapshot(contract, [article(1), article(2)]);
+  const after = buildContractSnapshot(contract, [article(1)]);
+  const diff = diffSnapshots(before, after);
+  assert.equal(diff.articles.find((a) => a.number === 2)?.kind, 'removed');
+});
+
+test('diffSnapshots sets title/amount flags independently and leaves untouched articles unchanged', () => {
+  const before = buildContractSnapshot(
+    { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: BigInt(1) },
+    [article(1)],
+  );
+  const titleOnly = buildContractSnapshot(
+    { ref: 'RC-1', titleFa: 'تغییر', titleEn: 't2', amount: BigInt(1) },
+    [article(1)],
+  );
+  const amountOnly = buildContractSnapshot(
+    { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: BigInt(2) },
+    [article(1)],
+  );
+
+  const titleDiff = diffSnapshots(before, titleOnly);
+  assert.equal(titleDiff.titleChanged, true);
+  assert.equal(titleDiff.amountChanged, false);
+  assert.equal(titleDiff.articles[0].kind, 'unchanged');
+
+  const amountDiff = diffSnapshots(before, amountOnly);
+  assert.equal(amountDiff.titleChanged, false);
+  assert.equal(amountDiff.amountChanged, true);
+  assert.equal(amountDiff.articles[0].kind, 'unchanged');
 });

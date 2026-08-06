@@ -8,6 +8,9 @@ const API_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../api');
 export const TEST_DATABASE_URL =
   'postgresql://root:root@localhost:5432/root_website_test?schema=public';
 
+/** A minimal valid PNG, for specs that exercise the design-image upload flow. */
+export const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
 /** The accounts prisma/seed.ts creates. */
 export const ADMIN = { email: 'admin@root.local', password: 'change-me-please' };
 export const CUSTOMER = { email: 'nahal@example.com', password: 'change-me-please' };

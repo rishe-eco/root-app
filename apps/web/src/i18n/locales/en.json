@@ -258,7 +258,39 @@
     "you": "You",
     "root": "Root",
     "concept": "Concept {{id}}",
-    "downloadPdf": "Download PDF"
+    "downloadPdf": "Download PDF",
+    "pending": {
+      "designBody_one": "The design changed — {{count}} page needs your approval.",
+      "designBody_other": "The design changed — {{count}} pages need your approval.",
+      "designCta": "Review the design",
+      "contractBody": "The contract text changed to v{{to}} since you approved v{{from}}.",
+      "contractCta": "Review & approve",
+      "contractNote": "The text also moved to v{{to}} — you can approve it once the design is done.",
+      "amendmentBodyApprove": "Root issued an amendment: “{{title}}”.",
+      "amendmentBodySign": "The amendment “{{title}}” is approved — sign it to finish.",
+      "amendmentCta": "Review the amendment",
+      "amendmentNote": "An amendment is also waiting, once the design is approved."
+    },
+    "versions": {
+      "cap": "Versions",
+      "contractLineage": "Contract",
+      "designLineage": "Design",
+      "signed": "signed {{when}}",
+      "approved": "approved {{when}}",
+      "superseded": "superseded",
+      "published": "published {{when}}",
+      "unsealed": "unsealed",
+      "awaiting_one": "{{count}} page awaiting you",
+      "awaiting_other": "{{count}} pages awaiting you"
+    },
+    "amendment": {
+      "title": "Amendment {{label}}",
+      "help": "A change made after signature. The base contract's signature stays exactly as it was.",
+      "approveCta": "Approve amendment",
+      "approvedLabel": "✓ Amendment approved",
+      "signCta": "Sign amendment",
+      "signedAt": "Signed"
+    }
   },
   "print": {
     "back": "Back to contract",

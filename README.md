@@ -320,6 +320,13 @@ Progress.
   the contract to the customer, and — once signed — issue an amendment and
   carry it to signature. No stage from here on needs the database or the
   GraphQL sandbox touched by hand.
+- The customer knowing that something moved (V3): a banner leads the contract
+  detail page whenever the text was revised, the design was revised, or an
+  amendment is waiting — naming what changed, in one sentence, with one
+  action that always matches what the gate will actually accept. A version
+  panel in the rail shows both lineages side by side, and the amendment gets
+  its own approve-then-sign block without ever making the signed base look
+  unfinished.
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -369,6 +376,32 @@ stack first ran on Postgres.
 ~~An upload form~~ and ~~creating a contract, entering article text, and
 publishing a revision from the admin UI~~ — both built by the admin contract
 workspace (V2); see "Built and working" above and the note below.
+
+**The pending-review banner, run against a real database — 2026-08-06.** V3
+adds no re-approval logic — `approveContract` and `signContract` already
+reopen on a fresh revision, and the prior approval already survives on the
+superseded one (V1b). What was missing was the customer knowing that
+something moved, and what: a `pending` field on `Contract`, derived fresh on
+every read exactly like the gate, is null unless the text was revised, the
+design was revised, or an amendment is waiting.
+
+Driven end to end in the browser, in both languages: as the customer,
+complete the design and sign a contract; as Root, revise one page's image
+and publish a design v2; back as the customer, the banner reads "the design
+changed — 1 page needs your approval," approving that one page (not four —
+carry-forward is the same rule the workspace's preview already used) clears
+it. Then, as Root, issue and publish an amendment on the signed contract: the
+banner switches to naming the amendment, and — because both were pending at
+once — correctly puts the design action first and the amendment second,
+exactly matching the gate (`assertCanApproveContract` requires the design
+complete first). The amendment's own approve-then-sign block worked from the
+portal, and the base signature and "✓ Contract approved" never moved.
+`border-inline-start` on the banner resolved to `border-right` under
+`dir="rtl"`, and the Persian banner reads as a sentence with the count in
+plain digits — no `+3/−1`, no `num-latin` forced onto the count. `migrate diff`
+reports no drift (this stage adds no migration); typecheck, the full unit
+suite (105), the integration suite (79, +7 for `pending`), and the e2e suite
+(23 specs, +1 for the banner) are all green.
 
 **Admin contract workspace, run against a real database — 2026-08-06.** The
 full lifecycle was driven end to end in the browser, in both languages:

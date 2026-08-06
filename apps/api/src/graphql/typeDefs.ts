@@ -212,7 +212,12 @@ export const typeDefs = /* GraphQL */ `
     dirty: Boolean!
   }
 
-  enum PageChangeKind {
+  """
+  Shared by a design page's change and a contract article's change (V3.md
+  §3.2) — one enum, one set of members, rather than a second copy with the
+  same four values under a different name.
+  """
+  enum ChangeKind {
     ADDED
     CHANGED
     REMOVED
@@ -222,7 +227,7 @@ export const typeDefs = /* GraphQL */ `
   type PageChange {
     conceptKey: String!
     pageKey: String!
-    kind: PageChangeKind!
+    kind: ChangeKind!
   }
 
   """
@@ -273,6 +278,42 @@ export const typeDefs = /* GraphQL */ `
     pageCount: Int!
   }
 
+  type ArticleChange {
+    number: Int!
+    titleFa: String!
+    titleEn: String!
+    kind: ChangeKind!
+  }
+
+  """
+  What moved in the text since the revision the customer last approved.
+  Present only while the current revision is itself unapproved — see
+  PendingReview.
+  """
+  type ContractDiff {
+    "The version the customer last approved."
+    fromVersion: Int!
+    toVersion: Int!
+    titleChanged: Boolean!
+    amountChanged: Boolean!
+    articles: [ArticleChange!]!
+  }
+
+  """
+  What has moved since the customer last acted, and null when nothing has.
+  Derived on every read, exactly like the gate — the client never decides
+  this, and a stale copy of it would be a banner asking for something
+  already done.
+  """
+  type PendingReview {
+    "The text was revised and wants approving again. Null when it was not."
+    contractDiff: ContractDiff
+    "Pages of the current design revision that are unapproved, with what Root did to each."
+    designChanges: [PageChange!]!
+    "A published amendment awaiting approval or signature."
+    amendment: Amendment
+  }
+
   type Contract {
     id: ID!
     ref: String!
@@ -299,6 +340,8 @@ export const typeDefs = /* GraphQL */ `
     "Both lineages, newest first. Non-staff see published revisions only."
     contractRevisions: [ContractRevisionSummary!]!
     designRevisions: [DesignRevisionSummary!]!
+    "What has moved since the customer last acted. Null when there is nothing to show."
+    pending: PendingReview
   }
 
   type StatusCount {

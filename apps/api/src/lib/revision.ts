@@ -170,3 +170,48 @@ export function readContractSnapshot(value: unknown): ContractSnapshot | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as ContractSnapshot;
 }
+
+export type ArticleChangeKind = 'added' | 'changed' | 'removed' | 'unchanged';
+
+export type SnapshotDiff = {
+  titleChanged: boolean;
+  amountChanged: boolean;
+  articles: Array<{ number: number; titleFa: string; titleEn: string; kind: ArticleChangeKind }>;
+};
+
+/**
+ * What changed between the revision the customer last approved and the one in
+ * front of them now (V3.md §3.1) — pure, beside the canonical form it reads,
+ * so it stays unit-testable without a database.
+ *
+ * A null `before` means the earlier revision is unsealed — a backfilled v1
+ * whose snapshot was never built. Everything then reads as `added`, which is
+ * honest: there is no recorded text to have changed from.
+ */
+export function diffSnapshots(before: ContractSnapshot | null, after: ContractSnapshot): SnapshotDiff {
+  const titleChanged = before === null || before.titleFa !== after.titleFa || before.titleEn !== after.titleEn;
+  const amountChanged = before === null || before.amount !== after.amount;
+
+  const beforeByNumber = new Map((before?.articles ?? []).map((a) => [a.number, a]));
+  const articles: SnapshotDiff['articles'] = [];
+
+  for (const article of after.articles) {
+    const prior = beforeByNumber.get(article.number);
+    const kind: ArticleChangeKind =
+      prior === undefined
+        ? 'added'
+        : prior.titleFa === article.titleFa &&
+            prior.titleEn === article.titleEn &&
+            prior.bodyFa === article.bodyFa &&
+            prior.bodyEn === article.bodyEn
+          ? 'unchanged'
+          : 'changed';
+    articles.push({ number: article.number, titleFa: article.titleFa, titleEn: article.titleEn, kind });
+    beforeByNumber.delete(article.number);
+  }
+  for (const gone of beforeByNumber.values()) {
+    articles.push({ number: gone.number, titleFa: gone.titleFa, titleEn: gone.titleEn, kind: 'removed' });
+  }
+
+  return { titleChanged, amountChanged, articles };
+}
