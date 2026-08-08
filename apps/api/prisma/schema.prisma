@@ -133,6 +133,11 @@ model Contract {
   customer   User   @relation("CustomerContracts", fields: [customerId], references: [id])
 
   status ContractStatus @default(DRAFT)
+  /// When the contract entered its current status. Not `updatedAt`, which any
+  /// write bumps — this is what the Needs-Root queue orders by, and a queue
+  /// ordered by "was touched at all" is not a queue. Set by both status
+  /// writers, and only when the status actually differs (V4.md defect D7).
+  statusChangedAt DateTime @default(now())
 
   /// Toman. Integer — no sub-unit in practice, and no float rounding.
   /// This is the *draft* fee; a published revision carries its own frozen copy.
@@ -163,6 +168,7 @@ model Contract {
   updatedAt DateTime @updatedAt
 
   @@index([customerId, status])
+  @@index([status, statusChangedAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -542,6 +548,12 @@ model ChangeLog {
   createdAt DateTime @default(now())
 
   @@index([contractId, createdAt])
+  /// Serves the desk's global activity feed (V4 T2) — a query across every
+  /// contract ordered by createdAt has nothing to use otherwise. An
+  /// (action, createdAt) composite would not help: it filters `action IN
+  /// (…)` and orders by time, which a leading-column-on-action index cannot
+  /// answer in order.
+  @@index([createdAt])
 }
 
 // ---------------------------------------------------------------------------

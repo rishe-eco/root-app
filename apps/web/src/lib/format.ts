@@ -39,6 +39,11 @@ export function formatAmount(amount: string | null, locale: Locale): string | nu
   return new Intl.NumberFormat(intlTag(locale)).format(Number(amount));
 }
 
+/** A plain integer through the locale's own digits — a tile showing "12" on a Persian page is a small tell that nobody looked at it in Persian (V4 T6). */
+export function formatCount(n: number, locale: Locale): string {
+  return new Intl.NumberFormat(intlTag(locale)).format(n);
+}
+
 const DIVISIONS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ['second', 60],
   ['minute', 60],

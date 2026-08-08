@@ -20,6 +20,7 @@ import {
   type User,
 } from '@/lib/queries';
 import { clockTime, initialOf, pick, relativeTime } from '@/lib/format';
+import { logText as buildLogText } from '@/lib/changelog';
 import StatusBadge from '@/components/StatusBadge';
 import Lock from '@/components/Lock';
 import Topbar from './Topbar';
@@ -147,41 +148,8 @@ export default function ContractDetail() {
     );
   }
 
-  const logText = (e: ChangeLogEntry) => {
-    const key = {
-      CREATED: 'created',
-      PUBLISHED: 'published',
-      CHOSE_CONCEPT: 'chose',
-      APPROVED_PAGE: 'approvedPage',
-      UNAPPROVED_PAGE: 'unapprovedPage',
-      DESIGN_COMPLETE: 'designComplete',
-      APPROVED_CONTRACT: 'approvedContract',
-      SIGNED: 'signed',
-      COMMENTED: 'comment',
-      SCOPE_ON: 'scopeOn',
-      SCOPE_OFF: 'scopeOff',
-      STATUS_CHANGED: 'statusChanged',
-      CONTRACT_REVISED: 'contractRevised',
-      DESIGN_REVISED: 'designRevised',
-      CONTRACT_AMENDED: 'contractAmended',
-      RE_APPROVED: 'reApproved',
-      RE_SIGNED: 'reSigned',
-      AMENDMENT_SIGNED: 'amendmentSigned',
-      AMENDMENT_APPROVED: 'amendmentApproved',
-    }[e.action];
-
-    // The one variable part of the sentence is localized here, not stored.
-    const arg =
-      e.action === 'STATUS_CHANGED' && e.arg
-        ? t(`status.${e.arg}`)
-        : e.action === 'APPROVED_PAGE' || e.action === 'UNAPPROVED_PAGE'
-          ? (labelForPage(e.arg) ?? e.arg ?? '')
-          : e.action === 'SCOPE_ON' || e.action === 'SCOPE_OFF'
-            ? (labelForScope(e.arg) ?? e.arg ?? '')
-            : (e.arg ?? '');
-
-    return t(`log.${key}`, { arg });
-  };
+  const logText = (e: ChangeLogEntry) =>
+    buildLogText(e, t, { labelForPage: (key) => labelForPage(key), labelForScope: (key) => labelForScope(key) });
 
   function labelForPage(key: string | null) {
     if (!key) return null;

@@ -643,6 +643,80 @@ export const ALL_CUSTOMERS = gql`
   }
 `;
 
+export type StatusCount = {
+  status: ContractStatus;
+  count: number;
+};
+
+/** A contract, thin — the desk's Overview reads these rather than full Contracts (V4 T1). */
+export type ContractRef = {
+  id: string;
+  ref: string;
+  titleFa: string;
+  titleEn: string;
+  status: ContractStatus;
+  customerName: string;
+  statusChangedAt: string;
+};
+
+export type ActivityItem = {
+  id: string;
+  contract: ContractRef;
+  actor: Pick<User, 'id' | 'name'>;
+  action: ChangeAction;
+  arg: string | null;
+  createdAt: string;
+};
+
+export const ALL_CONTRACT_STATUS_COUNTS = gql`
+  query AllContractStatusCounts {
+    allContractStatusCounts {
+      status
+      count
+    }
+  }
+`;
+
+const CONTRACT_REF_FIELDS = gql`
+  fragment ContractRefFields on ContractRef {
+    id
+    ref
+    titleFa
+    titleEn
+    status
+    customerName
+    statusChangedAt
+  }
+`;
+
+export const NEEDS_ROOT_QUEUE = gql`
+  ${CONTRACT_REF_FIELDS}
+  query NeedsRootQueue($limit: Int) {
+    needsRootQueue(limit: $limit) {
+      ...ContractRefFields
+    }
+  }
+`;
+
+export const ACTIVITY = gql`
+  ${CONTRACT_REF_FIELDS}
+  query Activity($limit: Int, $reviewOnly: Boolean) {
+    activity(limit: $limit, reviewOnly: $reviewOnly) {
+      id
+      action
+      arg
+      createdAt
+      actor {
+        id
+        name
+      }
+      contract {
+        ...ContractRefFields
+      }
+    }
+  }
+`;
+
 export const INVITE_CUSTOMER = gql`
   mutation InviteCustomer($email: String!, $name: String!, $clientName: String) {
     inviteCustomer(email: $email, name: $name, clientName: $clientName) {

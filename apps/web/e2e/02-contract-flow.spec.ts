@@ -286,3 +286,18 @@ test('a revised design page shows a banner naming it, and approving it clears th
 
   await expect(page.locator('.pending-banner')).toHaveCount(0);
 });
+
+test('an admin sees a non-zero count on the Overview (V4)', async ({ page }) => {
+  // No reset: this is the cheap end of the story the flow above already paid
+  // for — real status and activity data to look at, not a seeded illusion of
+  // one. The value of this stage is in the integration tests; this just
+  // proves the screen renders what they already prove is correct.
+  await signIn(page, ADMIN);
+  await page.goto('/en/desk/overview');
+
+  const tileCounts = page.locator('.tile-count');
+  await expect(tileCounts.first()).toBeVisible();
+  const values = await tileCounts.allInnerTexts();
+  const total = values.reduce((sum, v) => sum + (parseInt(v, 10) || 0), 0);
+  expect(total).toBeGreaterThan(0);
+});

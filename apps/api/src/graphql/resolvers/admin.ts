@@ -848,11 +848,21 @@ export const adminMutations = {
     ctx: Context,
   ) => {
     const admin = requireCapability(ctx, 'contracts.manage');
+    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    if (!contract) {
+      throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
+    }
+    // Setting a contract to the status it already has must be a no-op — not
+    // an equality check nudgeStatus already gets for free, but one this
+    // resolver has to make itself, or the Needs-Root queue could be cleared
+    // by touching a dropdown (V4 defect D7).
+    if (contract.status === args.status) return reload(args.contractId);
+
     // Permissive on purpose: from almost any status to almost any other,
     // with a manual override always available.
     await prisma.contract.update({
       where: { id: args.contractId },
-      data: { status: args.status },
+      data: { status: args.status, statusChangedAt: new Date() },
     });
     await log(args.contractId, admin.id, 'STATUS_CHANGED', args.status);
     return reload(args.contractId);

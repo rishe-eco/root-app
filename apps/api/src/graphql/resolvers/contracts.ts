@@ -91,7 +91,12 @@ export async function log(
 export async function nudgeStatus(contract: FullContract, next: ContractStatus, db: Db = prisma) {
   if (contract.status === 'DONE' || contract.status === 'DISCARDED') return;
   if (contract.status === next) return;
-  await db.contract.update({ where: { id: contract.id }, data: { status: next } });
+  // statusChangedAt only moves on a real transition (V4 defect D7) — this
+  // early-return above is what already guarantees that.
+  await db.contract.update({
+    where: { id: contract.id },
+    data: { status: next, statusChangedAt: new Date() },
+  });
 }
 
 export const reload = async (id: string) => (await loadContract(id))!;

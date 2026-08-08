@@ -349,6 +349,27 @@ export const typeDefs = /* GraphQL */ `
     count: Int!
   }
 
+  "A contract, thin. Enough to name and link to one, and nothing more — see fields.ts's note on why (V4 T1)."
+  type ContractRef {
+    id: ID!
+    ref: String!
+    titleFa: String!
+    titleEn: String!
+    status: ContractStatus!
+    customerName: String!
+    statusChangedAt: DateTime!
+  }
+
+  "One entry in the desk's activity feed. Reads across every contract, so the contract field stays thin (T1)."
+  type ActivityItem {
+    id: ID!
+    contract: ContractRef!
+    actor: User!
+    action: ChangeAction!
+    arg: String
+    createdAt: DateTime!
+  }
+
   type AuthPayload {
     user: User!
   }
@@ -373,6 +394,16 @@ export const typeDefs = /* GraphQL */ `
     "Admin only."
     allContracts: [Contract!]!
     allCustomers: [User!]!
+
+    "Staff. Counts across every contract — not the caller's own, unlike contractStatusCounts."
+    allContractStatusCounts: [StatusCount!]!
+    "Staff. Contracts waiting on Root, longest-waiting first."
+    needsRootQueue(limit: Int = 20): [ContractRef!]!
+    """
+    Staff. Recent activity across every contract, newest first. reviewOnly
+    narrows it to customer actions that want a response from Root.
+    """
+    activity(limit: Int = 40, reviewOnly: Boolean = false): [ActivityItem!]!
   }
 
   input CreateContractInput {

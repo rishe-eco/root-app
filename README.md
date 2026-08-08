@@ -327,6 +327,10 @@ Progress.
   panel in the rail shows both lineages side by side, and the amendment gets
   its own approve-then-sign block without ever making the signed base look
   unfinished.
+- The desk's Overview (V4): status tiles across every contract, a Needs-Root
+  queue ordered by how long each one has been waiting, and a review queue of
+  recent customer activity worth a look — dismissed by the contract's own
+  status moving on, not by a flag. **Track V — V1b through V4 — is complete.**
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -376,6 +380,48 @@ stack first ran on Postgres.
 ~~An upload form~~ and ~~creating a contract, entering article text, and
 publishing a revision from the admin UI~~ — both built by the admin contract
 workspace (V2); see "Built and working" above and the note below.
+
+**The desk's Overview, run against a real database — 2026-08-08.** Track V —
+V1b through V4 — is complete: the draft got a name on the wire, the staff
+shell and admin workspace let Root run a contract end to end, the customer
+learns when something moved, and now the desk answers "what needs me"
+without clicking into anything.
+
+Defect D7: nothing recorded *when* a contract entered its current status —
+`updatedAt` bumps on any write, including a customer ticking a scope item, so
+it could not order a "longest waiting" queue. Fixed with a `statusChangedAt`
+column, written by both status writers (the automatic nudge and the manual
+override) and only on a real transition — confirmed by an integration test
+that sets a contract to the status it already has and checks the clock did
+not move. Backfilled from `updatedAt` for existing rows rather than left at
+the migration's own run time, which would have told the queue every contract
+just arrived.
+
+The three new queries are deliberately thin (`ContractRef`, not `Contract`):
+`ActivityItem.contract` resolving through the usual `contractInclude` would
+have dragged every concept, page, article, comment and change-log entry along
+per row — forty rows reading themselves forty times over. The review queue's
+ownership filter — a customer's own action, not any staff member's — is a
+same-row comparison across two tables that Prisma's query builder cannot
+express as a `where`, so it is filtered in application code against a capped
+scan window instead of raw SQL, which felt like the wrong tool for a filter
+this simple. The change-log sentence builder that used to live only in
+`ContractDetail.tsx` is now `lib/changelog.ts`, imported by both the portal
+and the desk — `changeAction.test.ts` now parses its new home, and still
+fails loudly on a `ChangeAction` with nowhere to render.
+
+Driven end to end in the browser, in both languages: a customer choosing a
+concept, approving every page and leaving a comment nudges their contract
+into Waiting on Root and produces three review-queue entries in a sentence
+each, correctly excluding the four routine per-page approvals in between;
+the tiles and the Needs-Root queue agree with that same transition; a
+reviewer signed in to confirm the route renders its empty, honest state
+rather than a page of FORBIDDEN errors, since Overview's nav slot is open to
+any staff role but its data stays capability-guarded underneath. Tile counts
+render in the locale's own digits — Persian shows «۱» beside «منتظر ریشه»,
+not a Latin numeral forced onto a page that is otherwise entirely Persian.
+`migrate diff` reports no drift; typecheck, the full unit suite (105), the
+integration suite (84, +5) and the e2e suite (24 specs, +1) are all green.
 
 **The pending-review banner, run against a real database — 2026-08-06.** V3
 adds no re-approval logic — `approveContract` and `signContract` already
