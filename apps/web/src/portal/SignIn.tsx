@@ -6,6 +6,7 @@ import { useLocale, lp } from '@/lib/locale';
 import { homeFor } from '@/lib/access';
 import { ME, SIGN_IN, type User } from '@/lib/queries';
 import AuthShell from './AuthShell';
+import PasswordField from './PasswordField';
 
 export default function SignIn() {
   const { t } = useTranslation();
@@ -65,21 +66,13 @@ export default function SignIn() {
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label className="label" htmlFor="password">
-            {t('auth.password')}
-          </label>
-          <input
-            id="password"
-            className="input"
-            type="password"
-            autoComplete="current-password"
-            dir="ltr"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
+        <PasswordField
+          id="password"
+          label={t('auth.password')}
+          value={password}
+          onChange={setPassword}
+          autoComplete="current-password"
+        />
         <div>
           <button className="btn btn-primary" type="submit" disabled={submitting}>
             {t('auth.signIn')}

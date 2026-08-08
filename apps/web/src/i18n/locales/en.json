@@ -37,7 +37,7 @@
   "about": {
     "eyebrow": "About Us",
     "thesisA": "The person authors their own life — in search of ",
-    "thesisBeauty": "beauty",
+    "thesisBeauty": "a life worth living",
     "thesisB": ". Root never authors it for them.",
     "gistBody": "Root is a platform for knowing and growing yourself — no rush, no lock-in, no game played with your attention. It's young and grows slowly: today it works closely with a small number of people, and the rest of the family — Root Cast, Journey, Root Studio — arrives when it's ready, not before.",
     "clientsEyebrow": "Clients",
@@ -46,7 +46,7 @@
     "clientsCta": "Open the portal"
   },
   "footer": {
-    "descriptor": "Root, in search of beauty. A platform for knowing and growing yourself.",
+    "descriptor": "Root, in search of a life worth living. A platform for knowing and growing yourself.",
     "refusal": "No streaks. No lock-in. No game with your attention.",
     "copyright": "© 2026 Root"
   },
@@ -55,6 +55,8 @@
     "signInLede": "The portal is for people already working with Root. If you have an invite, use the link we sent you.",
     "email": "Email",
     "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "signIn": "Sign in",
     "forgot": "Forgot your password?",
     "backToSite": "Back to the site",
