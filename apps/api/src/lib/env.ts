@@ -13,6 +13,9 @@ try {
   if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
 }
 
+/** docker-compose.prod.yml's `${VAR}` interpolation defines a var as "" rather than omitting it when the operator leaves it blank; treat that the same as unset. */
+const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v);
+
 /**
  * Fail loudly at boot rather than mysteriously at the first request. In
  * particular JWT_SECRET has no default — an unset signing key is a silent
@@ -51,6 +54,23 @@ const schema = z.object({
    * disk without touching Node. Private files are never addressable this way.
    */
   PUBLIC_FILES_BASE: z.string().url().optional(),
+  /**
+   * Resend's key and the address to send from. Both optional — and, unlike
+   * STORAGE_DIR, optional even in production: the founder may legitimately
+   * not have wired a provider yet, and a missing one degrades invite/reset
+   * links to a console log rather than refusing to boot (see `lib/mail.ts`).
+   * What *is* rejected below is a half-set pair, since one without the other
+   * cannot send anything and so is a mistake, not a partial config.
+   *
+   * `emptyToUndefined` matters here specifically because of
+   * docker-compose.prod.yml: its `${RESEND_API_KEY}` interpolation always
+   * defines the variable inside the container — as an empty string when the
+   * operator hasn't set it, never as truly absent — so without this an
+   * unconfigured provider would fail boot instead of degrading to logging.
+   */
+  RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  /** e.g. "Root <hello@yourdomain.com>" — must be on a domain verified in Resend. */
+  MAIL_FROM: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -64,6 +84,12 @@ if (parsed.data.NODE_ENV === 'production' && !parsed.data.STORAGE_DIR) {
   throw new Error(
     'Invalid environment:\n  - STORAGE_DIR is required in production ' +
       '(a path outside the release directory — see docs/deploy.md)',
+  );
+}
+
+if (Boolean(parsed.data.RESEND_API_KEY) !== Boolean(parsed.data.MAIL_FROM)) {
+  throw new Error(
+    'Invalid environment:\n  - RESEND_API_KEY and MAIL_FROM must both be set, or both left unset',
   );
 }
 

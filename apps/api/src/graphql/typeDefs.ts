@@ -438,7 +438,8 @@ export const typeDefs = /* GraphQL */ `
     signAmendment(amendmentId: ID!, typedName: String!): Contract!
 
     # --- minimal operational admin ---
-    inviteCustomer(email: String!, name: String!, clientName: String): InviteResult!
+    "locale defaults to the inviting admin's own locale when omitted."
+    inviteCustomer(email: String!, name: String!, clientName: String, locale: String): InviteResult!
     revokeInvite(userId: ID!): Boolean!
     createContract(input: CreateContractInput!): Contract!
     "Fills an empty contract with the standard article titles and scope items. Refuses if either already has rows."

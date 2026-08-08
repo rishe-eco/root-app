@@ -7,6 +7,8 @@ import { newLinkToken } from '../../auth/tokens.js';
 import { draftState, buildAmendmentSnapshot, contentHash } from '../../lib/revision.js';
 import { carryForward, diffDesign } from '../../lib/design.js';
 import { ARTICLES, SCOPE } from '../../lib/templates.js';
+import { sendMail } from '../../lib/mail.js';
+import { resolveLocale, inviteEmail } from '../../lib/mailTemplates.js';
 import {
   conceptsInclude,
   draftDesignRevision,
@@ -86,16 +88,19 @@ async function resolveDesignImage(
 export const adminMutations = {
   inviteCustomer: async (
     _p: unknown,
-    args: { email: string; name: string; clientName?: string },
+    args: { email: string; name: string; clientName?: string; locale?: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'customers.manage');
+    const admin = requireCapability(ctx, 'customers.manage');
     const email = args.email.trim().toLowerCase();
+    // D9: default to the *inviting* admin's own locale, a better guess than
+    // the schema's hardcoded 'fa', when the caller doesn't say otherwise.
+    const locale = resolveLocale(args.locale ?? admin.locale);
 
     const user = await prisma.user.upsert({
       where: { email },
-      create: { email, name: args.name.trim(), clientName: args.clientName ?? null },
-      update: { name: args.name.trim(), clientName: args.clientName ?? null },
+      create: { email, name: args.name.trim(), clientName: args.clientName ?? null, locale },
+      update: { name: args.name.trim(), clientName: args.clientName ?? null, locale },
     });
     if (user.state === 'ACTIVE') {
       throw new GraphQLError('That account is already active.', {
@@ -109,9 +114,14 @@ export const adminMutations = {
       data: { userId: user.id, purpose: 'INVITE', tokenHash: hash, expiresAt },
     });
 
-    // No mail provider yet: the link is returned once, here, for Root to
-    // pass on. It cannot be read again.
+    // Still returned unconditionally: the fallback for when mail bounces or
+    // no provider is configured, not something mail makes redundant.
     const inviteUrl = `${env.APP_ORIGIN}/${user.locale}/portal/invite/${raw}`;
+    try {
+      await sendMail({ to: user.email, ...inviteEmail(user.locale, { name: user.name, inviteUrl }) });
+    } catch (err) {
+      console.error('[mail] invite send failed', err);
+    }
     return { userId: user.id, email: user.email, inviteUrl, expiresAt };
   },
 

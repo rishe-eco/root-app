@@ -4,6 +4,8 @@ import { env } from '../../lib/env.js';
 import { setSessionCookie, clearSessionCookie, type Context } from '../../context.js';
 import { signSession, newLinkToken, hashToken } from '../../auth/tokens.js';
 import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from '../../auth/password.js';
+import { sendMail } from '../../lib/mail.js';
+import { resetEmail } from '../../lib/mailTemplates.js';
 
 /**
  * Sign in, sign out, and the two link-token flows.
@@ -92,11 +94,15 @@ export const authMutations = {
       data: { userId: user.id, purpose: 'PASSWORD_RESET', tokenHash: hash, expiresAt },
     });
 
-    // TODO(email): no mail provider is wired yet, so the link is logged for
-    // an operator to pass on by hand. Swap this for the provider call.
-    console.info(
-      `[reset] ${user.email} -> ${env.APP_ORIGIN}/${user.locale}/portal/reset/${raw}`,
-    );
+    const resetUrl = `${env.APP_ORIGIN}/${user.locale}/portal/reset/${raw}`;
+    try {
+      await sendMail({ to: user.email, ...resetEmail(user.locale, { resetUrl }) });
+    } catch (err) {
+      // A failure here must never become visible to the caller — this
+      // resolver returns `true` unconditionally by design (see above), and a
+      // distinguishable error would leak exactly what that hides.
+      console.error('[mail] reset send failed', err);
+    }
     return true;
   },
 
