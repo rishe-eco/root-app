@@ -53,16 +53,34 @@ V2   admin contract workspace    ✔ 2026-08-06  ed3aac9          [V2.md]
 V3   customer revised-banner     ✔ 2026-08-07  5b6182f          [V3.md]
 V4   admin overview + queue      ✔ 2026-08-08  337ce1c          [V4.md]
 C0   the email seam              ✔ 2026-08-08  4eb4106  ← early
-──────────────────────────────── everything below is unbuilt ────────
      the tagline + hero          ✔ 2026-08-10             [tagline.md]
-R1   Library model + editor      ← next, build-ready            [R1.md]
-R2   public reader + search      ┐
-R3   concept tree                │  outlined only, not yet
-C1   Review Room corpus          ├─ specified to build depth [later-tracks.md]
-C2   Review Room comments        │
+R1   Library model + editor      ✔ 2026-08-10  bc1f6aa          [R1.md]
+──────────────────────────────── everything below is unbuilt ────────
+R2   public reader + search      ← next, build-ready            [R2.md]
+R3   concept tree                ← build-ready, but see below   [R3.md]
+C1   Review Room corpus          ← build-ready                  [C1.md]
+C2   Review Room comments        ┐ outlined only  [later-tracks.md]
 R4   the agent                   ┘
 the Persian pass
 ```
+
+**R3 carries a condition the others do not.** The build plan places it
+*"deliberately after there are entries worth an ontology"*. If the corpus is
+still a handful of entries when its turn comes, **skip it and take C1** — a
+tree over twelve entries is worse than a flat tag list, and building it early
+fixes the hierarchy before anyone knows what it should be.
+
+**R1's review found five things; four are fixed and one carries into R2.**
+Fixed on 2026-08-10: the unbounded `limit` (now `lib/pagination.ts`, used by
+the Library *and* V4's two queries), the Persian-digit inconsistency in the
+entry list, a gap in the fold drift-guard that checked the replaced characters
+but not the stripped ones, and the `tsvector` deferral that had been decided
+and never written into the code.
+
+**What carries:** `:lang(fa)` in `tokens.css` sets custom properties that
+inherit, and nothing resets them — so a Latin block inside a Persian page is
+set in Vazirmatn at Persian leading. Invisible today, and R2's reader is
+exactly the page that puts two languages on one screen. [`R2.md`](R2.md) §1.
 
 **C0 was built out of order**, after V4 rather than after R3. The reason for
 placing it late was sound and is unchanged — email's only hard deadline is the
@@ -257,8 +275,11 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`V3.md`](V3.md) | customer revised-banner and re-approval | ✔ built |
 | [`V4.md`](V4.md) | admin overview and review queue | ✔ built |
 | [`tagline.md`](tagline.md) | tagline, hero and descriptor — the brand copy pass | ✔ done |
-| [`R1.md`](R1.md) | Library — model and admin entry editor | **next** |
-| [`later-tracks.md`](later-tracks.md) | R2–R4, C1–C2 — outline and banked traps | |
+| [`R1.md`](R1.md) | Library — model and admin entry editor | ✔ built |
+| [`R2.md`](R2.md) | Library — public reader, list and search | **next** |
+| [`R3.md`](R3.md) | Library — the concept tree | ready · conditional |
+| [`C1.md`](C1.md) | Review Room — documents, snapshots, the corpus | ready |
+| [`later-tracks.md`](later-tracks.md) | C2 and R4 — outline and banked traps | |
 
 **The built stage files are kept as written**, not rewritten to match what
 shipped. They are the plan the build was measured against, and their value now
