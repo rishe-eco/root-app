@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSearchText, foldPersian, makeSlug, slugify } from './library.js';
+import { STRIP_MARKS_SOURCE, buildSearchText, foldPersian, makeSlug, slugify } from './library.js';
 
 /** Walk up to the workspace root — same helper as changeAction.test.ts. */
 function repoRoot(): string {
@@ -51,6 +51,28 @@ test("library_fold's character table is balanced (§5.2)", () => {
   // path fold text two different ways.
   for (const [i, ch] of fromChars.entries()) {
     assert.equal(foldPersian(ch), toChars[i].toLowerCase(), `mismatch at index ${i}: '${ch}'`);
+  }
+});
+
+test("library_fold's strip pattern matches the JS port's, verbatim (§5.2)", () => {
+  // The table check above covers the characters that are *replaced*. The
+  // characters that are *removed* — ZWNJ, tatweel, harakat — live in
+  // regexp_replace's pattern, and an edit to one side only is just as silent:
+  // stop stripping ZWNJ in one place and «می‌رود» no longer matches «میرود»
+  // on whichever path was not updated.
+  const sql = findR1Migration();
+  const body = sql.match(/library_fold\(t text\) RETURNS text AS \$\$(.*?)\$\$ LANGUAGE/s);
+  assert.ok(body, 'could not find the library_fold() function body in the R1 migration');
+  const literals = [...body![1].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
+  // regexp_replace(coalesce(t, ''), <pattern>, <replacement>, <flags>) — the
+  // first literal is coalesce's empty string, so the pattern is the second.
+  const pattern = literals[1];
+  assert.equal(pattern, STRIP_MARKS_SOURCE, 'the SQL strip pattern and the JS one have diverged');
+
+  // And behaviourally, so the assertion above cannot pass on two identical
+  // strings that both stopped working.
+  for (const ch of ['‌', 'ـ', 'ً', 'ْ']) {
+    assert.equal(foldPersian(`ا${ch}ب`), 'اب', `'${ch.codePointAt(0)!.toString(16)}' was not stripped`);
   }
 });
 

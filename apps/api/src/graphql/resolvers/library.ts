@@ -11,6 +11,7 @@ import { prisma } from '../../lib/prisma.js';
 import { requireCapability, type Context } from '../../context.js';
 import { storage } from '../../lib/storage.js';
 import { buildSearchText, foldPersian, makeSlug } from '../../lib/library.js';
+import { clampLimit } from '../../lib/pagination.js';
 
 /**
  * The Library's queries and mutations (R1). Guarded by capability, never by
@@ -158,8 +159,8 @@ export const libraryQueries = {
       prisma.libraryEntry.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        take: args.limit ?? 50,
-        skip: args.offset ?? 0,
+        take: clampLimit(args.limit, 50, 100),
+        skip: Math.max(args.offset ?? 0, 0),
         select: rowSelect,
       }),
       prisma.libraryEntry.count({ where }),

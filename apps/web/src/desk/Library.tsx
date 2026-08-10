@@ -116,7 +116,11 @@ export default function Library() {
                   <td className="num-latin">{r.year ?? '—'}</td>
                   <td>{t(`desk.library.provenance.${r.translationProvenance}`)}</td>
                   <td>{t(`desk.library.rights.${r.rightsBasis}`)}</td>
-                  <td className="num-latin">{r.conceptCount}</td>
+                  {/* A count, not a citation field — so it reads in the
+                      viewer's own digits, like the pagination footer below
+                      and V4's tiles. `num-latin` is for the year and the DOI,
+                      which are Latin wherever they are printed. */}
+                  <td>{formatCount(r.conceptCount, locale)}</td>
                   <td>
                     {/* Reuses the contract-status pill shell and its neutral
                         (draft) / solid (done) colour roles — generic tokens,
