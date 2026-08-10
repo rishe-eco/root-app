@@ -977,3 +977,255 @@ export const SIGN_AMENDMENT = gql`
     }
   }
 `;
+
+// ---------------------------------------------------------------------------
+// Library (R1) — bilingual as *data*. Entry content is never a translation
+// key; only the editor's own chrome lives in en.json/fa.json (R1.md §0.1).
+// ---------------------------------------------------------------------------
+
+export type EntryType = 'PAPER' | 'BOOK' | 'ARTICLE' | 'ROOT_RESEARCH';
+export type TranslationProvenance = 'PUBLISHED' | 'ROOT' | 'NONE_YET';
+export type RightsBasis = 'PUBLIC_DOMAIN' | 'OPEN_LICENCE' | 'PERMISSION_GRANTED' | 'LINK_ONLY';
+export type EntryVisibility = 'PUBLIC' | 'PRIVATE';
+
+export type LibraryConcept = {
+  id: string;
+  slug: string;
+  titleFa: string;
+  titleEn: string;
+};
+
+export type LibraryEntry = {
+  id: string;
+  slug: string;
+  type: EntryType;
+  originalLang: string;
+  titleOriginal: string;
+  authors: string;
+  venue: string | null;
+  year: number | null;
+  doi: string | null;
+  sourceUrl: string | null;
+  abstractOriginal: string | null;
+  translationProvenance: TranslationProvenance;
+  titleTranslated: string | null;
+  abstractTranslated: string | null;
+  translationCredit: string | null;
+  rightsBasis: RightsBasis;
+  rightsNote: string | null;
+  fullTextUrl: string | null;
+  visibility: EntryVisibility;
+  publishedAt: string | null;
+  concepts: LibraryConcept[];
+  createdBy: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** The list screen's shape — never the abstract, never unbounded (R1.md §4.4, T1). */
+export type LibraryEntryRow = {
+  id: string;
+  slug: string;
+  type: EntryType;
+  titleOriginal: string;
+  titleTranslated: string | null;
+  year: number | null;
+  translationProvenance: TranslationProvenance;
+  rightsBasis: RightsBasis;
+  publishedAt: string | null;
+  conceptCount: number;
+};
+
+export type LibraryEntryInput = {
+  type: EntryType;
+  originalLang: string;
+  titleOriginal: string;
+  authors: string;
+  venue?: string | null;
+  year?: number | null;
+  doi?: string | null;
+  sourceUrl?: string | null;
+  abstractOriginal?: string | null;
+  translationProvenance: TranslationProvenance;
+  titleTranslated?: string | null;
+  abstractTranslated?: string | null;
+  translationCredit?: string | null;
+  rightsBasis: RightsBasis;
+  rightsNote?: string | null;
+  visibility: EntryVisibility;
+  slug?: string | null;
+};
+
+export type LibraryConceptInput = { titleFa: string; titleEn: string; slug?: string | null };
+
+const LIBRARY_ENTRY_ROW_FIELDS = gql`
+  fragment LibraryEntryRowFields on LibraryEntryRow {
+    id
+    slug
+    type
+    titleOriginal
+    titleTranslated
+    year
+    translationProvenance
+    rightsBasis
+    publishedAt
+    conceptCount
+  }
+`;
+
+export const LIBRARY_ENTRIES = gql`
+  ${LIBRARY_ENTRY_ROW_FIELDS}
+  query LibraryEntries($search: String, $type: EntryType, $limit: Int, $offset: Int) {
+    libraryEntries(search: $search, type: $type, limit: $limit, offset: $offset) {
+      rows {
+        ...LibraryEntryRowFields
+      }
+      total
+    }
+  }
+`;
+
+const LIBRARY_ENTRY_FIELDS = gql`
+  fragment LibraryEntryFields on LibraryEntry {
+    id
+    slug
+    type
+    originalLang
+    titleOriginal
+    authors
+    venue
+    year
+    doi
+    sourceUrl
+    abstractOriginal
+    translationProvenance
+    titleTranslated
+    abstractTranslated
+    translationCredit
+    rightsBasis
+    rightsNote
+    fullTextUrl
+    visibility
+    publishedAt
+    concepts {
+      id
+      slug
+      titleFa
+      titleEn
+    }
+    createdBy {
+      id
+      name
+    }
+    createdAt
+    updatedAt
+  }
+`;
+
+export const LIBRARY_ENTRY = gql`
+  ${LIBRARY_ENTRY_FIELDS}
+  query LibraryEntryById($id: ID!) {
+    libraryEntry(id: $id) {
+      ...LibraryEntryFields
+    }
+  }
+`;
+
+export const LIBRARY_CONCEPTS = gql`
+  query LibraryConcepts {
+    libraryConcepts {
+      id
+      slug
+      titleFa
+      titleEn
+    }
+  }
+`;
+
+export const CREATE_LIBRARY_ENTRY = gql`
+  ${LIBRARY_ENTRY_FIELDS}
+  mutation CreateLibraryEntry($input: LibraryEntryInput!) {
+    createLibraryEntry(input: $input) {
+      ...LibraryEntryFields
+    }
+  }
+`;
+
+export const UPDATE_LIBRARY_ENTRY = gql`
+  ${LIBRARY_ENTRY_FIELDS}
+  mutation UpdateLibraryEntry($id: ID!, $input: LibraryEntryInput!) {
+    updateLibraryEntry(id: $id, input: $input) {
+      ...LibraryEntryFields
+    }
+  }
+`;
+
+export const DELETE_LIBRARY_ENTRY = gql`
+  mutation DeleteLibraryEntry($id: ID!) {
+    deleteLibraryEntry(id: $id)
+  }
+`;
+
+export const SET_ENTRY_CONCEPTS = gql`
+  ${LIBRARY_ENTRY_FIELDS}
+  mutation SetEntryConcepts($id: ID!, $conceptIds: [ID!]!) {
+    setEntryConcepts(id: $id, conceptIds: $conceptIds) {
+      ...LibraryEntryFields
+    }
+  }
+`;
+
+export const DETACH_ENTRY_FULL_TEXT = gql`
+  ${LIBRARY_ENTRY_FIELDS}
+  mutation DetachEntryFullText($id: ID!) {
+    detachEntryFullText(id: $id) {
+      ...LibraryEntryFields
+    }
+  }
+`;
+
+export const PUBLISH_LIBRARY_ENTRY = gql`
+  ${LIBRARY_ENTRY_FIELDS}
+  mutation PublishLibraryEntry($id: ID!) {
+    publishLibraryEntry(id: $id) {
+      ...LibraryEntryFields
+    }
+  }
+`;
+
+export const UNPUBLISH_LIBRARY_ENTRY = gql`
+  ${LIBRARY_ENTRY_FIELDS}
+  mutation UnpublishLibraryEntry($id: ID!) {
+    unpublishLibraryEntry(id: $id) {
+      ...LibraryEntryFields
+    }
+  }
+`;
+
+export const CREATE_LIBRARY_CONCEPT = gql`
+  mutation CreateLibraryConcept($input: LibraryConceptInput!) {
+    createLibraryConcept(input: $input) {
+      id
+      slug
+      titleFa
+      titleEn
+    }
+  }
+`;
+
+export const UPDATE_LIBRARY_CONCEPT = gql`
+  mutation UpdateLibraryConcept($id: ID!, $input: LibraryConceptInput!) {
+    updateLibraryConcept(id: $id, input: $input) {
+      id
+      slug
+      titleFa
+      titleEn
+    }
+  }
+`;
+
+export const DELETE_LIBRARY_CONCEPT = gql`
+  mutation DeleteLibraryConcept($id: ID!) {
+    deleteLibraryConcept(id: $id)
+  }
+`;

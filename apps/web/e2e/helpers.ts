@@ -15,6 +15,7 @@ export const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 export const ADMIN = { email: 'admin@root.local', password: 'change-me-please' };
 export const CUSTOMER = { email: 'nahal@example.com', password: 'change-me-please' };
 export const REVIEWER = { email: 'reviewer@root.local', password: 'change-me-please' };
+export const CONTRIBUTOR = { email: 'contributor@root.local', password: 'change-me-please' };
 export const CONTRACT_REF = 'RC-2026-014';
 /** What the contracts list actually shows — the ref is not on that screen. */
 export const CONTRACT_TITLE = 'Nahal website & portal';

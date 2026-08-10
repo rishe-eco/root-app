@@ -47,10 +47,13 @@ export const PNG = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
 ]);
 
+export const PDF = Buffer.from('%PDF-1.7\n%some research text\n');
+
 export type UploadOpts = {
   as?: Pick<User, 'id'> | null;
   fileClass?: string;
   contractId?: string | null;
+  entryId?: string | null;
   filename?: string;
   body?: Buffer;
   type?: string;
@@ -67,6 +70,7 @@ export async function upload(base: string, opts: UploadOpts = {}) {
 
   const params = new URLSearchParams({ class: opts.fileClass ?? 'DESIGN_IMAGE' });
   if (opts.contractId) params.set('contractId', opts.contractId);
+  if (opts.entryId) params.set('entryId', opts.entryId);
 
   const res = await fetch(`${base}/upload?${params}`, {
     method: 'POST',

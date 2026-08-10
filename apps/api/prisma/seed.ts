@@ -30,6 +30,10 @@ const CUSTOMER_PASSWORD = process.env.SEED_CUSTOMER_PASSWORD ?? 'change-me-pleas
 // desk section — the role F3 built had no surface to test until now.
 const REVIEWER_EMAIL = process.env.SEED_REVIEWER_EMAIL ?? 'reviewer@root.local';
 const REVIEWER_PASSWORD = process.env.SEED_REVIEWER_PASSWORD ?? 'change-me-please';
+// R1's e2e spec needs a CONTRIBUTOR to prove the editor degrades honestly —
+// the section is reachable, publish is not (T6).
+const CONTRIBUTOR_EMAIL = process.env.SEED_CONTRIBUTOR_EMAIL ?? 'contributor@root.local';
+const CONTRIBUTOR_PASSWORD = process.env.SEED_CONTRIBUTOR_PASSWORD ?? 'change-me-please';
 
 async function main() {
   const admin = await prisma.user.upsert({
@@ -66,6 +70,18 @@ async function main() {
       roles: ['REVIEWER'],
       state: 'ACTIVE',
       passwordHash: await bcrypt.hash(REVIEWER_PASSWORD, 12),
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: CONTRIBUTOR_EMAIL },
+    update: {},
+    create: {
+      email: CONTRIBUTOR_EMAIL,
+      name: 'Contributor',
+      roles: ['CONTRIBUTOR'],
+      state: 'ACTIVE',
+      passwordHash: await bcrypt.hash(CONTRIBUTOR_PASSWORD, 12),
     },
   });
 

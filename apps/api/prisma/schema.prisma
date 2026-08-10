@@ -72,6 +72,7 @@ model User {
   tickets       Ticket[]
   ticketMessage TicketMessage[]
   uploads       StoredFile[]
+  libraryEntries LibraryEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -410,6 +411,10 @@ model StoredFile {
 
   conceptImages DesignConcept[] @relation("ConceptImage")
   pageImages    PageDesign[]    @relation("PageImage")
+  /// The other asymmetry to `contractId`: an entry has *one* full text and
+  /// the edge lives on the entry (§1.1), so this side is a nullable scalar,
+  /// not an array — a contract has many files, an entry's hosted text is one.
+  entryFullText LibraryEntry?   @relation("EntryFullText")
 
   createdAt DateTime @default(now())
 
@@ -637,4 +642,143 @@ model TicketMessage {
   body     String
 
   createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Library — the Research Lab's corpus (R1)
+// ---------------------------------------------------------------------------
+//
+// Bilingual as *data*, not as UI strings: a Persian title and an English title
+// are both columns on the same row, present at once. This is the first model
+// in the app where that is true — everywhere else, one locale is chosen per
+// request and the other language lives in apps/web/src/i18n/locales/*.json.
+//
+// The rule that shapes this section (R1.md §1): a hosted file may exist only
+// when the entry is PUBLIC and its rights basis is not LINK_ONLY. The two
+// flags that each independently gate a hosted PDF being world-readable never
+// meet in the spec, so the CHECK constraint below (hand-added to the
+// migration — Prisma cannot express a cross-column rule as a `@@unique` or a
+// `@default`) is the one place that closes both roads at once.
+
+enum EntryType {
+  PAPER // peer-reviewed
+  BOOK
+  ARTICLE // article / web
+  ROOT_RESEARCH // Root's own — "distinct: grown here"
+}
+
+enum TranslationProvenance {
+  PUBLISHED // an existing translation; cite translator + edition
+  ROOT // Root translated it; labelled as such
+  NONE_YET // original only; a reader may request one
+}
+
+enum RightsBasis {
+  PUBLIC_DOMAIN
+  OPEN_LICENCE
+  PERMISSION_GRANTED
+  LINK_ONLY
+}
+
+enum EntryVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+model LibraryEntry {
+  id String @id @default(cuid())
+
+  /// The public reader's URL segment (R2). Unique, immutable once published —
+  /// a URL that has been handed out is not free to change (T4).
+  slug String @unique
+  type EntryType
+
+  // ---- the work, in its own language ----
+  /// BCP-47-ish tag ("fa", "en", "de"). Deliberately NOT the app's Locale
+  /// enum: the app has two UI languages, the corpus has as many source
+  /// languages as it has sources, and conflating them caps the Library at
+  /// two (T2).
+  originalLang     String
+  titleOriginal    String
+  /// Free text, as written on the paper. Not a relation, not an array —
+  /// author disambiguation is a research-data problem this stage is not
+  /// solving.
+  authors          String
+  venue            String?
+  year             Int?
+  doi              String?
+  sourceUrl        String?
+  abstractOriginal String?
+
+  // ---- the translation ----
+  /// Required, no default (§2.1) — a defaulted value here would be omission
+  /// with a friendly face; "always shown, never implied" only holds if
+  /// omission is impossible.
+  translationProvenance TranslationProvenance
+  titleTranslated       String?
+  abstractTranslated    String?
+  /// Where the "published" state's credit goes: translator, edition, link.
+  translationCredit     String?
+
+  // ---- rights ----
+  /// Required, no default (§2.1) — same reasoning as translationProvenance.
+  rightsBasis RightsBasis
+  /// OPEN_LICENCE records the licence URL; PERMISSION_GRANTED records where
+  /// the yes is. Both optional in the schema, both prompted by the editor.
+  rightsNote  String?
+
+  // ---- the hosted text (§1.1: the edge lives here, not on StoredFile) ----
+  fullTextFileId String?     @unique
+  fullTextFile   StoredFile? @relation("EntryFullText", fields: [fullTextFileId], references: [id], onDelete: Restrict)
+
+  /// PUBLIC by default (§2.1) — the Lab is a public library, so public is the
+  /// honest default; the private register is protected by publishedAt being
+  /// null until someone publishes deliberately, not by this flag.
+  visibility EntryVisibility @default(PUBLIC)
+  /// Null means draft. Set by publishLibraryEntry, which needs library.publish.
+  publishedAt DateTime?
+
+  /// Normalized haystack, maintained on write by buildSearchText — see
+  /// lib/library.ts and T8. Folded through library_fold() so Persian
+  /// orthographic variants compare equal (§5).
+  searchText String @default("")
+
+  concepts LibraryEntryConcept[]
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([publishedAt, visibility])
+  @@index([type])
+}
+
+/// Flat in R1 — no parentId. R3 owns the tree; a nullable self-relation with
+/// no backfill is genuinely free to add later, and a column nothing reads
+/// yet is a column that acquires a wrong meaning before a right one (§2.3).
+model LibraryConcept {
+  id      String @id @default(cuid())
+  slug    String @unique
+  titleFa String
+  titleEn String
+
+  entries LibraryEntryConcept[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Explicit join model rather than an implicit m-n: R3 will want ordering and
+/// possibly a "primary concept", and an implicit relation cannot grow columns
+/// later without becoming this model anyway (§2.3).
+model LibraryEntryConcept {
+  entryId   String
+  conceptId String
+  entry     LibraryEntry   @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  concept   LibraryConcept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@id([entryId, conceptId])
+  @@index([conceptId])
 }

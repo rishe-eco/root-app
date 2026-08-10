@@ -370,6 +370,128 @@ export const typeDefs = /* GraphQL */ `
     createdAt: DateTime!
   }
 
+  # ---------------------------------------------------------------------
+  # Library (R1) — bilingual as *data*. titleOriginal/titleTranslated and
+  # the abstracts are rows, never locale-file keys (R1.md §0.1) — the
+  # desk.library.* namespace in en.json/fa.json is the editor's chrome only.
+  # ---------------------------------------------------------------------
+
+  enum EntryType {
+    PAPER
+    BOOK
+    ARTICLE
+    ROOT_RESEARCH
+  }
+
+  enum TranslationProvenance {
+    PUBLISHED
+    ROOT
+    NONE_YET
+  }
+
+  enum RightsBasis {
+    PUBLIC_DOMAIN
+    OPEN_LICENCE
+    PERMISSION_GRANTED
+    LINK_ONLY
+  }
+
+  enum EntryVisibility {
+    PUBLIC
+    PRIVATE
+  }
+
+  "Flat in R1 (§2.3) — R3 turns this into a tree."
+  type LibraryConcept {
+    id: ID!
+    slug: String!
+    titleFa: String!
+    titleEn: String!
+  }
+
+  "Staff, in full, for the editor."
+  type LibraryEntry {
+    id: ID!
+    slug: String!
+    type: EntryType!
+
+    originalLang: String!
+    titleOriginal: String!
+    authors: String!
+    venue: String
+    year: Int
+    doi: String
+    sourceUrl: String
+    abstractOriginal: String
+
+    translationProvenance: TranslationProvenance!
+    titleTranslated: String
+    abstractTranslated: String
+    translationCredit: String
+
+    rightsBasis: RightsBasis!
+    rightsNote: String
+
+    "Null whenever no file is hosted. The hosted-text CHECK in the migration is what actually enforces that LINK_ONLY and PRIVATE entries never have one — this is just what that state looks like from here."
+    fullTextUrl: String
+
+    visibility: EntryVisibility!
+    "Null means draft."
+    publishedAt: DateTime
+
+    concepts: [LibraryConcept!]!
+
+    createdBy: User!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  "A Library entry, thin — the list screen's shape. Never the abstract, never unbounded (§4.4, T1)."
+  type LibraryEntryRow {
+    id: ID!
+    slug: String!
+    type: EntryType!
+    titleOriginal: String!
+    titleTranslated: String
+    year: Int
+    translationProvenance: TranslationProvenance!
+    rightsBasis: RightsBasis!
+    publishedAt: DateTime
+    conceptCount: Int!
+  }
+
+  type LibraryEntryPage {
+    rows: [LibraryEntryRow!]!
+    total: Int!
+  }
+
+  input LibraryEntryInput {
+    type: EntryType!
+    originalLang: String!
+    titleOriginal: String!
+    authors: String!
+    venue: String
+    year: Int
+    doi: String
+    sourceUrl: String
+    abstractOriginal: String
+    translationProvenance: TranslationProvenance!
+    titleTranslated: String
+    abstractTranslated: String
+    translationCredit: String
+    rightsBasis: RightsBasis!
+    rightsNote: String
+    visibility: EntryVisibility!
+    "Overrides the title-derived slug. On update, refused once publishedAt is set (T4). Omit to leave an existing slug untouched."
+    slug: String
+  }
+
+  input LibraryConceptInput {
+    titleFa: String!
+    titleEn: String!
+    slug: String
+  }
+
   type AuthPayload {
     user: User!
   }
@@ -404,6 +526,13 @@ export const typeDefs = /* GraphQL */ `
     narrows it to customer actions that want a response from Root.
     """
     activity(limit: Int = 40, reviewOnly: Boolean = false): [ActivityItem!]!
+
+    "Staff. Every entry, drafts included. Thin — see LibraryEntryRow."
+    libraryEntries(search: String, type: EntryType, limit: Int = 50, offset: Int = 0): LibraryEntryPage!
+    "Staff. One entry, in full, for the editor."
+    libraryEntry(id: ID!): LibraryEntry
+    "Staff. The tag picker needs these; R3 gives them a tree."
+    libraryConcepts: [LibraryConcept!]!
   }
 
   input CreateContractInput {
@@ -491,5 +620,22 @@ export const typeDefs = /* GraphQL */ `
     deleteAmendment(amendmentId: ID!): Contract!
     "Logs CONTRACT_AMENDED and nudges WAITING_ON_CUSTOMER."
     publishAmendment(amendmentId: ID!): Contract!
+
+    # --- Library (R1) ---
+    createLibraryEntry(input: LibraryEntryInput!): LibraryEntry!
+    updateLibraryEntry(id: ID!, input: LibraryEntryInput!): LibraryEntry!
+    "Removes any hosted file first (T3), then the entry."
+    deleteLibraryEntry(id: ID!): Boolean!
+    "Replaces the whole tag set."
+    setEntryConcepts(id: ID!, conceptIds: [ID!]!): LibraryEntry!
+    "Removes the hosted file (bytes and row) without changing rights or visibility. Replacing a file is this, then POST /upload."
+    detachEntryFullText(id: ID!): LibraryEntry!
+    publishLibraryEntry(id: ID!): LibraryEntry!
+    unpublishLibraryEntry(id: ID!): LibraryEntry!
+    "A contributor's own remit — filing an entry that needs a tag that does not exist yet should not require stopping to ask an admin."
+    createLibraryConcept(input: LibraryConceptInput!): LibraryConcept!
+    "Renaming and nesting the ontology is library.editTree, not library.write."
+    updateLibraryConcept(id: ID!, input: LibraryConceptInput!): LibraryConcept!
+    deleteLibraryConcept(id: ID!): Boolean!
   }
 `;
