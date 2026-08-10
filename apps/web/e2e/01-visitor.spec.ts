@@ -18,7 +18,12 @@ test.describe('a visitor', () => {
     await page.goto('/en/');
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page.getByText('Make a life worth living')).toBeVisible();
+    /* The hero line is one h1 split across three nodes so "new" can carry the
+       gold — asserting on the heading rather than the text also holds the
+       landing page to having an h1 at all. */
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(
+      'In search of something new',
+    );
   });
 
   test('/ redirects to a locale rather than 404ing', async ({ page }) => {

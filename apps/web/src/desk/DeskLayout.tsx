@@ -70,10 +70,10 @@ export default function DeskLayout() {
 
       <div className="desk-main">
         <header className="desk-topbar">
-          {/* TODO(label): "کارگاه" (workshop) is a placeholder Persian label
-              for desk.title / portal.navDesk — pending the founder's word
-              per docs/development/F2.md §6. The route /desk is not blocked
-              on this. */}
+          {/* «اتاقِ کار» — the workroom (founder direction, 2026-08-09,
+              settling the F2 placeholder). It pairs with the portal's
+              «میز کار» rather than competing: the portal is the desk, this
+              is the room it stands in. */}
           <h1 className="t-h3">{t('desk.title')}</h1>
           <div className="desk-topbar-right">
             <LangSwitch />

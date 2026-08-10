@@ -3,6 +3,12 @@
     "main": "Root",
     "sub": "ریشه"
   },
+  "tagline": {
+    "prefix": "In search of something ",
+    "face": "new",
+    "suffix": "...",
+    "descriptor": "An ecosystem for knowing and growing yourself."
+  },
   "nav": {
     "about": "About Us",
     "studio": "Root Studio",
@@ -12,10 +18,6 @@
     "locked": "Coming later"
   },
   "landing": {
-    "eyebrowPrefix": "In search of ",
-    "eyebrowHighlight": "beauty",
-    "heroTitle": "Make a life worth living",
-    "heroDescriptor": "A platform for knowing and growing yourself — no rush, no lock-in, no game played with your attention.",
     "cta": "Start where you are",
     "rootCast": "Root Cast",
     "growthHeading": "Where Root grows",
@@ -36,17 +38,15 @@
   },
   "about": {
     "eyebrow": "About Us",
-    "thesisA": "The person authors their own life — in search of ",
-    "thesisBeauty": "a life worth living",
-    "thesisB": ". Root never authors it for them.",
-    "gistBody": "Root is a platform for knowing and growing yourself — no rush, no lock-in, no game played with your attention. It's young and grows slowly: today it works closely with a small number of people, and the rest of the family — Root Cast, Journey, Root Studio — arrives when it's ready, not before.",
+    "thesis": "The person authors their own life. Root never authors it for them.",
+    "gistBody": "Root is an ecosystem for knowing and growing yourself — no rush, no lock-in, no game played with your attention. It's young and grows slowly: today it works closely with a small number of people, and the rest of the family — Root Cast, Journey, Root Studio — arrives when it's ready, not before.",
     "clientsEyebrow": "Clients",
     "clientsTitle": "Already working with us?",
     "clientsBody": "Track your contract, approve designs, and see what you owe — all in one quiet place.",
     "clientsCta": "Open the portal"
   },
   "footer": {
-    "descriptor": "Root, in search of a life worth living. A platform for knowing and growing yourself.",
+    "lead": "Root — ",
     "refusal": "No streaks. No lock-in. No game with your attention.",
     "copyright": "© 2026 Root"
   },

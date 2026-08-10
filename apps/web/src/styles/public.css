@@ -12,20 +12,17 @@
 .nav-brand-link { text-decoration: none; color: inherit; }
 
 /* ---- Landing hero ------------------------------------------------------ */
-.hero { display: flex; align-items: flex-start; padding-block: var(--space-24); padding-inline: var(--space-12); }
-.hero-main { flex: 0 0 60%; max-inline-size: 60%; display: flex; flex-direction: column; gap: var(--space-6); padding-inline-end: var(--space-6); }
-.hero-gap { flex: 0 0 20%; }
-.hero-side { flex: 0 0 20%; max-inline-size: 20%; }
+/* One centred line and its descriptor. The two-column split, the blurred
+   Root Cast panel and their responsive rules were removed 2026-08-09 —
+   `text-align: center` is what makes this work, so it lives on the flex
+   container rather than being repeated on each child. */
+.hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--space-6); padding-block: var(--space-24); padding-inline: var(--space-12); }
 
-.hero-tagline { font-size: var(--text-h3); font-weight: var(--weight-semibold); margin: 0; }
-.hero-title { line-height: var(--leading-tight); font-weight: var(--weight-bold); letter-spacing: -0.02em; margin: 0; }
-.hero-title-en { font-size: var(--text-display); }
-.hero-title-fa { font-size: var(--text-h2); letter-spacing: normal; }
+.hero-line { line-height: var(--leading-tight); font-weight: var(--weight-bold); letter-spacing: -0.02em; margin: 0; }
+.hero-line-en { font-size: var(--text-display); }
+/* Persian never gets negative tracking: it breaks the connected script. */
+.hero-line-fa { font-size: var(--text-h1); letter-spacing: normal; }
 .hero-lead { margin: 0; max-inline-size: 52ch; }
-
-.side-panel { block-size: 280px; justify-content: space-between; }
-.side-panel .ghost { font-size: var(--text-body-lg); font-weight: var(--weight-semibold); filter: blur(2.5px); opacity: 0.55; }
-.side-panel .ghost-note { margin-block-start: var(--space-2); }
 
 /* ---- Landing: where Root grows ----------------------------------------- */
 .growth { padding-block: 0 var(--space-24); padding-inline: var(--space-12); }
@@ -74,10 +71,10 @@
 
 /* ---- Responsive -------------------------------------------------------- */
 @media (max-width: 600px) {
-  .hero { flex-direction: column; gap: var(--space-12); }
-  .hero-main { flex: 1 1 auto; max-inline-size: 100%; padding-inline-end: 0; }
-  .hero-gap { display: none; }
-  .hero-side { flex: 1 1 auto; max-inline-size: 100%; }
+  /* The display rung is set for a wide viewport; one line at 64px becomes
+     four on a phone. Both languages drop a rung rather than wrapping. */
+  .hero-line-en { font-size: var(--text-h1); }
+  .hero-line-fa { font-size: var(--text-h2); }
 }
 @media (max-width: 768px) {
   .nav { flex-wrap: wrap; gap: var(--space-4); padding-inline: var(--space-6); }

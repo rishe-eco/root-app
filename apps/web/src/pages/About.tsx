@@ -18,11 +18,11 @@ export default function About() {
       <main className="about">
         <section className="gist">
           <p className="t-eyebrow gist-eyebrow">{t('about.eyebrow')}</p>
-          <h1 className={`${thesisCls} gist-title`}>
-            {t('about.thesisA')}
-            <span className="beauty">{t('about.thesisBeauty')}</span>
-            {t('about.thesisB')}
-          </h1>
+          {/* The thesis names no object, and that is the claim rather than an
+              omission: supplying what the person is searching for would be
+              authoring it, which is the sentence's own second half. The
+              direction lives in the tagline, adjectivally. Brand §1. */}
+          <h1 className={`${thesisCls} gist-title`}>{t('about.thesis')}</h1>
           <p className="t-lead gist-body">{t('about.gistBody')}</p>
         </section>
 
