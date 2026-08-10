@@ -21,6 +21,7 @@ import { buildContext } from '../context.js';
 import { storage } from '../lib/storage.js';
 import { UploadError, checkSize, policyFor, safeDownloadName, sniff } from '../lib/files.js';
 import { can } from '../lib/capabilities.js';
+import type { LibraryEntry } from '@prisma/client';
 
 export const filesRouter: Router = Router();
 
@@ -65,11 +66,12 @@ async function readBodyCapped(req: Request, cap: number): Promise<Buffer> {
 const ENVELOPE_SLACK = 64 * 1024;
 
 /**
- * POST /upload?class=DESIGN_IMAGE&contractId=…
+ * POST /upload?class=DESIGN_IMAGE&contractId=… or ?class=RESEARCH_TEXT&entryId=…
  *
  * The class is in the query string rather than the body on purpose: it decides
  * the size limit, and a limit that can only be known after reading the whole
- * body is not a limit.
+ * body is not a limit. Which owning-row parameter applies is decided by the
+ * class's policy (`owner`, in lib/files.ts) — see R1.md §6.
  *
  * CSRF: the session cookie is `SameSite=Lax`, which browsers do not attach to
  * a cross-site POST, and CORS is pinned to APP_ORIGIN. That is the same
@@ -82,24 +84,58 @@ filesRouter.post(
     if (!ctx.user) {
       throw new UploadError(401, 'UNAUTHENTICATED', 'You need to sign in.');
     }
+    const user = ctx.user; // a local const, so narrowing survives into the transaction closure below
 
     const { fileClass, policy } = policyFor(String(req.query.class ?? ''));
-    if (!can(ctx.user, policy.uploader)) {
+    if (!can(user, policy.uploader)) {
       throw new UploadError(403, 'FORBIDDEN', 'You do not have access to that.');
     }
 
     const contractId = typeof req.query.contractId === 'string' ? req.query.contractId : null;
-    if (policy.requiresContract && !contractId) {
-      throw new UploadError(
-        400,
-        'CONTRACT_REQUIRED',
-        'This kind of file belongs to a contract; name which one.',
-      );
-    }
-    if (contractId) {
+    const entryId = typeof req.query.entryId === 'string' ? req.query.entryId : null;
+
+    let entry: LibraryEntry | null = null;
+    if (policy.owner === 'contract') {
+      if (!contractId) {
+        throw new UploadError(
+          400,
+          'CONTRACT_REQUIRED',
+          'This kind of file belongs to a contract; name which one.',
+        );
+      }
       const contract = await prisma.contract.findUnique({ where: { id: contractId } });
       if (!contract) {
         throw new UploadError(404, 'NOT_FOUND', 'No such contract.');
+      }
+    } else {
+      // owner === 'entry' (R1.md §6). "No such thing", not "not allowed" —
+      // house rule 13 — for the missing case; the rights refusal below is the
+      // one place §1's rule is enforced at upload time, because RESEARCH_TEXT
+      // is PUBLIC and Nginx serves it with no code in the request afterwards.
+      if (!entryId) {
+        throw new UploadError(
+          400,
+          'ENTRY_REQUIRED',
+          'This kind of file belongs to a Library entry; name which one.',
+        );
+      }
+      entry = await prisma.libraryEntry.findUnique({ where: { id: entryId } });
+      if (!entry) {
+        throw new UploadError(404, 'NOT_FOUND', 'No such entry.');
+      }
+      if (entry.rightsBasis === 'LINK_ONLY' || entry.visibility === 'PRIVATE') {
+        throw new UploadError(
+          403,
+          'RIGHTS_FORBID_HOSTING',
+          'The rights on this entry do not allow a hosted file.',
+        );
+      }
+      if (entry.fullTextFileId) {
+        throw new UploadError(
+          409,
+          'ALREADY_HAS_FILE',
+          'This entry already has a hosted file. Detach it before uploading another.',
+        );
       }
     }
 
@@ -138,17 +174,31 @@ filesRouter.post(
 
     let stored;
     try {
-      stored = await prisma.storedFile.create({
-        data: {
-          key,
-          class: fileClass,
-          visibility: policy.visibility,
-          mime: type.mime,
-          bytes: data.length,
-          originalName: safeDownloadName(field.name, type.ext),
-          contractId,
-          uploadedById: ctx.user.id,
-        },
+      stored = await prisma.$transaction(async (tx) => {
+        const file = await tx.storedFile.create({
+          data: {
+            key,
+            class: fileClass,
+            visibility: policy.visibility,
+            mime: type.mime,
+            bytes: data.length,
+            originalName: safeDownloadName(field.name, type.ext),
+            contractId,
+            uploadedById: user.id,
+          },
+        });
+        if (entry) {
+          // Same transaction as the row write (R1.md §6, steps 2 & 4): if the
+          // entry was flipped to LINK_ONLY or PRIVATE between the check above
+          // and here, the hosted-text CHECK refuses this update and the whole
+          // transaction — including the StoredFile row — rolls back. The
+          // bytes are already on disk by then; the catch below cleans them up.
+          await tx.libraryEntry.update({
+            where: { id: entry.id },
+            data: { fullTextFileId: file.id },
+          });
+        }
+        return file;
       });
     } catch (err) {
       // The bytes are already on disk. Without this the file would linger with

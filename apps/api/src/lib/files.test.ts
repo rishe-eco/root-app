@@ -85,9 +85,9 @@ describe('policyFor', () => {
     assert.equal(policyFor('RESEARCH_TEXT').policy.visibility, 'PUBLIC');
   });
 
-  test('a private class must require a contract — otherwise nobody can be authorised', () => {
+  test('a private class must be contract-owned — the private read gate only knows how to check that edge', () => {
     for (const policy of Object.values(POLICY)) {
-      if (policy.visibility === 'PRIVATE') assert.ok(policy.requiresContract);
+      if (policy.visibility === 'PRIVATE') assert.equal(policy.owner, 'contract');
     }
   });
 });

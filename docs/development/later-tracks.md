@@ -1,4 +1,13 @@
-# Later tracks — R2–R4, C1–C2, and the Persian pass
+# Later tracks — C2, R4, and the Persian pass
+
+> **Status, 2026-08-10.** Most of this file has now been overtaken, which is
+> what it was for. **R2, R3 and C1 have their own build-ready files** —
+> [`R2.md`](R2.md), [`R3.md`](R3.md), [`C1.md`](C1.md) — written against the
+> code as it stands after R1. Their sections below are **superseded; read the
+> files.** The banked traps were folded into them where they survived contact
+> with the real code, and dropped where they did not.
+>
+> What remains genuinely outlined-only: **C2**, **R4**, and the Persian pass.
 
 > **Status, 2026-08-08.** Two sections here have been overtaken:
 >

@@ -1,5 +1,6 @@
 import type { ChangeAction, ContractStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import { clampLimit } from '../../lib/pagination.js';
 import { requireUser, requireCapability, type Context } from '../../context.js';
 import { contractInclude, loadForActor } from './contracts.js';
 
@@ -133,7 +134,7 @@ export const Query = {
     const rows = await prisma.contract.findMany({
       where: { status: 'WAITING_ON_ROOT' },
       orderBy: { statusChangedAt: 'asc' },
-      take: args.limit ?? 20,
+      take: clampLimit(args.limit, 20, 100),
       select: contractRefSelect,
     });
     return rows.map(toContractRef);
@@ -145,7 +146,7 @@ export const Query = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.manage');
-    const limit = args.limit ?? 40;
+    const limit = clampLimit(args.limit, 40, 100);
 
     const rows = await prisma.changeLog.findMany({
       where: args.reviewOnly ? { action: { in: REVIEW_ACTIONS } } : {},

@@ -63,8 +63,12 @@ export type ClassPolicy = {
   accepted: AcceptedType[];
   /** What a caller must be able to do in order to upload into this class. */
   uploader: Capability;
-  /** Whether the upload must name the contract it belongs to. */
-  requiresContract: boolean;
+  /**
+   * Which owning row an upload must name (R1.md §6). The rules that decide
+   * whether a file may exist at all live on that row, so an upload that names
+   * nothing cannot be checked against them.
+   */
+  owner: 'contract' | 'entry';
 };
 
 /**
@@ -80,19 +84,16 @@ export const POLICY: Record<FileClass, ClassPolicy> = {
     maxBytes: 2 * 1024 * 1024,
     accepted: [PNG, JPEG, WEBP],
     uploader: 'contracts.manage',
-    requiresContract: true,
+    owner: 'contract',
   },
-  // Nothing produces this yet — the Research Lab's R1 does. It is defined now
-  // because the public/private split had to exist from the first migration
-  // (build plan §F1), and a split with only one side is not a split.
   RESEARCH_TEXT: {
     visibility: 'PUBLIC',
     maxBytes: 25 * 1024 * 1024,
     accepted: [PDF],
-    // A contributor's own remit, once R1 exists — the hosted full text is part
-    // of writing a Library entry, not a separate privilege.
+    // A contributor's own remit — the hosted full text is part of writing a
+    // Library entry, not a separate privilege.
     uploader: 'library.write',
-    requiresContract: false,
+    owner: 'entry',
   },
 };
 

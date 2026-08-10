@@ -331,6 +331,23 @@ Progress.
   queue ordered by how long each one has been waiting, and a review queue of
   recent customer activity worth a look — dismissed by the contract's own
   status moving on, not by a flag. **Track V — V1b through V4 — is complete.**
+- Email (C0): invite, reset, reviewer-invite, new-comment and
+  contract-revised notifications, sent through a provider seam with a
+  logging fallback when none is configured, templated in the recipient's own
+  locale.
+- The tagline and hero: one `Tagline` component renders the same adjectival
+  face — currently "new" · «نو» — in the hero and the footer from a single
+  locale key, so the two can no longer say different things.
+- The Library (R1): a bilingual-as-data corpus at `/desk/library` — a
+  Persian title and an English title as columns on the same row, not chosen
+  by the reader's locale. Translation provenance and rights basis are
+  required with no default, so nothing publishes with a decision nobody
+  made. A hosted PDF can exist only when the entry is public and its rights
+  allow hosting — enforced by a database CHECK and, since the file is served
+  straight off disk once it exists, by the upload route at the only moment
+  that rule can still be checked. Root can create an entry, tag it, host a
+  file for it, and publish it; a contributor can do all of that except
+  publish.
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -380,6 +397,61 @@ stack first ran on Postgres.
 ~~An upload form~~ and ~~creating a contract, entering article text, and
 publishing a revision from the admin UI~~ — both built by the admin contract
 workspace (V2); see "Built and working" above and the note below.
+
+**The Library, run against a real database — 2026-08-10.** R1's spec (§1)
+found a state neither of its two source rules resolves on its own: a
+`PRIVATE` entry with a hosted PDF is invisible in every list and search, but
+its full text still sits at a public URL, because `RESEARCH_TEXT` is served
+by Nginx straight off disk with no code left in the request to check
+anything. So the rule is one rule — a hosted file may exist only when the
+entry is `PUBLIC` and its rights basis is not `LINK_ONLY` — held by a single
+hand-written CHECK constraint that refuses both a bad insert and a bad
+*update*: flipping a hosted entry to `LINK_ONLY` or `PRIVATE` now fails at
+the database unless the file reference is cleared first, which is what
+forces `updateLibraryEntry` to delete the bytes rather than silently orphan
+them. The upload route was generalised the same way the spec asked
+(`owner: 'contract' | 'entry'` instead of a contract-shaped
+`requiresContract` flag) so a `RESEARCH_TEXT` upload has a row to check the
+rule against at all — the only moment it can be checked, since nothing
+downstream of Nginx ever sees the request again.
+
+Two decisions the stage file left open (§11) got made and are recorded here
+rather than re-derived by whoever writes R2. Persian search folding
+(Arabic/Persian yeh and kaf, hamza-bearing alefs, ZWNJ, tatweel, harakat,
+and both digit scripts, all folding to one form) is implemented once, in
+JS, used by both the write path (`buildSearchText`) and the read path
+(folding the query term) — not through the hand-written `library_fold()`
+Postgres function the migration also carries, which stays as the spec's own
+hand-verified reference and nothing calls at runtime. Two implementations of
+the same fold that must agree is exactly the drift house rule 3 exists to
+prevent; keeping both write and read on one JS function removes the
+possibility rather than testing against it. Slugs keep a Persian title's own
+script rather than transliterating it — «یادگیری-ماشین», not
+`yadgiri-mashin` — and lock the moment an entry publishes (T4).
+
+Driven end to end in the browser, in both languages: as admin, an entry was
+created with both required-choice radio groups genuinely unpreselected (Save
+stayed disabled until both were answered), tagged with a new concept, and
+found by searching the concept's English title before the tag existed
+nowhere in the entry's own text — proof the search-text rebuild on
+`setEntryConcepts` actually ran. A PDF was uploaded, producing a working
+"View file" link with no attach step of its own (the upload route sets
+`fullTextFileId` inside the same transaction as the row), and the entry was
+published — the badge and the button both updated from the mutation's
+response with no manual refetch, which is Apollo's normalized cache doing
+what it is supposed to. In Persian: the nav reads «کتابخانه», every label
+and enum value is translated, the year field renders in Latin digits next to
+a DOI that is always Latin (T4's `num-latin` choice, made once and applied
+consistently), and the created-by line renders a real Jalali date through
+the locale's own `Intl.DateTimeFormat` — no horizontal overflow, no console
+errors. Signed in as the seeded contributor, the same entry's editor
+rendered in full — reachable, not hidden — with "Publishing is not
+available to you." where the publish control would be, and the concept
+list's rename/delete disabled with the same reasoning (T6); a customer
+navigating straight to `/desk/library` was bounced to their own portal
+before the screen ever rendered. `migrate diff` reports no drift; typecheck
+is clean in both workspaces; the unit suite (126, +6), the integration suite
+(100, +16) and the e2e suite (25 specs, +1) are all green.
 
 **The desk's Overview, run against a real database — 2026-08-08.** Track V —
 V1b through V4 — is complete: the draft got a name on the wire, the staff

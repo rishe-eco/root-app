@@ -19,6 +19,9 @@ import DeskHome from '@/desk/DeskHome';
 import Overview from '@/desk/Overview';
 import DeskContracts from '@/desk/Contracts';
 import Customers from '@/desk/Customers';
+import Library from '@/desk/Library';
+import LibraryEntry from '@/desk/LibraryEntry';
+import LibraryConcepts from '@/desk/LibraryConcepts';
 import ContractWorkspace from '@/desk/workspace/ContractWorkspace';
 import WorkspaceContractTab from '@/desk/workspace/ContractTab';
 import WorkspaceDesignTab from '@/desk/workspace/DesignTab';
@@ -83,6 +86,10 @@ export default function App() {
             <Route path="activity" element={<WorkspaceActivityTab />} />
           </Route>
           <Route path="customers" element={<Customers />} />
+          <Route path="library" element={<Library />} />
+          <Route path="library/concepts" element={<LibraryConcepts />} />
+          <Route path="library/new" element={<LibraryEntry />} />
+          <Route path="library/:id" element={<LibraryEntry />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />
