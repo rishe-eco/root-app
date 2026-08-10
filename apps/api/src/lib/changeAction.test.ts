@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url';
  *
  *   1. prisma/schema.prisma          the enum the database stores
  *   2. src/graphql/typeDefs.ts       the enum the client is promised
- *   3. web/src/portal/ContractDetail action -> i18n key
+ *   3. web/src/lib/changelog.ts      action -> i18n key (V4: moved out of
+ *                                    ContractDetail.tsx so the desk's
+ *                                    activity feed can share it — V4.md T5)
  *   4. web/src/i18n/locales/en.json  the English sentence
  *   5. web/src/i18n/locales/fa.json  the Persian sentence
  *
@@ -47,12 +49,12 @@ function enumValues(source: string, label: string): string[] {
     .filter((line) => /^[A-Z][A-Z0-9_]*$/.test(line));
 }
 
-/** The `ACTION: 'i18nKey'` map in ContractDetail's logText. */
+/** The `ACTION: 'i18nKey'` map in lib/changelog.ts's actionLogKey. */
 function actionKeyMap(): Map<string, string> {
-  const src = read('apps/web/src/portal/ContractDetail.tsx');
+  const src = read('apps/web/src/lib/changelog.ts');
   const start = src.indexOf('const key = {');
   const end = src.indexOf('}[e.action];', start);
-  assert.ok(start !== -1 && end !== -1, 'could not find the logText key map in ContractDetail.tsx');
+  assert.ok(start !== -1 && end !== -1, 'could not find the action key map in lib/changelog.ts');
 
   const map = new Map<string, string>();
   for (const [, action, key] of src

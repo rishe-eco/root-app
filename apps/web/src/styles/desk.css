@@ -1,0 +1,218 @@
+/**
+ * The desk's own shell grid. Not the portal's .side/.work/.topbar/.detail/
+ * .rail — those belong to a screen this one is allowed to diverge from.
+ * Every value below is a token reference; logical properties only, since the
+ * desk is a sidebar-and-main layout and that shape is exactly what breaks
+ * under a stray `left:` in Persian.
+ */
+
+.desk-shell { display: flex; min-block-size: 100vh; }
+
+.desk-side {
+  flex: 0 0 220px;
+  background: var(--color-footer);
+  border-inline-end: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-6);
+}
+
+.desk-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  color: var(--color-text);
+  padding-inline: var(--space-2);
+}
+.desk-brand .dot { inline-size: 11px; block-size: 11px; border-radius: 50%; background: var(--color-rule-strong); }
+
+.desk-nav { display: flex; flex-direction: column; gap: 2px; }
+
+.desk-link {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--text-body);
+}
+.desk-link:hover { background: var(--color-panel); color: var(--color-text); }
+.desk-link-active { background: var(--color-panel); color: var(--color-text); font-weight: var(--weight-semibold); }
+
+.desk-back { margin-block-start: auto; }
+
+.desk-main { flex: 1; display: flex; flex-direction: column; min-inline-size: 0; }
+
+.desk-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-8);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.desk-topbar-right { display: flex; align-items: center; gap: var(--space-4); }
+
+.desk-user { display: flex; align-items: center; gap: var(--space-3); }
+.desk-avatar {
+  inline-size: 34px;
+  block-size: 34px;
+  border-radius: 50%;
+  background: var(--color-inverse);
+  color: var(--color-text-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  flex: none;
+}
+
+.desk-content { padding: var(--space-8); display: flex; flex-direction: column; gap: var(--space-6); }
+
+.desk-section { display: flex; flex-direction: column; gap: var(--space-6); }
+
+.desk-muted { color: var(--color-text-muted); }
+
+.desk-code { word-break: break-all; }
+
+/* ---- Overview (V4) ------------------------------------------------------ */
+.tile-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-3); }
+.tile {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-raised);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.tile-count { font-size: var(--text-h2); font-weight: var(--weight-bold); }
+.tile-label { font-size: var(--text-small); color: var(--color-text-muted); }
+
+.overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); }
+@media (max-width: 900px) { .overview-grid { grid-template-columns: 1fr; } }
+
+.queue-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.queue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-2);
+  border-block-end: 1px solid var(--color-border);
+  text-decoration: none;
+  color: inherit;
+}
+.queue-row:last-child { border-block-end: none; }
+.queue-row:hover { background: var(--color-panel); }
+.queue-row-main { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; }
+.queue-row-title { font-weight: var(--weight-medium); }
+.queue-row-end { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); flex: none; }
+
+@media (max-width: 720px) {
+  .desk-shell { flex-direction: column; }
+  .desk-side { flex-basis: auto; flex-direction: row; align-items: center; }
+  .desk-nav { flex-direction: row; }
+  .desk-back { margin-block-start: 0; margin-inline-start: auto; }
+}
+
+/* ---- the contract workspace (V2) ---------------------------------------- */
+
+.workspace-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.workspace-tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.workspace-tab {
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--text-body);
+  border-block-end: 2px solid transparent;
+  margin-block-end: -1px;
+}
+.workspace-tab:hover { color: var(--color-text); }
+.workspace-tab-active { color: var(--color-text); border-block-end-color: var(--color-accent); font-weight: var(--weight-semibold); }
+
+.workspace-panel { display: flex; flex-direction: column; gap: var(--space-6); }
+
+.workspace-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* A record with its own Save button — no long-lived unsaved state across a
+   language switch (T8). Used for articles, concepts, pages, amendments. */
+.editor-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.editor-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.editor-card-actions { display: flex; gap: var(--space-2); align-items: center; }
+
+.editor-list { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.editor-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+@media (max-width: 720px) { .editor-grid-2 { grid-template-columns: 1fr; } }
+
+.dirty-note { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); color: var(--color-text-muted); }
+.dirty-dot { inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--gold-600); flex: none; }
+.dirty-dot-clean { background: var(--color-border-strong); }
+
+.thumb {
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.thumb img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+
+.dropzone {
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--text-small);
+  color: var(--color-text-muted);
+}
+
+.carry-preview { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+.carry-preview-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); }
+/* The palette has no green/red ramp on purpose — state is carried by copy,
+   not hue (tokens.css). These tints stay inside clay/cyan/gold/neutral. */
+.change-tag { font-size: var(--text-caption); padding: 2px var(--space-2); border-radius: var(--radius-full); background: var(--color-panel); color: var(--color-text-muted); }
+.change-tag-added { background: var(--cyan-100); color: var(--cyan-700); }
+.change-tag-changed { background: var(--gold-100); color: var(--gold-600); }
+.change-tag-removed { background: var(--color-accent-soft); color: var(--color-error); }
+
+.live-banner {
+  border-inline-start: 3px solid var(--gold-600);
+  background: var(--color-panel);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-small);
+}
+
+.lineage-columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6); }
+@media (max-width: 720px) { .lineage-columns { grid-template-columns: 1fr; } }
+.lineage-col { display: flex; flex-direction: column; gap: var(--space-2); }
+.lineage-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0; border-block-end: 1px solid var(--color-border); font-size: var(--text-small); }
+.lineage-row:last-child { border-block-end: none; }

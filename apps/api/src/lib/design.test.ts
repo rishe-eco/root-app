@@ -94,3 +94,18 @@ test('the diff reports added and removed pages', () => {
   const byKind = Object.fromEntries(diffDesign(before, after).map((c) => [c.pageKey, c.kind]));
   assert.deepEqual(byKind, { home: 'unchanged', new: 'added', gone: 'removed' });
 });
+
+test('diffDesign never produces a kind outside the four known literals', () => {
+  // The GraphQL layer maps these lower-case literals to PageChangeKind by an
+  // exhaustive Record (fields.ts) — TypeScript catches a fifth literal there
+  // at compile time, and this is the same invariant asserted from this side.
+  const before = revision([page('home', '/1.png', APPROVED), page('gone', '/x.png')]);
+  const after = revision([page('home', '/1.png'), page('new', '/y.png')]);
+  const kinds = new Set(diffDesign(before, after).map((c) => c.kind));
+  for (const k of kinds) {
+    assert.ok(
+      k === 'added' || k === 'changed' || k === 'removed' || k === 'unchanged',
+      `unexpected kind: ${k}`,
+    );
+  }
+});

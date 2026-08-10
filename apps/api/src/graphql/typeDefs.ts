@@ -42,6 +42,7 @@ export const typeDefs = /* GraphQL */ `
     RE_APPROVED
     RE_SIGNED
     AMENDMENT_SIGNED
+    AMENDMENT_APPROVED
   }
 
   type User {
@@ -136,6 +137,8 @@ export const typeDefs = /* GraphQL */ `
     bodyFa: String!
     bodyEn: String!
     contentHash: String!
+    "An optional, non-authoritative display hint — never a supersede. See schema.prisma."
+    relatesToArticle: Int
     publishedAt: DateTime
     approvedAt: DateTime
     signature: Signature
@@ -185,6 +188,132 @@ export const typeDefs = /* GraphQL */ `
     totalPageCount: Int!
   }
 
+  """
+  Root's working copy: the mutable Article rows plus the title and fee on
+  Contract. Nothing here has been handed to the customer — publishing is what
+  does that.
+
+  Staff only. Null for everyone else, rather than an error: the customer's own
+  client never asks for it, and a refusal would confirm the field means something.
+  """
+  type ContractDraft {
+    titleFa: String!
+    titleEn: String!
+    "Toman, as a decimal string."
+    amount: String
+    articles: [Article!]!
+    "The hash this draft would publish as, from the same canonical form the publish path uses."
+    contentHash: String!
+    """
+    Whether publishing would change anything. This is exactly the condition
+    publishContractRevision enforces, so a disabled button and a NO_CHANGES
+    refusal cannot disagree.
+    """
+    dirty: Boolean!
+  }
+
+  """
+  Shared by a design page's change and a contract article's change (V3.md
+  §3.2) — one enum, one set of members, rather than a second copy with the
+  same four values under a different name.
+  """
+  enum ChangeKind {
+    ADDED
+    CHANGED
+    REMOVED
+    UNCHANGED
+  }
+
+  type PageChange {
+    conceptKey: String!
+    pageKey: String!
+    kind: ChangeKind!
+  }
+
+  """
+  What publishing this draft would do, computed with the same carryForward
+  the publish path runs. Two implementations of this would drift, and the
+  visible one would be the one that looks right while the gate did something
+  else — so this is the pure function in lib/design.ts, not a second guess.
+  """
+  type CarryForwardPreview {
+    "The concept whose choice survives, or null if the customer must choose again."
+    chosenConceptKey: String
+    carriedPageCount: Int!
+    resetPageCount: Int!
+    changes: [PageChange!]!
+  }
+
+  """
+  The unpublished design revision, if one exists. Staff only.
+
+  **Reading this never creates one.** The draft comes into being on the first
+  edit, not on the first look — see draftDesignRevision.
+  """
+  type DesignDraft {
+    id: ID!
+    version: Int!
+    concepts: [DesignConcept!]!
+    carryForward: CarryForwardPreview!
+  }
+
+  "One entry in the contract lineage. A list of what happened, not a document."
+  type ContractRevisionSummary {
+    id: ID!
+    version: Int!
+    contentHash: String
+    publishedAt: DateTime
+    approvedAt: DateTime
+    supersededAt: DateTime
+    signedAt: DateTime
+    amendmentCount: Int!
+  }
+
+  type DesignRevisionSummary {
+    id: ID!
+    version: Int!
+    publishedAt: DateTime
+    supersededAt: DateTime
+    conceptCount: Int!
+    pageCount: Int!
+  }
+
+  type ArticleChange {
+    number: Int!
+    titleFa: String!
+    titleEn: String!
+    kind: ChangeKind!
+  }
+
+  """
+  What moved in the text since the revision the customer last approved.
+  Present only while the current revision is itself unapproved — see
+  PendingReview.
+  """
+  type ContractDiff {
+    "The version the customer last approved."
+    fromVersion: Int!
+    toVersion: Int!
+    titleChanged: Boolean!
+    amountChanged: Boolean!
+    articles: [ArticleChange!]!
+  }
+
+  """
+  What has moved since the customer last acted, and null when nothing has.
+  Derived on every read, exactly like the gate — the client never decides
+  this, and a stale copy of it would be a banner asking for something
+  already done.
+  """
+  type PendingReview {
+    "The text was revised and wants approving again. Null when it was not."
+    contractDiff: ContractDiff
+    "Pages of the current design revision that are unapproved, with what Root did to each."
+    designChanges: [PageChange!]!
+    "A published amendment awaiting approval or signature."
+    amendment: Amendment
+  }
+
   type Contract {
     id: ID!
     ref: String!
@@ -204,11 +333,41 @@ export const typeDefs = /* GraphQL */ `
     signature: Signature
     "The published revision that articles came from. Null before the first publish."
     revision: ContractRevision
+    "Staff only; null otherwise."
+    draft: ContractDraft
+    "Staff only; null otherwise."
+    designDraft: DesignDraft
+    "Both lineages, newest first. Non-staff see published revisions only."
+    contractRevisions: [ContractRevisionSummary!]!
+    designRevisions: [DesignRevisionSummary!]!
+    "What has moved since the customer last acted. Null when there is nothing to show."
+    pending: PendingReview
   }
 
   type StatusCount {
     status: ContractStatus!
     count: Int!
+  }
+
+  "A contract, thin. Enough to name and link to one, and nothing more — see fields.ts's note on why (V4 T1)."
+  type ContractRef {
+    id: ID!
+    ref: String!
+    titleFa: String!
+    titleEn: String!
+    status: ContractStatus!
+    customerName: String!
+    statusChangedAt: DateTime!
+  }
+
+  "One entry in the desk's activity feed. Reads across every contract, so the contract field stays thin (T1)."
+  type ActivityItem {
+    id: ID!
+    contract: ContractRef!
+    actor: User!
+    action: ChangeAction!
+    arg: String
+    createdAt: DateTime!
   }
 
   type AuthPayload {
@@ -235,6 +394,16 @@ export const typeDefs = /* GraphQL */ `
     "Admin only."
     allContracts: [Contract!]!
     allCustomers: [User!]!
+
+    "Staff. Counts across every contract — not the caller's own, unlike contractStatusCounts."
+    allContractStatusCounts: [StatusCount!]!
+    "Staff. Contracts waiting on Root, longest-waiting first."
+    needsRootQueue(limit: Int = 20): [ContractRef!]!
+    """
+    Staff. Recent activity across every contract, newest first. reviewOnly
+    narrows it to customer actions that want a response from Root.
+    """
+    activity(limit: Int = 40, reviewOnly: Boolean = false): [ActivityItem!]!
   }
 
   input CreateContractInput {
@@ -261,12 +430,34 @@ export const typeDefs = /* GraphQL */ `
     signContract(contractId: ID!, typedName: String!): Contract!
     addComment(contractId: ID!, body: String!, target: CommentTarget): Contract!
 
+    """
+    The amendment's own mini-gate: approve, then sign — without reopening
+    the base contract, whose signature stays exactly as it was.
+    """
+    approveAmendment(amendmentId: ID!): Contract!
+    signAmendment(amendmentId: ID!, typedName: String!): Contract!
+
     # --- minimal operational admin ---
-    inviteCustomer(email: String!, name: String!, clientName: String): InviteResult!
+    "locale defaults to the inviting admin's own locale when omitted."
+    inviteCustomer(email: String!, name: String!, clientName: String, locale: String): InviteResult!
     revokeInvite(userId: ID!): Boolean!
     createContract(input: CreateContractInput!): Contract!
+    "Fills an empty contract with the standard article titles and scope items. Refuses if either already has rows."
+    applyContractTemplate(contractId: ID!): Contract!
+    "The title and fee half of the draft. ref is not editable — see T1 in V2.md."
+    updateContractDraft(contractId: ID!, titleFa: String!, titleEn: String!, amount: String): Contract!
+    "Legal even when this article is inside the current published snapshot; the snapshot does not move."
+    deleteArticle(contractId: ID!, number: Int!): Contract!
     addConcept(contractId: ID!, key: String!, labelFa: String!, labelEn: String!, imageUrl: String): Contract!
+    "labelFa/labelEn only — key never changes; lib/design.ts matches on it for carry-forward."
+    updateConcept(conceptId: ID!, labelFa: String!, labelEn: String!): Contract!
+    "Pages cascade."
+    deleteConcept(conceptId: ID!): Contract!
     addPageDesign(conceptId: ID!, key: String!, labelFa: String!, labelEn: String!, imageUrl: String): Contract!
+    updatePageDesign(pageId: ID!, labelFa: String!, labelEn: String!): Contract!
+    deletePageDesign(pageId: ID!): Contract!
+    "Deletes the unpublished design revision and its concepts/pages."
+    discardDesignDraft(contractId: ID!): Contract!
 
     """
     Attach a file already uploaded through POST /upload, or pass fileId: null
@@ -276,6 +467,9 @@ export const typeDefs = /* GraphQL */ `
     setConceptImage(conceptId: ID!, fileId: ID): Contract!
     setPageImage(pageId: ID!, fileId: ID): Contract!
     addScopeItem(contractId: ID!, key: String!, labelFa: String!, labelEn: String!): Contract!
+    "Live to the customer the instant it is saved — ScopeItem is not versioned."
+    updateScopeItem(scopeItemId: ID!, labelFa: String!, labelEn: String!): Contract!
+    deleteScopeItem(scopeItemId: ID!): Contract!
     setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String): Contract!
 
     """
@@ -288,5 +482,14 @@ export const typeDefs = /* GraphQL */ `
 
     publishContract(contractId: ID!): Contract!
     setContractStatus(contractId: ID!, status: ContractStatus!): Contract!
+
+    "The current contract revision must be signed."
+    issueAmendment(contractId: ID!, titleFa: String!, titleEn: String!, bodyFa: String!, bodyEn: String!, relatesToArticle: Int): Contract!
+    "Refused once published — the hash is recomputed on every write."
+    updateAmendment(amendmentId: ID!, titleFa: String!, titleEn: String!, bodyFa: String!, bodyEn: String!, relatesToArticle: Int): Contract!
+    "Refused once published."
+    deleteAmendment(amendmentId: ID!): Contract!
+    "Logs CONTRACT_AMENDED and nudges WAITING_ON_CUSTOMER."
+    publishAmendment(amendmentId: ID!): Contract!
   }
 `;

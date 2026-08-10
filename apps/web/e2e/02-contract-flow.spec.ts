@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 import {
+  ADMIN,
   CUSTOMER,
   CONTRACT_TITLE,
+  PNG,
   renameContractDraft,
   resetTestDatabase,
   signIn,
@@ -218,4 +220,84 @@ test('renaming the draft after publishing does not change what the customer read
 
   // The crumb trail is the same title, for the same reason.
   await expect(page.locator('.crumb-now')).toHaveText(CONTRACT_TITLE);
+});
+
+test('a revised design page shows a banner naming it, and approving it clears the banner (V3, D1)', async ({
+  page,
+}) => {
+  // This is the one that would have caught D1: the client used to disable
+  // page approval whenever the contract was approved, which is exactly the
+  // state a design revision on an approved contract produces.
+  test.setTimeout(60_000);
+  resetTestDatabase();
+
+  // The customer completes v1 first, so a v2 has something to carry forward
+  // from — a one-page change should ask for one re-approval, not four.
+  await signIn(page, CUSTOMER);
+  await openFirstContract(page);
+  const contractId = page.url().split('/contracts/')[1].split(/[/?]/)[0];
+
+  await page.locator('.concept').first().click();
+  await expect(page.locator('.concept-chosen')).toHaveCount(1);
+
+  const approveButtons = page.locator('.pagerow-actions button');
+  const pageCount = await approveButtons.count();
+  expect(pageCount).toBeGreaterThan(1);
+  for (let i = 0; i < pageCount; i += 1) {
+    await approveButtons.nth(i).click();
+    await expect(approveButtons.nth(i)).toHaveText(/Approved/);
+  }
+  await expect(page.getByText('✓ Design approved & complete')).toBeVisible();
+
+  // Root revises the Landing page's image and publishes a v2 design revision.
+  await signIn(page, ADMIN);
+  await page.goto(`/en/desk/contracts/${contractId}/design`);
+  await page.getByRole('button', { name: 'Add concept' }).click();
+  await page.locator('input[placeholder="1d"]').fill('1x');
+  await page
+    .locator('form.workspace-row')
+    .filter({ has: page.locator('input[placeholder="1d"]') })
+    .getByRole('button', { name: 'Save' })
+    .click();
+  await expect(page.getByText('Editing design draft')).toBeVisible();
+
+  const conceptCard = page.locator('.editor-card').filter({ has: page.locator('.t-eyebrow', { hasText: '1a' }) });
+  const landingRow = conceptCard.locator('.editor-card').filter({ has: page.locator('input[value="Landing"]') });
+  await landingRow.locator('input[type="file"]').setInputFiles({
+    name: 'landing.png',
+    mimeType: 'image/png',
+    buffer: PNG,
+  });
+  await expect(landingRow.locator('.thumb img')).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole('button', { name: 'Publish design' }).click();
+  await expect(page.getByText('Showing the published design.')).toBeVisible();
+
+  // Back to the customer: the banner names it, with one action, and taking
+  // it works.
+  await signIn(page, CUSTOMER);
+  await openFirstContract(page);
+  await expect(page.getByText('The design changed — 1 page needs your approval.')).toBeVisible();
+
+  await page.getByRole('link', { name: 'Review the design' }).click();
+  const outstanding = page.locator('.pagerow-actions button', { hasText: /^Approve$/ });
+  await expect(outstanding).toHaveCount(1);
+  await outstanding.click();
+
+  await expect(page.locator('.pending-banner')).toHaveCount(0);
+});
+
+test('an admin sees a non-zero count on the Overview (V4)', async ({ page }) => {
+  // No reset: this is the cheap end of the story the flow above already paid
+  // for — real status and activity data to look at, not a seeded illusion of
+  // one. The value of this stage is in the integration tests; this just
+  // proves the screen renders what they already prove is correct.
+  await signIn(page, ADMIN);
+  await page.goto('/en/desk/overview');
+
+  const tileCounts = page.locator('.tile-count');
+  await expect(tileCounts.first()).toBeVisible();
+  const values = await tileCounts.allInnerTexts();
+  const total = values.reduce((sum, v) => sum + (parseInt(v, 10) || 0), 0);
+  expect(total).toBeGreaterThan(0);
 });

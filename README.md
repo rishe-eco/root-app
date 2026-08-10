@@ -314,7 +314,23 @@ Progress.
 - Contract detail: all five sections, the gate, the rail's status stepper and
   the history log.
 - Role-aware GraphQL API with the full Phase-1 mutation set.
-- Thin operational admin: issue invites, publish contracts, move status.
+- The staff shell at `/desk` (F2) and, inside it, the admin contract
+  workspace (V2): create a contract, fill in its articles from a template
+  or by hand, upload concept and page images, publish both lineages, hand
+  the contract to the customer, and — once signed — issue an amendment and
+  carry it to signature. No stage from here on needs the database or the
+  GraphQL sandbox touched by hand.
+- The customer knowing that something moved (V3): a banner leads the contract
+  detail page whenever the text was revised, the design was revised, or an
+  amendment is waiting — naming what changed, in one sentence, with one
+  action that always matches what the gate will actually accept. A version
+  panel in the rail shows both lineages side by side, and the amendment gets
+  its own approve-then-sign block without ever making the signed base look
+  unfinished.
+- The desk's Overview (V4): status tiles across every contract, a Needs-Root
+  queue ordered by how long each one has been waiting, and a review queue of
+  recent customer activity worth a look — dismissed by the contract's own
+  status moving on, not by a flag. **Track V — V1b through V4 — is complete.**
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -360,16 +376,90 @@ stack first ran on Postgres.
   the browser (above); what is missing is a PDF Root can generate itself, to
   email or to archive. That needs a headless browser in the API image, and it
   will render the existing print route.
-- An **upload form**. The upload itself is built and tested end to end (below);
-  what is missing is a screen with a file input on it, so previews still fall
-  back to the placeholder block. Until the admin workspace lands, the only way
-  to attach an image is `POST /upload` followed by `setConceptImage`.
-- Creating a contract, entering article text, and publishing a revision from
-  the admin UI — the mutations exist (`createContract`, `addConcept`,
-  `addPageDesign`, `addScopeItem`, `setArticle`, `publishContractRevision`,
-  `publishDesignRevision`) but nothing calls them. Until the admin workspace
-  lands, editing an article changes the draft and the customer sees nothing,
-  which is correct and also unusable.
+
+~~An upload form~~ and ~~creating a contract, entering article text, and
+publishing a revision from the admin UI~~ — both built by the admin contract
+workspace (V2); see "Built and working" above and the note below.
+
+**The desk's Overview, run against a real database — 2026-08-08.** Track V —
+V1b through V4 — is complete: the draft got a name on the wire, the staff
+shell and admin workspace let Root run a contract end to end, the customer
+learns when something moved, and now the desk answers "what needs me"
+without clicking into anything.
+
+Defect D7: nothing recorded *when* a contract entered its current status —
+`updatedAt` bumps on any write, including a customer ticking a scope item, so
+it could not order a "longest waiting" queue. Fixed with a `statusChangedAt`
+column, written by both status writers (the automatic nudge and the manual
+override) and only on a real transition — confirmed by an integration test
+that sets a contract to the status it already has and checks the clock did
+not move. Backfilled from `updatedAt` for existing rows rather than left at
+the migration's own run time, which would have told the queue every contract
+just arrived.
+
+The three new queries are deliberately thin (`ContractRef`, not `Contract`):
+`ActivityItem.contract` resolving through the usual `contractInclude` would
+have dragged every concept, page, article, comment and change-log entry along
+per row — forty rows reading themselves forty times over. The review queue's
+ownership filter — a customer's own action, not any staff member's — is a
+same-row comparison across two tables that Prisma's query builder cannot
+express as a `where`, so it is filtered in application code against a capped
+scan window instead of raw SQL, which felt like the wrong tool for a filter
+this simple. The change-log sentence builder that used to live only in
+`ContractDetail.tsx` is now `lib/changelog.ts`, imported by both the portal
+and the desk — `changeAction.test.ts` now parses its new home, and still
+fails loudly on a `ChangeAction` with nowhere to render.
+
+Driven end to end in the browser, in both languages: a customer choosing a
+concept, approving every page and leaving a comment nudges their contract
+into Waiting on Root and produces three review-queue entries in a sentence
+each, correctly excluding the four routine per-page approvals in between;
+the tiles and the Needs-Root queue agree with that same transition; a
+reviewer signed in to confirm the route renders its empty, honest state
+rather than a page of FORBIDDEN errors, since Overview's nav slot is open to
+any staff role but its data stays capability-guarded underneath. Tile counts
+render in the locale's own digits — Persian shows «۱» beside «منتظر ریشه»,
+not a Latin numeral forced onto a page that is otherwise entirely Persian.
+`migrate diff` reports no drift; typecheck, the full unit suite (105), the
+integration suite (84, +5) and the e2e suite (24 specs, +1) are all green.
+
+**The pending-review banner, run against a real database — 2026-08-06.** V3
+adds no re-approval logic — `approveContract` and `signContract` already
+reopen on a fresh revision, and the prior approval already survives on the
+superseded one (V1b). What was missing was the customer knowing that
+something moved, and what: a `pending` field on `Contract`, derived fresh on
+every read exactly like the gate, is null unless the text was revised, the
+design was revised, or an amendment is waiting.
+
+Driven end to end in the browser, in both languages: as the customer,
+complete the design and sign a contract; as Root, revise one page's image
+and publish a design v2; back as the customer, the banner reads "the design
+changed — 1 page needs your approval," approving that one page (not four —
+carry-forward is the same rule the workspace's preview already used) clears
+it. Then, as Root, issue and publish an amendment on the signed contract: the
+banner switches to naming the amendment, and — because both were pending at
+once — correctly puts the design action first and the amendment second,
+exactly matching the gate (`assertCanApproveContract` requires the design
+complete first). The amendment's own approve-then-sign block worked from the
+portal, and the base signature and "✓ Contract approved" never moved.
+`border-inline-start` on the banner resolved to `border-right` under
+`dir="rtl"`, and the Persian banner reads as a sentence with the count in
+plain digits — no `+3/−1`, no `num-latin` forced onto the count. `migrate diff`
+reports no drift (this stage adds no migration); typecheck, the full unit
+suite (105), the integration suite (79, +7 for `pending`), and the e2e suite
+(23 specs, +1 for the banner) are all green.
+
+**Admin contract workspace, run against a real database — 2026-08-06.** The
+full lifecycle was driven end to end in the browser, in both languages:
+create a contract, apply the article template, publish the contract
+revision, add a design concept and a page, upload a PNG to each and publish
+the design revision, hand the contract to the customer, complete the design
+and sign as the customer, then — back at the desk — issue an amendment,
+publish it, and approve and sign it as the customer. The base signature was
+untouched throughout, which is the property the two lineages (and now the
+amendment layer) exist for. `migrate diff` reports no drift; typecheck, the
+full unit and integration suites, and the e2e suite (22 specs, including the
+one driving this flow) are all green.
 
 **Run against a real database, 2026-08-01.** `prisma migrate dev` was generated
 against Postgres and the result is committed as `20260801120713_init`, so the

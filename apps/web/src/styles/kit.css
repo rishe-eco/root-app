@@ -213,6 +213,63 @@
 .help  { font-size: var(--text-caption); color: var(--color-text-muted); }
 .error { font-size: var(--text-caption); color: var(--color-error); }
 
+/* ---- Password field ---------------------------------------------------- */
+
+.password-wrap { position: relative; display: flex; }
+.password-wrap .input { padding-inline-end: calc(var(--space-4) + 28px); }
+
+.password-toggle {
+  position: absolute;
+  inset-inline-end: var(--space-2);
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 32px;
+  block-size: 32px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.password-toggle:hover { color: var(--color-text); }
+.password-toggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.eye {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  block-size: 16px;
+}
+.eye-lens {
+  inline-size: 15px;
+  block-size: 8px;
+  border: 1.4px solid currentColor;
+  border-radius: 50%;
+}
+.eye-pupil {
+  position: absolute;
+  inline-size: 4px;
+  block-size: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.eye-slash {
+  position: absolute;
+  inset-inline-start: 0;
+  inline-size: 16px;
+  block-size: 1.4px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+
 .choice { display: flex; align-items: flex-start; gap: var(--space-3); font-size: var(--text-body); }
 .choice input { accent-color: var(--color-accent); inline-size: 1.05rem; block-size: 1.05rem; margin-block-start: 0.15rem; flex: none; }
 

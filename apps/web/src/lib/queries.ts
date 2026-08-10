@@ -1,23 +1,7 @@
 import { gql } from '@apollo/client';
+import type { Role, Capability } from './access';
 
-export type Role = 'CUSTOMER' | 'ADMIN' | 'CONTRIBUTOR' | 'REVIEWER';
-
-/**
- * Mirrors the server's `lib/capabilities.ts`. The UI branches on these and
- * never on `roles` — a person may hold several, so any `role === '…'` on this
- * side is wrong in the same way it was on the server, only quieter.
- */
-export type Capability =
-  | 'contracts.manage'
-  | 'customers.manage'
-  | 'library.write'
-  | 'library.publish'
-  | 'library.editTree'
-  | 'review.participate'
-  | 'review.admin';
-
-export const can = (user: Pick<User, 'capabilities'> | null | undefined, cap: Capability) =>
-  user?.capabilities.includes(cap) ?? false;
+export type { Role, Capability };
 
 export type ContractStatus =
   | 'DRAFT'
@@ -40,7 +24,14 @@ export type ChangeAction =
   | 'COMMENTED'
   | 'SCOPE_ON'
   | 'SCOPE_OFF'
-  | 'STATUS_CHANGED';
+  | 'STATUS_CHANGED'
+  | 'CONTRACT_REVISED'
+  | 'DESIGN_REVISED'
+  | 'CONTRACT_AMENDED'
+  | 'RE_APPROVED'
+  | 'RE_SIGNED'
+  | 'AMENDMENT_SIGNED'
+  | 'AMENDMENT_APPROVED';
 
 export type User = {
   id: string;
@@ -118,6 +109,7 @@ export type Amendment = {
   bodyFa: string;
   bodyEn: string;
   contentHash: string;
+  relatesToArticle: number | null;
   publishedAt: string | null;
   approvedAt: string | null;
   signature: Signature | null;
@@ -150,6 +142,88 @@ export type Gate = {
   totalPageCount: number;
 };
 
+/** Shared by a design page's change and a contract article's change. */
+export type ChangeKind = 'ADDED' | 'CHANGED' | 'REMOVED' | 'UNCHANGED';
+
+export type PageChange = {
+  conceptKey: string;
+  pageKey: string;
+  kind: ChangeKind;
+};
+
+/** What publishing the design draft would do — computed server-side, never guessed. */
+export type CarryForwardPreview = {
+  chosenConceptKey: string | null;
+  carriedPageCount: number;
+  resetPageCount: number;
+  changes: PageChange[];
+};
+
+/** Root's working copy of the contract's title, fee and articles. Staff only. */
+export type ContractDraft = {
+  titleFa: string;
+  titleEn: string;
+  amount: string | null;
+  articles: Article[];
+  contentHash: string;
+  dirty: boolean;
+};
+
+/** The unpublished design revision, if one exists. Staff only; null means no draft. */
+export type DesignDraft = {
+  id: string;
+  version: number;
+  concepts: DesignConcept[];
+  carryForward: CarryForwardPreview;
+};
+
+export type ContractRevisionSummary = {
+  id: string;
+  version: number;
+  contentHash: string | null;
+  publishedAt: string | null;
+  approvedAt: string | null;
+  supersededAt: string | null;
+  signedAt: string | null;
+  amendmentCount: number;
+};
+
+export type DesignRevisionSummary = {
+  id: string;
+  version: number;
+  publishedAt: string | null;
+  supersededAt: string | null;
+  conceptCount: number;
+  pageCount: number;
+};
+
+export type ArticleChange = {
+  number: number;
+  titleFa: string;
+  titleEn: string;
+  kind: ChangeKind;
+};
+
+/** What moved in the text since the revision the customer last approved. */
+export type ContractDiff = {
+  fromVersion: number;
+  toVersion: number;
+  titleChanged: boolean;
+  amountChanged: boolean;
+  articles: ArticleChange[];
+};
+
+/**
+ * What has moved since the customer last acted, computed server-side —
+ * never guessed on the client (V3.md §3.2/T4). Null means there is nothing
+ * to show; that is the banner's entire "show or don't" decision.
+ */
+export type PendingReview = {
+  contractDiff: ContractDiff | null;
+  designChanges: PageChange[];
+  amendment: Amendment | null;
+};
+
 export type Contract = {
   id: string;
   ref: string;
@@ -158,6 +232,7 @@ export type Contract = {
   status: ContractStatus;
   amount: string | null;
   customer: Pick<User, 'id' | 'name' | 'clientName'>;
+  publishedAt: string | null;
   updatedAt: string;
   gate: Gate;
   concepts: DesignConcept[];
@@ -167,6 +242,13 @@ export type Contract = {
   changeLog: ChangeLogEntry[];
   signature: Signature | null;
   revision: ContractRevision | null;
+  // Non-staff see published revisions only — enforced server-side, not here.
+  contractRevisions: ContractRevisionSummary[];
+  designRevisions: DesignRevisionSummary[];
+  pending: PendingReview | null;
+  // Staff-only; present only on queries that select them (the workspace).
+  draft?: ContractDraft | null;
+  designDraft?: DesignDraft | null;
 };
 
 const USER_FIELDS = gql`
@@ -190,6 +272,7 @@ export const CONTRACT_FIELDS = gql`
     titleEn
     status
     amount
+    publishedAt
     updatedAt
     customer {
       id
@@ -281,6 +364,7 @@ export const CONTRACT_FIELDS = gql`
         bodyFa
         bodyEn
         contentHash
+        relatesToArticle
         publishedAt
         approvedAt
         signature {
@@ -289,6 +373,128 @@ export const CONTRACT_FIELDS = gql`
           signedAt
         }
       }
+    }
+    contractRevisions {
+      id
+      version
+      contentHash
+      publishedAt
+      approvedAt
+      supersededAt
+      signedAt
+      amendmentCount
+    }
+    designRevisions {
+      id
+      version
+      publishedAt
+      supersededAt
+      conceptCount
+      pageCount
+    }
+    pending {
+      contractDiff {
+        fromVersion
+        toVersion
+        titleChanged
+        amountChanged
+        articles {
+          number
+          titleFa
+          titleEn
+          kind
+        }
+      }
+      designChanges {
+        conceptKey
+        pageKey
+        kind
+      }
+      amendment {
+        id
+        ordinal
+        titleFa
+        titleEn
+        bodyFa
+        bodyEn
+        contentHash
+        relatesToArticle
+        publishedAt
+        approvedAt
+        signature {
+          id
+          typedName
+          signedAt
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * The workspace's own shape: everything a customer's `ContractFields` gets,
+ * plus the staff-only fields V1b put on the wire and V2 finally reads. Kept
+ * separate on purpose (V1b §3.4) — a customer's query never asks for these,
+ * and a fragment that selected them anyway would carry four extra nulls on
+ * every customer request.
+ */
+export const CONTRACT_WORKSPACE_FIELDS = gql`
+  ${CONTRACT_FIELDS}
+  fragment ContractWorkspaceFields on Contract {
+    ...ContractFields
+    draft {
+      titleFa
+      titleEn
+      amount
+      contentHash
+      dirty
+      articles {
+        id
+        number
+        titleFa
+        titleEn
+        bodyFa
+        bodyEn
+      }
+    }
+    designDraft {
+      id
+      version
+      concepts {
+        id
+        key
+        labelFa
+        labelEn
+        imageUrl
+        chosen
+        pages {
+          id
+          key
+          labelFa
+          labelEn
+          imageUrl
+          approved
+        }
+      }
+      carryForward {
+        chosenConceptKey
+        carriedPageCount
+        resetPageCount
+        changes {
+          conceptKey
+          pageKey
+          kind
+        }
+      }
+    }
+  }
+`;
+
+export const CONTRACT_WORKSPACE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  query ContractWorkspace($id: ID!) {
+    contract(id: $id) {
+      ...ContractWorkspaceFields
     }
   }
 `;
@@ -437,6 +643,80 @@ export const ALL_CUSTOMERS = gql`
   }
 `;
 
+export type StatusCount = {
+  status: ContractStatus;
+  count: number;
+};
+
+/** A contract, thin — the desk's Overview reads these rather than full Contracts (V4 T1). */
+export type ContractRef = {
+  id: string;
+  ref: string;
+  titleFa: string;
+  titleEn: string;
+  status: ContractStatus;
+  customerName: string;
+  statusChangedAt: string;
+};
+
+export type ActivityItem = {
+  id: string;
+  contract: ContractRef;
+  actor: Pick<User, 'id' | 'name'>;
+  action: ChangeAction;
+  arg: string | null;
+  createdAt: string;
+};
+
+export const ALL_CONTRACT_STATUS_COUNTS = gql`
+  query AllContractStatusCounts {
+    allContractStatusCounts {
+      status
+      count
+    }
+  }
+`;
+
+const CONTRACT_REF_FIELDS = gql`
+  fragment ContractRefFields on ContractRef {
+    id
+    ref
+    titleFa
+    titleEn
+    status
+    customerName
+    statusChangedAt
+  }
+`;
+
+export const NEEDS_ROOT_QUEUE = gql`
+  ${CONTRACT_REF_FIELDS}
+  query NeedsRootQueue($limit: Int) {
+    needsRootQueue(limit: $limit) {
+      ...ContractRefFields
+    }
+  }
+`;
+
+export const ACTIVITY = gql`
+  ${CONTRACT_REF_FIELDS}
+  query Activity($limit: Int, $reviewOnly: Boolean) {
+    activity(limit: $limit, reviewOnly: $reviewOnly) {
+      id
+      action
+      arg
+      createdAt
+      actor {
+        id
+        name
+      }
+      contract {
+        ...ContractRefFields
+      }
+    }
+  }
+`;
+
 export const INVITE_CUSTOMER = gql`
   mutation InviteCustomer($email: String!, $name: String!, $clientName: String) {
     inviteCustomer(email: $email, name: $name, clientName: $clientName) {
@@ -461,6 +741,238 @@ export const SET_CONTRACT_STATUS = gql`
   ${CONTRACT_FIELDS}
   mutation SetContractStatus($contractId: ID!, $status: ContractStatus!) {
     setContractStatus(contractId: $contractId, status: $status) {
+      ...ContractFields
+    }
+  }
+`;
+
+// --- the contract workspace (V2) --------------------------------------------
+//
+// Every mutation below returns the whole workspace shape, matching the rest
+// of the API's convention (T9 in V2.md): one reload keeps the gate, the
+// status, the dirty flag and the carry-forward preview all consistent
+// without the client recomputing any of them.
+
+export const CREATE_CONTRACT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation CreateContract($input: CreateContractInput!) {
+    createContract(input: $input) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const APPLY_CONTRACT_TEMPLATE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation ApplyContractTemplate($contractId: ID!) {
+    applyContractTemplate(contractId: $contractId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_CONTRACT_DRAFT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdateContractDraft($contractId: ID!, $titleFa: String!, $titleEn: String!, $amount: String) {
+    updateContractDraft(contractId: $contractId, titleFa: $titleFa, titleEn: $titleEn, amount: $amount) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SET_ARTICLE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetArticle($contractId: ID!, $number: Int!, $titleFa: String!, $titleEn: String!, $bodyFa: String, $bodyEn: String) {
+    setArticle(contractId: $contractId, number: $number, titleFa: $titleFa, titleEn: $titleEn, bodyFa: $bodyFa, bodyEn: $bodyEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_ARTICLE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeleteArticle($contractId: ID!, $number: Int!) {
+    deleteArticle(contractId: $contractId, number: $number) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const PUBLISH_CONTRACT_REVISION = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation PublishContractRevision($contractId: ID!) {
+    publishContractRevision(contractId: $contractId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const ADD_CONCEPT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation AddConcept($contractId: ID!, $key: String!, $labelFa: String!, $labelEn: String!) {
+    addConcept(contractId: $contractId, key: $key, labelFa: $labelFa, labelEn: $labelEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_CONCEPT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdateConcept($conceptId: ID!, $labelFa: String!, $labelEn: String!) {
+    updateConcept(conceptId: $conceptId, labelFa: $labelFa, labelEn: $labelEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_CONCEPT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeleteConcept($conceptId: ID!) {
+    deleteConcept(conceptId: $conceptId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const ADD_PAGE_DESIGN = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation AddPageDesign($conceptId: ID!, $key: String!, $labelFa: String!, $labelEn: String!) {
+    addPageDesign(conceptId: $conceptId, key: $key, labelFa: $labelFa, labelEn: $labelEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_PAGE_DESIGN = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdatePageDesign($pageId: ID!, $labelFa: String!, $labelEn: String!) {
+    updatePageDesign(pageId: $pageId, labelFa: $labelFa, labelEn: $labelEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_PAGE_DESIGN = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeletePageDesign($pageId: ID!) {
+    deletePageDesign(pageId: $pageId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SET_CONCEPT_IMAGE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetConceptImage($conceptId: ID!, $fileId: ID) {
+    setConceptImage(conceptId: $conceptId, fileId: $fileId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SET_PAGE_IMAGE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetPageImage($pageId: ID!, $fileId: ID) {
+    setPageImage(pageId: $pageId, fileId: $fileId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DISCARD_DESIGN_DRAFT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DiscardDesignDraft($contractId: ID!) {
+    discardDesignDraft(contractId: $contractId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const PUBLISH_DESIGN_REVISION = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation PublishDesignRevision($contractId: ID!) {
+    publishDesignRevision(contractId: $contractId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const ADD_SCOPE_ITEM = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation AddScopeItem($contractId: ID!, $key: String!, $labelFa: String!, $labelEn: String!) {
+    addScopeItem(contractId: $contractId, key: $key, labelFa: $labelFa, labelEn: $labelEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_SCOPE_ITEM = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdateScopeItem($scopeItemId: ID!, $labelFa: String!, $labelEn: String!) {
+    updateScopeItem(scopeItemId: $scopeItemId, labelFa: $labelFa, labelEn: $labelEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_SCOPE_ITEM = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeleteScopeItem($scopeItemId: ID!) {
+    deleteScopeItem(scopeItemId: $scopeItemId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const ISSUE_AMENDMENT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation IssueAmendment($contractId: ID!, $titleFa: String!, $titleEn: String!, $bodyFa: String!, $bodyEn: String!, $relatesToArticle: Int) {
+    issueAmendment(contractId: $contractId, titleFa: $titleFa, titleEn: $titleEn, bodyFa: $bodyFa, bodyEn: $bodyEn, relatesToArticle: $relatesToArticle) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_AMENDMENT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdateAmendment($amendmentId: ID!, $titleFa: String!, $titleEn: String!, $bodyFa: String!, $bodyEn: String!, $relatesToArticle: Int) {
+    updateAmendment(amendmentId: $amendmentId, titleFa: $titleFa, titleEn: $titleEn, bodyFa: $bodyFa, bodyEn: $bodyEn, relatesToArticle: $relatesToArticle) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_AMENDMENT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeleteAmendment($amendmentId: ID!) {
+    deleteAmendment(amendmentId: $amendmentId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const PUBLISH_AMENDMENT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation PublishAmendment($amendmentId: ID!) {
+    publishAmendment(amendmentId: $amendmentId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const APPROVE_AMENDMENT = gql`
+  ${CONTRACT_FIELDS}
+  mutation ApproveAmendment($amendmentId: ID!) {
+    approveAmendment(amendmentId: $amendmentId) {
+      ...ContractFields
+    }
+  }
+`;
+
+export const SIGN_AMENDMENT = gql`
+  ${CONTRACT_FIELDS}
+  mutation SignAmendment($amendmentId: ID!, $typedName: String!) {
+    signAmendment(amendmentId: $amendmentId, typedName: $typedName) {
       ...ContractFields
     }
   }

@@ -3,8 +3,10 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
+import { homeFor } from '@/lib/access';
 import { ME, SIGN_IN, type User } from '@/lib/queries';
 import AuthShell from './AuthShell';
+import PasswordField from './PasswordField';
 
 export default function SignIn() {
   const { t } = useTranslation();
@@ -23,15 +25,15 @@ export default function SignIn() {
   const from = (location.state as { from?: string } | null)?.from;
 
   if (!loading && data?.me) {
-    return <Navigate to={from ?? lp(locale, '/app/contracts')} replace />;
+    return <Navigate to={from ?? lp(locale, homeFor(data.me))} replace />;
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     try {
-      await signIn({ variables: { email, password }, refetchQueries: [{ query: ME }] });
-      navigate(from ?? lp(locale, '/app/contracts'), { replace: true });
+      const res = await signIn({ variables: { email, password }, refetchQueries: [{ query: ME }] });
+      navigate(from ?? lp(locale, homeFor(res.data?.signIn.user)), { replace: true });
     } catch {
       setError(t('auth.errInvalid'));
     }
@@ -64,21 +66,13 @@ export default function SignIn() {
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label className="label" htmlFor="password">
-            {t('auth.password')}
-          </label>
-          <input
-            id="password"
-            className="input"
-            type="password"
-            autoComplete="current-password"
-            dir="ltr"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
+        <PasswordField
+          id="password"
+          label={t('auth.password')}
+          value={password}
+          onChange={setPassword}
+          autoComplete="current-password"
+        />
         <div>
           <button className="btn btn-primary" type="submit" disabled={submitting}>
             {t('auth.signIn')}

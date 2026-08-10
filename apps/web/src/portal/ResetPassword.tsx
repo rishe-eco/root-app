@@ -3,8 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
+import { homeFor } from '@/lib/access';
 import { ME, RESET_PASSWORD } from '@/lib/queries';
 import AuthShell from './AuthShell';
+import PasswordField from './PasswordField';
 
 const MIN_PASSWORD = 10;
 
@@ -26,8 +28,8 @@ export default function ResetPassword() {
     if (password !== confirm) return setError(t('auth.errMismatch'));
 
     try {
-      await reset({ variables: { token, password }, refetchQueries: [{ query: ME }] });
-      navigate(lp(locale, '/app/contracts'), { replace: true });
+      const res = await reset({ variables: { token, password }, refetchQueries: [{ query: ME }] });
+      navigate(lp(locale, homeFor(res.data?.resetPassword.user)), { replace: true });
     } catch (err) {
       const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })
         .graphQLErrors?.[0]?.extensions?.code;
@@ -38,36 +40,20 @@ export default function ResetPassword() {
   return (
     <AuthShell title={t('auth.resetTitle')} error={error}>
       <form className="auth-form" onSubmit={onSubmit}>
-        <div className="field">
-          <label className="label" htmlFor="pw">
-            {t('auth.newPassword')}
-          </label>
-          <input
-            id="pw"
-            className="input"
-            type="password"
-            autoComplete="new-password"
-            dir="ltr"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label className="label" htmlFor="pw2">
-            {t('auth.confirmPassword')}
-          </label>
-          <input
-            id="pw2"
-            className="input"
-            type="password"
-            autoComplete="new-password"
-            dir="ltr"
-            required
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-          />
-        </div>
+        <PasswordField
+          id="pw"
+          label={t('auth.newPassword')}
+          value={password}
+          onChange={setPassword}
+          autoComplete="new-password"
+        />
+        <PasswordField
+          id="pw2"
+          label={t('auth.confirmPassword')}
+          value={confirm}
+          onChange={setConfirm}
+          autoComplete="new-password"
+        />
         <div>
           <button className="btn btn-primary" type="submit" disabled={loading}>
             {t('auth.resetCta')}

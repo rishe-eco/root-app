@@ -2,7 +2,8 @@ import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
-import { ME, can, type User } from '@/lib/queries';
+import { isStaff } from '@/lib/access';
+import { ME, type User } from '@/lib/queries';
 
 /** Later phases. Present in the rail so the shape of the product is honest. */
 const SOON = ['services', 'billing', 'support'] as const;
@@ -70,13 +71,13 @@ export default function PortalLayout() {
             </NavLink>
           ))}
 
-          {can(me, 'contracts.manage') ? (
+          {isStaff(me) ? (
             <NavLink
               className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
-              to={lp(locale, '/admin')}
+              to={lp(locale, '/desk')}
             >
               <span className="side-glyph" />
-              <span>{t('portal.navAdmin')}</span>
+              <span>{t('portal.navDesk')}</span>
             </NavLink>
           ) : null}
         </nav>

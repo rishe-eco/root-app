@@ -1,5 +1,5 @@
 import { DateTimeResolver } from 'graphql-scalars';
-import { Contract, ContractRevision, DesignConcept, PageDesign, ScopeItem, User } from './fields.js';
+import { Contract, ContractRevision, DesignConcept, DesignDraft, PageDesign, ScopeItem, User } from './fields.js';
 import { Query } from './query.js';
 import { authMutations } from './auth.js';
 import { customerMutations } from './customer.js';
@@ -22,6 +22,7 @@ export const resolvers = {
   Contract,
   ContractRevision,
   DesignConcept,
+  DesignDraft,
   PageDesign,
   ScopeItem,
   User,

@@ -67,6 +67,11 @@ services:
       # it. See .env.production.example.
       STORAGE_DIR: ${STORAGE_DIR}
       PUBLIC_FILES_BASE: ${PUBLIC_FILES_BASE}
+      # Optional — see .env.production.example. Left unset here, Compose still
+      # defines the var inside the container as "", which env.ts treats as
+      # unset rather than a boot-time error.
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      MAIL_FROM: ${MAIL_FROM}
     # Loopback only. Host Nginx proxies to it; nothing reaches it from outside.
     ports:
       - '127.0.0.1:${API_PORT:-4000}:4000'

@@ -67,6 +67,12 @@
 
 /* ---- Contract detail --------------------------------------------------- */
 .detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-6); align-items: start; padding: var(--space-8); max-inline-size: 1240px; }
+
+/* V3 · the pending-review banner — leads the page, one primary action */
+.pending-banner { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-inline-start: 3px solid var(--gold-600); background: var(--color-panel); border-radius: var(--radius-sm); padding: var(--space-4) var(--space-5); flex-wrap: wrap; }
+.pending-banner-body { display: flex; flex-direction: column; gap: 3px; min-inline-size: 0; }
+.pending-lead { margin: 0; font-size: var(--text-body); font-weight: var(--weight-medium); color: var(--color-text); }
+.pending-note { margin: 0; font-size: var(--text-small); color: var(--color-text-muted); }
 .detail-main { display: flex; flex-direction: column; gap: var(--space-6); min-inline-size: 0; }
 .detail-head h1 { margin: 0; }
 .detail-head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
