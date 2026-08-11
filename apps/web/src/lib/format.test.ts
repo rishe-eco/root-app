@@ -1,6 +1,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dirFor, formatCitation } from './format.js';
+import { dirFor, formatCitation, translationLangFor } from './format.js';
+
+test('translationLangFor: a Persian original is translated outward, not into Persian again', () => {
+  // The regression this exists for: the reader hardcoded the translation
+  // column to lang="fa" dir="rtl", which is right for the common case (an
+  // English paper brought into Persian) and sets ROOT_RESEARCH's *English*
+  // translation in Vazirmatn, right-to-left. The only entry the e2e covers
+  // has originalLang "en", which is exactly the case the hardcode got right.
+  assert.equal(translationLangFor('fa'), 'en');
+  assert.equal(translationLangFor('fa-IR'), 'en');
+  assert.equal(translationLangFor('FA'), 'en');
+});
+
+test('translationLangFor: anything else is translated into Persian', () => {
+  assert.equal(translationLangFor('en'), 'fa');
+  assert.equal(translationLangFor('de'), 'fa');
+  assert.equal(translationLangFor('en-US'), 'fa');
+});
+
+test('translationLangFor: the result is never the language it came from', () => {
+  for (const lang of ['fa', 'en', 'de', 'ar', 'fa-IR', 'en-GB']) {
+    assert.notEqual(translationLangFor(lang), lang.split('-')[0].toLowerCase());
+  }
+});
 
 test('dirFor: fa/ar/he are rtl, en/de are ltr, an unknown tag defaults to ltr', () => {
   assert.equal(dirFor('fa'), 'rtl');
