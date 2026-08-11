@@ -55,14 +55,19 @@ V4   admin overview + queue      ✔ 2026-08-08  337ce1c          [V4.md]
 C0   the email seam              ✔ 2026-08-08  4eb4106  ← early
      the tagline + hero          ✔ 2026-08-10             [tagline.md]
 R1   Library model + editor      ✔ 2026-08-10  bc1f6aa          [R1.md]
+R2   public reader + search      ✔ 2026-08-11  e267676          [R2.md]
+C1   Review Room corpus          ✔ 2026-08-11  b5e6bed  ← early [C1.md]
 ──────────────────────────────── everything below is unbuilt ────────
-R2   public reader + search      ← next, build-ready            [R2.md]
-R3   concept tree                ← build-ready, but see below   [R3.md]
-C1   Review Room corpus          ← build-ready                  [C1.md]
-C2   Review Room comments        ┐ outlined only  [later-tracks.md]
-R4   the agent                   ┘
-the Persian pass
+R3   concept tree                ← conditional, see below       [R3.md]
+C2   Review Room comments        ← the default next            [C2.md]
+R4   the agent                   ← build-ready                  [R4.md]
+the Persian pass                 ← build-ready        [persian-pass.md]
 ```
+
+**Every remaining stage has a build-ready file.** The Persian pass had never been
+specified anywhere — the build plan lists it and never says what it is — so
+[`persian-pass.md`](persian-pass.md) *proposes* what it is. Argue with that
+definition before starting it.
 
 **R3 carries a condition the others do not.** The build plan places it
 *"deliberately after there are entries worth an ontology"*. If the corpus is
@@ -276,10 +281,13 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`V4.md`](V4.md) | admin overview and review queue | ✔ built |
 | [`tagline.md`](tagline.md) | tagline, hero and descriptor — the brand copy pass | ✔ done |
 | [`R1.md`](R1.md) | Library — model and admin entry editor | ✔ built |
-| [`R2.md`](R2.md) | Library — public reader, list and search | **next** |
-| [`R3.md`](R3.md) | Library — the concept tree | ready · conditional |
-| [`C1.md`](C1.md) | Review Room — documents, snapshots, the corpus | ready |
-| [`later-tracks.md`](later-tracks.md) | C2 and R4 — outline and banked traps | |
+| [`R2.md`](R2.md) | Library — public reader, list and search | ✔ built |
+| [`C1.md`](C1.md) | Review Room — documents, snapshots, the corpus | ✔ built |
+| [`R3.md`](R3.md) | Library — the concept tree | ready · **conditional** |
+| [`C2.md`](C2.md) | Review Room — comments, threads, corpus admin | **the default next** |
+| [`R4.md`](R4.md) | Library — the agent | ready |
+| [`persian-pass.md`](persian-pass.md) | the Persian pass | ready · *defines itself* |
+| [`later-tracks.md`](later-tracks.md) | retired — every section superseded | archive |
 
 **The built stage files are kept as written**, not rewritten to match what
 shipped. They are the plan the build was measured against, and their value now

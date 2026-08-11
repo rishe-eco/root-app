@@ -1,13 +1,18 @@
-# Later tracks — C2, R4, and the Persian pass
+# Later tracks — **retired 2026-08-11**
 
-> **Status, 2026-08-10.** Most of this file has now been overtaken, which is
-> what it was for. **R2, R3 and C1 have their own build-ready files** —
-> [`R2.md`](R2.md), [`R3.md`](R3.md), [`C1.md`](C1.md) — written against the
-> code as it stands after R1. Their sections below are **superseded; read the
-> files.** The banked traps were folded into them where they survived contact
-> with the real code, and dropped where they did not.
+> **This file is an archive. Nothing here is current.**
 >
-> What remains genuinely outlined-only: **C2**, **R4**, and the Persian pass.
+> Every section has been superseded by a build-ready stage file:
+> [`R2.md`](R2.md) · [`R3.md`](R3.md) · [`C1.md`](C1.md) · [`C2.md`](C2.md) ·
+> [`R4.md`](R4.md) · [`persian-pass.md`](persian-pass.md). C0 is built.
+>
+> **Kept, not deleted, for one reason:** it is the record of which traps were
+> knowable in advance. The banked traps were folded into the stage files where
+> they survived contact with the real code and dropped where they did not, and
+> the C0 section below reads as a scorecard on the practice itself — every trap
+> it banked was real and every one was hit. That is the argument for doing this
+> again on the next product, and it is only legible while the original
+> predictions are still readable.
 
 > **Status, 2026-08-08.** Two sections here have been overtaken:
 >
