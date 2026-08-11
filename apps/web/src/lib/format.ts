@@ -99,6 +99,24 @@ const RTL_LANGS = new Set(['fa', 'ar', 'he', 'ur', 'ps', 'ckb', 'sd', 'yi', 'dv'
 export const dirFor = (lang: string): 'rtl' | 'ltr' =>
   RTL_LANGS.has(lang.split('-')[0].toLowerCase()) ? 'rtl' : 'ltr';
 
+/**
+ * The language a translation is *into*, given the language it is from.
+ *
+ * The corpus is bilingual and the schema stores only `originalLang`, so this
+ * is derived rather than read. Root's programme mostly brings an English
+ * corpus into Persian — but `ROOT_RESEARCH` is written in Persian and
+ * translated outward, and assuming "the translation is always Persian" set
+ * that English prose in Vazirmatn, right-to-left: the exact failure the
+ * `:lang()` reset in tokens.css exists to prevent, arriving through the
+ * assumption rather than the CSS.
+ *
+ * Wrong only for a translation into some third language, which the schema
+ * cannot currently express. If it ever needs to, this becomes a
+ * `translationLang` column and this function goes away.
+ */
+export const translationLangFor = (originalLang: string): 'fa' | 'en' =>
+  originalLang.split('-')[0].toLowerCase() === 'fa' ? 'en' : 'fa';
+
 export type CitableEntry = {
   authors: string;
   titleOriginal: string;

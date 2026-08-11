@@ -229,3 +229,48 @@
   cursor: pointer;
 }
 .option-item input { accent-color: var(--color-accent); flex: none; }
+
+/* ---- Review Room (C1) — rounds, and one document rendered from its
+   frozen blocks. `.review-sha` forces Latin/ltr regardless of the desk's
+   own locale — a commit sha is an identifier, like a DOI (R1's num-latin
+   choice), never something that reads in Persian digits. ---- */
+.review-rounds { display: flex; flex-direction: column; gap: var(--space-6); }
+.review-round { gap: var(--space-4); }
+.review-round-head { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.review-sha { font-family: var(--font-latin); direction: ltr; unicode-bidi: isolate; font-size: var(--text-caption); color: var(--color-text-muted); }
+
+.review-doc-list { display: flex; flex-direction: column; gap: 2px; }
+.review-doc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: inherit;
+}
+.review-doc-row:hover { background: var(--color-panel); }
+
+.review-doc-head { display: flex; flex-direction: column; gap: var(--space-2); padding-block-end: var(--space-4); border-block-end: 1px solid var(--color-border); }
+.review-doc-head h2 { margin: 0; }
+.review-doc-provenance { margin: 0; }
+
+.review-doc-body { display: flex; flex-direction: column; gap: var(--space-2); max-inline-size: 72ch; }
+
+/* Each block sets its own lang/dir (lib/markdown.ts's blockLocale) — the
+   same reasoning as the Library reader's columns (R2.md §1): root-sot's
+   canon mixes English and Persian within one document, and tokens.css's
+   :lang(fa)/:lang(en) blocks are what make a nested boundary render
+   correctly rather than inheriting whatever the desk's own locale set. */
+.review-block { margin-block-end: var(--space-4); }
+.review-block :is(h1, h2, h3, h4, h5, h6) { margin-block: var(--space-6) var(--space-2); line-height: var(--leading-tight); }
+.review-block :is(h1, h2, h3, h4, h5, h6):first-child { margin-block-start: 0; }
+.review-block p { margin: 0; line-height: var(--leading-body); }
+.review-block ul, .review-block ol { padding-inline-start: var(--space-6); margin: 0; }
+.review-block li + li { margin-block-start: var(--space-1); }
+.review-block blockquote { border-inline-start: 3px solid var(--color-rule-strong); padding-inline-start: var(--space-4); color: var(--color-text-muted); margin: 0; }
+.review-block pre { background: var(--color-panel); border-radius: var(--radius-sm); padding: var(--space-4); overflow-x: auto; direction: ltr; text-align: start; }
+.review-block code { font-family: var(--font-latin); font-size: var(--text-small); }
+.review-block table { border-collapse: collapse; inline-size: 100%; }
+.review-block :is(th, td) { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-3); text-align: start; }

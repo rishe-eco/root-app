@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import type { Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 
 const API_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../api');
 
@@ -98,6 +98,48 @@ export function renameContractDraft(titleEn: string) {
     stdio: 'pipe',
     timeout: 60_000,
   });
+}
+
+/** The API port `playwright.config.ts`'s webServer runs on — duplicated here
+ *  rather than imported, same reasoning as TEST_DATABASE_URL above. */
+const E2E_API_URL = 'http://localhost:4101';
+
+export type TestBlock = { id: string; kind: 'HEADING' | 'PARAGRAPH' | 'CODE' | 'LIST' | 'QUOTE' | 'TABLE'; depth?: number; text: string };
+
+/**
+ * Publishes a Review Room round by calling `publishReviewRound` directly —
+ * the same mutation `prisma/publish-round.ts` calls, the same trust
+ * boundary (C1.md §3.1), just without a real root-sot checkout to shell git
+ * against. The CLI's own git-and-split half is exercised for real by a
+ * throwaway repository instead (see the C1 build note); this is only ever
+ * used to get a round into the database for the *reading* screens to show.
+ */
+export async function publishTestRound(
+  request: APIRequestContext,
+  opts: { sha: string; label?: string; documents: Array<{ path: string; title: string; order: number; blocks: TestBlock[] }> },
+): Promise<{ id: string }> {
+  const signIn = await request.post(`${E2E_API_URL}/graphql`, {
+    data: {
+      query: 'mutation($email:String!,$password:String!){ signIn(email:$email,password:$password){ user { id } } }',
+      variables: { email: ADMIN.email, password: ADMIN.password },
+    },
+  });
+  const signInBody = await signIn.json();
+  if (signInBody.errors) throw new Error(`publishTestRound sign-in failed: ${JSON.stringify(signInBody.errors)}`);
+
+  const res = await request.post(`${E2E_API_URL}/graphql`, {
+    data: {
+      query: `
+        mutation($sha:String!,$label:String,$documents:[ReviewDocumentInput!]!){
+          publishReviewRound(sha:$sha,label:$label,documents:$documents){ id }
+        }
+      `,
+      variables: { sha: opts.sha, label: opts.label ?? null, documents: opts.documents },
+    },
+  });
+  const body = await res.json();
+  if (body.errors) throw new Error(`publishTestRound failed: ${JSON.stringify(body.errors)}`);
+  return body.data.publishReviewRound as { id: string };
 }
 
 /**

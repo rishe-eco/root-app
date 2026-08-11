@@ -16,6 +16,7 @@
     "seed": "tsx prisma/seed.ts",
     "backfill": "tsx prisma/backfill-revisions.ts",
     "create-admin": "tsx prisma/create-admin.ts",
+    "publish-round": "tsx prisma/publish-round.ts",
     "start:e2e": "tsx src/index.ts"
   },
   "prisma": {

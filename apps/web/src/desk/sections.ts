@@ -2,7 +2,7 @@ import { can, isStaff, type Capability } from '@/lib/access';
 import type { User } from '@/lib/queries';
 
 export type DeskSection = {
-  key: 'overview' | 'contracts' | 'customers' | 'library';
+  key: 'overview' | 'contracts' | 'customers' | 'library' | 'review';
   /** null means "any staff capability", which is what Overview needs. */
   capability: Capability | null;
 };
@@ -17,6 +17,7 @@ export const DESK_SECTIONS: DeskSection[] = [
   { key: 'contracts', capability: 'contracts.manage' },
   { key: 'customers', capability: 'customers.manage' },
   { key: 'library', capability: 'library.write' },
+  { key: 'review', capability: 'review.participate' },
 ];
 
 export const visibleSections = (me: Pick<User, 'capabilities'> | null | undefined) =>

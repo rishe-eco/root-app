@@ -74,7 +74,7 @@ test('an admin sees every contract, not just their own', async ({ page }) => {
   await expect(page.getByText('RC-2026-014')).toBeVisible();
 });
 
-test('a reviewer sees Overview and nothing else, and cannot type their way into Contracts', async ({
+test('a reviewer sees Overview and Review and nothing else, and cannot type their way into Contracts', async ({
   page,
 }) => {
   await signIn(page, REVIEWER);
@@ -82,8 +82,13 @@ test('a reviewer sees Overview and nothing else, and cannot type their way into 
 
   const nav = page.locator('.desk-nav');
   await expect(nav.getByText('Overview')).toBeVisible();
+  // review.participate (C1) is the one capability REVIEWER holds beyond the
+  // implicit "any staff" Overview — so this is the one other section that
+  // should be here, not a hole where every other capability's section is not.
+  await expect(nav.getByText('Review')).toBeVisible();
   await expect(nav.getByText('Contracts')).toHaveCount(0);
   await expect(nav.getByText('Customers')).toHaveCount(0);
+  await expect(nav.getByText('Library')).toHaveCount(0);
 
   // The acceptance criterion: a capability filter, not an isAdmin in disguise.
   await page.goto('/en/desk/contracts');

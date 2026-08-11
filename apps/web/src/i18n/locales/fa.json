@@ -156,6 +156,7 @@
     "navContracts": "قراردادها",
     "navCustomers": "مشتریان",
     "navLibrary": "کتابخانه",
+    "navReview": "بازبینی",
     "backToPortal": "بازگشت به پرتال",
     "needsRootTitle": "منتظر ریشه",
     "needsRootEmpty": "چیزی منتظر ریشه نیست.",
@@ -258,6 +259,13 @@
       "rename": "تغییر نام",
       "deleteConcept": "حذف",
       "editTreeNeedsCapability": "این عملیات در اختیار شما نیست."
+    },
+    "review": {
+      "empty": "هنوز هیچ دوره‌ای منتشر نشده است.",
+      "untitledRound": "دوره‌ی بی‌عنوان",
+      "publishedBy": "منتشرشده توسط {{name}}",
+      "backToRounds": "بازگشت به دوره‌ها",
+      "docProvenance": "{{path}} · دوره‌ی {{sha}} · منتشرشده در {{date}}"
     }
   },
   "workspace": {

@@ -559,6 +559,80 @@ export const typeDefs = /* GraphQL */ `
     total: Int!
   }
 
+  # ---------------------------------------------------------------------
+  # Review Room (C1) — a round is a frozen root-sot commit sha plus its
+  # allowlisted documents at that sha, split into blocks at publish time.
+  # No ReviewGrant type — one corpus, for anyone holding review.participate
+  # (C1.md §1). review.admin is the only capability that may publish.
+  # ---------------------------------------------------------------------
+
+  enum BlockKind {
+    HEADING
+    PARAGRAPH
+    CODE
+    LIST
+    QUOTE
+    TABLE
+  }
+
+  type ReviewBlock {
+    id: ID!
+    kind: BlockKind!
+    depth: Int
+    text: String!
+  }
+
+  "Thin — the round list's document shape. No blocks (T1's discipline, applied here too)."
+  type ReviewDocumentRef {
+    id: ID!
+    path: String!
+    title: String!
+    order: Int!
+  }
+
+  type ReviewRound {
+    id: ID!
+    sha: String!
+    label: String
+    publishedAt: DateTime!
+    publishedBy: User!
+    "In manifest order."
+    documents: [ReviewDocumentRef!]!
+  }
+
+  "The round a document belongs to, thin — enough to show provenance beside the text."
+  type ReviewRoundRef {
+    id: ID!
+    sha: String!
+    label: String
+    publishedAt: DateTime!
+  }
+
+  "One document, in full, rendered from its frozen blocks."
+  type ReviewDocument {
+    id: ID!
+    path: String!
+    title: String!
+    order: Int!
+    contentHash: String!
+    blocks: [ReviewBlock!]!
+    round: ReviewRoundRef!
+  }
+
+  input ReviewBlockInput {
+    id: String!
+    kind: BlockKind!
+    depth: Int
+    text: String!
+  }
+
+  input ReviewDocumentInput {
+    path: String!
+    title: String!
+    order: Int!
+    blocks: [ReviewBlockInput!]!
+  }
+
   type AuthPayload {
     user: User!
   }
@@ -607,6 +681,11 @@ export const typeDefs = /* GraphQL */ `
     publicLibraryEntry(slug: String!): PublicEntry
     "Public. Concepts that have at least one publicly visible entry."
     publicLibraryConcepts: [PublicConcept!]!
+
+    "Staff (review.participate). Rounds newest first."
+    reviewRounds: [ReviewRound!]!
+    "Staff (review.participate). One document from one round."
+    reviewDocument(roundId: ID!, documentId: ID!): ReviewDocument
   }
 
   input CreateContractInput {
@@ -711,5 +790,15 @@ export const typeDefs = /* GraphQL */ `
     "Renaming and nesting the ontology is library.editTree, not library.write."
     updateLibraryConcept(id: ID!, input: LibraryConceptInput!): LibraryConcept!
     deleteLibraryConcept(id: ID!): Boolean!
+
+    """
+    Freezes a round: a root-sot commit sha and its allowlisted documents at
+    that sha, already split into blocks by the publish CLI. review.admin
+    only — the CLI is convenience, this mutation is the trust boundary
+    (C1.md §3.1). Every path and block is revalidated here; contentHash is
+    always recomputed from the blocks received, never taken from the request.
+    Refused if a round for this sha already exists.
+    """
+    publishReviewRound(sha: String!, label: String, documents: [ReviewDocumentInput!]!): ReviewRound!
   }
 `;

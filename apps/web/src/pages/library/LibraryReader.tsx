@@ -7,7 +7,7 @@ import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import NotFound from '@/pages/NotFound';
 import { PUBLIC_LIBRARY_ENTRY, type PublicEntry } from '@/lib/queries';
-import { dirFor, formatCitation } from '@/lib/format';
+import { dirFor, formatCitation, translationLangFor } from '@/lib/format';
 
 const DEFAULT_TITLE = document.title;
 
@@ -58,6 +58,7 @@ export default function LibraryReader() {
   // provenance flag — an entry with no translation must not render an
   // empty second column.
   const hasTranslation = Boolean(entry.titleTranslated);
+  const translationLang = translationLangFor(entry.originalLang);
 
   return (
     <div className="root-ui shell">
@@ -90,10 +91,10 @@ export default function LibraryReader() {
             {entry.abstractOriginal ? <p className="t-body">{entry.abstractOriginal}</p> : null}
           </div>
           {hasTranslation ? (
-            // The translation is always Persian prose — Root's own program
-            // brings the corpus into Persian, regardless of which interface
-            // language the visitor is reading in (§0.1).
-            <div className="library-col" lang="fa" dir="rtl">
+            // Into *the other* language, not always Persian — see
+            // translationLangFor. This was hardcoded to `fa`, which set a
+            // Persian-original entry's English translation in Vazirmatn, RTL.
+            <div className="library-col" lang={translationLang} dir={dirFor(translationLang)}>
               <p className="t-eyebrow">{t('library.reader.translation')}</p>
               <h1 className="t-h1">{entry.titleTranslated}</h1>
               {entry.abstractTranslated ? <p className="t-body">{entry.abstractTranslated}</p> : null}
