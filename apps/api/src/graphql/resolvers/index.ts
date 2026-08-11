@@ -4,7 +4,7 @@ import { Query } from './query.js';
 import { authMutations } from './auth.js';
 import { customerMutations } from './customer.js';
 import { adminMutations } from './admin.js';
-import { LibraryEntry, libraryMutations, libraryQueries } from './library.js';
+import { LibraryEntry, libraryMutations, libraryQueries, publicLibraryQueries } from './library.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -29,7 +29,7 @@ export const resolvers = {
   User,
   LibraryEntry,
 
-  Query: { ...Query, ...libraryQueries },
+  Query: { ...Query, ...libraryQueries, ...publicLibraryQueries },
 
   Mutation: {
     ...authMutations,

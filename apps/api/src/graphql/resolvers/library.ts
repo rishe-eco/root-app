@@ -10,7 +10,7 @@ import type {
 import { prisma } from '../../lib/prisma.js';
 import { requireCapability, type Context } from '../../context.js';
 import { storage } from '../../lib/storage.js';
-import { buildSearchText, foldPersian, makeSlug } from '../../lib/library.js';
+import { buildSearchText, foldPersian, makeSlug, publiclyVisible } from '../../lib/library.js';
 import { clampLimit } from '../../lib/pagination.js';
 
 /**
@@ -176,6 +176,130 @@ export const libraryQueries = {
   libraryConcepts: async (_p: unknown, _a: unknown, ctx: Context) => {
     requireCapability(ctx, 'library.write');
     return prisma.libraryConcept.findMany({ orderBy: { titleEn: 'asc' } });
+  },
+};
+
+/** The public list row (R2.md §2.3, T1) — thin like the staff row, plus
+ *  fullTextUrl: whether a PDF exists is exactly what a reader browsing the
+ *  list decides on before opening an entry. */
+const publicRowSelect = {
+  id: true,
+  slug: true,
+  type: true,
+  titleOriginal: true,
+  titleTranslated: true,
+  year: true,
+  translationProvenance: true,
+  rightsBasis: true,
+  fullTextFileId: true,
+  publishedAt: true,
+  _count: { select: { concepts: true } },
+} satisfies Prisma.LibraryEntrySelect;
+
+type PublicRowShape = Prisma.LibraryEntryGetPayload<{ select: typeof publicRowSelect }>;
+
+const toPublicRow = (r: PublicRowShape) => ({
+  id: r.id,
+  slug: r.slug,
+  type: r.type,
+  titleOriginal: r.titleOriginal,
+  titleTranslated: r.titleTranslated,
+  year: r.year,
+  translationProvenance: r.translationProvenance,
+  rightsBasis: r.rightsBasis,
+  fullTextUrl: r.fullTextFileId ? `/files/${r.fullTextFileId}` : null,
+  // Never null: every row this query returns matched publiclyVisible, which
+  // requires publishedAt not null (T2's "not found" only applies below it).
+  publishedAt: r.publishedAt as Date,
+  conceptCount: r._count.concepts,
+});
+
+const publicEntryInclude = {
+  concepts: { include: { concept: true } },
+} satisfies Prisma.LibraryEntryInclude;
+
+type PublicEntryShape = Prisma.LibraryEntryGetPayload<{ include: typeof publicEntryInclude }>;
+
+/** §2.3's expose list, field by field — no searchText, no visibility, no
+ *  fullTextFileId, no createdBy. Built once here rather than left to field
+ *  resolvers, so there is exactly one funnel a public field can leak through. */
+const toPublicEntry = (e: PublicEntryShape) => ({
+  id: e.id,
+  slug: e.slug,
+  type: e.type,
+  originalLang: e.originalLang,
+  titleOriginal: e.titleOriginal,
+  authors: e.authors,
+  venue: e.venue,
+  year: e.year,
+  doi: e.doi,
+  sourceUrl: e.sourceUrl,
+  abstractOriginal: e.abstractOriginal,
+  translationProvenance: e.translationProvenance,
+  titleTranslated: e.titleTranslated,
+  abstractTranslated: e.abstractTranslated,
+  translationCredit: e.translationCredit,
+  rightsBasis: e.rightsBasis,
+  rightsNote: e.rightsNote,
+  fullTextUrl: e.fullTextFileId ? `/files/${e.fullTextFileId}` : null,
+  publishedAt: e.publishedAt as Date,
+  concepts: e.concepts.map((lc) => ({
+    slug: lc.concept.slug,
+    titleFa: lc.concept.titleFa,
+    titleEn: lc.concept.titleEn,
+  })),
+});
+
+/**
+ * The public reader's three queries (R2.md §2). No requireCapability
+ * anywhere in this object — that omission is the point, and it is also why
+ * every one of them filters through publiclyVisible rather than trusting a
+ * caller-supplied flag. This is the first place in the app an unauthenticated
+ * request reaches a resolver at all.
+ */
+export const publicLibraryQueries = {
+  publicLibraryEntries: async (
+    _p: unknown,
+    args: { search?: string; type?: EntryType; conceptSlug?: string; limit?: number; offset?: number },
+  ) => {
+    const where: Prisma.LibraryEntryWhereInput = {
+      ...publiclyVisible,
+      ...(args.type ? { type: args.type } : {}),
+      ...(args.search ? { searchText: { contains: foldPersian(args.search) } } : {}),
+      ...(args.conceptSlug ? { concepts: { some: { concept: { slug: args.conceptSlug } } } } : {}),
+    };
+    const [rows, total] = await Promise.all([
+      prisma.libraryEntry.findMany({
+        where,
+        orderBy: { publishedAt: 'desc' },
+        // §2.2: a smaller ceiling than the staff list's 100 — an anonymous
+        // caller has no scrolling-their-own-corpus excuse for a big page.
+        take: clampLimit(args.limit, 24, 60),
+        skip: Math.max(args.offset ?? 0, 0),
+        select: publicRowSelect,
+      }),
+      prisma.libraryEntry.count({ where }),
+    ]);
+    return { rows: rows.map(toPublicRow), total };
+  },
+
+  publicLibraryEntry: async (_p: unknown, args: { slug: string }) => {
+    const entry = await prisma.libraryEntry.findFirst({
+      where: { ...publiclyVisible, slug: args.slug },
+      include: publicEntryInclude,
+    });
+    // T2: a draft's slug, a private entry's slug and a slug nobody ever used
+    // are one answer here — not found — so this endpoint cannot be used to
+    // learn which slugs exist as drafts.
+    return entry ? toPublicEntry(entry) : null;
+  },
+
+  publicLibraryConcepts: async () => {
+    const concepts = await prisma.libraryConcept.findMany({
+      where: { entries: { some: { entry: publiclyVisible } } },
+      orderBy: { titleEn: 'asc' },
+    });
+    return concepts.map((c) => ({ slug: c.slug, titleFa: c.titleFa, titleEn: c.titleEn }));
   },
 };
 

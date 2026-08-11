@@ -5,6 +5,10 @@ import Landing from '@/pages/Landing';
 import About from '@/pages/About';
 import Reserved from '@/pages/Reserved';
 import NotFound from '@/pages/NotFound';
+import LibraryHome from '@/pages/library/LibraryHome';
+import LibraryList from '@/pages/library/LibraryList';
+import LibraryReader from '@/pages/library/LibraryReader';
+import { useLocale, lp } from '@/lib/locale';
 import SignIn from '@/portal/SignIn';
 import AcceptInvite from '@/portal/AcceptInvite';
 import RequestReset from '@/portal/RequestReset';
@@ -36,6 +40,14 @@ function LocaleRedirect() {
   return <Navigate to={`/${guessLocale()}${rest === '/' ? '' : rest}${search}${hash}`} replace />;
 }
 
+/** `/cast` and `/blog` have both been reserved routes since launch, and a
+ *  public URL that has ever existed is not free to 404 (R2.md §3) — both
+ *  fold into Root Cast, which now lives at /library/cast. */
+function ToLibraryCast() {
+  const locale = useLocale();
+  return <Navigate to={lp(locale, '/library/cast')} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -48,9 +60,17 @@ export default function App() {
 
         {/* Reserved slots — the rooms exist, they are simply not furnished. */}
         <Route path="studio" element={<Reserved section="studio" />} />
-        <Route path="cast" element={<Reserved section="cast" />} />
         <Route path="journey" element={<Reserved section="journey" />} />
-        <Route path="blog" element={<Reserved section="blog" />} />
+
+        {/* The Library (R2) — the content lock opens here. Two strands: the
+            Research Lab is real; Root Cast is still Reserved, now reachable
+            at its permanent address rather than the top level. */}
+        <Route path="library" element={<LibraryHome />} />
+        <Route path="library/research" element={<LibraryList />} />
+        <Route path="library/research/:slug" element={<LibraryReader />} />
+        <Route path="library/cast" element={<Reserved section="cast" />} />
+        <Route path="cast" element={<ToLibraryCast />} />
+        <Route path="blog" element={<ToLibraryCast />} />
 
         {/* Auth — standalone pages, not modals */}
         <Route path="portal" element={<SignIn />} />

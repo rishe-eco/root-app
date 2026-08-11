@@ -13,6 +13,7 @@
     "about": "About Us",
     "studio": "Root Studio",
     "cast": "Root Cast",
+    "library": "Library",
     "journey": "Journey",
     "portal": "Portal",
     "locked": "Coming later"
@@ -44,6 +45,64 @@
     "clientsTitle": "Already working with us?",
     "clientsBody": "Track your contract, approve designs, and see what you owe — all in one quiet place.",
     "clientsCta": "Open the portal"
+  },
+  "library": {
+    "home": {
+      "eyebrow": "The Library",
+      "title": "A place to read, in more than one language",
+      "body": "Research and writing Root translates, hosts and cites — original and translation side by side, each in its own script.",
+      "researchEyebrow": "Research Lab",
+      "researchTitle": "Papers, books and Root's own research",
+      "researchBody": "Search the corpus, read an entry beside its translation, and see exactly what its rights allow.",
+      "entries": "entries",
+      "recentHeading": "Recently added"
+    },
+    "list": {
+      "eyebrow": "Research Lab",
+      "title": "Search the Library",
+      "filteredBy": "Filtered by a concept.",
+      "clearFilter": "Clear filter",
+      "searchPlaceholder": "Search titles, authors, abstracts…",
+      "typeAll": "Every type",
+      "type": {
+        "PAPER": "Paper",
+        "BOOK": "Book",
+        "ARTICLE": "Article",
+        "ROOT_RESEARCH": "Root Research"
+      },
+      "provenance": {
+        "PUBLISHED": "Published translation",
+        "ROOT": "Root's translation",
+        "NONE_YET": "Not yet translated"
+      },
+      "hasFile": "PDF",
+      "empty": "Nothing matches yet.",
+      "prevPage": "Previous",
+      "nextPage": "Next"
+    },
+    "reader": {
+      "original": "Original",
+      "translation": "Translation",
+      "provenancePublished": "Translated by {{credit}}",
+      "provenanceRoot": "Root translation",
+      "provenanceNone": "Original only — not yet translated",
+      "sourceLink": "See the original",
+      "viewFile": "View file",
+      "citation": "Cite this entry",
+      "rights": {
+        "PUBLIC_DOMAIN": "Public domain",
+        "OPEN_LICENCE": "Open licence",
+        "PERMISSION_GRANTED": "Hosted with permission",
+        "LINK_ONLY": "Rights allow a link only, not a hosted copy"
+      }
+    },
+    "lang": {
+      "fa": "Persian",
+      "en": "English",
+      "ar": "Arabic",
+      "de": "German",
+      "fr": "French"
+    }
   },
   "footer": {
     "lead": "Root — ",

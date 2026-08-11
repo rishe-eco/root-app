@@ -69,6 +69,88 @@
 /* ---- Not found --------------------------------------------------------- */
 .notfound { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); padding: var(--space-24) var(--space-6); text-align: center; }
 
+/* ---- The Library (R2) — umbrella, list/search, reader ------------------
+   Cards and grids throughout, matching the landing/about editorial feel
+   rather than the desk's tables — this is the public-facing half. Logical
+   properties only (house rule 7); nothing here assumes a direction. */
+
+.library-home,
+.library-list,
+.library-reader {
+  flex: 1;
+  inline-size: 100%;
+  max-inline-size: var(--content-max);
+  margin-inline: auto;
+  padding-block: var(--space-16) var(--space-24);
+  padding-inline: var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.library-home-head,
+.library-list-head { max-inline-size: 64ch; display: flex; flex-direction: column; gap: var(--space-3); }
+.library-home-body { margin: 0; }
+
+.library-strands { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.library-strand { position: relative; }
+.library-strand-count { margin: 0; }
+.library-strand-locked { opacity: 0.75; }
+.library-strand-locked .lock { align-self: flex-start; margin-block-start: var(--space-2); }
+
+.library-recent { display: flex; flex-direction: column; gap: var(--space-3); }
+.library-recent-list { display: flex; flex-direction: column; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
+
+/* ---- List / search ------------------------------------------------------ */
+.library-list-filter { display: flex; align-items: center; gap: var(--space-2); }
+.library-list-controls { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.library-list-controls .input { flex: 1 1 280px; }
+.library-list-controls .select { flex: 0 0 auto; }
+
+.library-cards { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.library-entry-card { gap: var(--space-2); }
+.library-entry-card h2 { margin: 0; }
+.library-entry-meta { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+
+.library-list-pager { display: flex; align-items: center; gap: var(--space-4); }
+
+/* ---- Reader -------------------------------------------------------------
+   Two directions on one page (§1): each column below sets its own lang/dir
+   and is otherwise ordinary flow — nothing at the document level changes. */
+.library-reader-provenance { margin: 0; }
+
+.library-columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-10); align-items: start; }
+.library-columns-single { grid-template-columns: 1fr; }
+.library-col { display: flex; flex-direction: column; gap: var(--space-3); min-inline-size: 0; }
+.library-col h1 { margin: 0; }
+.library-col p { margin: 0; }
+
+.library-meta { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); padding-block-start: var(--space-6); border-block-start: 1px solid var(--color-border); }
+.library-meta > p { margin: 0; }
+.library-meta-line { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.library-concepts { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.library-concepts .badge { text-decoration: none; }
+
+.library-citation { inline-size: 100%; }
+.library-citation summary { cursor: pointer; }
+.library-citation-block {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-latin);
+  direction: ltr;
+  text-align: start;
+  background: var(--color-panel);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  margin-block-start: var(--space-2);
+  font-size: var(--text-caption);
+}
+
+@media (max-width: 768px) {
+  .library-home, .library-list, .library-reader { padding-inline: var(--space-6); }
+  .library-columns { grid-template-columns: 1fr; }
+}
+
 /* ---- Responsive -------------------------------------------------------- */
 @media (max-width: 600px) {
   /* The display rung is set for a wide viewport; one line at 64px becomes

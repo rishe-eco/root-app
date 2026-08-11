@@ -348,6 +348,14 @@ Progress.
   that rule can still be checked. Root can create an entry, tag it, host a
   file for it, and publish it; a contributor can do all of that except
   publish.
+- The Library's public reader (R2): the first unauthenticated resolvers in
+  the app. An anonymous visitor reaches `/:lang/library`, searches the
+  Research Lab in either script, and reads an entry's original beside its
+  translation, each in its own script and direction. `publicLibraryEntries`,
+  `publicLibraryEntry` and `publicLibraryConcepts` are separate resolvers
+  from the staff ones, filtered through `publiclyVisible`, and structurally
+  incapable of returning a draft's `searchText` or `createdBy`. `/cast` and
+  `/blog` redirect to `/library/cast` rather than 404.
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -397,6 +405,84 @@ stack first ran on Postgres.
 ~~An upload form~~ and ~~creating a contract, entering article text, and
 publishing a revision from the admin UI~~ — both built by the admin contract
 workspace (V2); see "Built and working" above and the note below.
+
+**The Library's public reader, run against a real database — 2026-08-11.**
+R2's spec (§1) already knew the shape of the trap — `tokens.css` keys the
+Persian type family and leading off `:lang(fa)`, and a Latin block nested
+inside a Persian page inherits them because nothing resets them back — and
+gave the fix as one `:lang(en)` block restating the Latin defaults. Building
+the reader and checking it with the browser's own computed styles (not by
+eye) found that the given fix is necessary but not sufficient in this
+codebase: `.root-ui` is the *only* rule anywhere in the kit that reads
+`var(--font-sans)` into an actual `font-family`, once, near the document
+root. `font-family` is an inherited property, so every element below
+`.root-ui` inherits that one already-resolved value — overriding the custom
+property further down changes what a *fresh* `var()` read would produce, but
+nothing below `.root-ui` performs one, so the rendered font never moves.
+`:lang(en)` was setting `--font-sans` correctly and `font-family` was still
+Vazirmatn. The fix that actually works re-declares `font-family:
+var(--font-sans)` and `line-height: var(--leading-body)` **inside** both
+`:lang(fa)` and `:lang(en)` themselves, not just their custom properties —
+since `:lang()` matches the exact element carrying that `lang` attribute,
+this forces the fresh substitution at precisely the point a nested language
+boundary needs it, verified afterward with `getComputedStyle` on a `lang="en"`
+column inside a Persian-locale page: `font-family` reads `Inter, system-ui,
+…` and `line-height` reads the Latin 1.55, both correctly, with the
+surrounding Persian chrome unaffected.
+
+Two public queries were written from nothing, never as a flag on the staff
+ones (§2.1): `publicLibraryEntries`/`publicLibraryEntry`/
+`publicLibraryConcepts` carry no `requireCapability` at all — the first
+resolvers in the app an anonymous request reaches — and return `PublicEntry`/
+`PublicEntryRow`/`PublicConcept`, GraphQL types with no `searchText`,
+`visibility`, `fullTextFileId` or `createdBy` field to ask for at all. A
+draft's slug, a private entry's slug and a slug nobody used are one answer,
+`null` (T2) — this endpoint cannot be used to learn which slugs exist as
+drafts. The public list clamps to 60 rather than the staff list's 100 (§2.2)
+— reusing R1 review's `clampLimit`, since an anonymous caller has no
+scrolling-their-own-corpus excuse for a large page.
+
+Citation (BibTeX and APA) is generated on read from the fields the entry
+already has — `authors`, `titleOriginal`, `venue`, `year`, `doi`,
+`sourceUrl` — never stored, so it cannot drift from them the way a cached
+copy would the first time a venue typo is fixed (§6). It cites exactly what
+the entry holds, in its own script; a Persian author's name is never given
+an invented Latin transliteration.
+
+`/cast` and `/blog` — both reserved routes since launch — now redirect to
+`/library/cast` instead of 404ing, per the rule that a public URL that has
+ever existed is not free to delete. The nav's `cast` slot graduated from
+locked to a real `Library` link; `studio` and `journey` are still locked.
+`/desk` was not touched at all (T7) — confirmed by re-running the desk
+Library screens after the change and finding them identical.
+
+Driven end to end in the browser: as admin, an English paper with a Root
+Persian translation was created and published in `/desk` (unchanged, R1);
+as an anonymous visitor with cookies cleared, the same entry was found by
+searching a plain-English substring, opened, and read with both columns
+visible — the English original in `lang="en" dir="ltr"`, the Persian
+translation in `lang="fa" dir="rtl"`, on a page whose own document direction
+is RTL throughout. Switching the language on that page landed on the exact
+same entry rather than the list (T4), since the slug is not localised. A
+concept badge on the entry linked to the list pre-filtered by that concept,
+with a visible "clear filter" affordance. `migrate diff` reports no drift
+(no schema changes this stage); typecheck is clean in both workspaces; the
+API's unit suite (132, unchanged) and integration suite (107, +7) are green,
+a new web-side unit suite exists for the first time (5 tests, `dirFor` and
+`formatCitation`, wired into `npm test` via the same `tsx --test` pattern the
+API already used) and passes, and the e2e suite (26, +1) is green including
+the one console-flake retry the suite has carried since before this stage.
+
+**What this stage decided, for R3 (§10):** the umbrella page was built as a
+real screen rather than an immediate redirect to `/library/research` — Root
+Cast is a named, real second strand already, and a visitor should be able to
+see both exist even while only one is open; this can be revisited once a
+second strand actually ships. The translation-request affordance for a
+`NONE_YET` entry was deferred entirely, with no button that does nothing in
+its place — the same call R2.md itself recommended. Concept counts on the
+public side are per-entry only for now (`conceptCount` on the row,
+`conceptSlug` as a filter); whether R3's tree needs rolled-up counts is still
+open.
 
 **The Library, run against a real database — 2026-08-10.** R1's spec (§1)
 found a state neither of its two source rules resolves on its own: a

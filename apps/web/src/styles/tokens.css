@@ -173,12 +173,48 @@
 
 /* Persian is the default language of the product, not a translation.
    Only the family and the leading change; every component is otherwise
-   identical, and mirrors via logical properties. */
+   identical, and mirrors via logical properties.
+
+   `font-family`/`line-height` are re-declared here too, not just the custom
+   properties — and that second declaration is the part that is easy to
+   think unnecessary. `.root-ui` is the only place in the whole kit that
+   reads `var(--font-sans)` into an actual `font-family`; every element below
+   it inherits that ALREADY-RESOLVED value, the ordinary way `font-family`
+   inherits. Overriding `--font-sans` further down (as :lang(en) below does,
+   on a nested lang="en" column) changes the custom property at that element,
+   but nothing re-reads it into `font-family` there — so the rendered font
+   stays whatever `.root-ui` resolved at the top, unless a rule matching that
+   exact element performs its own `var()` substitution. This rule is that
+   substitution, for whichever language its own :lang() already matches.
+   If a token is added here, add it to :lang(en) below too — see that
+   block's comment for why a one-sided edit is silent (R2.md §1, T3). */
 :lang(fa) {
   --font-sans:     var(--font-persian);
   --leading-body:  1.8;
   --leading-snug:  1.5;
   --leading-tight: 1.3;
+  font-family: var(--font-sans);
+  line-height: var(--leading-body);
+}
+
+/* The Latin defaults, restated so they can be inherited *back*. Needed for
+   exactly the reason :lang(fa)'s comment above explains: a `lang="en"` block
+   nested inside a Persian page (the Library reader, R2) does not "reset" to
+   :root's values on its own — :lang(fa) is the nearest ancestor rule that
+   ever set the custom properties, and `.root-ui`'s `font-family` already
+   resolved and inherited past this point before this rule ever runs. Both
+   the custom properties AND font-family/line-height have to be re-declared
+   here, or an English column beside a Persian one renders in Vazirmatn at
+   Persian leading — legible, because Vazirmatn carries Latin glyphs, and
+   therefore exactly the kind of wrong that ships unnoticed. Values must
+   match :root's; add a token here whenever one is added to :lang(fa). */
+:lang(en) {
+  --font-sans:     var(--font-latin);
+  --leading-body:  1.55;
+  --leading-snug:  1.35;
+  --leading-tight: 1.15;
+  font-family: var(--font-sans);
+  line-height: var(--leading-body);
 }
 
 @media (prefers-reduced-motion: reduce) {

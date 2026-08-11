@@ -1229,3 +1229,119 @@ export const DELETE_LIBRARY_CONCEPT = gql`
     deleteLibraryConcept(id: $id)
   }
 `;
+
+// ---------------------------------------------------------------------
+// Library (R2) — the public reader. Distinct types from the staff ones
+// above: PublicEntry/PublicEntryRow/PublicConcept are what an anonymous
+// visitor may see, curated server-side (R2.md §2.3) — this file mirrors
+// the server's shape by hand, same as everything else here, and cannot
+// widen it by accident the way reusing LibraryEntry's type could.
+// ---------------------------------------------------------------------
+
+export type PublicConcept = { slug: string; titleFa: string; titleEn: string };
+
+export type PublicEntry = {
+  id: string;
+  slug: string;
+  type: EntryType;
+  originalLang: string;
+  titleOriginal: string;
+  authors: string;
+  venue: string | null;
+  year: number | null;
+  doi: string | null;
+  sourceUrl: string | null;
+  abstractOriginal: string | null;
+  translationProvenance: TranslationProvenance;
+  titleTranslated: string | null;
+  abstractTranslated: string | null;
+  translationCredit: string | null;
+  rightsBasis: RightsBasis;
+  rightsNote: string | null;
+  fullTextUrl: string | null;
+  publishedAt: string;
+  concepts: PublicConcept[];
+};
+
+export type PublicEntryRow = {
+  id: string;
+  slug: string;
+  type: EntryType;
+  titleOriginal: string;
+  titleTranslated: string | null;
+  year: number | null;
+  translationProvenance: TranslationProvenance;
+  rightsBasis: RightsBasis;
+  fullTextUrl: string | null;
+  publishedAt: string;
+  conceptCount: number;
+};
+
+const PUBLIC_ENTRY_ROW_FIELDS = gql`
+  fragment PublicEntryRowFields on PublicEntryRow {
+    id
+    slug
+    type
+    titleOriginal
+    titleTranslated
+    year
+    translationProvenance
+    rightsBasis
+    fullTextUrl
+    publishedAt
+    conceptCount
+  }
+`;
+
+export const PUBLIC_LIBRARY_ENTRIES = gql`
+  ${PUBLIC_ENTRY_ROW_FIELDS}
+  query PublicLibraryEntries($search: String, $type: EntryType, $conceptSlug: String, $limit: Int, $offset: Int) {
+    publicLibraryEntries(search: $search, type: $type, conceptSlug: $conceptSlug, limit: $limit, offset: $offset) {
+      rows {
+        ...PublicEntryRowFields
+      }
+      total
+    }
+  }
+`;
+
+export const PUBLIC_LIBRARY_ENTRY = gql`
+  query PublicLibraryEntry($slug: String!) {
+    publicLibraryEntry(slug: $slug) {
+      id
+      slug
+      type
+      originalLang
+      titleOriginal
+      authors
+      venue
+      year
+      doi
+      sourceUrl
+      abstractOriginal
+      translationProvenance
+      titleTranslated
+      abstractTranslated
+      translationCredit
+      rightsBasis
+      rightsNote
+      fullTextUrl
+      publishedAt
+      concepts {
+        slug
+        titleFa
+        titleEn
+      }
+    }
+  }
+`;
+
+export const PUBLIC_LIBRARY_CONCEPTS = gql`
+  query PublicLibraryConcepts {
+    publicLibraryConcepts {
+      slug
+      titleFa
+      titleEn
+    }
+  }
+`;

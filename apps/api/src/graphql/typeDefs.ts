@@ -492,6 +492,73 @@ export const typeDefs = /* GraphQL */ `
     slug: String
   }
 
+  # ---------------------------------------------------------------------
+  # Library (R2) — the public reader. Separate types and separate resolvers
+  # from the staff ones above, on purpose (R2.md §2.1): a boolean that
+  # toggled the staff query's filter and shape would be two functions
+  # wearing one name, and the failure mode is a draft leaking because
+  # someone widened the shared selection. No id is exposed for a concept
+  # here — the public taxonomy is addressed by slug, same as an entry.
+  # ---------------------------------------------------------------------
+
+  "Public. Only concepts with at least one publicly visible entry reach here."
+  type PublicConcept {
+    slug: String!
+    titleFa: String!
+    titleEn: String!
+  }
+
+  "Public, in full — see the withhold list in R2.md §2.3. No searchText, no visibility, no fullTextFileId, no createdBy."
+  type PublicEntry {
+    id: ID!
+    slug: String!
+    type: EntryType!
+
+    originalLang: String!
+    titleOriginal: String!
+    authors: String!
+    venue: String
+    year: Int
+    doi: String
+    sourceUrl: String
+    abstractOriginal: String
+
+    translationProvenance: TranslationProvenance!
+    titleTranslated: String
+    abstractTranslated: String
+    translationCredit: String
+
+    rightsBasis: RightsBasis!
+    rightsNote: String
+
+    "Null when nothing is hosted — absent, not necessarily forbidden; rightsBasis is how a reader tells the two apart."
+    fullTextUrl: String
+    "Always set — every row this type describes is published (T2)."
+    publishedAt: DateTime!
+
+    concepts: [PublicConcept!]!
+  }
+
+  "Public list row — thin, same reasoning as LibraryEntryRow (T1)."
+  type PublicEntryRow {
+    id: ID!
+    slug: String!
+    type: EntryType!
+    titleOriginal: String!
+    titleTranslated: String
+    year: Int
+    translationProvenance: TranslationProvenance!
+    rightsBasis: RightsBasis!
+    fullTextUrl: String
+    publishedAt: DateTime!
+    conceptCount: Int!
+  }
+
+  type PublicEntryPage {
+    rows: [PublicEntryRow!]!
+    total: Int!
+  }
+
   type AuthPayload {
     user: User!
   }
@@ -533,6 +600,13 @@ export const typeDefs = /* GraphQL */ `
     libraryEntry(id: ID!): LibraryEntry
     "Staff. The tag picker needs these; R3 gives them a tree."
     libraryConcepts: [LibraryConcept!]!
+
+    "Public. Published, public-visibility entries only (R2)."
+    publicLibraryEntries(search: String, type: EntryType, conceptSlug: String, limit: Int = 24, offset: Int = 0): PublicEntryPage!
+    "Public. One entry by its slug. Null for a draft, a private entry, or no such slug — the three are one answer (T2)."
+    publicLibraryEntry(slug: String!): PublicEntry
+    "Public. Concepts that have at least one publicly visible entry."
+    publicLibraryConcepts: [PublicConcept!]!
   }
 
   input CreateContractInput {
