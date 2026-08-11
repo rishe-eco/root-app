@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {
   buildAmendmentSnapshot,
   buildContractSnapshot,
+  buildDocumentSnapshot,
   canonicalize,
   contentHash,
   diffSnapshots,
   draftState,
+  type Block,
 } from './revision.js';
 
 const article = (number: number, bodyFa: string | null = null) => ({
@@ -66,6 +68,40 @@ test('changing the fee changes the hash', () => {
     articles,
   );
   assert.notEqual(contentHash(a), contentHash(b));
+});
+
+// ---------------------------------------------------------------------------
+// C1 — a document snapshot hashes the same way, over blocks alone
+// ---------------------------------------------------------------------------
+
+const block = (id: string, text: string, kind: Block['kind'] = 'PARAGRAPH'): Block => ({ id, kind, text });
+
+test('buildDocumentSnapshot: contentHash is stable under re-serialization of the same blocks', () => {
+  const blocks = [block('b1', 'Hello'), block('b2', 'World')];
+  const first = contentHash(buildDocumentSnapshot(blocks));
+  const second = contentHash(buildDocumentSnapshot(JSON.parse(JSON.stringify(blocks))));
+  assert.equal(first, second);
+});
+
+test("buildDocumentSnapshot: changing a block's text changes the hash", () => {
+  const before = contentHash(buildDocumentSnapshot([block('b1', 'Hello')]));
+  const after = contentHash(buildDocumentSnapshot([block('b1', 'Hello there')]));
+  assert.notEqual(before, after);
+});
+
+test('buildDocumentSnapshot: reordering blocks changes the hash — order is content, like article order', () => {
+  const a = contentHash(buildDocumentSnapshot([block('b1', 'First'), block('b2', 'Second')]));
+  const b = contentHash(buildDocumentSnapshot([block('b2', 'Second'), block('b1', 'First')]));
+  assert.notEqual(a, b);
+});
+
+test('buildDocumentSnapshot: renaming the document (path/title) does not change the hash — it is not part of the snapshot', () => {
+  // There is no path/title on DocumentSnapshot at all (C1.md: "sha256 over
+  // the canonical serialization of blocks") — this test is really asserting
+  // that fact by construction: two snapshots built from the same blocks
+  // always hash equal, regardless of what the caller later stores beside them.
+  const blocks = [block('b1', 'Same content')];
+  assert.equal(contentHash(buildDocumentSnapshot(blocks)), contentHash(buildDocumentSnapshot(blocks)));
 });
 
 test('the hash is sha256 hex', () => {

@@ -5,6 +5,7 @@ import { authMutations } from './auth.js';
 import { customerMutations } from './customer.js';
 import { adminMutations } from './admin.js';
 import { LibraryEntry, libraryMutations, libraryQueries, publicLibraryQueries } from './library.js';
+import { reviewMutations, reviewQueries } from './review.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -29,12 +30,13 @@ export const resolvers = {
   User,
   LibraryEntry,
 
-  Query: { ...Query, ...libraryQueries, ...publicLibraryQueries },
+  Query: { ...Query, ...libraryQueries, ...publicLibraryQueries, ...reviewQueries },
 
   Mutation: {
     ...authMutations,
     ...customerMutations,
     ...adminMutations,
     ...libraryMutations,
+    ...reviewMutations,
   },
 };

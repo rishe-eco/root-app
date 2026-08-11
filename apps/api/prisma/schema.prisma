@@ -73,6 +73,7 @@ model User {
   ticketMessage TicketMessage[]
   uploads       StoredFile[]
   libraryEntries LibraryEntry[]
+  reviewRounds   ReviewRound[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -781,4 +782,54 @@ model LibraryEntryConcept {
 
   @@id([entryId, conceptId])
   @@index([conceptId])
+}
+
+// ---------------------------------------------------------------------------
+// Review Room (C1) — a round is a frozen sha + allowlist + snapshots. Nothing
+// about a round changes after publish; there is no ReviewGrant model on
+// purpose (C1.md §1) — one corpus, for everyone holding review.participate,
+// not per-reviewer visibility.
+// ---------------------------------------------------------------------------
+
+model ReviewRound {
+  id String @id @default(cuid())
+
+  /// The root-sot commit this round froze. Recorded, never fetched — the API
+  /// never reads a git tree (C1.md §0).
+  sha   String
+  label String?
+
+  publishedAt   DateTime @default(now())
+  publishedById String
+  publishedBy   User     @relation(fields: [publishedById], references: [id])
+
+  documents ReviewDocument[]
+
+  @@index([publishedAt])
+}
+
+model ReviewDocument {
+  id      String      @id @default(cuid())
+  roundId String
+  round   ReviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  /// Path within root-sot, exactly as the manifest named it at that sha.
+  path  String
+  title String
+
+  /// sha256 over the canonical serialization of `blocks` — see lib/revision.ts
+  /// (buildDocumentSnapshot) and C1.md §2.1. Always recomputed server-side,
+  /// never taken from the publish request.
+  contentHash String
+
+  /// The frozen document, as an ordered block list — see C1.md §2. This shape,
+  /// not rendered HTML and not one raw string, is what lets a future comment
+  /// anchor to (blockId, start, end) without re-publishing the round.
+  blocks Json
+
+  /// Position in the manifest, so the reading order matches what Root curated.
+  order Int
+
+  @@unique([roundId, path])
+  @@index([roundId, order])
 }

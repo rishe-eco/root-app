@@ -156,6 +156,7 @@
     "navContracts": "Contracts",
     "navCustomers": "Customers",
     "navLibrary": "Library",
+    "navReview": "Review",
     "backToPortal": "Back to the portal",
     "needsRootTitle": "Needs Root",
     "needsRootEmpty": "Nothing is waiting on Root.",
@@ -258,6 +259,13 @@
       "rename": "Rename",
       "deleteConcept": "Delete",
       "editTreeNeedsCapability": "This action is not available to you."
+    },
+    "review": {
+      "empty": "No rounds have been published yet.",
+      "untitledRound": "Untitled round",
+      "publishedBy": "Published by {{name}}",
+      "backToRounds": "Back to rounds",
+      "docProvenance": "{{path}} · round {{sha}} · published {{date}}"
     }
   },
   "workspace": {

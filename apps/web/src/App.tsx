@@ -26,6 +26,8 @@ import Customers from '@/desk/Customers';
 import Library from '@/desk/Library';
 import LibraryEntry from '@/desk/LibraryEntry';
 import LibraryConcepts from '@/desk/LibraryConcepts';
+import Review from '@/desk/Review';
+import ReviewDocumentScreen from '@/desk/ReviewDocumentScreen';
 import ContractWorkspace from '@/desk/workspace/ContractWorkspace';
 import WorkspaceContractTab from '@/desk/workspace/ContractTab';
 import WorkspaceDesignTab from '@/desk/workspace/DesignTab';
@@ -110,6 +112,8 @@ export default function App() {
           <Route path="library/concepts" element={<LibraryConcepts />} />
           <Route path="library/new" element={<LibraryEntry />} />
           <Route path="library/:id" element={<LibraryEntry />} />
+          <Route path="review" element={<Review />} />
+          <Route path="review/:roundId/:documentId" element={<ReviewDocumentScreen />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

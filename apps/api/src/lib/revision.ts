@@ -66,7 +66,35 @@ export function canonicalize(value: Json): string {
   return `{${body}}`;
 }
 
-export function contentHash(snapshot: ContractSnapshot | AmendmentSnapshot): string {
+/** Bumped only when a document snapshot's *shape* changes (C1.md §2.1) — its
+ *  own tag, never SNAPSHOT_FORMAT: a shared version number that means two
+ *  different things means neither. */
+export const DOCUMENT_SNAPSHOT_FORMAT = 1;
+
+/** One block of a Review Room document's frozen text, split once at publish
+ *  time and stored, never recomputed (C1.md §2) — so a comment can anchor to
+ *  (blockId, start, end) and stay meaningful no matter how the block is later
+ *  rendered. `text` is the block's markdown source, verbatim. */
+export type Block = {
+  id: string;
+  kind: 'HEADING' | 'PARAGRAPH' | 'CODE' | 'LIST' | 'QUOTE' | 'TABLE';
+  depth?: number;
+  text: string;
+};
+
+export type DocumentSnapshot = {
+  format: number;
+  /** Hashed over the blocks only (C1.md's ReviewDocument.contentHash comment)
+   *  — path and title are presentational, not content, so renaming a document
+   *  between rounds must not change what its hash attests to. */
+  blocks: Block[];
+};
+
+export function buildDocumentSnapshot(blocks: Block[]): DocumentSnapshot {
+  return { format: DOCUMENT_SNAPSHOT_FORMAT, blocks };
+}
+
+export function contentHash(snapshot: ContractSnapshot | AmendmentSnapshot | DocumentSnapshot): string {
   return createHash('sha256').update(canonicalize(snapshot as unknown as Json), 'utf8').digest('hex');
 }
 

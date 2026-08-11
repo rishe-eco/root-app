@@ -1345,3 +1345,96 @@ export const PUBLIC_LIBRARY_CONCEPTS = gql`
     }
   }
 `;
+
+// ---------------------------------------------------------------------
+// Review Room (C1) — reading only. Publishing a round happens through the
+// publish-round CLI (C1.md §3), never through this app, so there is no
+// mutation document here to mirror one.
+// ---------------------------------------------------------------------
+
+export type BlockKind = 'HEADING' | 'PARAGRAPH' | 'CODE' | 'LIST' | 'QUOTE' | 'TABLE';
+
+export type ReviewBlock = {
+  id: string;
+  kind: BlockKind;
+  depth: number | null;
+  text: string;
+};
+
+export type ReviewDocumentRef = {
+  id: string;
+  path: string;
+  title: string;
+  order: number;
+};
+
+export type ReviewRound = {
+  id: string;
+  sha: string;
+  label: string | null;
+  publishedAt: string;
+  publishedBy: Pick<User, 'id' | 'name'>;
+  documents: ReviewDocumentRef[];
+};
+
+export type ReviewRoundRef = {
+  id: string;
+  sha: string;
+  label: string | null;
+  publishedAt: string;
+};
+
+export type ReviewDocument = {
+  id: string;
+  path: string;
+  title: string;
+  order: number;
+  contentHash: string;
+  blocks: ReviewBlock[];
+  round: ReviewRoundRef;
+};
+
+export const REVIEW_ROUNDS = gql`
+  query ReviewRounds {
+    reviewRounds {
+      id
+      sha
+      label
+      publishedAt
+      publishedBy {
+        id
+        name
+      }
+      documents {
+        id
+        path
+        title
+        order
+      }
+    }
+  }
+`;
+
+export const REVIEW_DOCUMENT = gql`
+  query ReviewDocumentById($roundId: ID!, $documentId: ID!) {
+    reviewDocument(roundId: $roundId, documentId: $documentId) {
+      id
+      path
+      title
+      order
+      contentHash
+      blocks {
+        id
+        kind
+        depth
+        text
+      }
+      round {
+        id
+        sha
+        label
+        publishedAt
+      }
+    }
+  }
+`;

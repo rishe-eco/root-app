@@ -356,6 +356,15 @@ Progress.
   from the staff ones, filtered through `publiclyVisible`, and structurally
   incapable of returning a draft's `searchText` or `createdBy`. `/cast` and
   `/blog` redirect to `/library/cast` rather than 404.
+- The Review Room's corpus (C1): a round freezes one `root-sot` commit sha
+  plus its allowlisted documents at that sha into an ordered block list,
+  hashed and stored — nothing about a round changes after publish. Publishing
+  runs entirely outside the API, in `npm run publish-round`, which reads a
+  manifest and shows files at the frozen sha with real `git`, then calls the
+  same `publishReviewRound` mutation the trust boundary actually lives in —
+  every path, block shape and hash is revalidated there, never trusted from
+  the CLI. A reviewer reads exactly the published corpus at `/desk/review`
+  and nothing else; there is no per-reviewer grant.
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -401,10 +410,105 @@ stack first ran on Postgres.
   the browser (above); what is missing is a PDF Root can generate itself, to
   email or to archive. That needs a headless browser in the API image, and it
   will render the existing print route.
+- **Review Room comments** (C2). C1 built the corpus and the reading surface
+  only, deliberately — a comment model built casually beside a fresh document
+  renderer is one C2 would have to migrate (C1.md T4).
 
 ~~An upload form~~ and ~~creating a contract, entering article text, and
 publishing a revision from the admin UI~~ — both built by the admin contract
 workspace (V2); see "Built and working" above and the note below.
+
+**The Review Room's corpus, run against a real database — 2026-08-11.**
+R3 (the Library's concept tree) was next in the build plan's sequence, but
+its own stage file gates itself on corpus size — *"if the corpus is still a
+handful of entries when R3's turn comes, say so and skip ahead to C1"* — and
+the Library has exactly one entry, seeded during R1/R2's own manual
+verification. Flagged and confirmed with the user before starting; C1 was
+built instead, out of the build plan's stated order but by its own stated
+condition.
+
+C1's shape is lopsided on purpose: the reading surface is a thin GraphQL
+layer over two tables, and almost all the actual design weight is in the
+publish step — the first thing in this codebase that crosses from a git repo
+the API cannot see into Postgres. `npm run publish-round --workspace=apps/api
+-- --sot <path> --sha <40-char sha> [--manifest review-manifest.json] [--label
+"…"]` runs entirely outside the API: it resolves and verifies the commit
+(refusing a branch name, `HEAD`, or a dirty working tree), reads
+`review-manifest.json` **at that sha** rather than off disk, and `git show`s
+every allowlisted path at that sha — failing the *whole* round, loudly, the
+moment one path is missing, so a partially published round can never happen.
+Only the CLI ever touches git; the mutation it calls, `publishReviewRound`,
+is the actual trust boundary — every path and block shape is revalidated
+there, and `contentHash` is always computed server-side from the blocks
+received, with no hash field in the mutation's input at all to even consider
+trusting.
+
+The decision the build plan's own §0 flagged as easy to get backwards, gotten
+right: **allowlist, not denylist.** A document is outside the corpus until a
+manifest names it, checked in root-sot's own version control — so adding a
+document is a reviewable commit, and `personal-canon.md` stays out by
+omission rather than by a rule that has to remember to exclude it. Proven at
+both layers: a unit test builds a manifest that never mentions
+`personal-canon.md` and asserts the file is never even read, and an
+integration test publishes a round and asserts exactly the manifest's
+documents were written, no more.
+
+The block-list decision (§2) was the one the stage said C2 depends on
+getting right: not rendered HTML (anchors shift when the renderer changes),
+not one raw string with global offsets (couples a future comment UI to the
+renderer emitting source positions), but an ordered list of small, typed
+blocks — heading/paragraph/code/list/quote/table — split once at publish
+time and frozen. A hand-rolled line classifier, not a full CommonMark parser:
+splitting only has to produce stable, coarse chunks; a real parser
+(`marked`, sanitized through `dompurify`, both pinned to an exact version)
+renders each block's own markdown at read time. Hashing reuses
+`lib/revision.ts`'s `canonicalize`/`contentHash` under a new
+`DOCUMENT_SNAPSHOT_FORMAT` tag rather than `SNAPSHOT_FORMAT` — a shared
+version number that means two different things means neither — and hashes
+over the blocks alone, deliberately: renaming a document between rounds must
+not change what its hash attests to.
+
+C1.md flagged that R2's `:lang(en)` fix was a prerequisite in practice, since
+root-sot's canon mixes English and Persian within one document the same way
+the Library reader mixes an original and its translation. It was — and this
+stage found the reverse case of the same script-detection question R2 didn't
+have to answer: R2 always knew an entry's `originalLang`, but a Review Room
+block has no language field at all. Solved with a small per-block script
+guess (a proportion-of-Persian-characters heuristic) good enough for
+choosing `lang`/`dir`, not a translation detector — verified live with
+`getComputedStyle` on a Persian sub-heading and paragraph rendered inline
+inside an otherwise-English document: `Vazirmatn`/rtl for the Persian
+blocks, `Inter`/ltr for everything around them, in the same document, on the
+same page.
+
+No `ReviewGrant` model, on purpose (§1) — one corpus, for anyone holding
+`review.participate`. Proven with the actual seeded reviewer account, not
+just a capability check: signed in, they see exactly Overview and Review in
+the desk nav (Library, Contracts and Customers absent), open the CLI-smoke
+round below, and read a rendered document with real headings, a list, and a
+fenced code block, in both languages. A customer navigating straight to
+`/desk/review` is bounced to their own portal before the screen renders, the
+same as every other desk section.
+
+The publish step itself was run for real, twice — against a throwaway git
+repository built for the purpose, not simulated: once through the success
+path (a two-language markdown document with a heading, a Persian
+sub-heading and paragraph, a list and a fenced code block, published and
+read back with all six blocks split correctly), and three times through the
+refusal paths — a branch name in place of a sha, a dirty working tree, and a
+manifest naming a path that does not exist at the frozen sha — each refused
+with no partial round left behind. `migrate diff` reports no schema drift;
+typecheck is clean in both workspaces; the unit suite (158, +26 across
+`lib/revision.test.ts`, `lib/reviewBlocks.test.ts` and
+`lib/publishRound.test.ts`), the integration suite (119, +12) and the e2e
+suite (27, +1, plus one existing F2-era test updated to expect the Review
+section a reviewer now correctly sees) are all green.
+
+**One thing this stage could not do**, recorded rather than silently
+skipped: C1.md's own closing checklist asks for a wording fix in the build
+plan's §5b, in `root-sot`'s own repository — which does not exist on this
+machine (the API never reading a git tree turned out to apply to the
+person building it, too). Left for whoever next has both repos checked out.
 
 **The Library's public reader, run against a real database — 2026-08-11.**
 R2's spec (§1) already knew the shape of the trap — `tokens.css` keys the
