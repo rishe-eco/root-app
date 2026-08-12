@@ -14,7 +14,11 @@ export default defineConfig(() => {
   // production host Nginx routes these three the same way — without them here,
   // every design image would 404 in development and work on the server, which
   // is the worst direction for that difference to run.
-  const proxy = { '/graphql': api, '/files': api, '/upload': api };
+  // '/ask' (R4) is the same same-origin-cookie story, plus one more thing:
+  // it's a streamed SSE response, so it must never be buffered — Vite's
+  // proxy passes chunks through as they arrive by default, which is exactly
+  // what a reader watching an answer stream in needs.
+  const proxy = { '/graphql': api, '/files': api, '/upload': api, '/ask': api };
 
   return {
     plugins: [react()],

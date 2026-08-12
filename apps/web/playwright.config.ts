@@ -60,6 +60,10 @@ export default defineConfig({
         JWT_SECRET: 'e2e-only-secret-not-used-anywhere-else-0123456789',
         APP_ORIGIN: `http://localhost:${WEB_PORT}`,
         TRUST_PROXY_HOPS: '0',
+        // R4: a canned in-process client, not a live API — see
+        // lib/anthropicClient.ts's buildE2EStubClient and env.ts's refusal
+        // to ever honor this in production.
+        ANTHROPIC_E2E_STUB: '1',
       },
     },
     {

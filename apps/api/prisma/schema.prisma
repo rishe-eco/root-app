@@ -417,6 +417,15 @@ model StoredFile {
   /// not an array — a contract has many files, an entry's hosted text is one.
   entryFullText LibraryEntry?   @relation("EntryFullText")
 
+  /// The Anthropic Files API id for this PDF's bytes (R4.md §2.3) — set the
+  /// first time a `quotableFullText` entry is asked about, never re-uploaded
+  /// after. Null for every DESIGN_IMAGE row and for a RESEARCH_TEXT row never
+  /// asked about yet. Cleared (never left dangling) wherever this row's bytes
+  /// are removed — deleting a StoredFile is already the one moment its `key`
+  /// stops meaning anything, and this id is exactly the same kind of pointer.
+  anthropicFileId         String?
+  anthropicFileUploadedAt DateTime?
+
   createdAt DateTime @default(now())
 
   @@index([contractId])

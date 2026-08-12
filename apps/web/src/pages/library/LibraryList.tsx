@@ -7,6 +7,7 @@ import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import { PUBLIC_LIBRARY_ENTRIES, type EntryType, type PublicEntryRow } from '@/lib/queries';
 import { formatCount } from '@/lib/format';
+import AskLab from '@/components/AskLab';
 
 const ENTRY_TYPES: EntryType[] = ['PAPER', 'BOOK', 'ARTICLE', 'ROOT_RESEARCH'];
 const PAGE_SIZE = 24;
@@ -48,6 +49,8 @@ export default function LibraryList() {
           <p className="t-eyebrow">{t('library.list.eyebrow')}</p>
           <h1 className="t-h1">{t('library.list.title')}</h1>
         </section>
+
+        <AskLab />
 
         {conceptSlug ? (
           <p className="t-small library-list-filter">
