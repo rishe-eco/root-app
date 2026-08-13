@@ -68,6 +68,7 @@ function fakeAnthropic(opts: {
   citations?: Array<Record<string, unknown>>;
   countTokensInputTokens?: number;
   throwOnStream?: boolean;
+  throwOnUpload?: boolean;
 } = {}) {
   const streamRequests: Array<Record<string, unknown>> = [];
   const uploads: Array<{ betas?: string[] }> = [];
@@ -77,6 +78,7 @@ function fakeAnthropic(opts: {
       files: {
         upload: async (params: { betas?: string[] }) => {
           uploads.push(params);
+          if (opts.throwOnUpload) throw new Error('files api unavailable');
           return { id: `fake-file-${uploads.length}` };
         },
       },
@@ -293,6 +295,40 @@ test('an upstream failure surfaces as an error event, never a silent hang', asyn
 
   const { frames } = await ask({ question: 'beekeeping', locale: 'en' });
   assert.ok(frames.some((fr) => fr.event === 'error' && (fr.data as { code: string }).code === 'UPSTREAM_FAILED'));
+});
+
+test('a Files API failure ends the stream with an error event, not silence', async () => {
+  // The upload happens *after* flushHeaders, so a failure here cannot become
+  // a 502 with a JSON body the way a pre-stream failure does — it has to
+  // arrive as an SSE frame. Without one the response just stops: the client
+  // reads to `done`, sees no terminal frame, and leaves the reader watching
+  // a disabled button forever. Every path past flushHeaders owes the client
+  // exactly one terminal event.
+  const file = await prisma.storedFile.create({
+    data: {
+      key: await storage.put('PUBLIC', Buffer.from('%PDF-1.7 quotable bytes'), '.pdf'),
+      class: 'RESEARCH_TEXT',
+      visibility: 'PUBLIC',
+      mime: 'application/pdf',
+      bytes: 24,
+      originalName: 'open.pdf',
+      uploadedById: f.admin.id,
+    },
+  });
+  await prisma.libraryEntry.create({
+    data: entryData({ rightsBasis: 'OPEN_LICENCE', fullTextFileId: file.id }),
+  });
+
+  const { client, streamRequests } = fakeAnthropic({ throwOnUpload: true });
+  __setAnthropicClientForTests(client);
+
+  const { frames } = await ask({ question: 'beekeeping', locale: 'en' });
+
+  assert.equal(streamRequests.length, 0, 'no request is sent when its documents could not be prepared');
+  assert.ok(
+    frames.some((fr) => fr.event === 'error' && (fr.data as { code: string }).code === 'UPSTREAM_FAILED'),
+    'the stream must terminate with an error frame rather than simply stopping',
+  );
 });
 
 test('no ANTHROPIC_API_KEY configured refuses with UNAVAILABLE before touching the database', async () => {

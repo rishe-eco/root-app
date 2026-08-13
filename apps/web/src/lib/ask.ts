@@ -104,35 +104,58 @@ export async function askLab(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  /**
+   * A stream that ends without one of these has told the reader nothing,
+   * and the component's `status` never leaves `asking` — a spinner and a
+   * disabled button, permanently. The server owes exactly one terminal
+   * frame per request (routes/ask.ts), but the stream can also just stop:
+   * Nginx's 120s `proxy_read_timeout`, an API restart mid-answer, a laptop
+   * closing. Treat silence as the network failure it is rather than
+   * trusting the far end to always get the last word out.
+   */
+  let terminated = false;
 
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    let boundary: number;
-    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-      const frame = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      const parsed = parseFrame(frame);
-      if (!parsed) continue;
+      let boundary: number;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const parsed = parseFrame(frame);
+        if (!parsed) continue;
 
-      switch (parsed.event) {
-        case 'delta':
-          callbacks.onDelta((parsed.data as { text: string }).text);
-          break;
-        case 'done':
-          callbacks.onDone(parsed.data as AskDoneEvent);
-          break;
-        case 'refused':
-          callbacks.onRefused();
-          break;
-        case 'error': {
-          const code = (parsed.data as { code?: unknown }).code;
-          callbacks.onError(isAskErrorCode(code) ? code : 'INTERNAL');
-          break;
+        switch (parsed.event) {
+          case 'delta':
+            callbacks.onDelta((parsed.data as { text: string }).text);
+            break;
+          case 'done':
+            terminated = true;
+            callbacks.onDone(parsed.data as AskDoneEvent);
+            break;
+          case 'refused':
+            terminated = true;
+            callbacks.onRefused();
+            break;
+          case 'error': {
+            terminated = true;
+            const code = (parsed.data as { code?: unknown }).code;
+            callbacks.onError(isAskErrorCode(code) ? code : 'INTERNAL');
+            break;
+          }
         }
       }
     }
+  } catch {
+    // An aborted read is the caller's own doing — the component aborts any
+    // in-flight question when a new one is asked, and on unmount. Reporting
+    // that as a failure would flash an error over the answer replacing it.
+    if (!signal?.aborted) callbacks.onError('NETWORK');
+    return;
   }
+
+  if (!terminated && !signal?.aborted) callbacks.onError('NETWORK');
 }

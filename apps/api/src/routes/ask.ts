@@ -187,32 +187,49 @@ askRouter.post(
     // Upload-once (R4.md §2.3): only for the entries selected for full text,
     // and only ever the first time — ensureAnthropicFileId is a no-op once
     // StoredFile.anthropicFileId is set.
-    await Promise.all(
-      candidates
-        .filter((c) => fullTextIds.has(c.id) && c.fullTextFile)
-        .map((c) =>
-          ensureAnthropicFileId(c.fullTextFile!, {
-            read: (key) => storage.read(key),
-            upload: async ({ data, filename, mime }) => {
-              const uploaded = await client.beta.files.upload({
-                file: await toFile(data, filename, { type: mime }),
-                betas: ['files-api-2025-04-14'],
-              });
-              return uploaded.id;
-            },
-            persist: async (storedFileId, anthropicFileId) => {
-              await prisma.storedFile.update({
-                where: { id: storedFileId },
-                data: { anthropicFileId, anthropicFileUploadedAt: new Date() },
-              });
-              // Keep the in-memory candidate in step so buildDocumentBlocks
-              // (below, same request) sees the id it just resolved.
-              const c = candidates.find((x) => x.fullTextFile?.id === storedFileId);
-              if (c?.fullTextFile) c.fullTextFile.anthropicFileId = anthropicFileId;
-            },
-          }),
-        ),
-    );
+    //
+    // Inside a try, because the headers are already flushed: past this point
+    // a thrown error can no longer become a status code, and Express's
+    // default handler would answer it by destroying the socket. The client
+    // reads that as a clean end of stream with no terminal frame and waits
+    // forever. **Every path past flushHeaders owes the client exactly one
+    // terminal event** — that is the invariant this try, and the one below,
+    // exist to keep.
+    try {
+      await Promise.all(
+        candidates
+          .filter((c) => fullTextIds.has(c.id) && c.fullTextFile)
+          .map((c) =>
+            ensureAnthropicFileId(c.fullTextFile!, {
+              read: (key) => storage.read(key),
+              upload: async ({ data, filename, mime }) => {
+                const uploaded = await client.beta.files.upload({
+                  file: await toFile(data, filename, { type: mime }),
+                  betas: ['files-api-2025-04-14'],
+                });
+                return uploaded.id;
+              },
+              persist: async (storedFileId, anthropicFileId) => {
+                await prisma.storedFile.update({
+                  where: { id: storedFileId },
+                  data: { anthropicFileId, anthropicFileUploadedAt: new Date() },
+                });
+                // Keep the in-memory candidate in step so buildDocumentBlocks
+                // (below, same request) sees the id it just resolved.
+                const c = candidates.find((x) => x.fullTextFile?.id === storedFileId);
+                if (c?.fullTextFile) c.fullTextFile.anthropicFileId = anthropicFileId;
+              },
+            }),
+          ),
+      );
+    } catch (err) {
+      // Never the question itself (R4.md §4) — only that preparing this
+      // request's documents failed, and why.
+      console.error('[ask] document upload failed', err instanceof Error ? err.message : err);
+      sendEvent(res, 'error', { code: 'UPSTREAM_FAILED' });
+      res.end();
+      return;
+    }
 
     const documentBlocks = buildDocumentBlocks(candidates, fullTextIds);
     const messages = buildAskMessages(question, documentBlocks);
