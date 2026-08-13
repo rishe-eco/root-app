@@ -157,6 +157,7 @@
     "navCustomers": "مشتریان",
     "navLibrary": "کتابخانه",
     "navReview": "بازبینی",
+    "navReviewAdmin": "پیکره",
     "backToPortal": "بازگشت به پرتال",
     "needsRootTitle": "منتظر ریشه",
     "needsRootEmpty": "چیزی منتظر ریشه نیست.",
@@ -265,7 +266,34 @@
       "untitledRound": "دوره‌ی بی‌عنوان",
       "publishedBy": "منتشرشده توسط {{name}}",
       "backToRounds": "بازگشت به دوره‌ها",
-      "docProvenance": "{{path}} · دوره‌ی {{sha}} · منتشرشده در {{date}}"
+      "docProvenance": "{{path}} · دوره‌ی {{sha}} · منتشرشده در {{date}}",
+      "staleRound": "این دوره، دوره‌ی جاری نیست.",
+      "goToCurrent": "رفتن به دوره‌ی جاری",
+      "crossBlockRefused": "یک نظر فقط می‌تواند به یک بلوک متصل شود — متنی را درون یک پاراگراف یا عنوان انتخاب کنید.",
+      "selectedQuote": "بخش انتخاب‌شده",
+      "composePlaceholder": "درباره‌ی این بخش چه می‌خواهید بگویید؟",
+      "openThread": "باز کردن گفتگو",
+      "cancel": "انصراف",
+      "you": "شما",
+      "resolved": "حل‌شده",
+      "detached": "این بخش دیگر با متن منتشرشده مطابقت ندارد — به‌صورت جدا نمایش داده می‌شود.",
+      "replyPlaceholder": "پاسخ…",
+      "reply": "پاسخ",
+      "resolve": "حل کردن"
+    },
+    "reviewAdmin": {
+      "title": "پیکره",
+      "manifestTitle": "دوره‌ها",
+      "empty": "هنوز هیچ دوره‌ای منتشر نشده است.",
+      "reviewersTitle": "بازبینان",
+      "inviteEmail": "ایمیل",
+      "inviteName": "نام",
+      "inviteCta": "ساخت لینک دعوت",
+      "inviteOnce": "همین حالا کپی کن — فقط یک‌بار نمایش داده می‌شود:",
+      "colName": "نام",
+      "colEmail": "ایمیل",
+      "revoke": "لغو دسترسی",
+      "revokeConfirm": "دسترسیِ بازبینیِ {{name}} حذف شود؟ نظرهای ایشان در سابقه باقی می‌ماند."
     }
   },
   "workspace": {

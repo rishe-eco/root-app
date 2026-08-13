@@ -60,6 +60,13 @@ export default defineConfig({
         JWT_SECRET: 'e2e-only-secret-not-used-anywhere-else-0123456789',
         APP_ORIGIN: `http://localhost:${WEB_PORT}`,
         TRUST_PROXY_HOPS: '0',
+        // C2 is the first stage whose flows (opening/replying to a thread,
+        // inviting a reviewer) actually call sendMail. Blank, not omitted —
+        // env.ts's loadEnvFile() only skips a var already present in
+        // process.env, and apps/api/.env carries a real Resend key that
+        // would otherwise place a live outbound call on every run.
+        RESEND_API_KEY: '',
+        MAIL_FROM: '',
       },
     },
     {

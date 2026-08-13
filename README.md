@@ -331,10 +331,11 @@ Progress.
   queue ordered by how long each one has been waiting, and a review queue of
   recent customer activity worth a look — dismissed by the contract's own
   status moving on, not by a flag. **Track V — V1b through V4 — is complete.**
-- Email (C0): invite, reset, reviewer-invite, new-comment and
-  contract-revised notifications, sent through a provider seam with a
+- Email (C0): invite and password reset, sent through a provider seam with a
   logging fallback when none is configured, templated in the recipient's own
-  locale.
+  locale. (Reviewer-invite and new-comment were promised alongside these but
+  not actually built until C2, below; contract-revised is still unbuilt —
+  see the note under C2.)
 - The tagline and hero: one `Tagline` component renders the same adjectival
   face — currently "new" · «نو» — in the hero and the footer from a single
   locale key, so the two can no longer say different things.
@@ -365,6 +366,19 @@ Progress.
   every path, block shape and hash is revalidated there, never trusted from
   the CLI. A reviewer reads exactly the published corpus at `/desk/review`
   and nothing else; there is no per-reviewer grant.
+- The Review Room's comments (C2): a thread anchors to `(blockId, start,
+  end)` into a block's *rendered* plain text, not its markdown source — the
+  string a reviewer actually selected, computed by `lib/anchor.ts` and
+  verified against the live render on every read; a mismatch shows the
+  thread detached, quote intact, never re-found. Root sees every thread; a
+  reviewer sees only their own, filtered by one function
+  (`threadsVisibleTo`) that also happens to be the entire permission check
+  for replying to and resolving one — a thread not visible through it cannot
+  be loaded at all. A new corpus-admin screen at `/desk/reviewAdmin`
+  (`review.admin`) can invite and revoke reviewers; revoking is refused,
+  not silently worked around, when reviewer is an account's only role.
+  Two more mail templates exist now: reviewer-invite and new-comment (never
+  sent to a different reviewer's thread than the one that changed).
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -410,13 +424,10 @@ stack first ran on Postgres.
   the browser (above); what is missing is a PDF Root can generate itself, to
   email or to archive. That needs a headless browser in the API image, and it
   will render the existing print route.
-- **Review Room comments** (C2). C1 built the corpus and the reading surface
-  only, deliberately — a comment model built casually beside a fresh document
-  renderer is one C2 would have to migrate (C1.md T4).
-
-~~An upload form~~ and ~~creating a contract, entering article text, and
+~~An upload form~~, ~~creating a contract, entering article text, and
 publishing a revision from the admin UI~~ — both built by the admin contract
-workspace (V2); see "Built and working" above and the note below.
+workspace (V2) — and ~~Review Room comments~~, built by C2 below; see "Built
+and working" above and the notes below.
 
 **The Review Room's corpus, run against a real database — 2026-08-11.**
 R3 (the Library's concept tree) was next in the build plan's sequence, but
@@ -509,6 +520,88 @@ skipped: C1.md's own closing checklist asks for a wording fix in the build
 plan's §5b, in `root-sot`'s own repository — which does not exist on this
 machine (the API never reading a git tree turned out to apply to the
 person building it, too). Left for whoever next has both repos checked out.
+
+**The Review Room's comments, run against a real database — 2026-08-12.**
+C2's whole design turns on one choice (§1): anchor to a block's *rendered*
+plain text, not its markdown source. `marked`/`dompurify` emit no source
+positions, and an offset into `**bold**` counts its own asterisks — rendered
+text is the string a reviewer actually selected, and C1 already paid for the
+precondition that makes it stable (`marked`/`dompurify` pinned exact, a
+published block's markdown never changes). `lib/anchor.ts` is the whole
+answer: `renderedPlainText`/`rangeToOffsets` reuse the same "prefix range's
+string length" trick a browser's own selection reporting relies on, so they
+agree with each other by construction; `offsetsToRange` walks back to a real
+Range for round-tripping and for highlighting (`Range.extractContents`, which
+already splits a partial text node at the boundary per spec — a **bold** in
+the middle of a selection needs no special case). None of it touches
+`document`/`window` directly, which is what let it be unit-tested over a
+constructed fragment with `jsdom` (a new devDependency, test-only) rather
+than a browser.
+
+The quote column is the anchor's own witness (§1.1), checked on every read —
+`verifyAnchor` — and a mismatch renders the thread **detached**: the quote
+shown plain, unhighlighted, never re-found by fuzzy matching. A comment
+highlighting the wrong words is worse than one highlighting nothing, because
+a reviewer reads the highlight and not the quote.
+
+**"Reviewers do not see each other's comments" turned out to double as the
+entire write permission check, not just the read one** — the one design
+payoff worth naming. `threadsVisibleTo(user)` (Root: no filter; a reviewer:
+`authorId: me`) is used to *load* a thread before replying to or resolving
+it; a thread that filter excludes was never fetched, so there is no second
+"is this yours" check anywhere to forget or get backwards. Proven at both
+ends: an integration test opens a thread as one reviewer and asserts a
+second reviewer's `reviewDocument.threads` comes back empty while Root's
+comes back with it, and a second test asserts replying to or resolving that
+thread by id, as the second reviewer, is `NOT_FOUND` — indistinguishable
+from a thread that never existed, never `FORBIDDEN` (house rule: existence
+and ownership collapse into one answer). A hand-written CHECK
+(`startOffset >= 0 AND endOffset > startOffset`) backs up the resolver's own
+validation at the database, asserted directly with `assert.rejects` rather
+than assumed.
+
+Revoking a reviewer's role hit the exact constraint violation C2.md flagged
+as "waiting in the revoke path": `User.roles` cannot go empty. Decided
+explicitly rather than invented around — `revokeReviewer` refuses with a
+plain `LAST_ROLE` code when it's the account's only role, rather than
+silently demoting them to some fallback or leaving a row the database would
+have rejected anyway. Revoking one of *several* roles removes only
+`REVIEWER` and leaves every comment and thread the person wrote exactly
+where it was — deleting a reviewer's record of the review would destroy the
+thing the feature exists to produce.
+
+C0's own promise turned out to be wrong twice over, both corrected here.
+The root-sot build plan's §5b line — "bilingual templates … for invite,
+reset, reviewer-invite, new-comment and contract-revised" — was never true;
+C0 built two of five and said so honestly in its own header comment, but
+nothing corrected the promise itself (`later-tracks.md`, footnoted now).
+This repo's own README repeated the overclaim in its "Built and working"
+list, corrected above. C2 writes two of the remaining three —
+`reviewerInviteEmail`, `newCommentEmail` — both in the key-parity test
+alongside invite/reset; `contract-revised` is still nobody's job yet.
+**A real bug the fix surfaced**: `apps/api/.env` carries a live Resend key,
+and neither `test:integration`'s npm script nor the e2e `webServer` env
+overrode it — meaning the moment a resolver under test called `sendMail`
+(nothing had, before C2), every test run would have placed a real outbound
+call to Resend using fake `@test.local` addresses. Both now pin
+`RESEND_API_KEY`/`MAIL_FROM` to the empty string, which `env.ts`'s existing
+`emptyToUndefined` preprocessing already treats as unset — no new mechanism,
+just two lines using one that was sitting there for a different reason
+(docker-compose's blank-var interpolation).
+
+Driven live in the browser in both languages: a reviewer selects a passage,
+opens a thread, sees it highlighted with the comment attached; Root reads
+the same document, sees the thread (a second seeded reviewer would not),
+replies, and resolves it — the card collapses, stays readable, and the
+highlight is still there on demand (T4: resolution is a state, not a hide).
+In Persian, the cross-block refusal message and the compose form read
+correctly RTL, and a selection inside a Persian block mixed with Latin words
+(root-sot's canon does this) anchors on the same logical character offsets
+as an all-Latin one — verified directly, not assumed, per T3. `migrate diff`
+reports no drift; typecheck is clean in both workspaces; the web unit suite
+(21, +13, all in the new `lib/anchor.test.ts`), the API unit suite (168, +10
+in `lib/mailTemplates.test.ts`), the integration suite (135, +16, all in the
+new `test/c2.test.ts`) and the e2e suite (28, +1) are all green.
 
 **The Library's public reader, run against a real database — 2026-08-11.**
 R2's spec (§1) already knew the shape of the trap — `tokens.css` keys the

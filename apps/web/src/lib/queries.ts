@@ -1384,6 +1384,30 @@ export type ReviewRoundRef = {
   publishedAt: string;
 };
 
+export type ReviewComment = {
+  id: string;
+  authorId: string;
+  author: Pick<User, 'id' | 'name'>;
+  body: string;
+  createdAt: string;
+};
+
+export type ReviewThread = {
+  id: string;
+  documentId: string;
+  authorId: string;
+  author: Pick<User, 'id' | 'name'>;
+  blockId: string;
+  startOffset: number;
+  endOffset: number;
+  quote: string;
+  resolvedAt: string | null;
+  resolvedById: string | null;
+  resolvedBy: Pick<User, 'id' | 'name'> | null;
+  createdAt: string;
+  comments: ReviewComment[];
+};
+
 export type ReviewDocument = {
   id: string;
   path: string;
@@ -1392,7 +1416,41 @@ export type ReviewDocument = {
   contentHash: string;
   blocks: ReviewBlock[];
   round: ReviewRoundRef;
+  threads: ReviewThread[];
 };
+
+const REVIEW_THREAD_FIELDS = gql`
+  fragment ReviewThreadFields on ReviewThread {
+    id
+    documentId
+    authorId
+    author {
+      id
+      name
+    }
+    blockId
+    startOffset
+    endOffset
+    quote
+    resolvedAt
+    resolvedById
+    resolvedBy {
+      id
+      name
+    }
+    createdAt
+    comments {
+      id
+      authorId
+      author {
+        id
+        name
+      }
+      body
+      createdAt
+    }
+  }
+`;
 
 export const REVIEW_ROUNDS = gql`
   query ReviewRounds {
@@ -1416,6 +1474,7 @@ export const REVIEW_ROUNDS = gql`
 `;
 
 export const REVIEW_DOCUMENT = gql`
+  ${REVIEW_THREAD_FIELDS}
   query ReviewDocumentById($roundId: ID!, $documentId: ID!) {
     reviewDocument(roundId: $roundId, documentId: $documentId) {
       id
@@ -1435,6 +1494,67 @@ export const REVIEW_DOCUMENT = gql`
         label
         publishedAt
       }
+      threads {
+        ...ReviewThreadFields
+      }
     }
+  }
+`;
+
+export const OPEN_REVIEW_THREAD = gql`
+  ${REVIEW_THREAD_FIELDS}
+  mutation OpenReviewThread($documentId: ID!, $blockId: String!, $startOffset: Int!, $endOffset: Int!, $quote: String!, $body: String!) {
+    openReviewThread(documentId: $documentId, blockId: $blockId, startOffset: $startOffset, endOffset: $endOffset, quote: $quote, body: $body) {
+      ...ReviewThreadFields
+    }
+  }
+`;
+
+export const ADD_REVIEW_COMMENT = gql`
+  ${REVIEW_THREAD_FIELDS}
+  mutation AddReviewComment($threadId: ID!, $body: String!) {
+    addReviewComment(threadId: $threadId, body: $body) {
+      ...ReviewThreadFields
+    }
+  }
+`;
+
+export const RESOLVE_REVIEW_THREAD = gql`
+  ${REVIEW_THREAD_FIELDS}
+  mutation ResolveReviewThread($threadId: ID!) {
+    resolveReviewThread(threadId: $threadId) {
+      ...ReviewThreadFields
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------
+// The corpus admin (C2 §5) — reviewer invite and revoke.
+// ---------------------------------------------------------------------
+
+export const REVIEWERS = gql`
+  query Reviewers {
+    reviewers {
+      id
+      name
+      email
+    }
+  }
+`;
+
+export const INVITE_REVIEWER = gql`
+  mutation InviteReviewer($email: String!, $name: String!) {
+    inviteReviewer(email: $email, name: $name) {
+      userId
+      email
+      inviteUrl
+      expiresAt
+    }
+  }
+`;
+
+export const REVOKE_REVIEWER = gql`
+  mutation RevokeReviewer($userId: ID!) {
+    revokeReviewer(userId: $userId)
   }
 `;

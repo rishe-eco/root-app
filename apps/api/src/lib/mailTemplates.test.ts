@@ -1,13 +1,33 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LOCALES, resolveLocale, inviteEmail, resetEmail, type MailContent } from './mailTemplates.js';
+import {
+  LOCALES,
+  resolveLocale,
+  inviteEmail,
+  resetEmail,
+  reviewerInviteEmail,
+  newCommentEmail,
+  type MailContent,
+} from './mailTemplates.js';
 
 const INVITE_URL = 'https://example.com/fa/portal/invite/tok123';
 const RESET_URL = 'https://example.com/en/portal/reset/tok456';
+const REVIEWER_INVITE_URL = 'https://example.com/fa/portal/invite/tok789';
+const THREAD_URL = 'https://example.com/en/desk/review/round1/doc1#thread-abc';
 
 const builders: Array<{ name: string; build: (locale: string) => MailContent; link: string }> = [
   { name: 'invite', build: (l) => inviteEmail(l, { name: 'کاربر', inviteUrl: INVITE_URL }), link: INVITE_URL },
   { name: 'reset', build: (l) => resetEmail(l, { resetUrl: RESET_URL }), link: RESET_URL },
+  {
+    name: 'reviewer-invite',
+    build: (l) => reviewerInviteEmail(l, { name: 'کاربر', inviteUrl: REVIEWER_INVITE_URL }),
+    link: REVIEWER_INVITE_URL,
+  },
+  {
+    name: 'new-comment',
+    build: (l) => newCommentEmail(l, { recipientName: 'کاربر', documentTitle: 'Learn', threadUrl: THREAD_URL }),
+    link: THREAD_URL,
+  },
 ];
 
 for (const { name, build, link } of builders) {
