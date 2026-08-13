@@ -102,6 +102,27 @@
       "ar": "Arabic",
       "de": "German",
       "fr": "French"
+    },
+    "ask": {
+      "eyebrow": "Ask the Lab",
+      "title": "Ask a question of the corpus",
+      "paperEyebrow": "Ask this paper",
+      "paperTitle": "Ask a question of this entry",
+      "placeholder": "What do you want to know?",
+      "submit": "Ask",
+      "asking": "Asking…",
+      "thinking": "Reading the corpus…",
+      "noCandidates": "Nothing in the Library’s corpus yet appears to answer that.",
+      "refused": "The Lab’s agent declined to answer that question.",
+      "error": {
+        "UNAVAILABLE": "The Lab’s agent is not configured here.",
+        "RATE_LIMITED": "Too many questions too quickly — try again shortly.",
+        "RESTING": "The Lab is resting for today — try again tomorrow.",
+        "TOO_LARGE": "This question pulled in more of the corpus than fits in one request.",
+        "NOT_FOUND": "No such entry.",
+        "NETWORK": "Could not reach the Lab — check your connection.",
+        "INTERNAL": "Something went wrong. Try again in a moment."
+      }
     }
   },
   "footer": {

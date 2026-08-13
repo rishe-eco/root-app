@@ -67,6 +67,12 @@ export default defineConfig({
         // would otherwise place a live outbound call on every run.
         RESEND_API_KEY: '',
         MAIL_FROM: '',
+        // R4: a canned in-process client, not a live API — see
+        // lib/anthropicClient.ts's buildE2EStubClient and env.ts's refusal
+        // to ever honor this in production. ANTHROPIC_API_KEY is left
+        // unset rather than blanked: env.ts only requires it in production,
+        // and the stub takes precedence over a key in any case.
+        ANTHROPIC_E2E_STUB: '1',
       },
     },
     {

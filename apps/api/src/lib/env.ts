@@ -71,6 +71,28 @@ const schema = z.object({
   RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   /** e.g. "Root <hello@yourdomain.com>" — must be on a domain verified in Resend. */
   MAIL_FROM: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  /**
+   * The Research Lab's agent (R4). Unlike RESEND_API_KEY, this is **not**
+   * optional in production — R4.md §6 is explicit that the first per-request
+   * money this product spends must not be discovered at the first question.
+   * It *is* optional in development, the same shape `lib/mail.ts` already
+   * uses for a provider the founder hasn't wired up yet: a missing key
+   * degrades the Ask surface to "unavailable" rather than refusing to boot,
+   * so the rest of the app still runs for someone working on R2's reader.
+   */
+  ANTHROPIC_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  /**
+   * e2e-only (R4.md §8: "stub the transport"). A real SSE mock of the
+   * Messages API is a lot of low-level protocol to get exactly right for a
+   * single spec; this reuses the same in-process seam the integration suite
+   * already trusts (`lib/anthropicClient.ts`'s `__setAnthropicClientForTests`)
+   * instead, wired on at boot rather than by a direct function call, since
+   * Playwright drives the API as a separate process it can only configure
+   * through env vars — the same way `playwright.config.ts` already injects
+   * `JWT_SECRET` and `DATABASE_URL`. Rejected outright in production so it
+   * can never become a way to fake an answer for a real reader.
+   */
+  ANTHROPIC_E2E_STUB: z.preprocess(emptyToUndefined, z.enum(['1']).optional()),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -91,6 +113,17 @@ if (Boolean(parsed.data.RESEND_API_KEY) !== Boolean(parsed.data.MAIL_FROM)) {
   throw new Error(
     'Invalid environment:\n  - RESEND_API_KEY and MAIL_FROM must both be set, or both left unset',
   );
+}
+
+if (parsed.data.NODE_ENV === 'production' && !parsed.data.ANTHROPIC_API_KEY) {
+  throw new Error(
+    'Invalid environment:\n  - ANTHROPIC_API_KEY is required in production ' +
+      '(the Research Lab agent spends money on an anonymous request — see R4.md §6)',
+  );
+}
+
+if (parsed.data.NODE_ENV === 'production' && parsed.data.ANTHROPIC_E2E_STUB) {
+  throw new Error('Invalid environment:\n  - ANTHROPIC_E2E_STUB must never be set in production');
 }
 
 export const env = {

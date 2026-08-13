@@ -379,6 +379,22 @@ Progress.
   not silently worked around, when reviewer is an account's only role.
   Two more mail templates exist now: reviewer-invite and new-comment (never
   sent to a different reviewer's thread than the one that changed).
+- The Research Lab's agent (R4): "Ask the Lab" and "Ask this paper" — one
+  component and one server-side code path, the candidate set narrowed to one
+  entry for the pinned variant and nothing else. The rights boundary is
+  structural, not a system-prompt request: `quotableFullText` is the single
+  gate a `LINK_ONLY` entry's hosted text must pass before it may become a
+  `file` document block, `buildDocumentBlocks` re-derives it itself rather
+  than trusting a caller, and the database's own CHECK constraint from R1
+  makes "LINK_ONLY with a hosted file" an impossible row regardless. A
+  quotable entry's PDF is uploaded to the Files API once, cached on
+  `StoredFile.anthropicFileId`, and never re-uploaded. The answer streams
+  over hand-rolled SSE on `POST /ask` — plain HTTP, not GraphQL, the same
+  reasoning upload/download already established — and every citation the
+  model returns resolves back to a real entry URL. Rate limiting (a per-IP
+  token bucket) and a daily spend ceiling that fails closed are both real,
+  in front of the first endpoint in this app where an anonymous request
+  spends money.
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -428,6 +444,111 @@ stack first ran on Postgres.
 publishing a revision from the admin UI~~ — both built by the admin contract
 workspace (V2) — and ~~Review Room comments~~, built by C2 below; see "Built
 and working" above and the notes below.
+
+**The Research Lab's agent, asked for real — 2026-08-12.**
+R4 was the explicit next instruction — R3 stays deferred on the same
+corpus-size gate that sent R1/R2 to C1 first, and C2 (Review Room comments)
+remained the build plan's own "default next" but was not what was asked for.
+
+**§0's boundary, held two ways, and proven both.** A `LINK_ONLY` entry's
+hosted text must never enter a request — the build plan's own words are that
+an agent holding it "would republish it a paragraph at a time, at scale,
+under Root's name." That cannot be a system-prompt instruction, since nothing
+stops a model from paraphrasing or a reader from asking directly, so it has
+to be about what the request contains. `quotableFullText(entry)` is the one
+function that decides, and `buildDocumentBlocks` calls it itself rather than
+trusting a `fullTextIds` set a caller already computed — proven by a unit
+test that hands it a LINK_ONLY entry deliberately pre-marked for full text
+and asserts the block it produces is text-only regardless. Then, against the
+real database: R1's own CHECK constraint
+(`LibraryEntry_hosted_text_is_publishable`) already makes "LINK_ONLY with a
+hosted file" an impossible row, confirmed by `assert.rejects` in the
+integration suite rather than assumed. Two independent layers, and the
+integration test asks a real question of a corpus holding one LINK_ONLY entry
+beside one quotable entry with an actual uploaded PDF, in the same request,
+and asserts exactly one `file`-sourced document block comes out the other
+side.
+
+**Retrieval found a real gap in reusing R2's query as written.** R2's search
+box types a few keywords and the resolver does `searchText: { contains: term
+}` — a whole `contains` argument has to appear as one substring. A full
+question ("What does the beekeeping research say?") almost never appears
+verbatim in an entry's stored abstract, so passing the question straight
+through returned nothing for nearly every real question — caught by the
+integration suite failing on exactly this, not spotted in review.
+`extractSearchTerms` splits the folded question into words and matches an
+entry containing *any* of them: still `searchText`/`foldPersian`, still no
+`tsvector`, still no embeddings — R4.md §2.1's own reasoning ("retrieval that
+returns everything plausible and lets a 1M-context model read it is both
+simpler and better") applied to what "reuse R2's query" has to mean for a
+sentence instead of a keyword.
+
+**The transport is a plain route, not GraphQL, and hand-rolled SSE over a
+`POST`, not `EventSource`.** Same reasoning `routes/files.ts` already
+established for upload/download: a streamed response doesn't fit Apollo's
+JSON contract. `EventSource` only does `GET`, and a `GET` would put the
+question in a URL that lands in Nginx's own access log beside the visitor's
+IP — exactly the "record of what someone is reading" §4 says never to
+create — so the client reads the stream by hand off `fetch`'s
+`ReadableStream` instead.
+
+**Every string a reader sees is the client's, not the server's — found by
+applying house rule 6 literally.** The first draft had the API compose
+bilingual prose directly into error and refusal payloads; rewritten so every
+SSE/JSON error carries a bare code (`RATE_LIMITED`, `RESTING`, `UNAVAILABLE`,
+…) and `apps/web/src/lib/ask.ts` + `AskLab.tsx` own every displayed string
+through `fa.json`/`en.json`, same as everywhere else in the app.
+
+**Cost control, for real, not just described.** A hosted PDF is uploaded to
+the Files API the first time a quotable entry is asked about and never
+again — `StoredFile.anthropicFileId` (new column, its own migration) caches
+the id, proven by an integration test that asks the same paper twice and
+counts exactly one upload. The full-text selector is cheapest-first by byte
+size against both a document-count cap and a cumulative-byte cap (the API's
+32 MB request ceiling, not just R1's 25 MB per-file cap, is the real
+constraint once a question can pull in several papers). The last document
+block carries the cache breakpoint, paying off for a reader asking several
+questions of the same pinned paper. A per-IP token bucket and a daily spend
+ceiling that fails closed both sit in front of the model call, in-memory by
+design — the same tradeoff §4 itself accepts for the bucket, and losing a
+day's spend counter to a restart is the recoverable failure next to a
+ceiling that silently stops enforcing.
+
+**e2e stubs the transport a layer up from the wire, deliberately.** A byte-
+exact mock of the real Messages API's SSE framing (content block deltas,
+citation deltas, message-delta usage) is a lot of undocumented low-level
+protocol to get right blind for one spec, and a subtly wrong mock is a false
+green — worse than no e2e coverage. `ANTHROPIC_E2E_STUB=1` (env-only, and
+`env.ts` refuses to boot with it set in production) swaps in a canned
+in-process client at the same module seam the integration suite already
+trusts, wired on by `playwright.config.ts` the same way it already injects
+`JWT_SECRET`. The rights boundary and every refusal path stay the
+integration suite's job, proven against the real database; the e2e spec's
+job is only "does a real browser, streaming over the real wire, end up
+showing a real citation link" — and it does.
+
+**One thing this stage could not do.** §8 asks for a manual read of three
+real questions against the live API, in both languages — the one part of
+this stage that judges answer quality rather than code correctness. No
+`ANTHROPIC_API_KEY` is reachable from this sandbox (checked directly, and via
+`ant auth status` — the `ant` CLI itself isn't installed here), so that read
+could not be done. Recorded rather than silently skipped, same as C1's
+uncompletable root-sot wording fix. What *was* done instead: the full
+browser pass below, live against `ANTHROPIC_E2E_STUB`, driving both "Ask the
+Lab" and "Ask this paper" in both languages, including reading the RTL/font
+computed styles on the answer panel and confirming the citation link's
+`href` carries the right locale prefix.
+
+Nginx needs a real block for the first time since C0 — `deploy/nginx/root.conf`
+gained `location = /ask` with its own rate-limit zone (separate budget from
+`/graphql`, since only one of the two spends money), `proxy_buffering off`
+for the stream, and a longer read timeout than `/graphql`'s. `vite.config.ts`'s
+dev/preview proxy gained `/ask` alongside `/graphql`/`/files`/`/upload`.
+
+Tests: unit 169 (+21 — `askLab.ts`'s rights gate, retrieval, request/response
+shape, and the upload-once seam), integration 130 (+11, including the two-
+layer §0 proof above and the daily-ceiling/rate-limit refusals), e2e 28 (+1,
+against the stubbed transport). `prisma migrate diff` reports no drift.
 
 **The Review Room's corpus, run against a real database — 2026-08-11.**
 R3 (the Library's concept tree) was next in the build plan's sequence, but

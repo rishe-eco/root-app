@@ -4,6 +4,7 @@ import type { Server } from 'node:http';
 import type { User } from '@prisma/client';
 
 import { filesRouter, filesErrorHandler } from '../routes/files.js';
+import { askRouter, askErrorHandler } from '../routes/ask.js';
 import { signSession } from '../auth/tokens.js';
 import { env } from '../lib/env.js';
 
@@ -36,6 +37,57 @@ export async function startFileServer(): Promise<{ base: string; close: () => Pr
     base: `http://127.0.0.1:${addr.port}`,
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
+}
+
+/** A real HTTP server for the ask route (R4) — same reasoning as
+ *  `startFileServer`: SSE framing, status codes and header order are
+ *  transport, and a real server is the only way to exercise them. */
+export async function startAskServer(): Promise<{ base: string; close: () => Promise<void> }> {
+  const app = express();
+  app.use(askRouter);
+  app.use(askErrorHandler);
+
+  const server: Server = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const addr = server.address();
+  if (addr === null || typeof addr === 'string') throw new Error('no port');
+
+  return {
+    base: `http://127.0.0.1:${addr.port}`,
+    close: () => new Promise((resolve) => server.close(() => resolve())),
+  };
+}
+
+/** Reads a whole SSE response body into its `{event, data}` frames. Ask's
+ *  responses are short-lived (one question, one answer), so collecting the
+ *  full stream rather than yielding it incrementally is the simpler and
+ *  entirely sufficient shape for a test. */
+export async function readSSE(res: Response): Promise<Array<{ event: string; data: unknown }>> {
+  if (!res.body) return [];
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const frames: Array<{ event: string; data: unknown }> = [];
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let boundary: number;
+    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+      const raw = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      let event = 'message';
+      let dataLine = '';
+      for (const line of raw.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+        else if (line.startsWith('data:')) dataLine += line.slice('data:'.length).trim();
+      }
+      if (dataLine) frames.push({ event, data: JSON.parse(dataLine) });
+    }
+  }
+  return frames;
 }
 
 /** The same cookie `buildContext` reads in production, signed the same way. */

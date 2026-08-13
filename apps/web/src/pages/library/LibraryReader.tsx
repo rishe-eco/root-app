@@ -8,6 +8,7 @@ import Footer from '@/components/Footer';
 import NotFound from '@/pages/NotFound';
 import { PUBLIC_LIBRARY_ENTRY, type PublicEntry } from '@/lib/queries';
 import { dirFor, formatCitation, translationLangFor } from '@/lib/format';
+import AskLab from '@/components/AskLab';
 
 const DEFAULT_TITLE = document.title;
 
@@ -144,6 +145,8 @@ export default function LibraryReader() {
             <pre className="library-citation-block">{formatCitation(entry, 'bibtex')}</pre>
           </details>
         </div>
+
+        <AskLab entrySlug={entry.slug} />
       </main>
 
       <Footer />

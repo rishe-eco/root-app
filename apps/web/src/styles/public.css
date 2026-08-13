@@ -151,6 +151,31 @@
   .library-columns { grid-template-columns: 1fr; }
 }
 
+/* ---- Ask the Lab / Ask this paper (R4) — one component, two placements:
+   LibraryList (unpinned) and LibraryReader (pinned to one entry). Its own
+   lang/dir (AskLab.tsx sets both from the viewer's locale, not the corpus'
+   — a question and its answer are always in the reader's language, R4.md
+   §3.2), so this block never assumes a direction either. */
+.ask-lab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-raised);
+}
+.ask-lab h2 { margin: 0; }
+
+.ask-lab-form { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-end; }
+.ask-lab-input { inline-size: 100%; min-height: 4.5rem; }
+
+.ask-lab-status { margin: 0; color: var(--color-text-muted); }
+
+.ask-lab-answer { display: flex; flex-direction: column; gap: var(--space-3); padding-block-start: var(--space-2); border-block-start: 1px solid var(--color-border); }
+.ask-lab-answer p { margin: 0; white-space: pre-wrap; }
+.ask-lab-citations { display: flex; flex-direction: column; gap: var(--space-1); list-style: none; margin: 0; padding: 0; font-size: var(--text-small); }
+
 /* ---- Responsive -------------------------------------------------------- */
 @media (max-width: 600px) {
   /* The display rung is set for a wide viewport; one line at 64px becomes

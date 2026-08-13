@@ -12,6 +12,7 @@ import { resolvers } from './graphql/resolvers/index.js';
 import { buildContext, type Context } from './context.js';
 import { ensureStorageReady } from './lib/storage.js';
 import { filesRouter, filesErrorHandler } from './routes/files.js';
+import { askRouter, askErrorHandler } from './routes/ask.js';
 
 const app = express();
 
@@ -35,6 +36,10 @@ await ensureStorageReady();
 // Mounted ahead of /graphql and outside express.json: these carry multipart
 // bodies and binary responses, neither of which that middleware should see.
 app.use(filesRouter);
+// Its own small express.json, scoped to POST /ask only (routes/ask.ts) — a
+// streamed SSE response is as far from Apollo's JSON contract as upload and
+// download are, so it stays a plain route rather than a GraphQL special case.
+app.use(askRouter);
 
 app.get('/health', async (_req, res) => {
   try {
@@ -70,9 +75,10 @@ app.use(
   }),
 );
 
-// Last, so it sees errors thrown by the file routes above. Express picks an
+// Last, so it sees errors thrown by the routes above. Express picks an
 // error handler by its four-argument shape, and only after every route.
 app.use(filesErrorHandler);
+app.use(askErrorHandler);
 
 app.listen(env.PORT, () => {
   console.info(`Root API listening on http://localhost:${env.PORT}/graphql`);
