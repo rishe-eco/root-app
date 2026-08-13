@@ -83,6 +83,22 @@ Check every place Persian text contains a Latin fragment — a URL, a DOI, an em
 - Do `<input>` and `<textarea>` carry the right `dir`? An email field inside an RTL form usually wants `dir="ltr"` — the sign-in form already does this for `originalLang` in R1's editor; check the rest.
 - Placeholders, validation messages, and the password field's show/hide toggle.
 
+#### 1.6.1 · Corpus text inside interface chrome — a known, confirmed gap
+
+**This one is not hypothetical; it is already wrong in three places**, found while reviewing R2, C2 and R4. The rule the codebase agrees on is R2's: entry content is *data*, and carries the language it is written in, not the viewer's. `LibraryReader` obeys it — `dirFor(entry.originalLang)` on the original column, `translationLangFor` on the other (that second half was the R2 review's own finding). Everywhere an entry title appears **outside** the reader, it does not:
+
+| | What renders | Carries `lang`/`dir` |
+|---|---|---|
+| `LibraryList.tsx:111` | `titleTranslated ?? titleOriginal` in a card | **no** |
+| `AskLab.tsx` citation list | `entryTitle` (always `titleOriginal`) | **no** |
+| `ReviewAdmin.tsx:129`, thread cards | reviewer names | **no** — and see below |
+
+A Persian title inside the English list is set in the Latin face and laid out LTR; the reverse is subtler and worse, because Vazirmatn *has* Latin glyphs, so an English title in a Persian list looks nearly right. That near-rightness is exactly why R2's own bug survived to review.
+
+**Names are the harder half, and worth deciding rather than fixing by reflex.** `User.name` carries no language field to key off — nothing in the schema says whether «نهال» or "Nahal" was typed. `User.locale` is the language they *read*, which is a decent guess and not the same thing. The options are a stored field, a heuristic like `blockLocale`'s, or leaving names in the surrounding direction and accepting it. Emails already get `dir="ltr"` explicitly, which shows the file knows the problem exists. **Pick one and write it down** — this is a decision, not a defect.
+
+**For titles, fix it once, as a component**, not three times inline — something like `<Text lang={…}>` that sets both attributes from one source. The server already has the language for the Library cases (`originalLang` is on the row); R4's `/ask` citation payload does **not** send it yet, and would need to. R4.md T5 asked for this and the build met only the half inside the answer panel — recorded here rather than left as a passing remark in a merge commit.
+
 ### 1.7 · Print
 
 F1b verified the printed contract in Persian — Jalali dates, Persian digits, correct shaping, `tfoot` verification strip. **Re-verify**, because print is the surface nobody looks at between releases and V2/V3 changed what a contract contains.

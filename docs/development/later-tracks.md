@@ -39,6 +39,27 @@
 > this line is the record that it was promised, not delivered, rather than
 > quietly forgotten.
 
+> **Status, 2026-08-13 — two things R4 left open on purpose.** Both were
+> found in review, both were judged not worth blocking the merge, and both
+> are the kind of thing that is invisible until it costs money.
+>
+> - **The spend counter under-reports on failure.** `recordSpend` runs after
+>   `finalMessage()` returns, so a request that spends input tokens and then
+>   fails never counts against `DAILY_SPEND_CEILING_USD`. A loop that fails
+>   every time is therefore uncapped by the ceiling — it is capped only by
+>   Nginx's `10r/m` and the in-process token bucket, which is why this is a
+>   gap and not a hole. The honest fix is to record an estimate before
+>   sending and reconcile after, which is more machinery than the corpus's
+>   traffic justifies today. **Revisit the first time the real bill and the
+>   counter disagree.**
+> - **`ASK_MAX_TOKENS` is 4096, and adaptive thinking spends from it.**
+>   Thinking tokens come out of the same budget as the answer, so a question
+>   spanning several papers can truncate. It surfaces honestly — the `done`
+>   frame carries `truncated` — but nobody has yet seen a real answer at
+>   real length, because §8's manual read against the live API could not be
+>   done from the build sandbox. **That read is still owed**, and tuning this
+>   constant is the first thing it should settle.
+
 **These are not build-ready.** The V-track files describe work I could ground
 line by line in code that exists. These cannot be, because the code they touch
 does not exist yet and because V2 will change what the desk looks like in ways
