@@ -280,7 +280,14 @@ export default function ReviewDocumentScreen() {
         </form>
       ) : null}
 
-      <div className="review-doc-body" onMouseUp={onSelectInBody}>
+      {/* `onKeyUp` alongside `onMouseUp` so a selection made with
+          shift+arrows under caret browsing opens a thread too — the same
+          class of gap as the contract list's mouse-only rows
+          (`02-contract-flow.spec.ts:124`), and R3.md §7's standing
+          instruction is not to add a second one. Both handlers are scoped
+          to the body: the compose textarea sits outside it, so focusing it
+          cannot clear the pending selection. */}
+      <div className="review-doc-body" onMouseUp={onSelectInBody} onKeyUp={onSelectInBody}>
         {doc.blocks.map((b) => {
           const { lang, dir } = blockLocale(b.text);
           const blockThreads = doc.threads.filter((th) => th.blockId === b.id);
