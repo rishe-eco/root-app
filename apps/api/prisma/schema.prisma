@@ -74,6 +74,9 @@ model User {
   uploads       StoredFile[]
   libraryEntries LibraryEntry[]
   reviewRounds   ReviewRound[]
+  reviewThreadsOpened   ReviewThread[]  @relation("ThreadAuthor")
+  reviewThreadsResolved ReviewThread[]  @relation("ThreadResolver")
+  reviewComments        ReviewComment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -830,6 +833,60 @@ model ReviewDocument {
   /// Position in the manifest, so the reading order matches what Root curated.
   order Int
 
+  threads ReviewThread[]
+
   @@unique([roundId, path])
   @@index([roundId, order])
+}
+
+// ---------------------------------------------------------------------------
+// Review Room — comments (C2). A comment anchors to a character range in one
+// block's *rendered plain text*, not its markdown source (C2.md §1) — the
+// string a reviewer actually selected. Offsets are local to one block, never
+// global to the document (§1.2), which is why C1 split into blocks at all.
+// ---------------------------------------------------------------------------
+
+model ReviewThread {
+  id         String         @id @default(cuid())
+  documentId String
+  document   ReviewDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  /// The reviewer who opened it. This is the ownership edge that keeps
+  /// parallel review parallel — see lib/capabilities.ts's threadsVisibleTo.
+  authorId String
+  author   User   @relation("ThreadAuthor", fields: [authorId], references: [id])
+
+  blockId     String
+  /// Enforced by a hand-written CHECK in the migration: startOffset >= 0 AND
+  /// endOffset > startOffset. A zero-width or inverted range is not a
+  /// passage (C2.md §2).
+  startOffset Int
+  endOffset   Int
+  /// The anchor's own witness (§1.1) — exactly the text the reviewer
+  /// selected. Verified against the rendered block on every read; a
+  /// mismatch (a dependency bump shifting the render) detaches the thread
+  /// rather than re-finding it.
+  quote String
+
+  resolvedAt   DateTime?
+  resolvedById String?
+  resolvedBy   User?     @relation("ThreadResolver", fields: [resolvedById], references: [id])
+
+  createdAt DateTime        @default(now())
+  comments  ReviewComment[]
+
+  @@index([documentId, authorId])
+}
+
+model ReviewComment {
+  id       String       @id @default(cuid())
+  threadId String
+  thread   ReviewThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User         @relation(fields: [authorId], references: [id])
+  body     String
+
+  createdAt DateTime @default(now())
+
+  @@index([threadId, createdAt])
 }

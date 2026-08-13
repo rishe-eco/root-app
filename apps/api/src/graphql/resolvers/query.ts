@@ -113,6 +113,16 @@ export const Query = {
     });
   },
 
+  /** The corpus admin's reviewer list (C2 §5). Same `has` reasoning as
+   *  allCustomers — a reviewer may hold another role alongside it. */
+  reviewers: async (_p: unknown, _a: unknown, ctx: Context) => {
+    requireCapability(ctx, 'review.admin');
+    return prisma.user.findMany({
+      where: { roles: { has: 'REVIEWER' } },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
   /**
    * Counts across every contract. `contractStatusCounts` above is scoped to
    * `customerId: user.id` — reusing it for an admin would show the count of

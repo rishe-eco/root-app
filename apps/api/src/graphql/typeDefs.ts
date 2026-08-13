@@ -617,6 +617,8 @@ export const typeDefs = /* GraphQL */ `
     contentHash: String!
     blocks: [ReviewBlock!]!
     round: ReviewRoundRef!
+    "Visible to Root always; to a reviewer, only the threads they opened (C2.md §3). No existence leak of anyone else's."
+    threads: [ReviewThread!]!
   }
 
   input ReviewBlockInput {
@@ -631,6 +633,38 @@ export const typeDefs = /* GraphQL */ `
     title: String!
     order: Int!
     blocks: [ReviewBlockInput!]!
+  }
+
+  # ---------------------------------------------------------------------
+  # Review Room — comments (C2). A thread anchors to (blockId, startOffset,
+  # endOffset) into a block's *rendered* plain text, with quote as that
+  # anchor's own witness (C2.md §1). Never a global document offset — see §1.2.
+  # ---------------------------------------------------------------------
+
+  type ReviewComment {
+    id: ID!
+    authorId: ID!
+    author: User!
+    body: String!
+    createdAt: DateTime!
+  }
+
+  type ReviewThread {
+    id: ID!
+    documentId: ID!
+    authorId: ID!
+    author: User!
+    blockId: ID!
+    startOffset: Int!
+    endOffset: Int!
+    "The text the reviewer actually selected. Re-checked against the live render on read; a mismatch is shown detached, never re-found (C2.md §1.1)."
+    quote: String!
+    resolvedAt: DateTime
+    resolvedById: ID
+    resolvedBy: User
+    createdAt: DateTime!
+    "Oldest first — the opening comment, then the reply thread."
+    comments: [ReviewComment!]!
   }
 
   type AuthPayload {
@@ -686,6 +720,8 @@ export const typeDefs = /* GraphQL */ `
     reviewRounds: [ReviewRound!]!
     "Staff (review.participate). One document from one round."
     reviewDocument(roundId: ID!, documentId: ID!): ReviewDocument
+    "Staff (review.admin). Every account holding the reviewer role, for the corpus admin screen."
+    reviewers: [User!]!
   }
 
   input CreateContractInput {
@@ -723,6 +759,10 @@ export const typeDefs = /* GraphQL */ `
     "locale defaults to the inviting admin's own locale when omitted."
     inviteCustomer(email: String!, name: String!, clientName: String, locale: String): InviteResult!
     revokeInvite(userId: ID!): Boolean!
+    "review.admin, not customers.manage — inviting a specialist to read a corpus is not account administration (C2.md §5)."
+    inviteReviewer(email: String!, name: String!, locale: String): InviteResult!
+    "Drops REVIEWER from the account's role set. Refused if it is their only role — that would violate the non-empty-roles constraint (C2.md §5). Comments and threads are untouched."
+    revokeReviewer(userId: ID!): Boolean!
     createContract(input: CreateContractInput!): Contract!
     "Fills an empty contract with the standard article titles and scope items. Refuses if either already has rows."
     applyContractTemplate(contractId: ID!): Contract!
@@ -800,5 +840,12 @@ export const typeDefs = /* GraphQL */ `
     Refused if a round for this sha already exists.
     """
     publishReviewRound(sha: String!, label: String, documents: [ReviewDocumentInput!]!): ReviewRound!
+
+    "review.participate. Opens a thread anchored to one passage in one block, with its opening comment."
+    openReviewThread(documentId: ID!, blockId: String!, startOffset: Int!, endOffset: Int!, quote: String!, body: String!): ReviewThread!
+    "review.participate. The thread must already be visible to the caller — Root, or the thread's own author; loading it is the permission check."
+    addReviewComment(threadId: ID!, body: String!): ReviewThread!
+    "Idempotent — resolving an already-resolved thread just returns it."
+    resolveReviewThread(threadId: ID!): ReviewThread!
   }
 `;

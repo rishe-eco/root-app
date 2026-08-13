@@ -28,6 +28,17 @@
 > What remains genuinely outlined-only: **R2, R3, R4, C1, C2** and the Persian
 > pass.
 
+> **Status, 2026-08-12.** C2 is built, and it closes the C0 §5b promise below
+> at four of five, not five of five. "Bilingual templates … for invite,
+> reset, reviewer-invite, new-comment and contract-revised" was never true
+> the way it reads — C0 built two and said so honestly in its own header
+> comment, but nothing ever corrected the promise text itself, and C2.md
+> caught the drift. C2 wrote the next two (`reviewerInviteEmail`,
+> `newCommentEmail` in `lib/mailTemplates.ts`, both in the key-parity test).
+> **`contract-revised` is still unbuilt** — no stage has needed it yet, and
+> this line is the record that it was promised, not delivered, rather than
+> quietly forgotten.
+
 **These are not build-ready.** The V-track files describe work I could ground
 line by line in code that exists. These cannot be, because the code they touch
 does not exist yet and because V2 will change what the desk looks like in ways

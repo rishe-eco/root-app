@@ -9,7 +9,7 @@
     "start": "node dist/src/index.js",
     "typecheck": "tsc -b --noEmit",
     "test": "tsx --test src/lib/*.test.ts",
-    "test:integration": "DATABASE_URL=\"postgresql://root:root@localhost:5432/root_website_test?schema=public\" STORAGE_DIR=\"${TMPDIR:-/tmp}/root-api-test-storage\" tsx --test --test-concurrency=1 src/test/*.test.ts",
+    "test:integration": "DATABASE_URL=\"postgresql://root:root@localhost:5432/root_website_test?schema=public\" STORAGE_DIR=\"${TMPDIR:-/tmp}/root-api-test-storage\" RESEND_API_KEY=\"\" MAIL_FROM=\"\" tsx --test --test-concurrency=1 src/test/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",

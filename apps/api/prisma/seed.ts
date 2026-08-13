@@ -30,6 +30,11 @@ const CUSTOMER_PASSWORD = process.env.SEED_CUSTOMER_PASSWORD ?? 'change-me-pleas
 // desk section — the role F3 built had no surface to test until now.
 const REVIEWER_EMAIL = process.env.SEED_REVIEWER_EMAIL ?? 'reviewer@root.local';
 const REVIEWER_PASSWORD = process.env.SEED_REVIEWER_PASSWORD ?? 'change-me-please';
+// C2's e2e spec needs a *second* active reviewer — the property the whole
+// stage rests on (one expert's thread invisible to another) has no way to
+// show up on screen with only one seeded account.
+const REVIEWER2_EMAIL = process.env.SEED_REVIEWER2_EMAIL ?? 'reviewer2@root.local';
+const REVIEWER2_PASSWORD = process.env.SEED_REVIEWER2_PASSWORD ?? 'change-me-please';
 // R1's e2e spec needs a CONTRIBUTOR to prove the editor degrades honestly —
 // the section is reachable, publish is not (T6).
 const CONTRIBUTOR_EMAIL = process.env.SEED_CONTRIBUTOR_EMAIL ?? 'contributor@root.local';
@@ -70,6 +75,18 @@ async function main() {
       roles: ['REVIEWER'],
       state: 'ACTIVE',
       passwordHash: await bcrypt.hash(REVIEWER_PASSWORD, 12),
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: REVIEWER2_EMAIL },
+    update: {},
+    create: {
+      email: REVIEWER2_EMAIL,
+      name: 'Second Reviewer',
+      roles: ['REVIEWER'],
+      state: 'ACTIVE',
+      passwordHash: await bcrypt.hash(REVIEWER2_PASSWORD, 12),
     },
   });
 

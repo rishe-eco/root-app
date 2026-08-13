@@ -157,6 +157,7 @@
     "navCustomers": "Customers",
     "navLibrary": "Library",
     "navReview": "Review",
+    "navReviewAdmin": "Corpus",
     "backToPortal": "Back to the portal",
     "needsRootTitle": "Needs Root",
     "needsRootEmpty": "Nothing is waiting on Root.",
@@ -265,7 +266,34 @@
       "untitledRound": "Untitled round",
       "publishedBy": "Published by {{name}}",
       "backToRounds": "Back to rounds",
-      "docProvenance": "{{path}} · round {{sha}} · published {{date}}"
+      "docProvenance": "{{path}} · round {{sha}} · published {{date}}",
+      "staleRound": "This round is not the current one.",
+      "goToCurrent": "Go to the current round",
+      "crossBlockRefused": "A comment can only anchor within one block — select text inside a single paragraph or heading.",
+      "selectedQuote": "Selected passage",
+      "composePlaceholder": "What would you like to say about this passage?",
+      "openThread": "Open thread",
+      "cancel": "Cancel",
+      "you": "You",
+      "resolved": "Resolved",
+      "detached": "This passage no longer matches the published text — shown detached.",
+      "replyPlaceholder": "Reply…",
+      "reply": "Reply",
+      "resolve": "Resolve"
+    },
+    "reviewAdmin": {
+      "title": "Corpus",
+      "manifestTitle": "Rounds",
+      "empty": "No rounds have been published yet.",
+      "reviewersTitle": "Reviewers",
+      "inviteEmail": "Email",
+      "inviteName": "Name",
+      "inviteCta": "Generate invite link",
+      "inviteOnce": "Copy this now — it is shown once:",
+      "colName": "Name",
+      "colEmail": "Email",
+      "revoke": "Revoke",
+      "revokeConfirm": "Remove {{name}}'s reviewer access? Their comments stay on the record."
     }
   },
   "workspace": {
