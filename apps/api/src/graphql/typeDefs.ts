@@ -451,6 +451,7 @@ export const typeDefs = /* GraphQL */ `
     id: ID!
     slug: String!
     type: EntryType!
+    originalLang: String!
     titleOriginal: String!
     titleTranslated: String
     year: Int
@@ -544,6 +545,7 @@ export const typeDefs = /* GraphQL */ `
     id: ID!
     slug: String!
     type: EntryType!
+    originalLang: String!
     titleOriginal: String!
     titleTranslated: String
     year: Int

@@ -130,7 +130,10 @@ export default function ContractPrint() {
         {revision.publishedAt
           ? fact(t('print.published'), fullDateTime(revision.publishedAt, locale))
           : null}
-        {amount ? fact(t('print.fee'), t('print.toman', { amount }), true) : null}
+        {/* Not num-latin (persian-pass.md §1.2): money is already run through
+            formatAmount into the locale's own digits, and num-latin would
+            force the Latin figure font onto them. */}
+        {amount ? fact(t('print.fee'), t('print.toman', { amount })) : null}
       </dl>
 
       <section className="doc-sec doc-parties">

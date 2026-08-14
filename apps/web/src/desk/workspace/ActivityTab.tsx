@@ -1,7 +1,7 @@
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
-import { relativeTime } from '@/lib/format';
+import { formatCount, relativeTime } from '@/lib/format';
 import type { WorkspaceContext } from './ContractWorkspace';
 
 /**
@@ -55,8 +55,8 @@ export default function ActivityTab() {
                           ? t('workspace.lineagePublished')
                           : t('workspace.lineageUnsealed')}
                 </span>
-                <span className="num-latin t-caption">
-                  {r.amendmentCount > 0 ? `+${r.amendmentCount}` : ''}
+                <span className="t-caption">
+                  {r.amendmentCount > 0 ? `+${formatCount(r.amendmentCount, locale)}` : ''}
                 </span>
               </div>
             ))
@@ -77,8 +77,8 @@ export default function ActivityTab() {
                       ? t('workspace.lineagePublished')
                       : t('workspace.lineageUnsealed')}
                 </span>
-                <span className="num-latin t-caption">
-                  {r.conceptCount}×{r.pageCount}
+                <span className="t-caption">
+                  {formatCount(r.conceptCount, locale)}×{formatCount(r.pageCount, locale)}
                 </span>
               </div>
             ))

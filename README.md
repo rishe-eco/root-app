@@ -395,6 +395,14 @@ Progress.
   token bucket) and a daily spend ceiling that fails closed are both real,
   in front of the first endpoint in this app where an anonymous request
   spends money.
+- The Persian pass's mechanical half (§1 of `persian-pass.md`): a general
+  locale key-parity test, the numeral rule written into house rule 14 and
+  five real font/digit-mismatch bugs it caught, four ZWNJ spelling
+  inconsistencies normalized, and the confirmed lang/dir gap on Library
+  titles and `/ask` citations closed with a new `<Text lang>` component. The
+  founder's own read-through (§2) and the style guide's move into `root-sot`
+  canon (§3.2) are explicitly not an engineer's call — see the dated note
+  below.
 
 **Verified how:** the public pages and the whole portal flow were driven in a
 browser in both languages — concept choice, four page approvals, contract
@@ -444,6 +452,124 @@ stack first ran on Postgres.
 publishing a revision from the admin UI~~ — both built by the admin contract
 workspace (V2) — and ~~Review Room comments~~, built by C2 below; see "Built
 and working" above and the notes below.
+
+**The Persian pass's mechanical half, against a real database and a real
+browser — 2026-08-14.** `persian-pass.md` splits into two halves that need
+different people: §1 (mechanical, the engineer's) and §2 (judgement — does
+the Persian read as *written*, not translated — the founder's, and nobody
+else's to call). This pass did §1 completely and stopped there on purpose;
+§2 and one part of §3 are recorded below as open, not skipped.
+
+Built on `main` after merging both C2 and R4 (each already carrying its own
+review), so the audit ran against the whole surface the build plan lists
+except R3 (still deferred on its own corpus-size gate).
+
+**§1.1 — the key-parity test that didn't exist.** There was exactly one
+(`changeAction.test.ts`, `log.*` only). `lib/localeParity.test.ts` is the
+general one: every key in `en.json` in `fa.json` and back, plus two
+subtler checks — no `fa` value byte-identical to its `en` counterpart, and
+none containing Latin letters — both past a small allowlist (`Root`, `PDF`,
+`DOI`, i18next's `{{var}}` interpolation, and the bare `v` that prefixes a
+version number outside the braces). The corpus turned out to already have
+zero missing keys either direction — five years of "every string in both
+locales" discipline holding up under the first test that actually checks it.
+
+**§1.2 — the numeral rule, written down and then broken by five things
+already in the code.** The rule is now house rule 14: counts/totals/
+pagination in the locale's own digits via `formatCount`; dates, times and
+money the same way; years, DOIs, refs, version numbers, hashes and concept
+keys stay Latin (`num-latin`) everywhere, citations included. Auditing every
+numeric render against it found the *same* bug five separate times — a
+correctly Persian-formatted number wrapped in `num-latin`, which forces the
+Latin figure font onto digits that are already ۰-۹ — in the contracts list's
+status chip counts, `ActivityTab`'s amendment count and concept×page tally,
+the Library umbrella's entry total, the portal contract list's fee column,
+and the print view's own fee line. Two more were i18next's `{{count}}`
+templates (`detail.pending.designBody`, `detail.versions.awaiting`)
+interpolating a raw JS number with no digit localization at all — `{{count}}`
+is what i18next uses to *pick* a plural form, not to format one, so it prints
+whatever `Number.prototype.toString` gives it regardless of locale. Fixed by
+keeping `count` for plural selection and adding a second, pre-formatted `n`
+for display; two more call sites with no plural form (`workspace.
+carriedPages`/`resetPages`) got the same treatment without needing the extra
+variable.
+
+**§1.3 — the logical-properties sweep held clean.** The prescribed grep found
+one hit, inside a comment explaining why the rule exists, not a real
+`left:`/`margin-right:` anywhere in the stylesheets. The one `transform:
+translate(-50%, -50%)` centering trick is the documented direction-agnostic
+exception.
+
+**§1.4 — the `:lang()` pair, verified by computed style, in both
+directions.** Textually complete already (`:lang(fa)`/`:lang(en)` set the
+same four custom properties and match `:root`'s Latin defaults exactly).
+Live-verified past appearance into `getComputedStyle`: a throwaway
+Persian-original, English-translated Library entry was created, published,
+read and deleted specifically to prove the direction R2 never had a real
+entry to test — the original column resolved to Vazirmatn at 28.8px leading
+inside an English-locale page, the translation column to Inter at 24.8px
+leading inside a Persian one, matching `:lang(fa)`'s `1.8` and `:lang(en)`'s
+`1.55` exactly, crossing the block boundary correctly with nothing
+hard-coded to the page's own locale.
+
+**§1.5 — every Persian string read for ZWNJ, four real inconsistencies
+found.** None were rendering bugs — in every case the letter the missing
+ZWNJ would have separated already doesn't connect forward (ر, د, ا) — but
+the same word was spelled two different ways in different places, which a
+Persian reader does notice: «گفتگو» beside an already-established
+«گفت‌وگو», and three status-label instances of «امضا شده»/«امضاشده» and
+«تأیید شده»/«تأییدشده» where the fused, ZWNJ-joined form was already the
+majority convention everywhere else the same word appears. Normalized to
+match. The two newest mail templates (reviewer-invite, new-comment) were
+read too and were already correct.
+
+**§1.6 / §1.6.1 — the confirmed gap, closed; the names decision, made and
+documented rather than fixed by reflex.** Every email/password/DOI/URL/year
+input already carried the right `dir`, and the password toggle's logical
+positioning was already correct. The gap the C2/R4 reviews had already found
+and written into `persian-pass.md` §1.6.1 — a Library title rendered outside
+the reader with no `lang`/`dir` at all, so a Persian title inside an English
+list sits in the Latin face, LTR — is fixed once, as a component:
+`components/Text.tsx` sets `lang` and `dir` from one source (`dirFor`), and
+is wired into five places: the public Library list, its "recently added"
+strand on the umbrella page, the desk Library list, the desk entry editor's
+own heading, and the `/ask` citation panel — which needed `originalLang`
+threading all the way from the resolver (added to both `PublicEntryRow` and
+`LibraryEntryRow`'s GraphQL selection) through the SSE `done` event
+(`entryOriginalLang`) to the client, since the citation payload had never
+carried it. **Names were deliberately left alone.** The spec offered three
+options — a stored language field, `lib/markdown.ts`'s `blockLocale` script
+heuristic, or accepting the ambient direction — and asked for a decision, not
+a reflex fix. `blockLocale` is tuned for multi-sentence prose and untested on
+short proper nouns; retrofitting it would also have meant touching a dozen
+more call sites (customer names, activity-log actors, the signed-in user's
+own name in the shell) well past the two the review had actually flagged;
+and a name switching script and font mid-sentence is arguably a worse
+reading experience than the status quo. Decided: names render in the
+ambient direction, documented in place at the two flagged call sites
+(`ReviewAdmin.tsx`, `ReviewDocumentScreen.tsx`) so a future reflex fix finds
+the reasoning first.
+
+**§1.7 — print, re-verified against a real signed-less revision, in both
+languages.** Jalali date, Persian digits, the sha256 hash, the ref and the
+version number all rendered correctly — and turned up the same `num-latin`
+bug as §1.2, in the print view's own fee line, which is now fixed too.
+
+**§2 and §3.2 — explicitly not done here.** §2 is the founder reading the
+Persian product end to end, alone, without the English beside it — "nobody
+else can call this" is the spec's own words, and an engineer producing a
+glossary or a terminology ruling would be exactly the reflex the mechanical
+half exists to clear out of the way first. §3.2's style guide (the numeral
+rule, the ZWNJ notes above, whatever §2 finds) belongs in `root-sot` canon,
+which this repo doesn't have a working copy of. **§3.1 was settled**: yes,
+the desk gets the same standard as the portal — already reflected above,
+since the desk's own Library list, editor and Review Room screens got the
+same fixes as the public-facing ones, not a lighter pass.
+
+**Verified how:** typecheck and the full unit suite (30 web, 179 API),
+integration suite (147) and e2e suite (29) are all green; the numeral and
+lang/dir fixes were driven live in a real browser in both languages, not
+just read from source.
 
 **The Research Lab's agent, asked for real — 2026-08-12.**
 R4 was the explicit next instruction — R3 stays deferred on the same

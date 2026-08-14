@@ -1027,6 +1027,7 @@ export type LibraryEntryRow = {
   id: string;
   slug: string;
   type: EntryType;
+  originalLang: string;
   titleOriginal: string;
   titleTranslated: string | null;
   year: number | null;
@@ -1063,6 +1064,7 @@ const LIBRARY_ENTRY_ROW_FIELDS = gql`
     id
     slug
     type
+    originalLang
     titleOriginal
     titleTranslated
     year
@@ -1267,6 +1269,7 @@ export type PublicEntryRow = {
   id: string;
   slug: string;
   type: EntryType;
+  originalLang: string;
   titleOriginal: string;
   titleTranslated: string | null;
   year: number | null;
@@ -1282,6 +1285,7 @@ const PUBLIC_ENTRY_ROW_FIELDS = gql`
     id
     slug
     type
+    originalLang
     titleOriginal
     titleTranslated
     year

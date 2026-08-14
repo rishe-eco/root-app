@@ -6,8 +6,9 @@ import { useLocale, lp } from '@/lib/locale';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import { PUBLIC_LIBRARY_ENTRIES, type EntryType, type PublicEntryRow } from '@/lib/queries';
-import { formatCount } from '@/lib/format';
+import { formatCount, translationLangFor } from '@/lib/format';
 import AskLab from '@/components/AskLab';
+import Text from '@/components/Text';
 
 const ENTRY_TYPES: EntryType[] = ['PAPER', 'BOOK', 'ARTICLE', 'ROOT_RESEARCH'];
 const PAGE_SIZE = 24;
@@ -110,8 +111,16 @@ export default function LibraryList() {
                 <p className="t-caption">{t(`library.list.type.${r.type}`)}</p>
                 {/* Entry content is data, not UI chrome (§0.1) — whichever
                     title the entry itself carries, never the viewer's own
-                    interface language deciding it. */}
-                <h2 className="t-h3">{r.titleTranslated ?? r.titleOriginal}</h2>
+                    interface language deciding it. A translated title reads
+                    in the translation's language, not the original's
+                    (persian-pass.md §1.6.1). */}
+                <Text
+                  as="h2"
+                  className="t-h3"
+                  lang={r.titleTranslated ? translationLangFor(r.originalLang) : r.originalLang}
+                >
+                  {r.titleTranslated ?? r.titleOriginal}
+                </Text>
                 <div className="library-entry-meta t-caption">
                   {r.year ? <span className="num-latin">{r.year}</span> : null}
                   <span>{t(`library.list.provenance.${r.translationProvenance}`)}</span>

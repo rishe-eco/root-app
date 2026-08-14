@@ -19,7 +19,7 @@ import {
   type DesignRevisionSummary,
   type User,
 } from '@/lib/queries';
-import { clockTime, initialOf, pick, relativeTime } from '@/lib/format';
+import { clockTime, formatCount, initialOf, pick, relativeTime } from '@/lib/format';
 import { logText as buildLogText } from '@/lib/changelog';
 import StatusBadge from '@/components/StatusBadge';
 import Lock from '@/components/Lock';
@@ -177,7 +177,9 @@ export default function ContractDetail() {
   function designVersionLabel(r: DesignRevisionSummary) {
     const isCurrent = r.supersededAt === null && r.publishedAt !== null;
     const remaining = gate.totalPageCount - gate.approvedPageCount;
-    if (isCurrent && remaining > 0) return t('detail.versions.awaiting', { count: remaining });
+    if (isCurrent && remaining > 0) {
+      return t('detail.versions.awaiting', { count: remaining, n: formatCount(remaining, locale) });
+    }
     if (r.supersededAt) return t('detail.versions.superseded');
     if (r.publishedAt) return t('detail.versions.published', { when: relativeTime(r.publishedAt, locale) });
     return t('detail.versions.unsealed');
@@ -222,7 +224,10 @@ export default function ContractDetail() {
               <div className="pending-banner-body">
                 {pendingMode === 'design' ? (
                   <p className="pending-lead">
-                    {t('detail.pending.designBody', { count: pending!.designChanges.length })}
+                    {t('detail.pending.designBody', {
+                      count: pending!.designChanges.length,
+                      n: formatCount(pending!.designChanges.length, locale),
+                    })}
                   </p>
                 ) : pendingMode === 'contract' ? (
                   <p className="pending-lead">
@@ -342,8 +347,8 @@ export default function ContractDetail() {
                     ) : (
                       <span className="muted">
                         {t('detail.progress', {
-                          done: gate.approvedPageCount,
-                          total: gate.totalPageCount,
+                          done: formatCount(gate.approvedPageCount, locale),
+                          total: formatCount(gate.totalPageCount, locale),
                         })}
                       </span>
                     )}

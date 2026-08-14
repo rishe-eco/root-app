@@ -18,7 +18,7 @@ import {
   type PageDesign,
 } from '@/lib/queries';
 import { uploadDesignImage, DESIGN_IMAGE_ACCEPT, UploadFailure } from '@/lib/upload';
-import { pick } from '@/lib/format';
+import { formatCount, pick } from '@/lib/format';
 import type { WorkspaceContext } from './ContractWorkspace';
 
 /** The four page keys every concept has used so far — a convenience picker,
@@ -331,6 +331,7 @@ function ConceptCard({
 
 export default function DesignTab() {
   const { t } = useTranslation();
+  const locale = useLocale();
   const { contract } = useOutletContext<WorkspaceContext>();
   const [addingConcept, setAddingConcept] = useState(false);
   const [newConceptKey, setNewConceptKey] = useState('');
@@ -431,9 +432,9 @@ export default function DesignTab() {
       <div className="carry-preview">
         <p className="t-small">{t('workspace.carryForwardTitle')}</p>
         <div className="carry-preview-row">
-          <span>{t('workspace.carriedPages', { count: cf.carriedPageCount })}</span>
+          <span>{t('workspace.carriedPages', { n: formatCount(cf.carriedPageCount, locale) })}</span>
           <span>·</span>
-          <span>{t('workspace.resetPages', { count: cf.resetPageCount })}</span>
+          <span>{t('workspace.resetPages', { n: formatCount(cf.resetPageCount, locale) })}</span>
         </div>
         {cf.chosenConceptKey === null && contract.concepts.some((c) => c.chosen) ? (
           <p className="t-caption desk-muted">{t('workspace.choiceReset')}</p>

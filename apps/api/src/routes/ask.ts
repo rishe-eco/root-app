@@ -292,6 +292,7 @@ askRouter.post(
                 citedText: c.citedText,
                 entrySlug: entry.slug,
                 entryTitle: entry.titleOriginal,
+                entryOriginalLang: entry.originalLang,
                 entryUrl: `/library/research/${encodeURIComponent(entry.slug)}`,
               }
             : null;

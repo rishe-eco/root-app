@@ -126,6 +126,8 @@ export default function ReviewAdmin() {
             <tbody>
               {reviewers.map((r) => (
                 <tr key={r.id}>
+                  {/* Names render in the ambient direction, deliberately —
+                      persian-pass.md §1.6.1's decision. */}
                   <td>{r.name}</td>
                   <td dir="ltr">{r.email}</td>
                   <td>
