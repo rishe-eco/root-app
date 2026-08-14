@@ -269,7 +269,7 @@
       "hostingNotAllowed": "حقوق این مدخل اجازه‌ی میزبانی فایل را نمی‌دهد.",
       "sectionConcepts": "مفاهیم",
       "saveConcepts": "ذخیره‌ی مفاهیم",
-      "createdBy": "ثبت‌شده به دست {{name}} در {{date}}",
+      "createdBy": "ثبت‌شده به‌دست {{name}} در {{date}}",
       "errRightsForbidHosting": "حقوق این مدخل اجازه‌ی میزبانی فایل را نمی‌دهد.",
       "errAlreadyHasFile": "این مدخل از پیش فایلی دارد؛ نخست آن را جدا کنید.",
       "conceptsTitle": "مفاهیم",

@@ -471,7 +471,7 @@ subtler checks — no `fa` value byte-identical to its `en` counterpart, and
 none containing Latin letters — both past a small allowlist (`Root`, `PDF`,
 `DOI`, i18next's `{{var}}` interpolation, and the bare `v` that prefixes a
 version number outside the braces). The corpus turned out to already have
-zero missing keys either direction — five years of "every string in both
+zero missing keys either direction — three weeks of "every string in both
 locales" discipline holding up under the first test that actually checks it.
 
 **§1.2 — the numeral rule, written down and then broken by five things

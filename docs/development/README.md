@@ -1,25 +1,29 @@
 # Development plan — how the remaining stages get built
 
-**Written:** 2026-08-05 · **Revised 2026-08-10** · Against `root-app` @
-`stage-v4-overview` + uncommitted brand-copy work
+**Written:** 2026-08-05 · **Revised 2026-08-14** · Against `root-app` @ `main`
 **For:** the engineer picking up the next stage. Read this file, then read *only*
 your stage's file. They are written to be self-contained.
 
-> **Tracks V, C and R4 are complete.** Everything through C2 and R4 is built
-> and merged to `main`; the Persian pass's mechanical half (§1) closed on
-> 2026-08-14. **What's left:** R3 (conditional on corpus size — check before
-> starting it), and the Persian pass's §2 (the founder's own read-through)
-> and §3.2 (moving the style guide into `root-sot` canon) — see the dated
-> note in the root [`README.md`](../../README.md).
+> **Tracks V and C are complete, and track R but for R3.** Everything through
+> C2 and R4 is built and merged to `main`; the Persian pass's mechanical half
+> (§1) closed on 2026-08-14. **What's left:** R3 (conditional on corpus size —
+> check before starting it), and the Persian pass's §2 (the founder's own
+> read-through) and §3.2 (moving the style guide into `root-sot` canon) — see
+> the dated note in the root [`README.md`](../../README.md).
 
-## ⚠ Nothing is merged
+## ✅ Everything is merged — branch from `main`
 
-All six stages sit chained on `stage-v4-overview`; **`main` is still at
-`478fb52`**, which is F3. Every `stage-*` branch is a link in that chain, not an
-independent line of work.
+Every built stage is on `main`, and each was merged only after its own review.
+Cut your branch from `main` and there is nothing to reconcile first.
 
-Read `main` to learn what exists and you will be six stages behind. Merge before
-starting R1, so that R1's branch is cut from something that reflects the app.
+*This section said the opposite until 2026-08-14, and said it long after it
+stopped being true* — "Nothing is merged; `main` is still at `478fb52`, which
+is F3", written when V1b through C0 really were chained on `stage-v4-overview`.
+That chain was merged on 2026-08-10 and seven stages have landed since. It is
+kept here as the note it turned into: **a warning about repository state is
+the fastest thing in this directory to go stale, and it is the second thing
+anyone reads.** If you find it wrong again, fix it in the same commit as
+whatever you were actually doing.
 
 ---
 

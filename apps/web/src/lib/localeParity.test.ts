@@ -72,3 +72,58 @@ test('no fa value contains Latin letters outside shared terms and placeholders',
   const offenders = Object.keys(faFlat).filter((k) => /[A-Za-z]/.test(strip(faFlat[k])));
   assert.deepEqual(offenders, [], `Latin letters leaking into Persian: ${offenders.join(', ')}`);
 });
+
+/**
+ * persian-pass.md §1.5, held mechanically. The pass read every Persian string
+ * for ZWNJ by hand and normalized four words spelled two ways; this catches
+ * the fifth, and every one after it — one sequence of letters, one spelling,
+ * across the whole file.
+ *
+ * **It cannot be a blanket rule**, which is why it has an allowlist rather
+ * than being a plain assertion. Persian genuinely spells the same letters two
+ * ways depending on grammatical role: a compound verb takes a space
+ * («هنوز چیزی منتشر نشده» — *nothing has been published*), the participial
+ * adjective built from it fuses with a ZWNJ («تغییرات منتشرنشده» —
+ * *unpublished changes*). Both are correct, and a test that flattened them
+ * would be pressure to make the Persian wrong.
+ *
+ * So each pair below is a **read and accepted** verdict, not a suppression.
+ * Adding to it means having checked the two call sites and concluded they
+ * play different grammatical roles — if they play the *same* role, it is the
+ * defect this test exists to find, and the fix is to pick one spelling.
+ */
+const ROLE_PAIRS: Record<string, string> = {
+  // verb «انجام شده» / adjective «انجام‌شده»
+  'انجامشده': 'compound verb vs. participial adjective (status.DONE)',
+  // verb «تغییر کرده» / adjective «تغییرکرده»
+  'تغییرکرده': 'compound verb vs. participial adjective (workspace.changeChanged)',
+  // verb «منتشر نشده» / adjective «منتشرنشده»
+  'منتشرنشده': 'compound verb vs. participial adjective (workspace.dirty)',
+};
+
+const PERSIAN_RUN = /[؀-ۿ‌]+/g;
+
+test('one sequence of Persian letters, one spelling — past the documented role pairs', () => {
+  const spellings = new Map<string, Set<string>>();
+  const add = (surface: string) => {
+    const key = surface.replace(/[‌\s]/g, '');
+    if (!key) return;
+    (spellings.get(key) ?? spellings.set(key, new Set()).get(key)!).add(surface);
+  };
+
+  for (const value of Object.values(faFlat)) {
+    const tokens = value.match(PERSIAN_RUN) ?? [];
+    tokens.forEach((token, i) => {
+      add(token);
+      // Bigrams too: «امضا شده» and «امضاشده» are the same letters, and only
+      // comparing whole tokens would never put them beside each other.
+      if (i + 1 < tokens.length) add(`${token} ${tokens[i + 1]}`);
+    });
+  }
+
+  const offenders = [...spellings.entries()]
+    .filter(([key, forms]) => forms.size > 1 && !(key in ROLE_PAIRS))
+    .map(([key, forms]) => `${key}: ${[...forms].join(' / ')}`);
+
+  assert.deepEqual(offenders, [], `the same word spelled more than one way:\n  ${offenders.join('\n  ')}`);
+});
