@@ -366,8 +366,8 @@
     "confirmDiscardDraft": "Discard this design draft? Every change since the last publish is lost.",
     "publishDesign": "Publish design",
     "carryForwardTitle": "What publishing would do",
-    "carriedPages": "{{count}} pages carry their approval forward",
-    "resetPages": "{{count}} pages will need re-approval",
+    "carriedPages": "{{n}} pages carry their approval forward",
+    "resetPages": "{{n}} pages will need re-approval",
     "choiceReset": "The customer's chosen concept no longer exists — they will have to choose again.",
     "changeAdded": "added",
     "changeChanged": "changed",
@@ -462,8 +462,8 @@
     "concept": "Concept {{id}}",
     "downloadPdf": "Download PDF",
     "pending": {
-      "designBody_one": "The design changed — {{count}} page needs your approval.",
-      "designBody_other": "The design changed — {{count}} pages need your approval.",
+      "designBody_one": "The design changed — {{n}} page needs your approval.",
+      "designBody_other": "The design changed — {{n}} pages need your approval.",
       "designCta": "Review the design",
       "contractBody": "The contract text changed to v{{to}} since you approved v{{from}}.",
       "contractCta": "Review & approve",
@@ -482,8 +482,8 @@
       "superseded": "superseded",
       "published": "published {{when}}",
       "unsealed": "unsealed",
-      "awaiting_one": "{{count}} page awaiting you",
-      "awaiting_other": "{{count}} pages awaiting you"
+      "awaiting_one": "{{n}} page awaiting you",
+      "awaiting_other": "{{n}} pages awaiting you"
     },
     "amendment": {
       "title": "Amendment {{label}}",

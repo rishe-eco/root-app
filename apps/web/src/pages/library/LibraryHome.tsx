@@ -6,7 +6,8 @@ import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import Lock from '@/components/Lock';
 import { PUBLIC_LIBRARY_ENTRIES, type PublicEntryRow } from '@/lib/queries';
-import { formatCount } from '@/lib/format';
+import { formatCount, translationLangFor } from '@/lib/format';
+import Text from '@/components/Text';
 
 const RECENT = 3;
 
@@ -44,8 +45,11 @@ export default function LibraryHome() {
             <p className="t-eyebrow">{t('library.home.researchEyebrow')}</p>
             <h2 className="t-h2">{t('library.home.researchTitle')}</h2>
             <p className="t-small">{t('library.home.researchBody')}</p>
+            {/* Not num-latin (persian-pass.md §1.2): a count reads in the
+                viewer's own digits, and num-latin would force the Latin
+                figure font onto them — same reasoning as desk/Overview.tsx. */}
             <p className="t-caption library-strand-count">
-              <span className="num-latin">{formatCount(total, locale)}</span> {t('library.home.entries')}
+              {formatCount(total, locale)} {t('library.home.entries')}
             </p>
           </Link>
 
@@ -64,7 +68,9 @@ export default function LibraryHome() {
               {rows.map((r) => (
                 <li key={r.id}>
                   <Link className="link" to={lp(locale, `/library/research/${encodeURIComponent(r.slug)}`)}>
-                    {r.titleTranslated ?? r.titleOriginal}
+                    <Text lang={r.titleTranslated ? translationLangFor(r.originalLang) : r.originalLang}>
+                      {r.titleTranslated ?? r.titleOriginal}
+                    </Text>
                   </Link>
                 </li>
               ))}

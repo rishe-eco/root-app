@@ -102,6 +102,8 @@ function ThreadCard({
       className={`card review-thread-card${thread.resolvedAt ? ' review-thread-resolved' : ''}`}
     >
       <div className="review-thread-meta t-caption">
+        {/* Names render in the ambient direction, deliberately —
+            persian-pass.md §1.6.1's decision. */}
         <span>{thread.author.id === me.id ? t('desk.review.you') : thread.author.name}</span>
         {thread.resolvedAt ? <span className="badge badge-neutral">{t('desk.review.resolved')}</span> : null}
       </div>

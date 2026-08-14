@@ -24,7 +24,8 @@ import {
   type User,
 } from '@/lib/queries';
 import { RESEARCH_TEXT_ACCEPT, UploadFailure, uploadResearchText } from '@/lib/upload';
-import { fullDateTime } from '@/lib/format';
+import { fullDateTime, translationLangFor } from '@/lib/format';
+import Text from '@/components/Text';
 
 const ENTRY_TYPES: EntryType[] = ['PAPER', 'BOOK', 'ARTICLE', 'ROOT_RESEARCH'];
 const PROVENANCE_OPTIONS: TranslationProvenance[] = ['PUBLISHED', 'ROOT', 'NONE_YET'];
@@ -216,7 +217,15 @@ export default function LibraryEntryScreen() {
   return (
     <div className="desk-section">
       <div className="workspace-row">
-        <h2 className="t-h2">{isNew ? t('desk.library.newEntry') : (entry?.titleTranslated ?? entry?.titleOriginal)}</h2>
+        <h2 className="t-h2">
+          {isNew || !entry ? (
+            t('desk.library.newEntry')
+          ) : (
+            <Text lang={entry.titleTranslated ? translationLangFor(entry.originalLang) : entry.originalLang}>
+              {entry.titleTranslated ?? entry.titleOriginal}
+            </Text>
+          )}
+        </h2>
         {!isNew && entry ? (
           <span className={`st-badge ${entry.publishedAt ? 'st-done' : 'st-draft'}`}>
             <span className="sdot" />

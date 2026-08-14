@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { can } from '@/lib/access';
 import { LIBRARY_ENTRIES, type EntryType, type LibraryEntryRow, type User } from '@/lib/queries';
-import { formatCount } from '@/lib/format';
+import { formatCount, translationLangFor } from '@/lib/format';
+import Text from '@/components/Text';
 
 const ENTRY_TYPES: EntryType[] = ['PAPER', 'BOOK', 'ARTICLE', 'ROOT_RESEARCH'];
 const PAGE_SIZE = 20;
@@ -108,8 +109,13 @@ export default function Library() {
                 >
                   {/* Entry content is data, not UI chrome (§0.1) — the title
                       shown is whichever the entry itself carries, never
-                      chosen by the viewer's own interface language. */}
-                  <td>{r.titleTranslated ?? r.titleOriginal}</td>
+                      chosen by the viewer's own interface language
+                      (persian-pass.md §1.6.1). */}
+                  <td>
+                    <Text lang={r.titleTranslated ? translationLangFor(r.originalLang) : r.originalLang}>
+                      {r.titleTranslated ?? r.titleOriginal}
+                    </Text>
+                  </td>
                   <td>{t(`desk.library.type.${r.type}`)}</td>
                   {/* T4/§7's num-latin choice for the year: it sits beside a
                       DOI in the editor and in citations, both always ASCII. */}

@@ -53,6 +53,20 @@ The codebase currently disagrees with itself. R1's entry list rendered a count w
 
 Write it into the house rules in [`README.md`](README.md), then audit every numeric render against it.
 
+#### 1.2.1 · The row this table is missing: **ordinals** *(open — 2026-08-14)*
+
+The rule landed as house rule 14 and the audit found five real bugs with it. Reviewing that audit turned up the case the table above never named, and so the audit had no verdict to apply: **a number that labels a thing in sequence.** It is neither a tally nor an identifier.
+
+Three places, all still Latin, all sitting inside Persian:
+
+- `ContractDetail.tsx` — the portal's step badges, hardcoded `1` / `2` / `3` in `sec-badge num-latin`.
+- `ContractPrint.tsx:158` — **the printed contract's article numbers**, `<span className="num-latin">{a.number}.</span>` before a Persian article title.
+- `ContractTab.tsx:139` — the same article number in the desk editor.
+
+**The pass arguably made this worse, which is why it needs settling rather than ignoring.** Before, the portal was mixed enough that Latin ordinals did not stand out. Now every count, total, fee and date around them is Persian and they are the only Latin figures left on the screen.
+
+**Not decided here on purpose.** Article numbering in the printed contract is how a legal document presents itself, not a formatting preference — «۱. عنوان» versus «1. عنوان» is the founder's call and belongs with §2. Whichever way it goes, **the answer must be the same in all three places**, and it should become a fourth row in the table above rather than three separate judgements.
+
 ### 1.3 · Logical properties — sweep and hold
 
 House rule 7 says logical properties only. Verify rather than assume:

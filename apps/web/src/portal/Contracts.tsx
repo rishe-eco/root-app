@@ -4,7 +4,7 @@ import { useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { MY_CONTRACTS, type Contract, type ContractStatus, type User } from '@/lib/queries';
-import { ALL_STATUSES, formatAmount, pick, relativeTime } from '@/lib/format';
+import { ALL_STATUSES, formatAmount, formatCount, pick, relativeTime } from '@/lib/format';
 import StatusBadge from '@/components/StatusBadge';
 import Topbar from './Topbar';
 
@@ -55,7 +55,7 @@ export default function Contracts() {
               aria-pressed={filter === key}
             >
               {t(`status.${key}`)}
-              <span className="chip-count num-latin">{counts.get(key) ?? 0}</span>
+              <span className="chip-count">{formatCount(counts.get(key) ?? 0, locale)}</span>
             </button>
           ))}
         </div>
@@ -111,8 +111,10 @@ export default function Contracts() {
                           <StatusBadge status={c.status} />
                         </td>
                         <td className="col-amount">
+                          {/* Not num-latin (persian-pass.md §1.2): money is
+                              already the locale's own digits. */}
                           {doc.amount ? (
-                            <span className="num-latin">
+                            <span>
                               {formatAmount(doc.amount, locale)} {t('contracts.toman')}
                             </span>
                           ) : (

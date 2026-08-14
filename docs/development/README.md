@@ -1,23 +1,29 @@
 # Development plan — how the remaining stages get built
 
-**Written:** 2026-08-05 · **Revised 2026-08-10** · Against `root-app` @
-`stage-v4-overview` + uncommitted brand-copy work
+**Written:** 2026-08-05 · **Revised 2026-08-14** · Against `root-app` @ `main`
 **For:** the engineer picking up the next stage. Read this file, then read *only*
 your stage's file. They are written to be self-contained.
 
-> **Track V is complete.** V1b, F2, V2, V3, V4 and C0 are built, and the brand
-> copy pass ([`tagline.md`](tagline.md)) closed on 2026-08-10.
-> **R1 is next** — [`R1.md`](R1.md). One thing comes before it: **merging the
-> chain**, below.
+> **Tracks V and C are complete, and track R but for R3.** Everything through
+> C2 and R4 is built and merged to `main`; the Persian pass's mechanical half
+> (§1) closed on 2026-08-14. **What's left:** R3 (conditional on corpus size —
+> check before starting it), and the Persian pass's §2 (the founder's own
+> read-through) and §3.2 (moving the style guide into `root-sot` canon) — see
+> the dated note in the root [`README.md`](../../README.md).
 
-## ⚠ Nothing is merged
+## ✅ Everything is merged — branch from `main`
 
-All six stages sit chained on `stage-v4-overview`; **`main` is still at
-`478fb52`**, which is F3. Every `stage-*` branch is a link in that chain, not an
-independent line of work.
+Every built stage is on `main`, and each was merged only after its own review.
+Cut your branch from `main` and there is nothing to reconcile first.
 
-Read `main` to learn what exists and you will be six stages behind. Merge before
-starting R1, so that R1's branch is cut from something that reflects the app.
+*This section said the opposite until 2026-08-14, and said it long after it
+stopped being true* — "Nothing is merged; `main` is still at `478fb52`, which
+is F3", written when V1b through C0 really were chained on `stage-v4-overview`.
+That chain was merged on 2026-08-10 and seven stages have landed since. It is
+kept here as the note it turned into: **a warning about repository state is
+the fastest thing in this directory to go stale, and it is the second thing
+anyone reads.** If you find it wrong again, fix it in the same commit as
+whatever you were actually doing.
 
 ---
 
@@ -57,11 +63,12 @@ C0   the email seam              ✔ 2026-08-08  4eb4106  ← early
 R1   Library model + editor      ✔ 2026-08-10  bc1f6aa          [R1.md]
 R2   public reader + search      ✔ 2026-08-11  e267676          [R2.md]
 C1   Review Room corpus          ✔ 2026-08-11  b5e6bed  ← early [C1.md]
+C2   Review Room comments        ✔ 2026-08-13  6bd43bb          [C2.md]
+R4   the agent                   ✔ 2026-08-13  c3fcf0f  ← early [R4.md]
 ──────────────────────────────── everything below is unbuilt ────────
 R3   concept tree                ← conditional, see below       [R3.md]
-C2   Review Room comments        ← the default next            [C2.md]
-R4   the agent                   ← build-ready                  [R4.md]
-the Persian pass                 ← build-ready        [persian-pass.md]
+the Persian pass                 ← §1 done 2026-08-14, §2/§3 open
+                                                     [persian-pass.md]
 ```
 
 **Every remaining stage has a build-ready file.** The Persian pass had never been
@@ -197,6 +204,24 @@ assert on them.
 else's. Distinguishing them turns the resolver into an oracle for which ids
 exist.
 
+**14 · Digits are Persian, except identifiers.** Settled by the Persian pass
+([`persian-pass.md`](persian-pass.md) §1.2), after finding the codebase
+disagreeing with itself once already (R1's entry count).
+
+| | Digits | Why |
+|---|---|---|
+| Counts, totals, pagination, tallies | **Persian** «۱۲», `formatCount` | prose numbers in a Persian sentence |
+| Dates, times, money | **Persian** | already the case, via `Intl` and `fa-IR` |
+| Years, DOIs, refs, version numbers, hashes, concept keys | **Latin**, `num-latin` | identifiers that are Latin wherever printed, including in citations |
+
+`formatCount(n, locale)` (`apps/web/src/lib/format.ts`) is the one place that
+runs a count through `Intl.NumberFormat` — call it rather than interpolating
+a raw number, including into i18next's `{{count}}`, which selects a plural
+form but does not localize the digits it is given. Where a template needs
+both — a plural form *and* Persian display digits — pass `count` (the real
+number, for plural selection) and a second variable carrying the formatted
+string for display (see `detail.pending.designBody`, `detail.versions.awaiting`).
+
 ---
 
 ## Working agreement
@@ -283,10 +308,10 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`R1.md`](R1.md) | Library — model and admin entry editor | ✔ built |
 | [`R2.md`](R2.md) | Library — public reader, list and search | ✔ built |
 | [`C1.md`](C1.md) | Review Room — documents, snapshots, the corpus | ✔ built |
+| [`C2.md`](C2.md) | Review Room — comments, threads, corpus admin | ✔ built |
+| [`R4.md`](R4.md) | Library — the agent | ✔ built |
 | [`R3.md`](R3.md) | Library — the concept tree | ready · **conditional** |
-| [`C2.md`](C2.md) | Review Room — comments, threads, corpus admin | **the default next** |
-| [`R4.md`](R4.md) | Library — the agent | ready |
-| [`persian-pass.md`](persian-pass.md) | the Persian pass | ready · *defines itself* |
+| [`persian-pass.md`](persian-pass.md) | the Persian pass | §1 ✔ 2026-08-14 · §2/§3 open |
 | [`later-tracks.md`](later-tracks.md) | retired — every section superseded | archive |
 
 **The built stage files are kept as written**, not rewritten to match what

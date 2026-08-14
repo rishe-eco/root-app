@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { askLab, type AskCitation, type AskErrorCode } from '@/lib/ask';
+import Text from './Text';
 
 type Status = 'idle' | 'asking' | 'streaming' | 'done' | 'refused' | 'error' | 'noCandidates';
 
@@ -107,7 +108,7 @@ export default function AskLab({ entrySlug }: { entrySlug?: string }) {
               {citations.map((c) => (
                 <li key={c.entrySlug}>
                   <Link className="link" to={lp(locale, c.entryUrl)}>
-                    {c.entryTitle}
+                    <Text lang={c.entryOriginalLang}>{c.entryTitle}</Text>
                   </Link>
                 </li>
               ))}

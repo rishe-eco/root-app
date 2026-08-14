@@ -8,7 +8,13 @@ import type { Locale } from '@/i18n';
  * same reasoning).
  */
 
-export type AskCitation = { citedText: string; entrySlug: string; entryTitle: string; entryUrl: string };
+export type AskCitation = {
+  citedText: string;
+  entrySlug: string;
+  entryTitle: string;
+  entryOriginalLang: string;
+  entryUrl: string;
+};
 
 export type AskDoneEvent = {
   text: string;
