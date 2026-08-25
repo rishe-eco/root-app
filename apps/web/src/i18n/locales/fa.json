@@ -424,7 +424,12 @@
     "lineageSuperseded": "جایگزین‌شده",
     "lineagePublished": "منتشرشده",
     "lineageUnsealed": "مهرنشده",
-    "changeLogTitle": "تاریخچه‌ی تغییرات"
+    "changeLogTitle": "تاریخچه‌ی تغییرات",
+    "commentsTitle": "گفتگو",
+    "commentsHelp": "چیزی که مشتری در صفحه‌ی قرارداد خودش می‌بیند. پاسخ که بدهی، قرارداد به «منتظر مشتری» می‌رود.",
+    "commentsEmpty": "هنوز چیزی گفته نشده.",
+    "commentPlaceholder": "پاسخت را بنویس…",
+    "commentCta": "ثبت پاسخ"
   },
   "upload": {
     "errAuth": "اجازه‌ی بارگذاریِ این فایل را نداری.",
