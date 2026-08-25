@@ -14,7 +14,8 @@ export type Capability =
   | 'library.publish'
   | 'library.editTree'
   | 'review.participate'
-  | 'review.admin';
+  | 'review.admin'
+  | 'apiTokens.manage';
 
 export const can = (user: Pick<User, 'capabilities'> | null | undefined, cap: Capability) =>
   user?.capabilities.includes(cap) ?? false;

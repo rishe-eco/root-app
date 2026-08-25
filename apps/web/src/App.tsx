@@ -29,6 +29,7 @@ import LibraryConcepts from '@/desk/LibraryConcepts';
 import Review from '@/desk/Review';
 import ReviewDocumentScreen from '@/desk/ReviewDocumentScreen';
 import ReviewAdmin from '@/desk/ReviewAdmin';
+import ApiTokens from '@/desk/ApiTokens';
 import ContractWorkspace from '@/desk/workspace/ContractWorkspace';
 import WorkspaceContractTab from '@/desk/workspace/ContractTab';
 import WorkspaceDesignTab from '@/desk/workspace/DesignTab';
@@ -116,6 +117,7 @@ export default function App() {
           <Route path="review" element={<Review />} />
           <Route path="review/:roundId/:documentId" element={<ReviewDocumentScreen />} />
           <Route path="reviewAdmin" element={<ReviewAdmin />} />
+          <Route path="apiTokens" element={<ApiTokens />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

@@ -41,6 +41,18 @@ export const CAPABILITIES = [
   'review.participate',
   /** Administer the corpus itself — the allowlist, the snapshots (track C2). */
   'review.admin',
+  /**
+   * Issue and revoke personal access tokens for the API.
+   *
+   * Its own verb rather than a fold into `customers.manage`, because it is not
+   * an account-administration act: a token is a *credential that acts as its
+   * holder*, so granting this to a role hands that role every other capability
+   * it holds, in a form that outlives a browser session. That makes it the one
+   * capability whose blast radius is the rest of the table — which is exactly
+   * why it should be visible as a separate row rather than arriving as a
+   * side effect of some other grant.
+   */
+  'apiTokens.manage',
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];

@@ -231,7 +231,8 @@ The gate reads the *current* revisions and is otherwise unchanged. Spec:
 Uploads live on local disk behind an interface (`lib/storage.ts`), so object
 storage later is a second implementation rather than a rewrite. They do **not**
 go through GraphQL: `POST /upload` and `GET /files/:id` are plain Express
-routes authenticated by the same session cookie, so Apollo stays JSON-only.
+routes authenticated through the same `buildContext` as `/graphql`, so Apollo
+stays JSON-only and there is one notion of who the caller is.
 
 **Every file is public or private, and the split is structural, not a flag
 checked at read time.** It is in the storage key's first path segment, on the
@@ -298,6 +299,23 @@ toggle, not stages. Any status can move to any other, and Root always has a
 manual override in the admin. The automatic transitions are defaults, not
 rails: a customer comment moves it to Waiting on Root, signing moves it to In
 Progress.
+
+## API tokens
+
+There are two credentials, not one. The session cookie is for browsers; a
+**personal access token** is for everything else — a script, a cron job, curl.
+Staff issue one from the desk (`Tokens`), it is shown exactly once, and it
+travels as `Authorization: Bearer root_…` on `/graphql` and `/upload` alike.
+
+Only the SHA-256 digest is stored, so a database leak yields nothing
+replayable. A token carries a **scope** (`READ` or `WRITE`) and nothing else:
+what its owner may *do* is re-read from the owner's live row on every request,
+which is why disabling or demoting an account kills its tokens instantly. And
+a token cannot issue or revoke tokens — that costs a password, on purpose.
+
+Restricted to `apiTokens.manage`, which today means ADMIN alone. Full
+reasoning and the list of what was deliberately not built:
+[`docs/development/api-tokens.md`](docs/development/api-tokens.md).
 
 ---
 

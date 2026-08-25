@@ -42,6 +42,13 @@
 .chip-count { margin-inline-start: var(--space-2); opacity: 0.7; }
 
 .table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; background: var(--color-raised); }
+/* For tables with more columns than a narrow viewport can hold. `overflow:
+   hidden` above is what rounds the corners, and on a three-column table it
+   never clips anything — but the tokens table has seven, and hidden there
+   silently swallows the status and the revoke button with no way to reach
+   them. Opt-in rather than a change to the rule above, so the tables that
+   were already fine keep the behaviour they were written against. */
+.table-wrap-wide { overflow-x: auto; }
 .ctable { inline-size: 100%; border-collapse: collapse; }
 .ctable th { text-align: start; font-size: var(--text-caption); text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-subtle); font-weight: var(--weight-semibold); padding: var(--space-4) 1.25rem; border-block-end: 1px solid var(--color-border); background: var(--color-footer); }
 .ctable td { padding: var(--space-4) 1.25rem; border-block-end: 1px solid var(--color-border); font-size: var(--text-body); vertical-align: middle; }

@@ -1562,3 +1562,65 @@ export const REVOKE_REVIEWER = gql`
     revokeReviewer(userId: $userId)
   }
 `;
+
+// ---------------------------------------------------------------------
+// Personal access tokens. The secret comes back from CREATE_API_TOKEN and
+// nowhere else — MY_API_TOKENS cannot return it, because the server does
+// not have it to return.
+// ---------------------------------------------------------------------
+
+export type ApiTokenScope = 'READ' | 'WRITE';
+
+export type ApiToken = {
+  id: string;
+  name: string;
+  prefix: string;
+  scope: ApiTokenScope;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+};
+
+const API_TOKEN_FIELDS = gql`
+  fragment ApiTokenFields on ApiToken {
+    id
+    name
+    prefix
+    scope
+    lastUsedAt
+    expiresAt
+    revokedAt
+    createdAt
+  }
+`;
+
+export const MY_API_TOKENS = gql`
+  ${API_TOKEN_FIELDS}
+  query MyApiTokens {
+    myApiTokens {
+      ...ApiTokenFields
+    }
+  }
+`;
+
+export const CREATE_API_TOKEN = gql`
+  ${API_TOKEN_FIELDS}
+  mutation CreateApiToken($name: String!, $scope: ApiTokenScope!, $expiresInDays: Int) {
+    createApiToken(name: $name, scope: $scope, expiresInDays: $expiresInDays) {
+      token
+      apiToken {
+        ...ApiTokenFields
+      }
+    }
+  }
+`;
+
+export const REVOKE_API_TOKEN = gql`
+  ${API_TOKEN_FIELDS}
+  mutation RevokeApiToken($id: ID!) {
+    revokeApiToken(id: $id) {
+      ...ApiTokenFields
+    }
+  }
+`;

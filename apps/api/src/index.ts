@@ -6,6 +6,7 @@ import { expressMiddleware } from '@apollo/server/express4';
 
 import { env } from './lib/env.js';
 import { errorLogging, formatError } from './lib/logging.js';
+import { enforceTokenScope } from './lib/tokenScope.js';
 import { prisma } from './lib/prisma.js';
 import { typeDefs } from './graphql/typeDefs.js';
 import { resolvers } from './graphql/resolvers/index.js';
@@ -59,8 +60,9 @@ const server = new ApolloServer<Context>({
   // customer's contract, so in production it is a map handed to anyone who
   // asks; in development it is what makes Sandbox usable.
   introspection: env.NODE_ENV !== 'production',
-  // …and the log the stack traces above are for.
-  plugins: [errorLogging],
+  // …and the log the stack traces above are for. `enforceTokenScope` sits
+  // beside it rather than inside a resolver on purpose — see lib/tokenScope.ts.
+  plugins: [errorLogging, enforceTokenScope],
   // Apollo does not mask error messages on its own — see logging.ts.
   formatError,
 });
