@@ -312,6 +312,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`R4.md`](R4.md) | Library — the agent | ✔ built |
 | [`R3.md`](R3.md) | Library — the concept tree | ready · **conditional** |
 | [`persian-pass.md`](persian-pass.md) | the Persian pass | §1 ✔ 2026-08-14 · §2/§3 open |
+| [`api-tokens.md`](api-tokens.md) | personal access tokens — a second credential | ✔ built · not a plan stage |
 | [`later-tracks.md`](later-tracks.md) | retired — every section superseded | archive |
 
 **The built stage files are kept as written**, not rewritten to match what

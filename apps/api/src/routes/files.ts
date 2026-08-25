@@ -3,9 +3,12 @@
  *
  * **Not through GraphQL** (build plan §F1). Multipart over GraphQL costs a
  * dependency and a transport special-case for no gain; Apollo stays JSON-only
- * and these two routes stay boring. They authenticate with the same session
- * cookie through the same `buildContext`, so there is one notion of who the
- * caller is, not two.
+ * and these two routes stay boring. They authenticate through the same
+ * `buildContext` as `/graphql`, so there is one notion of who the caller is,
+ * not two — which is also why an API token works here without this file
+ * knowing anything about tokens. What it *does* have to know is scope, since
+ * the plugin that enforces it only sees GraphQL operations; see the upload
+ * handler.
  *
  * They also do not pass through `express.json({ limit: '1mb' })` — that
  * middleware is mounted on `/graphql` alone, so its limit is neither raised
@@ -85,6 +88,19 @@ filesRouter.post(
       throw new UploadError(401, 'UNAUTHENTICATED', 'You need to sign in.');
     }
     const user = ctx.user; // a local const, so narrowing survives into the transaction closure below
+
+    // An upload is a write, and this route never reaches the Apollo plugin
+    // that says so for `/graphql` (lib/tokenScope.ts). Without this line a
+    // read-only token would be refused every mutation and still be able to
+    // put a file in storage — the exact hole the plugin exists to close,
+    // reopened by a transport that does not go through it.
+    if (ctx.auth?.kind === 'apiToken' && ctx.auth.scope !== 'WRITE') {
+      throw new UploadError(
+        403,
+        'TOKEN_READ_ONLY',
+        'This API token is read-only. Issue a write-scoped token to upload.',
+      );
+    }
 
     const { fileClass, policy } = policyFor(String(req.query.class ?? ''));
     if (!can(user, policy.uploader)) {

@@ -81,6 +81,12 @@
 
 .desk-code { word-break: break-all; }
 
+/* The copy/dismiss pair under a freshly issued token. `gap` rather than a
+   margin on the button, because the two sit flush otherwise — and flush
+   buttons under a secret you get one chance to copy is the wrong place to
+   make someone aim. */
+.desk-actions { display: flex; gap: var(--space-2); align-items: center; margin-block-start: var(--space-3); }
+
 /* ---- Overview (V4) ------------------------------------------------------ */
 .tile-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-3); }
 .tile {

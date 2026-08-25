@@ -684,6 +684,44 @@ export const typeDefs = /* GraphQL */ `
     expiresAt: DateTime!
   }
 
+  "What an API token may do. Never what its owner may do — that is read from the owner on every request."
+  enum ApiTokenScope {
+    "Queries only."
+    READ
+    "Queries and mutations."
+    WRITE
+  }
+
+  """
+  A personal access token for calling this API without a browser. The secret
+  itself is not a field here and never will be: it is stored only as a digest,
+  so the server could not return it even if asked.
+  """
+  type ApiToken {
+    id: ID!
+    name: String!
+    "The leading characters, so a listed token can be told from the others."
+    prefix: String!
+    scope: ApiTokenScope!
+    "Null until the token is used for the first time."
+    lastUsedAt: DateTime
+    "Null for a token that does not expire."
+    expiresAt: DateTime
+    "Set once revoked. A revoked token is kept, not deleted — the row is the record that it existed."
+    revokedAt: DateTime
+    createdAt: DateTime!
+  }
+
+  """
+  The one and only time the secret is readable. Nothing stores it; if it is
+  lost, the token is replaced rather than recovered.
+  """
+  type CreatedApiToken {
+    apiToken: ApiToken!
+    "The full token. Shown once, here, and never retrievable again."
+    token: String!
+  }
+
   type Query {
     me: User
     myContracts(status: ContractStatus): [Contract!]!
@@ -724,6 +762,9 @@ export const typeDefs = /* GraphQL */ `
     reviewDocument(roundId: ID!, documentId: ID!): ReviewDocument
     "Staff (review.admin). Every account holding the reviewer role, for the corpus admin screen."
     reviewers: [User!]!
+
+    "Staff (apiTokens.manage). The caller's own tokens, newest first, revoked ones included."
+    myApiTokens: [ApiToken!]!
   }
 
   input CreateContractInput {
@@ -849,5 +890,21 @@ export const typeDefs = /* GraphQL */ `
     addReviewComment(threadId: ID!, body: String!): ReviewThread!
     "Idempotent — resolving an already-resolved thread just returns it."
     resolveReviewThread(threadId: ID!): ReviewThread!
+
+    # --- API tokens ---
+    """
+    Issues a token and returns its secret, once. apiTokens.manage, and a
+    signed-in session — a token may not mint another token, or one leak
+    becomes permanent access.
+
+    expiresInDays null means it does not expire.
+    """
+    createApiToken(name: String!, scope: ApiTokenScope!, expiresInDays: Int): CreatedApiToken!
+    """
+    Revokes one of the caller's own tokens, effective on the next request.
+    Idempotent — revoking an already-revoked token returns it unchanged rather
+    than failing, since the caller's intent is already satisfied.
+    """
+    revokeApiToken(id: ID!): ApiToken!
   }
 `;

@@ -7,6 +7,7 @@ import { adminMutations } from './admin.js';
 import { LibraryEntry, libraryMutations, libraryQueries, publicLibraryQueries } from './library.js';
 import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
+import { apiTokenMutations, apiTokenQueries } from './apiTokens.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -32,7 +33,13 @@ export const resolvers = {
   LibraryEntry,
   ReviewDocument: reviewThreadFields.ReviewDocument,
 
-  Query: { ...Query, ...libraryQueries, ...publicLibraryQueries, ...reviewQueries },
+  Query: {
+    ...Query,
+    ...libraryQueries,
+    ...publicLibraryQueries,
+    ...reviewQueries,
+    ...apiTokenQueries,
+  },
 
   Mutation: {
     ...authMutations,
@@ -41,5 +48,6 @@ export const resolvers = {
     ...libraryMutations,
     ...reviewMutations,
     ...reviewThreadMutations,
+    ...apiTokenMutations,
   },
 };

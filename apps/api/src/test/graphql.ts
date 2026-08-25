@@ -4,6 +4,7 @@ import { typeDefs } from '../graphql/typeDefs.js';
 import { resolvers } from '../graphql/resolvers/index.js';
 import type { Context } from '../context.js';
 import { formatError } from '../lib/logging.js';
+import { enforceTokenScope } from '../lib/tokenScope.js';
 
 /**
  * Executes operations against the real schema and the real resolvers, in
@@ -21,6 +22,11 @@ const server = new ApolloServer<Context>({
   typeDefs,
   resolvers,
   includeStacktraceInErrorResponses: true, // a failing test wants the stack
+  // Token scope is enforced in a plugin keyed on the parsed operation, not in
+  // the resolvers — so a server without it would answer differently from the
+  // real one on exactly the rule most worth testing. Mounted here for the
+  // same reason `formatError` is: fidelity with production where it is cheap.
+  plugins: [enforceTokenScope],
   // The same translation production uses, so tests see the codes clients see.
   formatError,
 });
@@ -34,10 +40,18 @@ export type ExecResult = {
 
 /**
  * @param as the signed-in user, or null for an anonymous caller
+ * @param auth how they proved it. Defaults to a browser session, which is what
+ *   every test predating API tokens meant by `as`. Pass an `apiToken` kind to
+ *   exercise the resolvers — and the scope plugin — that care which credential
+ *   is in hand.
  */
 export async function exec(
   query: string,
-  opts: { as?: User | null; variables?: Record<string, unknown> } = {},
+  opts: {
+    as?: User | null;
+    auth?: Context['auth'];
+    variables?: Record<string, unknown>;
+  } = {},
 ): Promise<ExecResult> {
   // `req`/`res` are only reachable through resolvers that record a request's
   // IP or set a cookie. Enough of a stub to keep those from throwing, and no
@@ -46,6 +60,7 @@ export async function exec(
     req: { ip: '203.0.113.7', get: () => 'test-agent' },
     res: { cookie: () => undefined, clearCookie: () => undefined },
     user: opts.as ?? null,
+    auth: opts.auth ?? (opts.as ? { kind: 'session' } : null),
   } as unknown as Context;
 
   const response = await server.executeOperation(
