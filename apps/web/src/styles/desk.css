@@ -223,6 +223,16 @@
 .lineage-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0; border-block-end: 1px solid var(--color-border); font-size: var(--text-small); }
 .lineage-row:last-child { border-block-end: none; }
 
+/* ---- The customer conversation on the Activity tab. The thread itself
+   reuses portal.css's `.comment-*` — one contract, one visual grammar for it,
+   whichever side is reading. Only the composer differs: `.comment-form` sets
+   `align-items: flex-start`, which leaves the textarea at its intrinsic width.
+   That reads fine in the portal's narrow column and looks broken across the
+   desk panel, so the stretch is scoped here rather than fixed there. ---- */
+.workspace-comments { display: flex; flex-direction: column; gap: var(--space-4); }
+.workspace-comments .comment-form { align-self: stretch; }
+.workspace-comments .textarea { inline-size: 100%; }
+
 /* ---- Library (R1): required radio groups and the concept checkbox list.
    Genuinely unpreselected — no option carries `checked` until the editor
    sets one, which is the client half of the "no default" rule (§2.1). ---- */

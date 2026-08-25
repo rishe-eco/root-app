@@ -424,7 +424,12 @@
     "lineageSuperseded": "Superseded",
     "lineagePublished": "Published",
     "lineageUnsealed": "Unsealed",
-    "changeLogTitle": "Change log"
+    "changeLogTitle": "Change log",
+    "commentsTitle": "Conversation",
+    "commentsHelp": "What the customer sees on their own contract page. Replying moves the contract to Waiting on Customer.",
+    "commentsEmpty": "Nothing said yet.",
+    "commentPlaceholder": "Write a reply…",
+    "commentCta": "Post reply"
   },
   "upload": {
     "errAuth": "You do not have access to upload this.",
