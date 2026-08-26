@@ -48,6 +48,22 @@ load-bearing, not cosmetic.
 `current` is a symlink and Nginx's document root. `release-web.sh` swaps it
 with an atomic rename, so no request ever sees a half-uploaded build.
 
+**`app/` has no `node_modules`, and should not.** Nothing on the server runs
+this code from source: Docker's builder stage does its own `npm ci` inside the
+image, and the web app is built on your machine. The clone is here to give
+`docker compose build` a context and a compose file, nothing more. Running
+`npm install` on the server installs a React toolchain the box never uses —
+and `.dockerignore` excludes `node_modules` from the build context anyway, so
+not one byte of it would reach the image.
+
+The corollary is that any `/app/...` path in this file is **inside the
+container**. `/app/node_modules` exists; `/srv/root/app/node_modules` does not.
+To look at the real one:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T api ls /app/node_modules/.bin/
+```
+
 **`storage/` sits beside `current`, never inside it.** Releases are swapped and
 eventually pruned; a storage directory under one would take every customer's
 design files with it. The API refuses to boot in production without an explicit
@@ -153,15 +169,33 @@ whose password is written in this repository. Create one real admin instead.
 The password is read from stdin, so it stays out of shell history and `ps`:
 
 ```bash
-docker compose -f docker-compose.prod.yml exec -T api \
-  npx tsx prisma/create-admin.ts you@example.com "Your Name"
+docker compose -f docker-compose.prod.yml exec -T api /app/node_modules/.bin/tsx prisma/create-admin.ts you@example.com "Your Name"
 # type the password, then ctrl-D
 ```
 
+One line on purpose. A `\` continuation that loses its newline in a paste hands
+Docker an argument beginning with a space, and the error it prints —
+`exec: " tsx": executable file not found in $PATH` — reads like a missing
+binary rather than a mangled one.
+
+**Both paths in that command are inside the container.** `prisma/create-admin.ts`
+resolves against the image's `WORKDIR /app/apps/api`; on the host the same file
+is `apps/api/prisma/create-admin.ts`. There is no `/app` on the server and no
+`node_modules` in the server's clone — see [Server layout](#server-layout).
+
+The binary directly rather than `npx`, for the reason `docker-entrypoint.sh`
+gives where it does the same with `prisma`: npx can decide to consult its cache
+or the network when resolution surprises it, and nothing in a running container
+should reach for a registry. `tsx` hoists to the workspace root, hence
+`/app/node_modules/.bin`, not `/app/apps/api/node_modules/.bin`.
+
 It refuses a password under 10 characters and refuses an email that already
-exists. Then sign in at `/fa/portal` — one sign-in for everyone; there is no
-separate admin login — and the desk opens at `/fa/desk`, where invites are
-issued from **Customers**.
+exists — it will not quietly reset one. Only the trailing newline your shell
+adds is stripped, so a password with a leading or trailing space keeps it.
+
+Then sign in at `/fa/portal` — one sign-in for everyone; there is no separate
+admin login — and the desk opens at `/fa/desk`, where invites are issued from
+**Customers**.
 
 ---
 

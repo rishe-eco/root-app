@@ -5,10 +5,16 @@
  *   npm run create-admin --workspace=apps/api -- you@example.com "Your Name"
  *
  * The password is read from stdin rather than argv, so it stays out of shell
- * history and out of `ps`. Interactively, type it and press ctrl-D:
+ * history and out of `ps`. Interactively, type it and press ctrl-D.
  *
- *   docker compose -f docker-compose.prod.yml exec -T api \
- *     npx tsx prisma/create-admin.ts you@example.com "Your Name"
+ * On the server, one line and the binary directly — `docker-entrypoint.sh`
+ * gives the reason it does the same with `prisma`, and a `\` continuation that
+ * loses its newline in a paste fails in a way that reads like a missing binary:
+ *
+ *   docker compose -f docker-compose.prod.yml exec -T api /app/node_modules/.bin/tsx prisma/create-admin.ts you@example.com "Your Name"
+ *
+ * Both paths there are inside the container (WORKDIR /app/apps/api); the
+ * server's own clone has no node_modules. See deploy/README.md.
  *
  * This exists because seed.ts creates two accounts whose password is written
  * in the repository. That is right for development and unusable anywhere else.
