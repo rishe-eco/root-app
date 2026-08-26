@@ -9,6 +9,22 @@
 
 generator client {
   provider = "prisma-client-js"
+
+  // "native" alone was a silent single point of failure. Prisma picks the
+  // engine by probing the build machine for libssl, and when the probe fails
+  // it does not error — it defaults to debian-openssl-1.1.x and carries on.
+  // The container that comes out is fine until its first query.
+  //
+  // Naming the production target makes that impossible: the engine the VPS
+  // needs is fetched because it was asked for, not because a probe happened to
+  // work. "native" stays first so a dev machine — any OS — still gets its own,
+  // and on a correctly built image the two are the same file.
+  //
+  // This is belt and braces with apps/api/Dockerfile, which installs openssl
+  // so the probe works and then asserts the engine exists. Both, deliberately:
+  // the failure was invisible, cost a live deployment, and the two guards fail
+  // in different ways.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
