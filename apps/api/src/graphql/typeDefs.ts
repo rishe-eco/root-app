@@ -755,6 +755,14 @@ export const typeDefs = /* GraphQL */ `
     publicLibraryEntry(slug: String!): PublicEntry
     "Public. Concepts that have at least one publicly visible entry."
     publicLibraryConcepts: [PublicConcept!]!
+    """
+    Public. Whether this deployment has an Anthropic key configured, and so
+    whether POST /ask can answer at all. False hides the Ask surface entirely
+    rather than offering a box that always fails. A boolean about the server,
+    not about the caller — it says nothing a rate limit or a spend ceiling
+    would, both of which are decided per request inside the route.
+    """
+    askAvailable: Boolean!
 
     "Staff (review.participate). Rounds newest first."
     reviewRounds: [ReviewRound!]!

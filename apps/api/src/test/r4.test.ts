@@ -4,6 +4,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { Prisma } from '@prisma/client';
 import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
 import { startAskServer, readSSE } from './http.js';
+import { exec, ok, stop as stopGraphql } from './graphql.js';
 import { storage } from '../lib/storage.js';
 import { __setAnthropicClientForTests } from '../lib/anthropicClient.js';
 import { __resetAskRateLimitForTests, recordSpend, DAILY_SPEND_CEILING_USD } from '../lib/askRateLimit.js';
@@ -35,6 +36,7 @@ beforeEach(async () => {
 
 after(async () => {
   await close();
+  await stopGraphql();
   await prisma.$disconnect();
 });
 
@@ -341,6 +343,22 @@ test('no ANTHROPIC_API_KEY configured refuses with UNAVAILABLE before touching t
   assert.equal(res.status, 503);
   const body = (await res.json()) as { error: string };
   assert.equal(body.error, 'UNAVAILABLE');
+});
+
+/**
+ * The display half of the same fact. A missing key is a configuration choice
+ * now, not a boot failure (R4.md §6), so the only thing standing between a
+ * reader and a box that cannot answer is this field being right — and being
+ * answerable with no session, since the Research Lab has no sign-in.
+ */
+test('askAvailable reports whether a key is configured, to an anonymous caller', async () => {
+  const ASK_AVAILABLE = `query{ askAvailable }`;
+
+  __setAnthropicClientForTests(null);
+  assert.equal(ok(await exec(ASK_AVAILABLE)).askAvailable, false);
+
+  __setAnthropicClientForTests(fakeAnthropic().client);
+  assert.equal(ok(await exec(ASK_AVAILABLE)).askAvailable, true);
 });
 
 test('a malformed question or locale is refused before any candidate lookup', async () => {

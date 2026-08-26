@@ -12,6 +12,7 @@ import { requireCapability, type Context } from '../../context.js';
 import { storage } from '../../lib/storage.js';
 import { buildSearchText, foldPersian, makeSlug, publiclyVisible } from '../../lib/library.js';
 import { clampLimit } from '../../lib/pagination.js';
+import { getAnthropicClient } from '../../lib/anthropicClient.js';
 
 /**
  * The Library's queries and mutations (R1). Guarded by capability, never by
@@ -305,6 +306,17 @@ export const publicLibraryQueries = {
     });
     return concepts.map((c) => ({ slug: c.slug, titleFa: c.titleFa, titleEn: c.titleEn }));
   },
+
+  /**
+   * Read off the same seam the route itself uses, not off `env` directly —
+   * `getAnthropicClient()` also accounts for `ANTHROPIC_E2E_STUB`, so the e2e
+   * suite gets a true answer here without a second rule to keep in step. Any
+   * future reason the client is null is answered here for free.
+   *
+   * Touches no database and leaks nothing about the corpus, which is why it
+   * sits with the public queries despite not being a library read.
+   */
+  askAvailable: () => getAnthropicClient() !== null,
 };
 
 export const libraryMutations = {

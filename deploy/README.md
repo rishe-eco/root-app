@@ -12,6 +12,11 @@ browser ──TLS──▶ host Nginx ──┬──▶ /srv/root/current   (st
                               └──▶ 127.0.0.1:4000      (api container) ──▶ db container
 ```
 
+**Both paths in that diagram are settings, not facts.** `/srv/root` is
+`release-web.sh`'s `REMOTE_ROOT` argument, and `4000` is `API_PORT` in `.env`.
+Every path and port below is written out in full for a default install; if you
+change either, see [Somewhere else on the box](#somewhere-else-on-the-box).
+
 One origin, not two. The session is an httpOnly `SameSite=Lax` cookie: put the
 API on `api.example.com` and the browser drops it on every request, and every
 customer silently appears logged out with nothing in the console to explain it.
@@ -27,9 +32,10 @@ load-bearing, not cosmetic.
 ## Server layout
 
 ```
-/srv/root/
+/srv/root/                the app root — a default, not a requirement
   app/                    git clone — the API image and compose file build from here
-  .env                    secrets; never committed  (app/.env, see below)
+    .env                  secrets, never committed. Compose reads this one and
+                          only this one — NOT app/apps/api/.env
   releases/
     20260802T1200-a1b2c3/ an uploaded web build
     20260802T1600-d4e5f6/
@@ -80,14 +86,25 @@ Also set `STORAGE_DIR=/srv/root/storage` and `PUBLIC_FILES_BASE` to your origin
 plus `/public-files`. The API will not start in production without the first of
 those, and the bind mount in `docker-compose.prod.yml` uses it on both sides.
 
+`ANTHROPIC_API_KEY` is optional and blank is a real choice: without it the
+Research Lab's "Ask the Lab" and "Ask this paper" panels are not rendered at
+all, and nothing else changes. It is the only variable in that file that costs
+money per request — read `docs/development/R4.md` §4–5 before setting it.
+
 **3. Up.** The API's entrypoint runs `prisma migrate deploy` before starting, so
 the schema is created on first boot. It creates `storage/public` (0755, so
 `www-data` can traverse it) and `storage/private` (0700) itself.
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
-curl -s localhost:4000/health          # {"ok":true}
+curl -s localhost:4000/health          # {"ok":true} — localhost:$API_PORT
 ```
+
+If it does not come up, `docker compose -f docker-compose.prod.yml logs api` is
+the whole answer: the API validates its environment at boot and names the
+variable it is unhappy about. A container that keeps saying `Restarting` is
+crashing on start, not failing a healthcheck — a failed healthcheck reads
+`Up (unhealthy)` and stays up.
 
 **4. Nginx.**
 
@@ -142,7 +159,47 @@ docker compose -f docker-compose.prod.yml exec -T api \
 ```
 
 It refuses a password under 10 characters and refuses an email that already
-exists. Then sign in at `/fa/admin` and issue invites from there.
+exists. Then sign in at `/fa/portal` — one sign-in for everyone; there is no
+separate admin login — and the desk opens at `/fa/desk`, where invites are
+issued from **Customers**.
+
+---
+
+## Somewhere else on the box
+
+Nothing above is load-bearing except the *agreement* between the pieces. Two
+things move, and each has a short list of places that must move with it.
+
+**The app root** — `/srv/root` throughout. It is `release-web.sh`'s second
+argument, defaulting to `/srv/root`:
+
+```bash
+./deploy/release-web.sh you@your-vps /opt/stacks/root
+```
+
+That one argument moves `releases/` and `current`. The rest does not follow it
+automatically: the `root` directive and the `location /public-files/` alias in
+`/etc/nginx/sites-available/root`, `STORAGE_DIR` in `.env`, and wherever you
+cloned the repo (the compose file builds from the clone, and `docker compose`
+must be run from inside it — it is the only path here that has no setting at
+all). `STORAGE_DIR` does not have to sit under the app root; it only has to sit
+outside `current`, and outside any directory a release replaces.
+
+**The API port** — `4000` throughout, and there are two of them, which is the
+part worth being careful about:
+
+- `API_PORT` in `.env` is the **host** side. Change this one.
+- `PORT: 4000` in `docker-compose.prod.yml` is the **container** side. Leave it.
+  The container is a private network of one; nothing collides in there, and
+  moving it only breaks the Dockerfile's healthcheck.
+
+So `API_PORT=4009` gives `127.0.0.1:4009->4000/tcp` in `docker compose ps`, and
+that asymmetry is correct. The four `proxy_pass` lines in
+`deploy/nginx/root.conf` are the only other place to change.
+
+Editing `apps/api/.env` does nothing on the server. That file is for running the
+API on the host in development; the container never reads it, and Compose reads
+the repo-root `.env` and only that one.
 
 ---
 
