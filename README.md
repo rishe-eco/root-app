@@ -86,9 +86,12 @@ Seeding is *not* automatic and must not be run in production — it creates two
 accounts whose password is in this repository. Use `create-admin` instead:
 
 ```bash
-docker compose -f docker-compose.prod.yml exec -T api \
-  npx tsx prisma/create-admin.ts you@example.com "Your Name"   # password on stdin
+docker compose -f docker-compose.prod.yml exec -T api /app/node_modules/.bin/tsx prisma/create-admin.ts you@example.com "Your Name"
+# password on stdin — type it, then ctrl-D
 ```
+
+One line, and both paths are inside the container. `deploy/README.md` step 7
+has the reasoning for each.
 
 `docker-compose.yml` (no suffix) is the development file and brings up Postgres
 alone, for `npm run dev` on the host. The two are separate rather than layered
