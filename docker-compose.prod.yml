@@ -72,6 +72,12 @@ services:
       # unset rather than a boot-time error.
       RESEND_API_KEY: ${RESEND_API_KEY}
       MAIL_FROM: ${MAIL_FROM}
+      # The Research Lab's agent. Optional on the same terms as Resend above:
+      # unset, the Ask surface does not appear at all and the rest of the app
+      # is unaffected. A missing line here is not the same as a blank value —
+      # without it Compose never passes the variable in, so setting it in .env
+      # would have no effect and the reason would be invisible.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     # Loopback only. Host Nginx proxies to it; nothing reaches it from outside.
     ports:
       - '127.0.0.1:${API_PORT:-4000}:4000'

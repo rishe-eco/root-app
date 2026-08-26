@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { askLab, type AskCitation, type AskErrorCode } from '@/lib/ask';
+import { ASK_AVAILABLE } from '@/lib/queries';
 import Text from './Text';
 
 type Status = 'idle' | 'asking' | 'streaming' | 'done' | 'refused' | 'error' | 'noCandidates';
@@ -16,6 +18,10 @@ type Status = 'idle' | 'asking' | 'streaming' | 'done' | 'refused' | 'error' | '
 export default function AskLab({ entrySlug }: { entrySlug?: string }) {
   const { t } = useTranslation();
   const locale = useLocale();
+
+  // Before every other hook, but read only at the very bottom of this
+  // function: an early return here would make the hooks below conditional.
+  const { data: availability } = useQuery<{ askAvailable: boolean }>(ASK_AVAILABLE);
 
   const [question, setQuestion] = useState('');
   const [status, setStatus] = useState<Status>('idle');
@@ -70,6 +76,18 @@ export default function AskLab({ entrySlug }: { entrySlug?: string }) {
   }
 
   const busy = status === 'asking' || status === 'streaming';
+
+  // No key on the server, no Ask surface — not a disabled box or an
+  // "unavailable" notice, which would advertise a feature this deployment does
+  // not have and invite a reader to keep trying it. The route still refuses
+  // with UNAVAILABLE for anything that reaches it another way; this is the
+  // display half of the same fact, not the enforcement.
+  //
+  // Undefined counts as unavailable: while the query is in flight, and if it
+  // fails outright, render nothing. Failing closed here costs a reader one
+  // absent panel; failing open costs them a question typed out in full and
+  // then thrown away.
+  if (!availability?.askAvailable) return null;
 
   return (
     <section className="ask-lab" lang={locale} dir={locale === 'fa' ? 'rtl' : 'ltr'}>

@@ -72,13 +72,19 @@ const schema = z.object({
   /** e.g. "Root <hello@yourdomain.com>" — must be on a domain verified in Resend. */
   MAIL_FROM: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   /**
-   * The Research Lab's agent (R4). Unlike RESEND_API_KEY, this is **not**
-   * optional in production — R4.md §6 is explicit that the first per-request
-   * money this product spends must not be discovered at the first question.
-   * It *is* optional in development, the same shape `lib/mail.ts` already
-   * uses for a provider the founder hasn't wired up yet: a missing key
-   * degrades the Ask surface to "unavailable" rather than refusing to boot,
-   * so the rest of the app still runs for someone working on R2's reader.
+   * The Research Lab's agent (R4). Optional everywhere, exactly like
+   * RESEND_API_KEY: no key means the Ask surface is not offered at all —
+   * `askAvailable` is false, the client renders no Ask panel, and the route
+   * refuses with UNAVAILABLE for anyone who reaches it anyway.
+   *
+   * This reverses R4.md §6, which required the key in production so that the
+   * first per-request money this product spends could not be discovered at the
+   * first question. That reasoning was sound about *cost* and wrong about
+   * *mechanism*: refusing to boot doesn't reveal the spend, it takes down the
+   * portal, the desk and the contracts along with the Ask box — a whole
+   * product held hostage by one optional feature. Not rendering the surface
+   * makes the same fact visible without the outage, and does it on every
+   * screen a reader could have spent from. §6 records the reversal.
    */
   ANTHROPIC_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   /**
@@ -115,10 +121,13 @@ if (Boolean(parsed.data.RESEND_API_KEY) !== Boolean(parsed.data.MAIL_FROM)) {
   );
 }
 
+// Deliberately no production check on ANTHROPIC_API_KEY — see its comment
+// above. Say so once at boot instead, because "the Ask box is gone" is
+// otherwise a silent symptom an operator has to guess the cause of.
 if (parsed.data.NODE_ENV === 'production' && !parsed.data.ANTHROPIC_API_KEY) {
-  throw new Error(
-    'Invalid environment:\n  - ANTHROPIC_API_KEY is required in production ' +
-      '(the Research Lab agent spends money on an anonymous request — see R4.md §6)',
+  console.warn(
+    '[env] no ANTHROPIC_API_KEY — the Research Lab\'s Ask surface is disabled. ' +
+      'Set it in .env to enable it (see .env.production.example).',
   );
 }
 

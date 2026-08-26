@@ -1297,6 +1297,19 @@ const PUBLIC_ENTRY_ROW_FIELDS = gql`
   }
 `;
 
+/**
+ * Whether this deployment can answer at all — `AskLab` asks for itself rather
+ * than taking it as a prop, so no call site can mount the panel on a server
+ * that has no key. It is a root field with no arguments, so Apollo's cache
+ * answers every mount after the first from memory: one request per session,
+ * not one per page.
+ */
+export const ASK_AVAILABLE = gql`
+  query AskAvailable {
+    askAvailable
+  }
+`;
+
 export const PUBLIC_LIBRARY_ENTRIES = gql`
   ${PUBLIC_ENTRY_ROW_FIELDS}
   query PublicLibraryEntries($search: String, $type: EntryType, $conceptSlug: String, $limit: Int, $offset: Int) {
