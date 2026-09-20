@@ -59,6 +59,11 @@
 .doc-art-empty { color: var(--neutral-600); font-style: italic; }
 .doc-art-meta { margin: var(--space-2) 0 0; font-size: var(--text-caption); color: var(--neutral-700); word-break: break-all; }
 
+/* Appendix 1 as a view of the registry's agreed set (build plan L1) — a plain
+   list, not `.doc-art`'s numbered-article shape, because a scope item is not
+   an article. Logical padding so the marker sits on the correct side in RTL. */
+.doc-list { margin: 0; padding-inline-start: var(--space-6); display: flex; flex-direction: column; gap: var(--space-1); }
+
 .doc-sign-name { font-family: 'Vazirmatn Variable', 'Vazirmatn', cursive; font-size: var(--text-h3); margin: 0 0 var(--space-2); }
 .doc-sign-meta { margin: 0; font-size: var(--text-small); color: var(--neutral-700); }
 

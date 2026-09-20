@@ -146,11 +146,26 @@ export const customerMutations = {
     ctx: Context,
   ) => {
     const user = requireUser(ctx);
-    const item = await prisma.scopeItem.findUnique({ where: { id: args.scopeItemId } });
+    const item = await prisma.scopeItem.findUnique({
+      where: { id: args.scopeItemId },
+      include: { project: { include: { contracts: { orderBy: { createdAt: 'asc' }, take: 1 } } } },
+    });
     if (!item) {
       throw new GraphQLError('No such scope item.', { extensions: { code: 'NOT_FOUND' } });
     }
-    const contract = await loadForActor(item.contractId, user);
+    // ScopeItem belongs to a Project (build plan D1), which may in principle
+    // span more than one contract — L1 does not yet build the screen that
+    // would create a second, so the project's (only) contract is what
+    // ownership and the returned Contract! resolve against. loadForActor's
+    // own check is `contract.customerId === user.id`, and every contract this
+    // stage creates gets that from the same project.customerId — the two
+    // agree today by construction, which is what keeps this an ownership
+    // check on the project in spirit (house rule 5) rather than a role test.
+    const contractRow = item.project.contracts[0];
+    if (!contractRow) {
+      throw new GraphQLError('No such scope item.', { extensions: { code: 'NOT_FOUND' } });
+    }
+    const contract = await loadForActor(contractRow.id, user);
 
     // Never gated — the checklist stays editable at every stage.
     await prisma.scopeItem.update({

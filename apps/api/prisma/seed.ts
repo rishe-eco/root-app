@@ -10,7 +10,8 @@ import { loadEnvFile } from 'node:process';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { buildContractSnapshot, contentHash } from '../src/lib/revision.js';
-import { ARTICLES, SCOPE, PAGES } from '../src/lib/templates.js';
+import { agreedScopeSnapshot } from '../src/lib/scope.js';
+import { ARTICLES, SCOPE, PAGES, CHECKLIST } from '../src/lib/templates.js';
 
 // Run directly by `npm run seed`, which is not the Prisma CLI and so does not
 // load .env for us. Same reason `src/lib/env.ts` does this.
@@ -39,6 +40,10 @@ const REVIEWER2_PASSWORD = process.env.SEED_REVIEWER2_PASSWORD ?? 'change-me-ple
 // the section is reachable, publish is not (T6).
 const CONTRIBUTOR_EMAIL = process.env.SEED_CONTRIBUTOR_EMAIL ?? 'contributor@root.local';
 const CONTRIBUTOR_PASSWORD = process.env.SEED_CONTRIBUTOR_PASSWORD ?? 'change-me-please';
+// Build plan D6: DEVELOPER's first real test, exactly as F2 seeded REVIEWER
+// to give that role something to sign into and F3's CONTRIBUTOR before it.
+const DEVELOPER_EMAIL = process.env.SEED_DEVELOPER_EMAIL ?? 'developer@root.local';
+const DEVELOPER_PASSWORD = process.env.SEED_DEVELOPER_PASSWORD ?? 'change-me-please';
 
 async function main() {
   const admin = await prisma.user.upsert({
@@ -102,6 +107,44 @@ async function main() {
     },
   });
 
+  await prisma.user.upsert({
+    where: { email: DEVELOPER_EMAIL },
+    update: {},
+    create: {
+      email: DEVELOPER_EMAIL,
+      name: 'Developer',
+      roles: ['DEVELOPER'],
+      state: 'ACTIVE',
+      passwordHash: await bcrypt.hash(DEVELOPER_PASSWORD, 12),
+    },
+  });
+
+  // Build plan D1/L1: the registry's owner. One project for the one contract
+  // this fixture has ever needed — a real engagement spanning two contracts
+  // is exactly the case L1 does not yet build a screen for (see L1.md).
+  const project = await prisma.project.upsert({
+    where: { id: 'seed-project-nahal' },
+    update: {},
+    create: {
+      id: 'seed-project-nahal',
+      customerId: customer.id,
+      titleFa: 'وب‌سایت و پرتال نهال',
+      titleEn: 'Nahal website & portal',
+    },
+  });
+
+  // The completeness checklist (spec §3), seeded DECLINED — exactly as a
+  // freshly created project gets it through createContract. Kept here too so
+  // a fresh database and a migrated one land in the same state (matching the
+  // reasoning already given for seeding the v1 contract revision below).
+  for (const [i, [key, labelFa, labelEn]] of CHECKLIST.entries()) {
+    await prisma.scopeItem.upsert({
+      where: { projectId_key: { projectId: project.id, key } },
+      update: {},
+      create: { projectId: project.id, key, labelFa, labelEn, position: i, status: 'DECLINED' },
+    });
+  }
+
   const contract = await prisma.contract.upsert({
     where: { ref: 'RC-2026-014' },
     update: {},
@@ -110,6 +153,7 @@ async function main() {
       titleFa: 'وب‌سایت و پرتال نهال',
       titleEn: 'Nahal website & portal',
       customerId: customer.id,
+      projectId: project.id,
       amount: BigInt(180_000_000),
       status: 'WAITING_ON_CUSTOMER',
       publishedAt: new Date(),
@@ -148,9 +192,19 @@ async function main() {
 
   for (const [i, [key, labelFa, labelEn]] of SCOPE.entries()) {
     await prisma.scopeItem.upsert({
-      where: { contractId_key: { contractId: contract.id, key } },
+      where: { projectId_key: { projectId: project.id, key } },
       update: {},
-      create: { contractId: contract.id, key, labelFa, labelEn, position: i },
+      // AGREED, not PROPOSED: this fixture is meant to represent a contract
+      // already under way, the same reasoning addScopeItem's own comment
+      // gives for a Root-authored item (build plan L1).
+      create: {
+        projectId: project.id,
+        key,
+        labelFa,
+        labelEn,
+        position: CHECKLIST.length + i,
+        status: 'AGREED',
+      },
     });
   }
 
@@ -173,7 +227,8 @@ async function main() {
   // Seeding it here rather than leaning on the backfill keeps a fresh database
   // and a migrated one in the same state.
   const articles = await prisma.article.findMany({ where: { contractId: contract.id } });
-  const snapshot = buildContractSnapshot(contract, articles);
+  const scopeItems = await prisma.scopeItem.findMany({ where: { projectId: project.id } });
+  const snapshot = buildContractSnapshot(contract, articles, agreedScopeSnapshot(scopeItems));
   const contractRevision = await prisma.contractRevision.upsert({
     where: { contractId_version: { contractId: contract.id, version: 1 } },
     update: {},

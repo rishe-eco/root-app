@@ -62,12 +62,35 @@ export type DesignConcept = {
   pages: PageDesign[];
 };
 
+export type ScopeStatus = 'PROPOSED' | 'AGREED' | 'IN_BUILD' | 'IN_DEMO' | 'ACCEPTED' | 'DECLINED' | 'TRADED';
+
 export type ScopeItem = {
   id: string;
   key: string;
   labelFa: string;
   labelEn: string;
+  position: number;
   checked: boolean;
+  status: ScopeStatus;
+  temporary: boolean;
+  outOfScope: boolean;
+  adminWork: boolean;
+  decidedAt: string | null;
+  decidedNote: string | null;
+  declinedReason: string | null;
+  originNote: string | null;
+  originRound: string | null;
+};
+
+export type ScopeTrade = {
+  id: string;
+  outItem: ScopeItem;
+  inItem: ScopeItem;
+  proposedBy: Pick<User, 'id' | 'name'>;
+  proposedAt: string;
+  rootConfirmedAt: string | null;
+  customerConfirmedAt: string | null;
+  executedAt: string | null;
 };
 
 export type Article = {
@@ -237,7 +260,12 @@ export type Contract = {
   gate: Gate;
   concepts: DesignConcept[];
   scopeItems: ScopeItem[];
+  project: { id: string; scopeTrades: ScopeTrade[] } | null;
   articles: Article[];
+  /** Appendix 1 as frozen into the current published revision (build plan
+   *  L1) — the registry's agreed set at publish time, not the live registry
+   *  (`scopeItems` above). Empty for a revision published before L1. */
+  agreedScopeItems: Array<{ key: string; labelFa: string; labelEn: string }>;
   comments: Comment[];
   changeLog: ChangeLogEntry[];
   signature: Signature | null;
@@ -307,7 +335,43 @@ export const CONTRACT_FIELDS = gql`
       key
       labelFa
       labelEn
+      position
       checked
+      status
+      temporary
+      outOfScope
+      adminWork
+      decidedAt
+      decidedNote
+      declinedReason
+      originNote
+      originRound
+    }
+    project {
+      id
+      scopeTrades {
+        id
+        proposedAt
+        rootConfirmedAt
+        customerConfirmedAt
+        executedAt
+        proposedBy {
+          id
+          name
+        }
+        outItem {
+          id
+          key
+          labelFa
+          labelEn
+        }
+        inItem {
+          id
+          key
+          labelFa
+          labelEn
+        }
+      }
     }
     articles {
       id
@@ -316,6 +380,11 @@ export const CONTRACT_FIELDS = gql`
       titleEn
       bodyFa
       bodyEn
+    }
+    agreedScopeItems {
+      key
+      labelFa
+      labelEn
     }
     comments {
       id
@@ -919,6 +988,69 @@ export const DELETE_SCOPE_ITEM = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
   mutation DeleteScopeItem($scopeItemId: ID!) {
     deleteScopeItem(scopeItemId: $scopeItemId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SET_SCOPE_ITEM_STATUS = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetScopeItemStatus($scopeItemId: ID!, $status: ScopeStatus!, $reason: String) {
+    setScopeItemStatus(scopeItemId: $scopeItemId, status: $status, reason: $reason) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SET_SCOPE_ITEM_FLAGS = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetScopeItemFlags($scopeItemId: ID!, $temporary: Boolean!, $outOfScope: Boolean!, $adminWork: Boolean!) {
+    setScopeItemFlags(scopeItemId: $scopeItemId, temporary: $temporary, outOfScope: $outOfScope, adminWork: $adminWork) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DECIDE_SCOPE_ITEM = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DecideScopeItem($scopeItemId: ID!, $note: String!) {
+    decideScopeItem(scopeItemId: $scopeItemId, note: $note) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UNDECIDE_SCOPE_ITEM = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UndecideScopeItem($scopeItemId: ID!) {
+    undecideScopeItem(scopeItemId: $scopeItemId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const REORDER_SCOPE_ITEM = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation ReorderScopeItem($scopeItemId: ID!, $direction: ScopeMoveDirection!) {
+    reorderScopeItem(scopeItemId: $scopeItemId, direction: $direction) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const PROPOSE_SCOPE_TRADE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation ProposeScopeTrade($projectId: ID!, $outItemId: ID!, $inKey: String!, $inLabelFa: String!, $inLabelEn: String!) {
+    proposeScopeTrade(projectId: $projectId, outItemId: $outItemId, inKey: $inKey, inLabelFa: $inLabelFa, inLabelEn: $inLabelEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const CONFIRM_SCOPE_TRADE_ROOT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation ConfirmScopeTradeRoot($tradeId: ID!) {
+    confirmScopeTradeRoot(tradeId: $tradeId) {
       ...ContractWorkspaceFields
     }
   }

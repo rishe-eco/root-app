@@ -2,7 +2,7 @@ import { can, isStaff, type Capability } from '@/lib/access';
 import type { User } from '@/lib/queries';
 
 export type DeskSection = {
-  key: 'overview' | 'contracts' | 'customers' | 'library' | 'review' | 'reviewAdmin' | 'apiTokens';
+  key: 'overview' | 'contracts' | 'customers' | 'library' | 'review' | 'reviewAdmin' | 'builds' | 'apiTokens';
   /** null means "any staff capability", which is what Overview needs. */
   capability: Capability | null;
 };
@@ -19,6 +19,12 @@ export const DESK_SECTIONS: DeskSection[] = [
   { key: 'library', capability: 'library.write' },
   { key: 'review', capability: 'review.participate' },
   { key: 'reviewAdmin', capability: 'review.admin' },
+  // Build plan D6: a DEVELOPER holds `builds.author` alone, so without this
+  // row they would see *no* working surface at all — lending them the
+  // contract workspace instead would hand over `contracts.manage`'s whole
+  // remit for one verb. A stub today (L3b builds the real screen): the open
+  // feedback queue and the build-authoring form.
+  { key: 'builds', capability: 'builds.author' },
   // Last, and it is not an ordering accident: this is the only section that
   // hands out a credential rather than editing content, so it sits at the end
   // of the nav where settings live rather than among the working surfaces.

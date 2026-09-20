@@ -1,6 +1,6 @@
 import type { User } from './queries';
 
-export type Role = 'CUSTOMER' | 'ADMIN' | 'CONTRIBUTOR' | 'REVIEWER';
+export type Role = 'CUSTOMER' | 'ADMIN' | 'CONTRIBUTOR' | 'REVIEWER' | 'DEVELOPER';
 
 /**
  * Mirrors the server's `lib/capabilities.ts`. The UI branches on these and
@@ -15,7 +15,8 @@ export type Capability =
   | 'library.editTree'
   | 'review.participate'
   | 'review.admin'
-  | 'apiTokens.manage';
+  | 'apiTokens.manage'
+  | 'builds.author';
 
 export const can = (user: Pick<User, 'capabilities'> | null | undefined, cap: Capability) =>
   user?.capabilities.includes(cap) ?? false;

@@ -4,6 +4,7 @@ import { requireUser, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
 import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
+import { agreedScopeSnapshot } from '../../lib/scope.js';
 import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
 
@@ -26,6 +27,31 @@ export const Contract = {
 
   concepts: (c: FullContract) => c.currentDesignRevision?.concepts ?? [],
   signature: (c: FullContract) => c.currentContractRevision?.signature ?? null,
+
+  /**
+   * ScopeItem re-parented to Project at L1 (build plan D1) — this proxies
+   * `project.scopeItems` so every existing caller of `Contract.scopeItems`
+   * keeps working unchanged. Null project (pre-migration edge case, or a
+   * contract created outside `createContract`) reads as an empty registry
+   * rather than an error.
+   */
+  scopeItems: (c: FullContract) => c.project?.scopeItems ?? [],
+  project: (c: FullContract) => c.project ?? null,
+
+  /**
+   * Appendix 1 as a *view of the registry's agreed set*, frozen at the
+   * current revision's publish time (build plan L1; spec §3) — never the
+   * live registry, which is `Contract.scopeItems` above. Same pattern as
+   * `articles`: read from the stored snapshot, never recomputed from live
+   * rows, so a printed contract and its hash cannot drift apart.
+   *
+   * `?? []` guards a revision published before L1, whose stored snapshot has
+   * no `scopeItems` key at all — see revision.ts's note on ContractSnapshot.
+   */
+  agreedScopeItems: (c: FullContract) => {
+    const snapshot = readContractSnapshot(c.currentContractRevision?.snapshot ?? null);
+    return snapshot?.scopeItems ?? [];
+  },
 
   /**
    * The customer reads the *published* text, not Root's working copy. Ids are
@@ -71,7 +97,11 @@ export const Contract = {
   draft: (c: FullContract, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
     if (!can(user, 'contracts.manage')) return null;
-    const { hash, dirty } = draftState(c, c.articles, c.currentContractRevision);
+    // The registry's agreed set is part of what publishing would produce
+    // (L1) — without it here, marking one more item agreed would never
+    // register as "dirty" until some unrelated field also changed.
+    const scopeItems = agreedScopeSnapshot(c.project?.scopeItems ?? []);
+    const { hash, dirty } = draftState(c, c.articles, c.currentContractRevision, scopeItems);
     return {
       titleFa: c.titleFa,
       titleEn: c.titleEn,
@@ -311,6 +341,21 @@ export const PageDesign = {
 
 export const ScopeItem = {
   checked: (s: { checkedAt: Date | null }) => s.checkedAt !== null,
+};
+
+export const Project = {
+  /**
+   * A live query regardless of how the parent `Project` object was reached —
+   * `Contract.project` (via `contractInclude`) never fetches trades, and
+   * `Query.project` need not either, so this is the one place that always
+   * answers it rather than requiring every caller to remember to include it.
+   */
+  scopeTrades: (p: { id: string }) =>
+    prisma.scopeTrade.findMany({
+      where: { projectId: p.id },
+      include: { outItem: true, inItem: true, proposedBy: true },
+      orderBy: { createdAt: 'desc' },
+    }),
 };
 
 export const User = {

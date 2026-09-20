@@ -53,6 +53,12 @@ enum Role {
   /// The Review Room and nothing else. This is the one role handed to someone
   /// outside Root, so it is the one that has to stay least-privilege.
   REVIEWER
+  /// Build plan D6, 2026-09-20: the person who authors a build has no other
+  /// role to be. Grants `builds.author` alone — not `contracts.manage`, not
+  /// `customers.manage`, not `apiTokens.manage` — so a contractor ticking
+  /// feedback off a queue never sees the contract text, the fee, the customer
+  /// list or the billing surface. See lib/capabilities.ts.
+  DEVELOPER
 }
 
 enum UserState {
@@ -79,18 +85,20 @@ model User {
   // Preferred locale, so notifications can go out in the right language.
   locale String @default("fa")
 
-  contracts     Contract[]      @relation("CustomerContracts")
-  comments      Comment[]
-  changeLogs    ChangeLog[]
-  signatures    Signature[]
-  tokens        AuthToken[]
-  apiTokens     ApiToken[]
-  billingEntry  BillingEntry[]
-  tickets       Ticket[]
-  ticketMessage TicketMessage[]
-  uploads       StoredFile[]
-  libraryEntries LibraryEntry[]
-  reviewRounds   ReviewRound[]
+  contracts             Contract[]      @relation("CustomerContracts")
+  projects              Project[]       @relation("CustomerProjects")
+  scopeTrades           ScopeTrade[]
+  comments              Comment[]
+  changeLogs            ChangeLog[]
+  signatures            Signature[]
+  tokens                AuthToken[]
+  apiTokens             ApiToken[]
+  billingEntry          BillingEntry[]
+  tickets               Ticket[]
+  ticketMessage         TicketMessage[]
+  uploads               StoredFile[]
+  libraryEntries        LibraryEntry[]
+  reviewRounds          ReviewRound[]
   reviewThreadsOpened   ReviewThread[]  @relation("ThreadAuthor")
   reviewThreadsResolved ReviewThread[]  @relation("ThreadResolver")
   reviewComments        ReviewComment[]
@@ -177,11 +185,11 @@ model ApiToken {
   /// is the one that is visibly safe to revoke.
   lastUsedAt DateTime?
   /// Null means it does not expire. Enforced on read, not by a sweep.
-  expiresAt DateTime?
+  expiresAt  DateTime?
   /// Revocation is a tombstone rather than a delete: the row is the only
   /// record that the credential existed, and that is worth keeping.
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
 
   @@index([userId, createdAt])
 }
@@ -213,12 +221,22 @@ model Contract {
   customerId String
   customer   User   @relation("CustomerContracts", fields: [customerId], references: [id])
 
-  status ContractStatus @default(DRAFT)
+  /// Build plan D1, 2026-09-20: the registry's owner is the project, not the
+  /// contract — a contract attaches to a project rather than the other way
+  /// around. Nullable because L1 does not build the screens that create a
+  /// project before a contract exists (lifecycle spec §4 stages 1-2); every
+  /// contract migrated by L1 got one project of its own (see the L1
+  /// migration), and `createContract` creates one alongside every new
+  /// contract, but the column itself does not require it.
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  status          ContractStatus @default(DRAFT)
   /// When the contract entered its current status. Not `updatedAt`, which any
   /// write bumps — this is what the Needs-Root queue orders by, and a queue
   /// ordered by "was touched at all" is not a queue. Set by both status
   /// writers, and only when the status actually differs (V4.md defect D7).
-  statusChangedAt DateTime @default(now())
+  statusChangedAt DateTime       @default(now())
 
   /// Toman. Integer — no sub-unit in practice, and no float rounding.
   /// This is the *draft* fee; a published revision carries its own frozen copy.
@@ -238,7 +256,9 @@ model Contract {
   contractRevisions ContractRevision[] @relation("ContractRevisions")
   designRevisions   DesignRevision[]   @relation("ContractDesignRevisions")
 
-  scopeItems ScopeItem[]
+  // ScopeItem re-parented to Project at L1 (build plan D1) — reached here via
+  // `project.scopeItems`, never a direct relation. See Project and ScopeItem
+  // below.
   articles   Article[]
   comments   Comment[]
   changeLogs ChangeLog[]
@@ -365,7 +385,11 @@ model Amendment {
   publishedAt DateTime?
   approvedAt  DateTime?
 
-  signature Signature?
+  signature  Signature?
+  /// The paired amendment a scope trade updates the contract view through
+  /// (spec §4, build plan L1) — set once a trade executes. Null for every
+  /// amendment issued the ordinary way.
+  scopeTrade ScopeTrade?
 
   createdAt DateTime @default(now())
 
@@ -380,9 +404,9 @@ model DesignConcept {
   designRevision   DesignRevision @relation(fields: [designRevisionId], references: [id], onDelete: Cascade)
 
   /// Short id shown on the card: "1a", "1b", "1c".
-  key      String
-  labelFa  String
-  labelEn  String
+  key         String
+  labelFa     String
+  labelEn     String
   /// Uploaded preview. Null until Root uploads one — the UI falls back to the
   /// placeholder browser-chrome block. Set from `imageFile`, never by hand:
   /// see the note on PageDesign.imageUrl for why both fields exist.
@@ -474,8 +498,8 @@ model StoredFile {
   visibility FileVisibility
 
   /// The type the server determined, not the one the client claimed.
-  mime  String
-  bytes Int
+  mime         String
+  bytes        Int
   /// Only ever echoed back in a download filename, never used as a path.
   originalName String
 
@@ -511,12 +535,80 @@ model StoredFile {
   @@index([class, visibility])
 }
 
-/// Appendix 1 rendered as tickable items. Never gated — the customer can tick
-/// these at any point.
+// ---------------------------------------------------------------------------
+// Projects & the scope registry (build plan L1, 2026-09-20; spec §3-4)
+// ---------------------------------------------------------------------------
+//
+// D1: the registry's owner is a Project, not a Contract. A Contract attaches
+// to a Project (nullable projectId above) rather than owning the registry —
+// Contact and Scoping (spec §4 stages 1-2) produce a project and a seeded
+// registry before any contract exists, and a wedge customer's design contract
+// and build contract share one registry rather than each copying it (which
+// would destroy `origin`, the field that answers "where did this come from").
+
+enum ProjectStatus {
+  ACTIVE
+  /// Not currently set by anything — reserved for when a project can be
+  /// closed out. Later stages (L2's phases) are expected to read finer
+  /// lifecycle state off phases and the registry rather than growing this
+  /// enum, so it stays two values on purpose.
+  ARCHIVED
+}
+
+/// The registry's owner (D1): customer, status, and the scope items. Phases,
+/// demos and dependencies (L2, L5) hang off this in later stages.
+model Project {
+  id String @id @default(cuid())
+
+  customerId String
+  customer   User   @relation("CustomerProjects", fields: [customerId], references: [id])
+
+  titleFa String
+  titleEn String
+
+  status ProjectStatus @default(ACTIVE)
+
+  contracts   Contract[]
+  scopeItems  ScopeItem[]
+  scopeTrades ScopeTrade[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+/// Status lifecycle (spec §3; build plan L1): `proposed` at scoping, `agreed`
+/// once settled, `inBuild`/`inDemo` as it moves through a phase (L2), and
+/// `accepted` once a demo review closes it out (L3). `declined` and `traded`
+/// are terminal — a declined item stays in the record rather than being
+/// deleted, and a traded item's replacement is a new row linked through
+/// ScopeTrade, never an edit in place.
+enum ScopeStatus {
+  PROPOSED
+  AGREED
+  IN_BUILD
+  IN_DEMO
+  ACCEPTED
+  DECLINED
+  TRADED
+}
+
+/// Appendix 1, grown from a flat tickable checklist into the registry every
+/// other document reads from (spec §3). `checkedAt` is kept exactly as it
+/// was — the customer's own tick on the working checklist — and is never
+/// backfilled into `status`: they are different acts. `status` tracks where
+/// an item stands in the build lifecycle; `checkedAt` tracks only whether the
+/// customer ticked the box on the appendix. Conflating them at the L1
+/// migration would write a false history into the one record whose purpose
+/// is being true (build plan L1, banked trap #1).
+///
+/// Never gated — the customer can tick `checkedAt` at any point, whatever
+/// `status` says.
 model ScopeItem {
-  id         String   @id @default(cuid())
-  contractId String
-  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   key      String
   labelFa  String
@@ -525,7 +617,86 @@ model ScopeItem {
 
   checkedAt DateTime?
 
-  @@unique([contractId, key])
+  status ScopeStatus @default(PROPOSED)
+
+  /// A known stand-in — e.g. the SMS-less auth Nahal shipped with. Never
+  /// gates anything; the review frame (L3) reads it to say so in plain terms.
+  temporary Boolean @default(false)
+
+  /// Deliberately settled post-design, with a date and a pointer to what
+  /// settled it. Both or neither — held by a CHECK constraint added by hand
+  /// in the migration, since Prisma cannot express "these two columns agree".
+  /// There is no formal decision-record model yet (that is L3's round, or
+  /// L3b's build), so the pointer is a free-text note naming the decision —
+  /// a call, a message, a round — rather than a foreign key invented ahead of
+  /// the object it would eventually point at.
+  decidedAt   DateTime?
+  decidedNote String?
+
+  outOfScope Boolean @default(false)
+  adminWork  Boolean @default(false)
+
+  /// Recorded when `status` is DECLINED. Optional rather than CHECK-enforced
+  /// — contrast L3b's `Build` outcome, which the build plan holds to a CHECK
+  /// on exactly this shape. The completeness checklist below is seeded
+  /// DECLINED by default specifically so its *absence* of coverage is visible
+  /// before anyone has had the chance to write a reason for it.
+  declinedReason String?
+
+  /// Origin (spec §3): who asked, when, in which round — so "where did
+  /// bilingual come from" has an answer. No Round or Ticket-thread model
+  /// exists yet to point at (that arrives with L3's review frame), so this
+  /// stays three plain fields rather than a relation invented ahead of the
+  /// object it would relate to.
+  originNote    String?
+  originRound   String?
+  originAskedAt DateTime @default(now())
+
+  /// Set once this item is the "out" or "in" half of a scope trade (spec §4).
+  /// At most one of each per item — the unique constraints live on
+  /// ScopeTrade's own foreign keys.
+  tradedOut ScopeTrade? @relation("TradeOut")
+  tradedIn  ScopeTrade? @relation("TradeIn")
+
+  @@unique([projectId, key])
+}
+
+/// Paired movements — one item out, one in — recorded as a single row so the
+/// two ends can never drift apart (spec §4: "swap item X for item Y of
+/// comparable weight"). Both parties confirm before it executes and the
+/// contract view updates via a paired amendment.
+///
+/// **The customer-confirm half is not wired to a mutation this stage** — see
+/// docs/development/L1.md. `customerConfirmedAt` exists so executing a trade
+/// is already gated on both signatures the day the portal side lands, rather
+/// than becoming a second migration.
+model ScopeTrade {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  outItemId String    @unique
+  outItem   ScopeItem @relation("TradeOut", fields: [outItemId], references: [id], onDelete: Restrict)
+  inItemId  String    @unique
+  inItem    ScopeItem @relation("TradeIn", fields: [inItemId], references: [id], onDelete: Restrict)
+
+  proposedById String
+  proposedBy   User     @relation(fields: [proposedById], references: [id])
+  proposedAt   DateTime @default(now())
+
+  rootConfirmedAt     DateTime?
+  customerConfirmedAt DateTime?
+
+  executedAt  DateTime?
+  /// The paired amendment updating the contract view, written once the trade
+  /// executes. Null until then, and null forever for a project with no
+  /// signed contract to amend.
+  amendmentId String?    @unique
+  amendment   Amendment? @relation(fields: [amendmentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
 }
 
 /// The fourteen articles plus Appendix 1, as the editable **draft**. Body text
@@ -779,7 +950,7 @@ model LibraryEntry {
 
   /// The public reader's URL segment (R2). Unique, immutable once published —
   /// a URL that has been handed out is not free to change (T4).
-  slug String @unique
+  slug String    @unique
   type EntryType
 
   // ---- the work, in its own language ----
@@ -823,7 +994,7 @@ model LibraryEntry {
   /// PUBLIC by default (§2.1) — the Lab is a public library, so public is the
   /// honest default; the private register is protected by publishedAt being
   /// null until someone publishes deliberately, not by this flag.
-  visibility EntryVisibility @default(PUBLIC)
+  visibility  EntryVisibility @default(PUBLIC)
   /// Null means draft. Set by publishLibraryEntry, which needs library.publish.
   publishedAt DateTime?
 
@@ -951,7 +1122,7 @@ model ReviewThread {
   /// selected. Verified against the rendered block on every read; a
   /// mismatch (a dependency bump shifting the render) detaches the thread
   /// rather than re-finding it.
-  quote String
+  quote       String
 
   resolvedAt   DateTime?
   resolvedById String?

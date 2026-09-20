@@ -184,4 +184,13 @@ export const Query = {
       createdAt: r.createdAt,
     }));
   },
+
+  /** Staff. One project with its live registry — build plan L1. */
+  project: async (_p: unknown, args: { id: string }, ctx: Context) => {
+    requireCapability(ctx, 'contracts.manage');
+    return prisma.project.findUnique({
+      where: { id: args.id },
+      include: { scopeItems: { orderBy: { position: 'asc' } } },
+    });
+  },
 };

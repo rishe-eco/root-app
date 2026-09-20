@@ -104,6 +104,58 @@ test('buildDocumentSnapshot: renaming the document (path/title) does not change 
   assert.equal(contentHash(buildDocumentSnapshot(blocks)), contentHash(buildDocumentSnapshot(blocks)));
 });
 
+// ---------------------------------------------------------------------------
+// L1 — Appendix 1 as a view of the registry's agreed set. The trap this
+// guards: a published revision's snapshot must stay byte-identical whether or
+// not the caller ever heard of scopeItems.
+// ---------------------------------------------------------------------------
+
+test('omitting scopeItems hashes identically to passing an empty array — the shape every pre-L1 call site produced', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const withoutArg = buildContractSnapshot(contract, [article(1)]);
+  const withEmptyArray = buildContractSnapshot(contract, [article(1)], []);
+  assert.equal(contentHash(withoutArg), contentHash(withEmptyArray));
+});
+
+test('a non-empty agreed scope set changes the hash — it is real content, not decoration', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const without = buildContractSnapshot(contract, [article(1)]);
+  const withScope = buildContractSnapshot(contract, [article(1)], [
+    { key: 'bilingual', labelFa: 'دوزبانه', labelEn: 'Bilingual' },
+  ]);
+  assert.notEqual(contentHash(without), contentHash(withScope));
+});
+
+test('scope item order is content, like article order', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const a = buildContractSnapshot(contract, [], [
+    { key: 'a', labelFa: 'الف', labelEn: 'A' },
+    { key: 'b', labelFa: 'ب', labelEn: 'B' },
+  ]);
+  const b = buildContractSnapshot(contract, [], [
+    { key: 'b', labelFa: 'ب', labelEn: 'B' },
+    { key: 'a', labelFa: 'الف', labelEn: 'A' },
+  ]);
+  assert.notEqual(contentHash(a), contentHash(b));
+});
+
+test('draftState without a fourth argument behaves exactly as it did before L1', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const { hash } = draftState(contract, [article(1)], null);
+  const { dirty } = draftState(contract, [article(1)], { contentHash: hash });
+  assert.equal(dirty, false);
+});
+
+test('draftState goes dirty when only the agreed scope set changes', () => {
+  const contract = { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null };
+  const before = draftState(contract, [article(1)], null, []);
+  const current = { contentHash: before.hash };
+  const after = draftState(contract, [article(1)], current, [
+    { key: 'bilingual', labelFa: 'دوزبانه', labelEn: 'Bilingual' },
+  ]);
+  assert.equal(after.dirty, true);
+});
+
 test('the hash is sha256 hex', () => {
   const snapshot = buildContractSnapshot(
     { ref: 'RC-1', titleFa: 'ت', titleEn: 't', amount: null },

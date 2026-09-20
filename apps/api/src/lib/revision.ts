@@ -24,6 +24,8 @@ export type ArticleSnapshot = {
   bodyEn: string | null;
 };
 
+export type ScopeItemSnapshot = { key: string; labelFa: string; labelEn: string };
+
 export type ContractSnapshot = {
   format: number;
   ref: string;
@@ -32,6 +34,22 @@ export type ContractSnapshot = {
   /** Toman, as a decimal string: `amount` is a BigInt and does not survive JSON. */
   amount: string | null;
   articles: ArticleSnapshot[];
+  /**
+   * Appendix 1, as a view of the registry's agreed set (build plan L1; spec
+   * §3) rather than free text typed onto an article.
+   *
+   * **Why this is safe for already-published revisions (L1's sharpest
+   * trap).** A `ContractRevision.snapshot` is written once, at publish time,
+   * and never recomputed from live data afterward — every read goes through
+   * `readContractSnapshot`, which returns exactly the JSON that was stored.
+   * This field did not exist before L1, so no snapshot published before L1
+   * has it; `contentHash` for those rows was computed, at the time, over an
+   * object with no `scopeItems` key, and stays that way forever. Adding the
+   * key here changes only what `buildContractSnapshot` produces for
+   * revisions published *from now on* — it is a new input for new output,
+   * never a reinterpretation of old output. See docs/development/L1.md.
+   */
+  scopeItems: ScopeItemSnapshot[];
 };
 
 export type AmendmentSnapshot = {
@@ -118,10 +136,17 @@ type ArticleDraft = {
  * rows — into the snapshot a revision carries. Articles are ordered by number
  * here rather than trusting the caller's query, so the snapshot does not depend
  * on an `orderBy` somewhere else.
+ *
+ * `scopeItems` defaults to `[]` — the registry's agreed set, already reduced
+ * to the frozen shape by `lib/scope.ts`'s `agreedScopeSnapshot` before it
+ * reaches here. Every call site that predates L1 (and every already-published
+ * revision) never passed a third argument at all; see the field's own doc
+ * comment on `ContractSnapshot` for why that keeps old hashes intact.
  */
 export function buildContractSnapshot(
   contract: ContractDraft,
   articles: ArticleDraft[],
+  scopeItems: ScopeItemSnapshot[] = [],
 ): ContractSnapshot {
   return {
     format: SNAPSHOT_FORMAT,
@@ -138,6 +163,7 @@ export function buildContractSnapshot(
         bodyFa: a.bodyFa,
         bodyEn: a.bodyEn,
       })),
+    scopeItems,
   };
 }
 
@@ -159,13 +185,22 @@ export type DraftState = {
  * `publishContractRevision`'s `NO_CHANGES` refusal. They are the same
  * question — whether publishing this draft would produce something different
  * from what is live — and must not be answered twice.
+ *
+ * `scopeItems` is appended as a fourth, optional argument rather than
+ * inserted before `current` — every call site from before L1 passes three
+ * arguments, and this keeps them compiling unchanged. Passing the registry's
+ * current agreed set here is what makes "Root just marked one more item
+ * agreed, nothing else changed" register as dirty: without it, moving an item
+ * to `agreed` would never be publishable on its own, because the comparison
+ * this function makes would not have seen it move.
  */
 export function draftState(
   contract: ContractDraft,
   articles: ArticleDraft[],
   current: { contentHash: string | null } | null,
+  scopeItems: ScopeItemSnapshot[] = [],
 ): DraftState {
-  const snapshot = buildContractSnapshot(contract, articles);
+  const snapshot = buildContractSnapshot(contract, articles, scopeItems);
   const hash = contentHash(snapshot);
   const dirty = current === null || current.contentHash === null || current.contentHash !== hash;
   return { snapshot, hash, dirty };

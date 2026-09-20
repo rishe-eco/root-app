@@ -40,6 +40,35 @@ export const SCOPE: Array<[string, string, string]> = [
   ['tracking', 'ثبتِ تغییرات با کاربر و زمان', 'Change tracking with actor and timestamp'],
 ];
 
+/**
+ * The completeness checklist (build plan L1; spec §3): standard scope areas
+ * every web project must explicitly address or explicitly decline, so a hole
+ * like Nahal's missing dashboard and theme-settings coverage (friction F7) is
+ * a discovery at project creation rather than in review.
+ *
+ * Seeded DECLINED at project creation — deliberately, not PROPOSED — so an
+ * area nobody has scoped in reads as "declined, and worth a second look"
+ * rather than silently absent from the registry. `createProject` (see
+ * resolvers/admin/registry.ts) is the one place this list is applied; it is
+ * not part of `applyContractTemplate`'s SCOPE list above, and the two key
+ * spaces are kept apart (`checklist.*` vs the plain keys in SCOPE) so the two
+ * mechanisms never collide on one row.
+ *
+ * [key, labelFa, labelEn]
+ */
+export const CHECKLIST: Array<[string, string, string]> = [
+  ['checklist.publicPages', 'صفحات عمومیِ سایت', 'Public-facing pages'],
+  ['checklist.adminDashboard', 'داشبورد مدیریت', 'Admin dashboard'],
+  ['checklist.themeSettings', 'تنظیماتِ ظاهر و قالب', 'Theme & settings coverage'],
+  ['checklist.auth', 'احراز هویت', 'Authentication'],
+  ['checklist.notifications', 'اطلاع‌رسانی (پیامک/ایمیل)', 'Notifications (SMS/email)'],
+  ['checklist.payment', 'درگاه پرداخت', 'Payment'],
+  ['checklist.multilingual', 'چندزبانه‌بودن', 'Multilingual support'],
+  ['checklist.hosting', 'میزبانی', 'Hosting'],
+  ['checklist.legal', 'الزامات قانونی (اینماد)', 'Legal (Enamad)'],
+  ['checklist.analytics', 'تحلیلِ ترافیک', 'Analytics'],
+];
+
 /** [key, labelFa, labelEn] */
 export const PAGES: Array<[string, string, string]> = [
   ['home', 'صفحه‌ی فرود', 'Landing'],

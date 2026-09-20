@@ -40,7 +40,11 @@ export const contractInclude = {
       },
     },
   },
-  scopeItems: { orderBy: { position: 'asc' } },
+  // ScopeItem re-parented to Project at L1 (build plan D1) — reached through
+  // the project relation rather than a direct one. `Contract.scopeItems`
+  // (fields.ts) proxies `project.scopeItems` so existing callers see the same
+  // shape as before the migration.
+  project: { include: { scopeItems: { orderBy: { position: 'asc' } } } },
   articles: { orderBy: { number: 'asc' } },
   comments: { include: { author: true }, orderBy: { createdAt: 'asc' } },
   changeLogs: { include: { actor: true }, orderBy: { createdAt: 'desc' } },

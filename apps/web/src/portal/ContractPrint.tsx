@@ -167,6 +167,24 @@ export default function ContractPrint() {
         })}
       </section>
 
+      {/* Appendix 1, as a view of the registry's agreed set frozen into this
+          revision (build plan L1) — never the live registry (that is the
+          portal's own scope checklist, elsewhere on this contract). Empty
+          for a revision published before L1, since the snapshot gained this
+          field only going forward. */}
+      <section className="doc-sec">
+        <h2 className="doc-h">{t('print.appendix')}</h2>
+        {contract.agreedScopeItems.length > 0 ? (
+          <ul className="doc-list">
+            {contract.agreedScopeItems.map((s) => (
+              <li key={s.key}>{pick({ labelFa: s.labelFa, labelEn: s.labelEn }, 'label', locale)}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="doc-art-body doc-art-empty">{t('print.appendixEmpty')}</p>
+        )}
+      </section>
+
       {/* Amendments — changes made after signature, each standing on its own
           hash and its own signature. */}
       {revision.amendments.length > 0 ? (

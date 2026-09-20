@@ -6,6 +6,7 @@ export const typeDefs = /* GraphQL */ `
     ADMIN
     CONTRIBUTOR
     REVIEWER
+    DEVELOPER
   }
 
   enum ContractStatus {
@@ -84,12 +85,99 @@ export const typeDefs = /* GraphQL */ `
     pages: [PageDesign!]!
   }
 
+  """
+  Status lifecycle (build plan L1; spec §3): proposed at scoping, agreed once
+  settled, in-build/in-demo as it moves through a phase (L2), accepted once a
+  demo review closes it out (L3). DECLINED and TRADED are terminal.
+  """
+  enum ScopeStatus {
+    PROPOSED
+    AGREED
+    IN_BUILD
+    IN_DEMO
+    ACCEPTED
+    DECLINED
+    TRADED
+  }
+
+  enum ProjectStatus {
+    ACTIVE
+    ARCHIVED
+  }
+
+  enum ScopeMoveDirection {
+    UP
+    DOWN
+  }
+
+  """
+  Appendix 1, grown from a flat tickable checklist into the registry every
+  other document reads from (spec §3; build plan L1).
+
+  checked is the customer's own tick, unrelated to status — see
+  schema.prisma's note on ScopeItem for why the two are never conflated.
+  """
   type ScopeItem {
     id: ID!
     key: String!
     labelFa: String!
     labelEn: String!
+    position: Int!
     checked: Boolean!
+    status: ScopeStatus!
+    "A known stand-in that will change — never gates anything."
+    temporary: Boolean!
+    outOfScope: Boolean!
+    adminWork: Boolean!
+    "Both null or both set — see schema.prisma's CHECK constraint."
+    decidedAt: DateTime
+    decidedNote: String
+    "Set when status is DECLINED. Not required to be set — see schema.prisma."
+    declinedReason: String
+    "Who asked, in what context. Free text — no round object exists yet (L3)."
+    originNote: String
+    originRound: String
+    originAskedAt: DateTime!
+  }
+
+  """
+  A snapshot-frozen scope item — the shape Appendix 1 freezes into a published
+  contract revision (build plan L1). No id, no status: a position in a frozen
+  document, exactly like Article on Contract.articles.
+  """
+  type ScopeSnapshotItem {
+    key: String!
+    labelFa: String!
+    labelEn: String!
+  }
+
+  """
+  Paired movements — one item out, one in (spec §4). Both parties confirm
+  before it executes. **The customer-confirm half has no mutation yet** — see
+  docs/development/L1.md.
+  """
+  type ScopeTrade {
+    id: ID!
+    outItem: ScopeItem!
+    inItem: ScopeItem!
+    proposedBy: User!
+    proposedAt: DateTime!
+    rootConfirmedAt: DateTime
+    customerConfirmedAt: DateTime
+    executedAt: DateTime
+  }
+
+  """
+  The registry's owner (build plan D1). Phases, demos and dependencies (L2,
+  L5) are not modelled yet — this is deliberately thin.
+  """
+  type Project {
+    id: ID!
+    titleFa: String!
+    titleEn: String!
+    status: ProjectStatus!
+    scopeItems: [ScopeItem!]!
+    scopeTrades: [ScopeTrade!]!
   }
 
   type Article {
@@ -326,8 +414,18 @@ export const typeDefs = /* GraphQL */ `
     updatedAt: DateTime!
     gate: Gate!
     concepts: [DesignConcept!]!
+    "Live — this project's whole registry, not only what is agreed. See agreedScopeItems for the frozen view."
     scopeItems: [ScopeItem!]!
+    "Null until L1's migration runs, or for a contract with no project yet."
+    project: Project
     articles: [Article!]!
+    """
+    Appendix 1 as it was frozen into the current published revision — the
+    registry's agreed set at that moment, not the live registry (build plan
+    L1). Empty for a revision published before L1, since the snapshot gained
+    this field only going forward — see schema.prisma's ContractSnapshot note.
+    """
+    agreedScopeItems: [ScopeSnapshotItem!]!
     comments: [Comment!]!
     changeLog: [ChangeLogEntry!]!
     signature: Signature
@@ -773,6 +871,9 @@ export const typeDefs = /* GraphQL */ `
 
     "Staff (apiTokens.manage). The caller's own tokens, newest first, revoked ones included."
     myApiTokens: [ApiToken!]!
+
+    "Staff (contracts.manage). One project, with its registry and any trades."
+    project(id: ID!): Project
   }
 
   input CreateContractInput {
@@ -839,10 +940,37 @@ export const typeDefs = /* GraphQL */ `
     """
     setConceptImage(conceptId: ID!, fileId: ID): Contract!
     setPageImage(pageId: ID!, fileId: ID): Contract!
+    "Created AGREED — Root adding it here is the agreement act. See CHECKLIST for the DECLINED-by-default seed."
     addScopeItem(contractId: ID!, key: String!, labelFa: String!, labelEn: String!): Contract!
     "Live to the customer the instant it is saved — ScopeItem is not versioned."
     updateScopeItem(scopeItemId: ID!, labelFa: String!, labelEn: String!): Contract!
     deleteScopeItem(scopeItemId: ID!): Contract!
+
+    "reason is stored only when status is DECLINED; set otherwise, it is cleared."
+    setScopeItemStatus(scopeItemId: ID!, status: ScopeStatus!, reason: String): Contract!
+    "Full replace of all three flags in one call, since they are edited together on the registry screen."
+    setScopeItemFlags(scopeItemId: ID!, temporary: Boolean!, outOfScope: Boolean!, adminWork: Boolean!): Contract!
+    "Sets decidedAt to now and records the pointer. Refused if already decided — undecideScopeItem first."
+    decideScopeItem(scopeItemId: ID!, note: String!): Contract!
+    "Clears decidedAt and decidedNote together — see schema.prisma's CHECK."
+    undecideScopeItem(scopeItemId: ID!): Contract!
+    setScopeItemOrigin(scopeItemId: ID!, note: String, round: String): Contract!
+    "Swaps position with the neighbour in that direction. A no-op at either end of the list."
+    reorderScopeItem(scopeItemId: ID!, direction: ScopeMoveDirection!): Contract!
+
+    """
+    Proposes a paired movement: outItemId (must be AGREED or further along)
+    moves toward TRADED, and a new item is created PROPOSED to move the other
+    way. Neither actually moves until executeScopeTrade — see ScopeTrade.
+    Returns the contract, like every other registry mutation (T9 in V2.md) —
+    reach the new trade via project.scopeTrades.
+    """
+    proposeScopeTrade(projectId: ID!, outItemId: ID!, inKey: String!, inLabelFa: String!, inLabelEn: String!): Contract!
+    "Root's confirmation. The customer's has no mutation yet — see docs/development/L1.md."
+    confirmScopeTradeRoot(tradeId: ID!): Contract!
+    "Refused until both rootConfirmedAt and customerConfirmedAt are set."
+    executeScopeTrade(tradeId: ID!): Contract!
+
     setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String): Contract!
 
     """

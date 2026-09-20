@@ -53,6 +53,21 @@ export const CAPABILITIES = [
    * side effect of some other grant.
    */
   'apiTokens.manage',
+  /**
+   * Build plan D6, 2026-09-20: declare a build, disposition open feedback
+   * items, write change entries, move scope items to `in-demo` (L3b fills in
+   * the surface this guards; L1 only adds the role and the section it needs
+   * to not be blank).
+   *
+   * Its own row rather than a widening of `contracts.manage`, on purpose: the
+   * person who authors a build is not thereby an account administrator or a
+   * contract author. They never need the contract text, the fee, the
+   * customer list, or `apiTokens.manage` — the one capability whose blast
+   * radius is everything else a role holds — to do this job, so none of those
+   * are reachable from here. Same reasoning `REVIEWER` was narrowed to
+   * `review.participate` and nothing else.
+   */
+  'builds.author',
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -86,6 +101,17 @@ const GRANTS: Record<Role, readonly Capability[]> = {
    * as a second role, rather than by implication.
    */
   REVIEWER: ['review.participate'],
+
+  /**
+   * Build plan D6. One verb, and pointedly not `contracts.manage`,
+   * `customers.manage`, or `apiTokens.manage` — a developer pulls tickets
+   * from their own section (`DESK_SECTIONS`'s `builds` row) and never needs
+   * to see the contract, the fee, the customer list, or the token screen to
+   * do that. If Root wants one person holding both remits, `ADMIN` is added
+   * alongside — visibly, as a second role, exactly as `CONTRIBUTOR` is added
+   * beside `REVIEWER` rather than implied by it.
+   */
+  DEVELOPER: ['builds.author'],
 };
 
 /** Every capability held across a user's role set. */
