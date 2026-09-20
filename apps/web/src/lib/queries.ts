@@ -122,14 +122,88 @@ export type DemoUnmatchedPath = {
   count: number;
 };
 
+// ---------------------------------------------------------------------------
+// Review frames and feedback intake (build plan L3; spec §6). Named without
+// the bare word "review" anywhere — see the API's schema.prisma comment on
+// DemoFrame for why (desk/sections.ts already has review/reviewAdmin for the
+// unrelated Review Room).
+// ---------------------------------------------------------------------------
+
+export type DemoFrameLineKind = 'NEW' | 'KNOWN_MISSING' | 'TEMPORARY' | 'DECIDED';
+
+/** Only what interception (D4) and the frame display need from the source item. */
+export type FrameLineScopeItemRef = {
+  id: string;
+  labelFa: string;
+  labelEn: string;
+  temporary: boolean;
+  decidedAt: string | null;
+  decidedNote: string | null;
+};
+
+export type FeedbackStatus = 'OPEN' | 'RATIFIED' | 'ADDRESSED' | 'ACCEPTED' | 'DECLINED';
+
+export type FeedbackComment = {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: Pick<User, 'id' | 'name'>;
+};
+
+export type FeedbackItem = {
+  id: string;
+  status: FeedbackStatus;
+  createdAt: string;
+  ratifiedAt: string | null;
+  ratifiedBy: Pick<User, 'id' | 'name'> | null;
+  reopenedScopeItem: FrameLineScopeItemRef | null;
+  demoPage: Pick<DemoPage, 'id' | 'key' | 'labelFa' | 'labelEn'> | null;
+  frameLine: { id: string; kind: DemoFrameLineKind; textFa: string; textEn: string } | null;
+  comments: FeedbackComment[];
+};
+
+export type DemoFrameLine = {
+  id: string;
+  kind: DemoFrameLineKind;
+  textFa: string;
+  textEn: string;
+  position: number;
+  scopeItem: FrameLineScopeItemRef | null;
+  feedbackItem: FeedbackItem | null;
+};
+
+export type DemoFrame = {
+  id: string;
+  summaryFa: string | null;
+  summaryEn: string | null;
+  authoredBy: Pick<User, 'id' | 'name'>;
+  lines: DemoFrameLine[];
+};
+
+export type FeedbackInterceptionReason = 'DECIDED' | 'TEMPORARY';
+
+/** What submitFeedback actually did — house rule 6: a code and parameters,
+ *  never a sentence. The web renders the interception prompt from
+ *  interceptionReason and interceptionScopeItem's own fields. */
+export type FeedbackSubmitResult = {
+  item: FeedbackItem | null;
+  intercepted: boolean;
+  interceptionReason: FeedbackInterceptionReason | null;
+  interceptionScopeItem: FrameLineScopeItemRef | null;
+};
+
 export type Demo = {
   id: string;
   stagingUrl: string;
   buildRef: string | null;
   reviewWindowStart: string | null;
   reviewWindowEnd: string | null;
+  /** Null means draft — build plan L3: "a demo cannot be published naked." */
+  publishedAt: string | null;
   pages: DemoPage[];
   unmatchedPaths: DemoUnmatchedPath[];
+  frame: DemoFrame | null;
+  feedbackItems: FeedbackItem[];
 };
 
 /** Only what the phase board actually selects — not the full ScopeItem shape
@@ -369,8 +443,56 @@ const USER_FIELDS = gql`
   }
 `;
 
+/**
+ * Shared by a demo's `feedbackItems` and a frame line's own `feedbackItem`
+ * (build plan L3) — one fragment, so the two never silently ask for
+ * different shapes of the same object.
+ */
+export const FEEDBACK_ITEM_FIELDS = gql`
+  fragment FeedbackItemFields on FeedbackItem {
+    id
+    status
+    createdAt
+    ratifiedAt
+    ratifiedBy {
+      id
+      name
+    }
+    reopenedScopeItem {
+      id
+      labelFa
+      labelEn
+      temporary
+      decidedAt
+      decidedNote
+    }
+    demoPage {
+      id
+      key
+      labelFa
+      labelEn
+    }
+    frameLine {
+      id
+      kind
+      textFa
+      textEn
+    }
+    comments {
+      id
+      body
+      createdAt
+      author {
+        id
+        name
+      }
+    }
+  }
+`;
+
 /** One shape for the detail screen, so every mutation can return it whole. */
 export const CONTRACT_FIELDS = gql`
+  ${FEEDBACK_ITEM_FIELDS}
   fragment ContractFields on Contract {
     id
     ref
@@ -478,6 +600,7 @@ export const CONTRACT_FIELDS = gql`
           buildRef
           reviewWindowStart
           reviewWindowEnd
+          publishedAt
           pages {
             id
             key
@@ -496,6 +619,36 @@ export const CONTRACT_FIELDS = gql`
             firstSeenAt
             lastSeenAt
             count
+          }
+          frame {
+            id
+            summaryFa
+            summaryEn
+            authoredBy {
+              id
+              name
+            }
+            lines {
+              id
+              kind
+              textFa
+              textEn
+              position
+              scopeItem {
+                id
+                labelFa
+                labelEn
+                temporary
+                decidedAt
+                decidedNote
+              }
+              feedbackItem {
+                ...FeedbackItemFields
+              }
+            }
+          }
+          feedbackItems {
+            ...FeedbackItemFields
           }
         }
       }
@@ -1298,6 +1451,106 @@ export const REPORT_DEMO_PATH = gql`
           imageUrl
         }
       }
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Review frames and feedback intake (build plan L3; spec §6). The frame
+// mutations follow T9 like every other registry/phase mutation (whole
+// Contract back); submitFeedback returns FeedbackSubmitResult instead — the
+// interception result is not a Contract-shaped fact — so the caller refetches
+// the contract query itself after a first, non-intercepted submission (see
+// ContractDetail.tsx / PhasesTab.tsx). ratifyFeedback returns Contract! since
+// it never needs an interception-shaped answer.
+// ---------------------------------------------------------------------------
+
+export const GENERATE_DEMO_FRAME = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation GenerateDemoFrame($demoId: ID!) {
+    generateDemoFrame(demoId: $demoId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_DEMO_FRAME_SUMMARY = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdateDemoFrameSummary($demoId: ID!, $summaryFa: String, $summaryEn: String) {
+    updateDemoFrameSummary(demoId: $demoId, summaryFa: $summaryFa, summaryEn: $summaryEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const ADD_DEMO_FRAME_LINE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation AddDemoFrameLine($demoId: ID!, $kind: DemoFrameLineKind!, $textFa: String!, $textEn: String!) {
+    addDemoFrameLine(demoId: $demoId, kind: $kind, textFa: $textFa, textEn: $textEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_DEMO_FRAME_LINE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdateDemoFrameLine($lineId: ID!, $textFa: String!, $textEn: String!) {
+    updateDemoFrameLine(lineId: $lineId, textFa: $textFa, textEn: $textEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_DEMO_FRAME_LINE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeleteDemoFrameLine($lineId: ID!) {
+    deleteDemoFrameLine(lineId: $lineId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const PUBLISH_DEMO = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation PublishDemo($demoId: ID!) {
+    publishDemo(demoId: $demoId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SUBMIT_FEEDBACK = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  mutation SubmitFeedback($demoId: ID!, $targetDemoPageId: ID, $targetFrameLineId: ID, $body: String!, $confirmReopen: Boolean) {
+    submitFeedback(
+      demoId: $demoId
+      targetDemoPageId: $targetDemoPageId
+      targetFrameLineId: $targetFrameLineId
+      body: $body
+      confirmReopen: $confirmReopen
+    ) {
+      item {
+        ...FeedbackItemFields
+      }
+      intercepted
+      interceptionReason
+      interceptionScopeItem {
+        id
+        labelFa
+        labelEn
+        temporary
+        decidedAt
+        decidedNote
+      }
+    }
+  }
+`;
+
+export const RATIFY_FEEDBACK = gql`
+  ${CONTRACT_FIELDS}
+  mutation RatifyFeedback($demoId: ID!, $itemIds: [ID!]!) {
+    ratifyFeedback(demoId: $demoId, itemIds: $itemIds) {
+      ...ContractFields
     }
   }
 `;

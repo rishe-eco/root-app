@@ -134,10 +134,21 @@ export const typeDefs = /* GraphQL */ `
     decidedNote: String
     "Set when status is DECLINED. Not required to be set — see schema.prisma."
     declinedReason: String
-    "Who asked, in what context. Free text — no round object exists yet (L3)."
+    "Who asked, in what context. Free text — no round object exists yet."
     originNote: String
     originRound: String
     originAskedAt: DateTime!
+    """
+    Which phase (build plan L2) is building this item, if any. Pre-existing
+    gap found by L3's first successful e2e run: the web's own
+    CONTRACT_FIELDS fragment has selected this since L2 shipped, and the
+    Prisma column has existed just as long, but the GraphQL type never
+    declared the field — so every query built from that fragment
+    (MyContracts, AllContracts, CreateContract, …) failed schema validation
+    outright. Fixed here rather than deferred, since it blocks any
+    meaningful e2e verification of this stage's own new surface.
+    """
+    phaseId: ID
   }
 
   """
@@ -260,9 +271,137 @@ export const typeDefs = /* GraphQL */ `
     "Convention, not machinery (L2.2) — no deploy lock is implied by these dates."
     reviewWindowStart: DateTime
     reviewWindowEnd: DateTime
+    """
+    Null means draft — visible to staff only. Build plan L3, spec §6: "a demo
+    cannot be published naked" — publishDemo refuses without a frame first.
+    """
+    publishedAt: DateTime
+    "Null until generateDemoFrame has been called at least once."
+    frame: DemoFrame
     pages: [DemoPage!]!
     "Visible so the desk can notice a route nobody declared, rather than it vanishing silently."
     unmatchedPaths: [DemoUnmatchedPath!]!
+    "Every feedback item filed against this demo's pages or frame lines, newest first."
+    feedbackItems: [FeedbackItem!]!
+  }
+
+  # ---------------------------------------------------------------------
+  # Review frames and feedback intake (build plan L3; spec §6). Named
+  # without the bare word "review" in any identifier throughout — see
+  # schema.prisma's section comment for why (desk/sections.ts already has
+  # review and reviewAdmin for the unrelated Review Room). The desk section
+  # for this stage is "demos"; "review frame" and "demo review" stay prose.
+  # ---------------------------------------------------------------------
+
+  "The four buckets spec §6 asks the frame to project from the registry."
+  enum DemoFrameLineKind {
+    NEW
+    KNOWN_MISSING
+    TEMPORARY
+    DECIDED
+  }
+
+  """
+  One line of the frame — a commentable target in its own right, alongside a
+  DemoPage. textFa/textEn are a snapshot of the source scope item's label at
+  generation time (schema.prisma) — never recomputed live.
+  """
+  type DemoFrameLine {
+    id: ID!
+    kind: DemoFrameLineKind!
+    textFa: String!
+    textEn: String!
+    position: Int!
+    "Null for a line Root typed by hand, or one whose source item was later deleted. Interception (D4) reads this item's own temporary/decidedAt."
+    scopeItem: ScopeItem
+    "The one feedback item anchored to this line, if any (D4: duplicates collapse on target)."
+    feedbackItem: FeedbackItem
+  }
+
+  """
+  The review frame itself (spec §6). A demo cannot be published without one
+  (publishDemo's NO_FRAME refusal) — authoring this is the gate, not a
+  suggestion.
+  """
+  type DemoFrame {
+    id: ID!
+    "Freeform context beside the generated lines — optional."
+    summaryFa: String
+    summaryEn: String
+    authoredBy: User!
+    lines: [DemoFrameLine!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  """
+  Fates a feedback item can occupy (spec §6: "every item shows its fate —
+  accepted / done / declined-because"). This stage writes and reads OPEN and
+  RATIFIED; ADDRESSED/ACCEPTED/DECLINED are the states build plan L3b's
+  build ledger will write — present here so the surface this stage builds
+  can already render them, the same precedent L1 used for ScopeStatus.ACCEPTED.
+  """
+  enum FeedbackStatus {
+    "Submitted, unratified — an opinion (F8), visible but inert."
+    OPEN
+    "The decider (D3) ratified the batch this item was part of — actionable."
+    RATIFIED
+    "L3b: the developer's claim, not the customer's acceptance."
+    ADDRESSED
+    "The customer met it in the next review and did not reopen it."
+    ACCEPTED
+    "Declined, with its reason — spec §6's declined-because."
+    DECLINED
+  }
+
+  "One voice on a feedback item (spec §6, F8)."
+  type FeedbackComment {
+    id: ID!
+    author: User!
+    body: String!
+    createdAt: DateTime!
+  }
+
+  """
+  Per-item feedback intake (spec §6) — never a comment blob. Binds to a demo
+  page or a frame line, exactly one of the two. Two submissions against the
+  same target collapse into one row (D4) — see comments for the individual
+  voices that pile up on it.
+  """
+  type FeedbackItem {
+    id: ID!
+    demoPage: DemoPage
+    frameLine: DemoFrameLine
+    status: FeedbackStatus!
+    "Set when this item was filed against a decided/temporary scope item and the submitter chose to proceed (D4's interception)."
+    reopenedScopeItem: ScopeItem
+    ratifiedAt: DateTime
+    ratifiedBy: User
+    "Oldest first — the opening voice, then whoever piled on."
+    comments: [FeedbackComment!]!
+    createdAt: DateTime!
+  }
+
+  "Why submitFeedback was intercepted (D4) — a code and its parameter, never a sentence (house rule 6)."
+  enum FeedbackInterceptionReason {
+    DECIDED
+    TEMPORARY
+  }
+
+  """
+  What submitting one piece of feedback actually did. House rule 6: the API
+  returns a code and parameters, the web renders the sentence — the
+  interception prompt is built client-side from interceptionReason and
+  interceptionScopeItem's own decidedAt/decidedNote/temporary fields.
+  """
+  type FeedbackSubmitResult {
+    "Null when interception blocked the write — see intercepted below."
+    item: FeedbackItem
+    "True whenever the target resolved to a decided/temporary scope item, whether or not the submitter had already confirmed past it."
+    intercepted: Boolean!
+    interceptionReason: FeedbackInterceptionReason
+    "The scope item interception is asking about."
+    interceptionScopeItem: ScopeItem
   }
 
   "What reporting one browser navigation actually did — not the whole contract, since this fires on every page change and both a customer and Root may call it."
@@ -1092,6 +1231,56 @@ export const typeDefs = /* GraphQL */ `
     the project's customer, not a capability gate).
     """
     reportDemoPath(demoId: ID!, path: String!): DemoPathReport!
+
+    # --- Review frames and feedback intake (build plan L3; spec §6) ---
+    """
+    Seeds or refreshes the frame's generated lines from the registry
+    (lib/demoFrame.ts) — additive only, never deletes or edits an existing
+    line, so a line a reviewer has already commented on is never silently
+    pulled out from under that feedback. Creates the DemoFrame row itself if
+    this is the first call for this demo.
+    """
+    generateDemoFrame(demoId: ID!): Contract!
+    "Freehand context beside the generated lines. Either field omitted leaves it unchanged; pass an empty string to clear one."
+    updateDemoFrameSummary(demoId: ID!, summaryFa: String, summaryEn: String): Contract!
+    "A line Root types by hand — no scope item behind it, so it can never trigger interception (D4)."
+    addDemoFrameLine(demoId: ID!, kind: DemoFrameLineKind!, textFa: String!, textEn: String!): Contract!
+    updateDemoFrameLine(lineId: ID!, textFa: String!, textEn: String!): Contract!
+    "Cascades to its feedback item, if any."
+    deleteDemoFrameLine(lineId: ID!): Contract!
+    "Refused without a frame authored first (NO_FRAME) — spec §6: 'a demo cannot be published naked.'"
+    publishDemo(demoId: ID!): Contract!
+
+    """
+    Callable by Root or the project's own customer (house rule 2 — an
+    ownership check against project.customerId, never a role test), like
+    reportDemoPath. Exactly one of targetDemoPageId/targetFrameLineId.
+
+    Intercepted (D4) when the target resolves to a decided or temporary
+    scope item and confirmReopen is not yet true: nothing is written, and
+    the result's interceptionReason/interceptionScopeItem are what the web
+    renders into the "this was settled on ⟨date⟩ — reopen it?" prompt
+    (house rule 6 — never sentence text from here). Resubmit identically
+    with confirmReopen: true to proceed.
+
+    A second submission against a target that already has an item appends a
+    comment to it rather than creating a second one (D4's duplicate collapse).
+    """
+    submitFeedback(
+      demoId: ID!
+      targetDemoPageId: ID
+      targetFrameLineId: ID
+      body: String!
+      confirmReopen: Boolean = false
+    ): FeedbackSubmitResult!
+
+    """
+    The decider (D3: the project's own customer, or staff) ratifies a batch.
+    Only items in the list that are currently OPEN and belong to this demo
+    move to RATIFIED; anything else named is silently skipped, the same
+    idempotent shape resolveReviewThread already uses.
+    """
+    ratifyFeedback(demoId: ID!, itemIds: [ID!]!): Contract!
 
     setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String): Contract!
 

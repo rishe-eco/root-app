@@ -103,6 +103,12 @@ model User {
   reviewThreadsResolved ReviewThread[]  @relation("ThreadResolver")
   reviewComments        ReviewComment[]
 
+  // Demo review frames and feedback intake (build plan L3; spec §6) — named
+  // without the bare word "review" throughout (see DemoFrame's own comment).
+  authoredDemoFrames DemoFrame[]
+  ratifiedFeedback   FeedbackItem[]    @relation("FeedbackRatifiedBy")
+  feedbackComments   FeedbackComment[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -671,6 +677,17 @@ model ScopeItem {
   phaseId String?
   phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
 
+  /// Frame lines generated from this item (build plan L3) — a snapshot of its
+  /// label at generation time, not a live view (see DemoFrameLine's own
+  /// comment), so this relation exists for provenance and for reading the
+  /// item's *current* temporary/decidedAt flags at interception time, never
+  /// for the line's displayed text.
+  frameLines       DemoFrameLine[]
+  /// Set on a FeedbackItem when a comment against this item's frame line was
+  /// filed after it was already `decided` or `temporary`, and the submitter
+  /// chose to proceed (D4's interception, recorded rather than only prompted).
+  reopenedFeedback FeedbackItem[]  @relation("FeedbackReopenedScopeItem")
+
   @@unique([projectId, key])
 }
 
@@ -770,13 +787,24 @@ model Demo {
 
   /// The review window is a *convention*, not machinery (D2, L2.2): Root
   /// stops deploying to staging between these two dates by habit, and the
-  /// review frame (L3) will generate its "do not expect changes right now"
+  /// review frame (L3) generates its "do not expect changes right now"
   /// sentence from them. No deploy-lock exists or is planned here.
   reviewWindowStart DateTime?
   reviewWindowEnd   DateTime?
 
+  /// Build plan L3, spec §6: "a demo cannot be published naked." Null means
+  /// draft — visible to staff while they shape phases, pages and the frame,
+  /// invisible to the customer's own portal query. `publishDemo` is the only
+  /// writer, and it refuses without a `frame` already authored (NO_FRAME).
+  publishedAt DateTime?
+
+  /// The review frame (spec §6) — at most one per demo. See DemoFrame's own
+  /// comment for why this is not named anything containing "review".
+  frame DemoFrame?
+
   pages          DemoPage[]
   unmatchedPaths DemoUnmatchedPath[]
+  feedbackItems  FeedbackItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -810,6 +838,10 @@ model DemoPage {
   pageDesignId String?
   pageDesign   PageDesign? @relation(fields: [pageDesignId], references: [id], onDelete: SetNull)
 
+  /// At most one — feedback against a page collapses onto this single row
+  /// (build plan L3, D4), same mechanism as DemoFrameLine.feedbackItem below.
+  feedbackItem FeedbackItem?
+
   @@unique([demoId, key])
   @@index([demoId, canonicalPath])
 }
@@ -834,6 +866,172 @@ model DemoUnmatchedPath {
   count       Int      @default(1)
 
   @@unique([demoId, normalizedPath])
+}
+
+// ---------------------------------------------------------------------------
+// Review frames and feedback intake (build plan L3, 2026-09-21; spec §6) —
+// the product thesis, testable. Named deliberately without the bare word
+// "review" in any identifier: `desk/sections.ts` already has `review` and
+// `reviewAdmin` for the Review Room (Root's own documents read by outside
+// specialists), an entirely different feature, and this codebase already
+// lost that naming fight once (build plan L3's first banked trap). The desk
+// section for this stage is `demos`; "review frame" and "demo review" stay
+// prose, never an identifier — hence `DemoFrame`, not `ReviewFrame`.
+// ---------------------------------------------------------------------------
+
+/// The review frame itself (spec §6) — at most one per Demo. Publishing a
+/// demo (`publishDemo`) refuses without one (`NO_FRAME`): "a demo cannot be
+/// published naked" is the mechanism, not a suggestion.
+///
+/// Authoring is mostly generation from the registry (`generateDemoFrame`,
+/// additive-only — see DemoFrameLine), plus whatever Root types by hand.
+model DemoFrame {
+  id     String @id @default(cuid())
+  demoId String @unique
+  demo   Demo   @relation(fields: [demoId], references: [id], onDelete: Cascade)
+
+  authoredById String
+  authoredBy   User   @relation(fields: [authoredById], references: [id])
+
+  /// Freeform context beside the generated lines — e.g. the freeze-window
+  /// sentence D2/L2.2 already banks as a plain fact. Optional: a frame can be
+  /// entirely generated lines with nothing added by hand.
+  summaryFa String?
+  summaryEn String?
+
+  lines DemoFrameLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// The four buckets spec §6 asks the frame to project from the registry:
+/// what's new, what's known-missing, what's temporary, what's decided.
+enum DemoFrameLineKind {
+  NEW
+  KNOWN_MISSING
+  TEMPORARY
+  DECIDED
+}
+
+/// One line of the frame — a commentable target in its own right (see
+/// FeedbackItem), alongside a DemoPage, so a reviewer can react to "SMS is
+/// still missing" without that reaction having anywhere else to anchor.
+///
+/// `textFa`/`textEn` are a **snapshot** of the source scope item's label at
+/// generation time, the same reasoning `agreedScopeSnapshot` already uses for
+/// Appendix 1 — a label edited on the registry later must not silently
+/// rewrite what a past review frame said.
+model DemoFrameLine {
+  id      String    @id @default(cuid())
+  frameId String
+  frame   DemoFrame @relation(fields: [frameId], references: [id], onDelete: Cascade)
+
+  kind     DemoFrameLineKind
+  textFa   String
+  textEn   String
+  position Int               @default(0)
+
+  /// Where this line was generated from, and — critically — the live pointer
+  /// interception (D4) reads `temporary`/`decidedAt` from. SetNull, not
+  /// Cascade: deleting the scope item later must not delete a line (or the
+  /// feedback anchored to it) that already shipped in a published frame; it
+  /// simply stops being able to trigger interception. Null for a line Root
+  /// typed by hand (`addDemoFrameLine`).
+  scopeItemId String?
+  scopeItem   ScopeItem? @relation(fields: [scopeItemId], references: [id], onDelete: SetNull)
+
+  feedbackItem FeedbackItem?
+
+  @@index([frameId, kind, position])
+}
+
+/// Fates a feedback item can occupy (spec §6: "every item shows its fate —
+/// accepted / done / declined-because"). L3 writes and reads OPEN and
+/// RATIFIED; ADDRESSED/ACCEPTED/DECLINED are the states L3b's build ledger
+/// will write (build plan L3b) — banked here as the full enum on the same
+/// precedent L1 used for `ScopeStatus.ACCEPTED` (built before anything could
+/// reach it), so the surface this stage builds can already render whatever a
+/// later stage sets, rather than needing a second migration to add them.
+enum FeedbackStatus {
+  /// Submitted, unratified — an opinion (spec §6 / F8), visible but inert.
+  OPEN
+  /// The decider (D3) ratified the batch this item was part of — actionable.
+  RATIFIED
+  /// L3b: the developer claims this was addressed in a build. Not yet the
+  /// customer's acceptance — see build plan L3b.2's "two fields, never one."
+  ADDRESSED
+  /// The customer met it in the next review and did not reopen it.
+  ACCEPTED
+  /// Declined, with its reason — spec §6's "declined-*because*."
+  DECLINED
+}
+
+/// Per-item feedback intake (spec §6) — never a comment blob. Binds to a demo
+/// page or a frame line, exactly one of the two, the same shape Signature
+/// already uses for contractRevisionId/amendmentId — enforced by a
+/// hand-written CHECK in the migration (Prisma cannot express it).
+///
+/// **Duplicate collapse lives in the two unique constraints below** (build
+/// plan D4): a second submission against a target that already has a row
+/// here never reaches `create` — `submitFeedback` looks the row up first and
+/// appends a FeedbackComment instead. No model, no semantic matcher — it
+/// keys off the same target row, which is what "dumb" (D4) means in code.
+model FeedbackItem {
+  id     String @id @default(cuid())
+  demoId String
+  demo   Demo   @relation(fields: [demoId], references: [id], onDelete: Cascade)
+
+  demoPageId  String?        @unique
+  demoPage    DemoPage?      @relation(fields: [demoPageId], references: [id], onDelete: Cascade)
+  frameLineId String?        @unique
+  frameLine   DemoFrameLine? @relation(fields: [frameLineId], references: [id], onDelete: Cascade)
+
+  status FeedbackStatus @default(OPEN)
+
+  /// D4's interception, recorded rather than only prompted-and-forgotten: set
+  /// when the target resolved to a `decided` or `temporary` scope item at
+  /// submission time and the submitter chose to proceed anyway. An item that
+  /// was never intercepted has this null; an interception the submitter did
+  /// *not* confirm never becomes a row at all (see `submitFeedback`).
+  reopenedScopeItemId String?
+  reopenedScopeItem   ScopeItem? @relation("FeedbackReopenedScopeItem", fields: [reopenedScopeItemId], references: [id], onDelete: SetNull)
+
+  /// Ratification (spec §6, D3) — the decider approves a batch. Recorded
+  /// here, per item, rather than bound to `Signature` (build plan L3's
+  /// banked trap #4): a signature attests to hashed bytes of a legal
+  /// instrument, and "the customer approved this feedback batch" is not that,
+  /// however signature-shaped it looks — who decided what, when, without
+  /// widening the one model where "signature" is load-bearing.
+  ratifiedAt   DateTime?
+  ratifiedById String?
+  ratifiedBy   User?     @relation("FeedbackRatifiedBy", fields: [ratifiedById], references: [id])
+
+  comments FeedbackComment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([demoId, status])
+}
+
+/// The individual voices on one feedback item (spec §6, F8: "any number of
+/// customer-side contributors may comment; a batch becomes actionable only
+/// when the decider ratifies"). The first comment is written together with
+/// the item; every submission after the first against the same target
+/// appends here instead of creating a second item (D4).
+model FeedbackComment {
+  id             String       @id @default(cuid())
+  feedbackItemId String
+  feedbackItem   FeedbackItem @relation(fields: [feedbackItemId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  body     String
+
+  createdAt DateTime @default(now())
+
+  @@index([feedbackItemId, createdAt])
 }
 
 /// The fourteen articles plus Appendix 1, as the editable **draft**. Body text

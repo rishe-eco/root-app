@@ -696,5 +696,45 @@
       "noPageYet": "Browse the site above — the current page will appear here.",
       "phoneNote": "Viewport widths are a desktop-review feature and cannot be simulated on your own phone screen — showing the site at your device's own width instead."
     }
+  },
+  "feedback": {
+    "frameTitle": "Review frame",
+    "generateFrame": "Generate frame",
+    "refreshFrame": "Refresh from the registry",
+    "summaryFa": "Summary (Persian)",
+    "summaryEn": "Summary (English)",
+    "addLine": "Add a line by hand",
+    "lineKind": "Section",
+    "kind": {
+      "NEW": "What's new",
+      "KNOWN_MISSING": "What's known-missing",
+      "TEMPORARY": "What's temporary",
+      "DECIDED": "What's decided"
+    },
+    "decidedOn": "Decided on {{date}}",
+    "publish": "Publish this demo",
+    "published": "Published",
+    "publishNoFrame": "Author a review frame before publishing this demo.",
+    "pagesTitle": "Pages",
+    "addComment": "Add feedback",
+    "commentPlaceholder": "What did you notice?",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "status": {
+      "OPEN": "Open",
+      "RATIFIED": "Ratified",
+      "ADDRESSED": "Addressed",
+      "ACCEPTED": "Accepted",
+      "DECLINED": "Declined"
+    },
+    "reopened": "Formally reopened",
+    "ratifiedLine": "Ratified by {{name}} on {{date}}",
+    "selectForRatify": "Select for ratification",
+    "ratifySelected": "Ratify {{n}} selected",
+    "intercept": {
+      "decided": "This was settled on {{date}} — {{note}}. Do you want to formally reopen it?",
+      "temporary": "\"{{label}}\" is marked temporary — do you want to comment anyway?"
+    },
+    "confirmReopen": "Yes, formally reopen it"
   }
 }

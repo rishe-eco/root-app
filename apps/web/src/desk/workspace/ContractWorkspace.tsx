@@ -6,20 +6,29 @@ import { CONTRACT_WORKSPACE, type Contract } from '@/lib/queries';
 import { pick } from '@/lib/format';
 import StatusBadge from '@/components/StatusBadge';
 
-export type WorkspaceContext = { contract: Contract };
+/**
+ * `refetch` is the one deliberate exception to "no tab calls refetch" (see
+ * below): `submitFeedback` (build plan L3) returns `FeedbackSubmitResult`,
+ * not `Contract!`, because an interception result is not a Contract-shaped
+ * fact — so `DemoFeedbackPanel` is the one caller in this codebase that
+ * needs it, for the one case Apollo's normalized cache cannot help with: a
+ * brand new FeedbackItem the cache has nowhere to insert itself into.
+ */
+export type WorkspaceContext = { contract: Contract; refetch: () => void };
 
 const TABS = ['contract', 'design', 'scope', 'phases', 'activity'] as const;
 
 /**
  * The shell every tab renders inside. One query (`CONTRACT_WORKSPACE`) owns
  * the data; every mutation a tab fires returns the same shape, so Apollo's
- * normalized cache keeps this in sync without any tab calling `refetch`.
+ * normalized cache keeps this in sync without any tab calling `refetch` —
+ * see `WorkspaceContext`'s own comment for the one exception.
  */
 export default function ContractWorkspace() {
   const { t } = useTranslation();
   const locale = useLocale();
   const { id = '' } = useParams();
-  const { data, loading, error } = useQuery<{ contract: Contract | null }>(CONTRACT_WORKSPACE, {
+  const { data, loading, error, refetch } = useQuery<{ contract: Contract | null }>(CONTRACT_WORKSPACE, {
     variables: { id },
   });
 
@@ -56,7 +65,7 @@ export default function ContractWorkspace() {
       </nav>
 
       <div className="workspace-panel">
-        <Outlet context={{ contract } satisfies WorkspaceContext} />
+        <Outlet context={{ contract, refetch: () => void refetch() } satisfies WorkspaceContext} />
       </div>
     </div>
   );

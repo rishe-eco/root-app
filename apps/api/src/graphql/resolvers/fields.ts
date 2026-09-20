@@ -8,6 +8,7 @@ import { agreedScopeSnapshot } from '../../lib/scope.js';
 import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
 import { computeProjectProgress } from '../../lib/phase.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
+import { feedbackItemInclude } from './feedback.js';
 
 /**
  * Field resolvers for the object types — the layer that decides what a stored
@@ -365,22 +366,46 @@ export const Project = {
    * their `pageDesign` (the design-image toggle, L2.1) and unmatched paths
    * come newest-first, which is what makes "a page we did not expect" read
    * as a live bucket rather than a static dump (L2.2).
+   *
+   * Build plan L3: a draft demo (`publishedAt: null`) is filtered out for
+   * everyone but staff — "a demo cannot be published naked" (spec §6) is
+   * also a promise about what the customer's own query can ever return, not
+   * only about what `publishDemo` refuses. The frame and its lines, and
+   * every feedback item, come along eagerly for the same reason the pages
+   * do: one round trip, matching this resolver's own existing shape.
    */
-  phases: (p: { id: string }) =>
-    prisma.phase.findMany({
+  phases: (p: { id: string }, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    const staff = can(user, 'contracts.manage');
+    return prisma.phase.findMany({
       where: { projectId: p.id },
       orderBy: { number: 'asc' },
       include: {
         scopeItems: { orderBy: { position: 'asc' } },
         demos: {
+          where: staff ? {} : { publishedAt: { not: null } },
           orderBy: { createdAt: 'desc' },
           include: {
             pages: { include: { pageDesign: true } },
             unmatchedPaths: { orderBy: { lastSeenAt: 'desc' } },
+            frame: {
+              include: {
+                authoredBy: true,
+                lines: {
+                  orderBy: [{ kind: 'asc' }, { position: 'asc' }],
+                  include: { scopeItem: true, feedbackItem: { include: feedbackItemInclude } },
+                },
+              },
+            },
+            feedbackItems: {
+              orderBy: { createdAt: 'desc' },
+              include: feedbackItemInclude,
+            },
           },
         },
       },
-    }),
+    });
+  },
 
   /**
    * Coarse progress (lib/phase.ts), derived fresh on every read — never a

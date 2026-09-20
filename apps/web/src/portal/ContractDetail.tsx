@@ -24,6 +24,7 @@ import { logText as buildLogText } from '@/lib/changelog';
 import StatusBadge from '@/components/StatusBadge';
 import Lock from '@/components/Lock';
 import DemoViewport from '@/components/DemoViewport';
+import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
 import Topbar from './Topbar';
 
 const MIN_SIGN_NAME = 2;
@@ -323,7 +324,10 @@ export default function ContractDetail() {
                 );
                 const demo = currentPhase?.demos[0];
                 return demo ? (
-                  <DemoViewport demo={demo} />
+                  <>
+                    <DemoViewport demo={demo} />
+                    <DemoFeedbackPanel demo={demo} canAuthor={false} onChanged={() => void refetch()} />
+                  </>
                 ) : (
                   <p className="t-small muted">{t('detail.demoNone')}</p>
                 );

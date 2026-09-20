@@ -15,13 +15,18 @@ import { matchDemoPath } from '../../lib/demoPages.js';
  * a project — `project.customerId === user.id` — never a role test, per D3's
  * own escape-hatch note (build plan §2 D3). Staff bypass via
  * `contracts.manage`, exactly like `loadForActor`.
+ *
+ * Exported for `resolvers/feedback.ts` (build plan L3) — `submitFeedback`
+ * and `ratifyFeedback` are the same shape of mutation (customer-or-staff,
+ * ownership not capability) and reuse this rather than growing a second
+ * copy of the check (house rule 3).
  */
-async function loadDemoForActor(demoId: string, user: { id: string; roles: unknown[] }) {
+export async function loadDemoForActor(demoId: string, user: { id: string; roles: unknown[] }) {
   const demo = await prisma.demo.findUnique({
     where: { id: demoId },
     include: {
       pages: true,
-      phase: { include: { project: { select: { customerId: true } } } },
+      phase: { include: { project: { include: { customer: true } } } },
     },
   });
   if (!demo) {

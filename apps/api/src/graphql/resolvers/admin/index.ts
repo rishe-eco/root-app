@@ -4,6 +4,7 @@ import { designMutations } from './design.js';
 import { amendmentMutations } from './amendments.js';
 import { registryMutations } from './registry.js';
 import { phaseMutations } from './phases.js';
+import { demoFrameMutations } from './demoFrame.js';
 
 /**
  * Everything only Root may do: invites, authoring a contract's draft,
@@ -32,4 +33,8 @@ export const adminMutations = {
   // so it is spread straight into the root Mutation object in
   // resolvers/index.ts instead.
   ...phaseMutations,
+  // Review frames (build plan L3) — `contracts.manage` only, same reasoning.
+  // `submitFeedback`/`ratifyFeedback` (resolvers/feedback.ts) are likewise
+  // deliberately *not* here: the project's own customer calls both.
+  ...demoFrameMutations,
 };

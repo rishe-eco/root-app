@@ -5,6 +5,7 @@ import { authMutations } from './auth.js';
 import { customerMutations } from './customer.js';
 import { adminMutations } from './admin/index.js';
 import { demoMutations } from './demo.js';
+import { feedbackMutations } from './feedback.js';
 import { LibraryEntry, libraryMutations, libraryQueries, publicLibraryQueries } from './library.js';
 import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
@@ -51,6 +52,9 @@ export const resolvers = {
     // resolvers/demo.ts's own comment on why it is not folded into
     // adminMutations.
     ...demoMutations,
+    // build plan L3: same reasoning — submitFeedback/ratifyFeedback are
+    // ownership-gated against project.customerId, not capability-gated.
+    ...feedbackMutations,
     ...libraryMutations,
     ...reviewMutations,
     ...reviewThreadMutations,

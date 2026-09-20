@@ -21,6 +21,7 @@ import {
   type ScopeItem,
 } from '@/lib/queries';
 import DemoViewport from '@/components/DemoViewport';
+import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
 import type { WorkspaceContext } from './ContractWorkspace';
 
 /**
@@ -119,7 +120,15 @@ function DemoPageRow({
   );
 }
 
-function DemoCard({ demo, designOptions }: { demo: Demo; designOptions: PageDesignOption[] }) {
+function DemoCard({
+  demo,
+  designOptions,
+  onChanged,
+}: {
+  demo: Demo;
+  designOptions: PageDesignOption[];
+  onChanged: () => void;
+}) {
   const { t } = useTranslation();
   const locale = useLocale();
   const [stagingUrl, setStagingUrl] = useState(demo.stagingUrl);
@@ -226,6 +235,8 @@ function DemoCard({ demo, designOptions }: { demo: Demo; designOptions: PageDesi
 
       <DemoViewport demo={demo} />
 
+      <DemoFeedbackPanel demo={demo} canAuthor onChanged={onChanged} />
+
       <div className="workspace-row">
         <h4 className="t-h3">{t('workspace.demoPagesTitle')}</h4>
         <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingPage((v) => !v)}>
@@ -291,10 +302,12 @@ function PhaseCard({
   phase,
   unassignedItems,
   designOptions,
+  onChanged,
 }: {
   phase: Phase;
   unassignedItems: ScopeItem[];
   designOptions: PageDesignOption[];
+  onChanged: () => void;
 }) {
   const { t } = useTranslation();
   const locale = useLocale();
@@ -460,7 +473,7 @@ function PhaseCard({
         {phase.demos.length === 0 ? (
           <p className="t-small muted">{t('workspace.phaseNoDemo')}</p>
         ) : (
-          phase.demos.map((d) => <DemoCard key={d.id} demo={d} designOptions={designOptions} />)
+          phase.demos.map((d) => <DemoCard key={d.id} demo={d} designOptions={designOptions} onChanged={onChanged} />)
         )}
       </div>
     </div>
@@ -470,7 +483,7 @@ function PhaseCard({
 export default function PhasesTab() {
   const { t } = useTranslation();
   const locale = useLocale();
-  const { contract } = useOutletContext<WorkspaceContext>();
+  const { contract, refetch } = useOutletContext<WorkspaceContext>();
   const project = contract.project;
 
   const [adding, setAdding] = useState(false);
@@ -557,7 +570,13 @@ export default function PhasesTab() {
         <p className="t-small muted">{t('workspace.phasesEmpty')}</p>
       ) : (
         phases.map((phase) => (
-          <PhaseCard key={phase.id} phase={phase} unassignedItems={unassignedItems} designOptions={designOptions} />
+          <PhaseCard
+            key={phase.id}
+            phase={phase}
+            unassignedItems={unassignedItems}
+            designOptions={designOptions}
+            onChanged={refetch}
+          />
         ))
       )}
     </div>
