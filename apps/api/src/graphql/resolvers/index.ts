@@ -4,6 +4,7 @@ import { Query } from './query.js';
 import { authMutations } from './auth.js';
 import { customerMutations } from './customer.js';
 import { adminMutations } from './admin/index.js';
+import { demoMutations } from './demo.js';
 import { LibraryEntry, libraryMutations, libraryQueries, publicLibraryQueries } from './library.js';
 import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
@@ -46,6 +47,10 @@ export const resolvers = {
     ...authMutations,
     ...customerMutations,
     ...adminMutations,
+    // build plan L2: callable by Root *or* the project's own customer — see
+    // resolvers/demo.ts's own comment on why it is not folded into
+    // adminMutations.
+    ...demoMutations,
     ...libraryMutations,
     ...reviewMutations,
     ...reviewThreadMutations,

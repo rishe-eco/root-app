@@ -3,6 +3,7 @@ import { contractAdminMutations } from './contracts.js';
 import { designMutations } from './design.js';
 import { amendmentMutations } from './amendments.js';
 import { registryMutations } from './registry.js';
+import { phaseMutations } from './phases.js';
 
 /**
  * Everything only Root may do: invites, authoring a contract's draft,
@@ -25,4 +26,10 @@ export const adminMutations = {
   ...designMutations,
   ...amendmentMutations,
   ...registryMutations,
+  // Phases and the live demo surface (build plan L2) — `contracts.manage`
+  // only, same as everything else in this barrel. `reportDemoPath`
+  // (resolvers/demo.ts) is deliberately *not* here: a customer calls it too,
+  // so it is spread straight into the root Mutation object in
+  // resolvers/index.ts instead.
+  ...phaseMutations,
 };

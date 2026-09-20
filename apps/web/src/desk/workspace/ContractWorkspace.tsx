@@ -8,7 +8,7 @@ import StatusBadge from '@/components/StatusBadge';
 
 export type WorkspaceContext = { contract: Contract };
 
-const TABS = ['contract', 'design', 'scope', 'activity'] as const;
+const TABS = ['contract', 'design', 'scope', 'phases', 'activity'] as const;
 
 /**
  * The shell every tab renders inside. One query (`CONTRACT_WORKSPACE`) owns

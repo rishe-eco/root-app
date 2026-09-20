@@ -80,6 +80,8 @@ export type ScopeItem = {
   declinedReason: string | null;
   originNote: string | null;
   originRound: string | null;
+  /** Which phase (L2) is building this item, if any. */
+  phaseId: string | null;
 };
 
 export type ScopeTrade = {
@@ -91,6 +93,82 @@ export type ScopeTrade = {
   rootConfirmedAt: string | null;
   customerConfirmedAt: string | null;
   executedAt: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Phases and the live demo surface (build plan L2). One list, reached only
+// through `Contract.project.phases` — there is no standalone "phase" query,
+// matching T9: every mutation here returns the whole contract.
+// ---------------------------------------------------------------------------
+
+/** The design-image toggle's own read (L2.1) — imageUrl and key only, never approvedAt. */
+export type PageDesignRef = { id: string; key: string; imageUrl: string | null };
+
+export type DemoPage = {
+  id: string;
+  key: string;
+  labelFa: string;
+  labelEn: string;
+  canonicalPath: string;
+  pageDesign: PageDesignRef | null;
+};
+
+/** "A page we did not expect" (L2.2) — visible on the desk phase board. */
+export type DemoUnmatchedPath = {
+  id: string;
+  normalizedPath: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  count: number;
+};
+
+export type Demo = {
+  id: string;
+  stagingUrl: string;
+  buildRef: string | null;
+  reviewWindowStart: string | null;
+  reviewWindowEnd: string | null;
+  pages: DemoPage[];
+  unmatchedPaths: DemoUnmatchedPath[];
+};
+
+/** Only what the phase board actually selects — not the full ScopeItem shape
+ *  (that stays on `contract.scopeItems`, which the assignment control reads
+ *  from so the dropdown can offer every item, not only ones already on a
+ *  phase). */
+export type PhaseScopeItemRef = {
+  id: string;
+  key: string;
+  labelFa: string;
+  labelEn: string;
+  status: ScopeStatus;
+};
+
+export type Phase = {
+  id: string;
+  number: number;
+  titleFa: string;
+  titleEn: string;
+  milestoneLabel: string | null;
+  scopeItems: PhaseScopeItemRef[];
+  demos: Demo[];
+};
+
+/** Derived server-side (lib/phase.ts) — never a hand-typed percentage (F5). */
+export type ProjectProgress = {
+  totalPhases: number;
+  currentPhaseNumber: number | null;
+  currentPhaseTitleFa: string | null;
+  currentPhaseTitleEn: string | null;
+  itemsAcceptedInPhase: number;
+  itemsTotalInPhase: number;
+};
+
+/** What reporting one browser navigation did — not the whole contract (see typeDefs). */
+export type DemoPathReport = {
+  matched: boolean;
+  normalizedPath: string;
+  page: DemoPage | null;
 };
 
 export type Article = {
@@ -260,7 +338,7 @@ export type Contract = {
   gate: Gate;
   concepts: DesignConcept[];
   scopeItems: ScopeItem[];
-  project: { id: string; scopeTrades: ScopeTrade[] } | null;
+  project: { id: string; scopeTrades: ScopeTrade[]; phases: Phase[]; progress: ProjectProgress } | null;
   articles: Article[];
   /** Appendix 1 as frozen into the current published revision (build plan
    *  L1) — the registry's agreed set at publish time, not the live registry
@@ -346,6 +424,7 @@ export const CONTRACT_FIELDS = gql`
       declinedReason
       originNote
       originRound
+      phaseId
     }
     project {
       id
@@ -370,6 +449,54 @@ export const CONTRACT_FIELDS = gql`
           key
           labelFa
           labelEn
+        }
+      }
+      progress {
+        totalPhases
+        currentPhaseNumber
+        currentPhaseTitleFa
+        currentPhaseTitleEn
+        itemsAcceptedInPhase
+        itemsTotalInPhase
+      }
+      phases {
+        id
+        number
+        titleFa
+        titleEn
+        milestoneLabel
+        scopeItems {
+          id
+          key
+          labelFa
+          labelEn
+          status
+        }
+        demos {
+          id
+          stagingUrl
+          buildRef
+          reviewWindowStart
+          reviewWindowEnd
+          pages {
+            id
+            key
+            labelFa
+            labelEn
+            canonicalPath
+            pageDesign {
+              id
+              key
+              imageUrl
+            }
+          }
+          unmatchedPaths {
+            id
+            normalizedPath
+            firstSeenAt
+            lastSeenAt
+            count
+          }
         }
       }
     }
@@ -1052,6 +1179,125 @@ export const CONFIRM_SCOPE_TRADE_ROOT = gql`
   mutation ConfirmScopeTradeRoot($tradeId: ID!) {
     confirmScopeTradeRoot(tradeId: $tradeId) {
       ...ContractWorkspaceFields
+    }
+  }
+`;
+
+// --- Phases and the live demo surface (build plan L2) -----------------------
+
+export const CREATE_PHASE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation CreatePhase($contractId: ID!, $number: Int!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String) {
+    createPhase(contractId: $contractId, number: $number, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_PHASE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdatePhase($phaseId: ID!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String) {
+    updatePhase(phaseId: $phaseId, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_PHASE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeletePhase($phaseId: ID!) {
+    deletePhase(phaseId: $phaseId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const ASSIGN_SCOPE_ITEM_TO_PHASE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation AssignScopeItemToPhase($scopeItemId: ID!, $phaseId: ID) {
+    assignScopeItemToPhase(scopeItemId: $scopeItemId, phaseId: $phaseId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const CREATE_DEMO = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation CreateDemo($phaseId: ID!, $stagingUrl: String!, $buildRef: String) {
+    createDemo(phaseId: $phaseId, stagingUrl: $stagingUrl, buildRef: $buildRef) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_DEMO = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdateDemo($demoId: ID!, $stagingUrl: String, $buildRef: String, $reviewWindowStart: DateTime, $reviewWindowEnd: DateTime) {
+    updateDemo(demoId: $demoId, stagingUrl: $stagingUrl, buildRef: $buildRef, reviewWindowStart: $reviewWindowStart, reviewWindowEnd: $reviewWindowEnd) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_DEMO = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeleteDemo($demoId: ID!) {
+    deleteDemo(demoId: $demoId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DECLARE_DEMO_PAGE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeclareDemoPage($demoId: ID!, $key: String!, $labelFa: String!, $labelEn: String!, $canonicalPath: String!, $pageDesignId: ID) {
+    declareDemoPage(demoId: $demoId, key: $key, labelFa: $labelFa, labelEn: $labelEn, canonicalPath: $canonicalPath, pageDesignId: $pageDesignId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_DEMO_PAGE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdateDemoPage($demoPageId: ID!, $labelFa: String!, $labelEn: String!, $canonicalPath: String!, $pageDesignId: ID) {
+    updateDemoPage(demoPageId: $demoPageId, labelFa: $labelFa, labelEn: $labelEn, canonicalPath: $canonicalPath, pageDesignId: $pageDesignId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_DEMO_PAGE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeleteDemoPage($demoPageId: ID!) {
+    deleteDemoPage(demoPageId: $demoPageId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+/**
+ * The reporter snippet's own call, relayed by the viewport frame
+ * (components/DemoViewport.tsx) whenever it accepts a page-change message.
+ * Returns a thin payload, not the whole contract (typeDefs' own comment) —
+ * this fires on every navigation inside the framed site, staff or customer.
+ */
+export const REPORT_DEMO_PATH = gql`
+  mutation ReportDemoPath($demoId: ID!, $path: String!) {
+    reportDemoPath(demoId: $demoId, path: $path) {
+      matched
+      normalizedPath
+      page {
+        id
+        key
+        labelFa
+        labelEn
+        canonicalPath
+        pageDesign {
+          id
+          key
+          imageUrl
+        }
+      }
     }
   }
 `;

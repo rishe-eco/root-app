@@ -436,8 +436,21 @@ test('applyContractTemplate refuses a contract that already has articles, and fi
   });
   assert.equal(already.code, 'TEMPLATE_NOT_EMPTY');
 
+  // A project, because the template seeds the completeness checklist into the
+  // registry and the registry hangs off the project as of L1 (build plan D1).
+  // `createContract` makes both together; this insert goes straight through
+  // Prisma, so it has to do the same by hand.
+  const emptyProject = await prisma.project.create({
+    data: { customerId: f.customer.id, titleFa: 'خالی', titleEn: 'Empty' },
+  });
   const empty = await prisma.contract.create({
-    data: { ref: 'RC-EMPTY-1', titleFa: 'خالی', titleEn: 'Empty', customerId: f.customer.id },
+    data: {
+      ref: 'RC-EMPTY-1',
+      titleFa: 'خالی',
+      titleEn: 'Empty',
+      customerId: f.customer.id,
+      projectId: emptyProject.id,
+    },
   });
   const data = ok(
     await exec(

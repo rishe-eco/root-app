@@ -178,6 +178,98 @@ export const typeDefs = /* GraphQL */ `
     status: ProjectStatus!
     scopeItems: [ScopeItem!]!
     scopeTrades: [ScopeTrade!]!
+    "Ordered by number — build plan L2."
+    phases: [Phase!]!
+    "Derived fresh on every read (lib/phase.ts) — never a stored percentage (F5)."
+    progress: ProjectProgress!
+  }
+
+  # ---------------------------------------------------------------------
+  # Phases and the live demo surface (build plan L2; spec §4 stage 6, §6)
+  # ---------------------------------------------------------------------
+
+  """
+  Coarse progress. Deliberately has no "on track"/"at risk" field — nothing
+  built so far carries a due date or a verified commitment to judge that
+  against (that is L5's dependency board). See lib/phase.ts.
+  """
+  type ProjectProgress {
+    totalPhases: Int!
+    "Null only when the project has no phases yet."
+    currentPhaseNumber: Int
+    currentPhaseTitleFa: String
+    currentPhaseTitleEn: String
+    "Accepted scope items in the current phase, out of its total — DECLINED and TRADED items are excluded from both counts."
+    itemsAcceptedInPhase: Int!
+    itemsTotalInPhase: Int!
+  }
+
+  """
+  A slice of the build, ordered. Nothing on this type is a status set by
+  hand — see ProjectProgress for the derived read.
+  """
+  type Phase {
+    id: ID!
+    number: Int!
+    titleFa: String!
+    titleEn: String!
+    "A stand-in for a real Milestone/BillingEntry linkage (L6) — free text for now."
+    milestoneLabel: String
+    scopeItems: [ScopeItem!]!
+    "Newest first."
+    demos: [Demo!]!
+  }
+
+  """
+  A declared page on a demo — what a reported path is matched against
+  (lib/demoPages.ts). Never inferred.
+  """
+  type DemoPage {
+    id: ID!
+    key: String!
+    labelFa: String!
+    labelEn: String!
+    canonicalPath: String!
+    "The design-image toggle (L2.1) — null until a page design is attached."
+    pageDesign: PageDesign
+  }
+
+  """
+  "A page we did not expect" (L2.2) — a reported path matching no declared
+  DemoPage. A block string, not a quoted one: the inner quotes are part of
+  the phrase the plan uses, and an escaped quote inside this template literal
+  collapses to a bare quote before GraphQL ever sees it, which would end the
+  description early and make the whole schema unparseable.
+  """
+  type DemoUnmatchedPath {
+    id: ID!
+    normalizedPath: String!
+    firstSeenAt: DateTime!
+    lastSeenAt: DateTime!
+    count: Int!
+  }
+
+  """
+  The live staging site, embedded (D2) — never a capture, never proxied.
+  """
+  type Demo {
+    id: ID!
+    stagingUrl: String!
+    "D2's build reference. A plain string until L3b's Build object exists."
+    buildRef: String
+    "Convention, not machinery (L2.2) — no deploy lock is implied by these dates."
+    reviewWindowStart: DateTime
+    reviewWindowEnd: DateTime
+    pages: [DemoPage!]!
+    "Visible so the desk can notice a route nobody declared, rather than it vanishing silently."
+    unmatchedPaths: [DemoUnmatchedPath!]!
+  }
+
+  "What reporting one browser navigation actually did — not the whole contract, since this fires on every page change and both a customer and Root may call it."
+  type DemoPathReport {
+    matched: Boolean!
+    page: DemoPage
+    normalizedPath: String!
   }
 
   type Article {
@@ -970,6 +1062,36 @@ export const typeDefs = /* GraphQL */ `
     confirmScopeTradeRoot(tradeId: ID!): Contract!
     "Refused until both rootConfirmedAt and customerConfirmedAt are set."
     executeScopeTrade(tradeId: ID!): Contract!
+
+    # --- Phases and the live demo surface (build plan L2) ---
+    "number is the project-scoped ordinal — @@unique([projectId, number])."
+    createPhase(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, milestoneLabel: String): Contract!
+    updatePhase(phaseId: ID!, titleFa: String!, titleEn: String!, milestoneLabel: String): Contract!
+    deletePhase(phaseId: ID!): Contract!
+    "phaseId: null unassigns the item from whatever phase it was on."
+    assignScopeItemToPhase(scopeItemId: ID!, phaseId: ID): Contract!
+
+    "stagingUrl must be HTTPS (L2.2) — refused otherwise, with a code naming why."
+    createDemo(phaseId: ID!, stagingUrl: String!, buildRef: String): Contract!
+    updateDemo(demoId: ID!, stagingUrl: String, buildRef: String, reviewWindowStart: DateTime, reviewWindowEnd: DateTime): Contract!
+    deleteDemo(demoId: ID!): Contract!
+    "canonicalPath is compared through lib/demoPages.ts's normalizePath — declare it in whatever raw shape is natural, not pre-normalized."
+    declareDemoPage(demoId: ID!, key: String!, labelFa: String!, labelEn: String!, canonicalPath: String!, pageDesignId: ID): Contract!
+    "labelFa/labelEn/canonicalPath and the design-image toggle, all in one call — the desk edits a declared page as one row, not five separate ones."
+    updateDemoPage(demoPageId: ID!, labelFa: String!, labelEn: String!, canonicalPath: String!, pageDesignId: ID): Contract!
+    deleteDemoPage(demoPageId: ID!): Contract!
+
+    """
+    The reporter snippet's own call, made on every page-change event —
+    matches the path against the demo's declared pages (lib/demoPages.ts)
+    and records a miss rather than dropping it (L2.2). Callable by Root
+    *or* the project's own customer, unlike every other mutation in this
+    section: this is telemetry from a page either of them may be viewing,
+    not a content edit, which is also why it returns a thin payload instead
+    of the whole contract (house rule 2 — this is an ownership check against
+    the project's customer, not a capability gate).
+    """
+    reportDemoPath(demoId: ID!, path: String!): DemoPathReport!
 
     setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String): Contract!
 

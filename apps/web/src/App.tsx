@@ -35,6 +35,7 @@ import ContractWorkspace from '@/desk/workspace/ContractWorkspace';
 import WorkspaceContractTab from '@/desk/workspace/ContractTab';
 import WorkspaceDesignTab from '@/desk/workspace/DesignTab';
 import WorkspaceScopeTab from '@/desk/workspace/ScopeTab';
+import WorkspacePhasesTab from '@/desk/workspace/PhasesTab';
 import WorkspaceActivityTab from '@/desk/workspace/ActivityTab';
 
 /** `/` and any unprefixed path get sent to the visitor's best-guess locale. */
@@ -108,6 +109,7 @@ export default function App() {
             <Route path="contract" element={<WorkspaceContractTab />} />
             <Route path="design" element={<WorkspaceDesignTab />} />
             <Route path="scope" element={<WorkspaceScopeTab />} />
+            <Route path="phases" element={<WorkspacePhasesTab />} />
             <Route path="activity" element={<WorkspaceActivityTab />} />
           </Route>
           <Route path="customers" element={<Customers />} />

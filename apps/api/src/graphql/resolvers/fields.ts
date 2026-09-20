@@ -6,6 +6,7 @@ import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../lib/scope.js';
 import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
+import { computeProjectProgress } from '../../lib/phase.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
 
 /**
@@ -356,6 +357,54 @@ export const Project = {
       include: { outItem: true, inItem: true, proposedBy: true },
       orderBy: { createdAt: 'desc' },
     }),
+
+  /**
+   * Phases and their demos (build plan L2), same reasoning as `scopeTrades`
+   * above — neither `contractInclude` nor `Query.project`'s include fetches
+   * these, so this is the one place that always answers it. Demo pages carry
+   * their `pageDesign` (the design-image toggle, L2.1) and unmatched paths
+   * come newest-first, which is what makes "a page we did not expect" read
+   * as a live bucket rather than a static dump (L2.2).
+   */
+  phases: (p: { id: string }) =>
+    prisma.phase.findMany({
+      where: { projectId: p.id },
+      orderBy: { number: 'asc' },
+      include: {
+        scopeItems: { orderBy: { position: 'asc' } },
+        demos: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            pages: { include: { pageDesign: true } },
+            unmatchedPaths: { orderBy: { lastSeenAt: 'desc' } },
+          },
+        },
+      },
+    }),
+
+  /**
+   * Coarse progress (lib/phase.ts), derived fresh on every read — never a
+   * stored percentage (F5's own slippage; L2.2's banked trap). A separate
+   * query from `phases` above rather than reusing its result: GraphQL field
+   * resolvers do not share work across sibling fields in this codebase (see
+   * `scopeTrades`'s own comment), and the shape this needs — id, number,
+   * titles, and only each scope item's `status` — is lighter than what the
+   * phase board asks of `phases`.
+   */
+  progress: async (p: { id: string }) => {
+    const phases = await prisma.phase.findMany({
+      where: { projectId: p.id },
+      orderBy: { number: 'asc' },
+      select: {
+        id: true,
+        number: true,
+        titleFa: true,
+        titleEn: true,
+        scopeItems: { select: { status: true } },
+      },
+    });
+    return computeProjectProgress(phases);
+  },
 };
 
 export const User = {

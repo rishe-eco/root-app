@@ -452,6 +452,12 @@ model PageDesign {
 
   approvedAt DateTime?
 
+  /// L2's design-image toggle reads `imageUrl` and `key` from here through a
+  /// DemoPage — never a reason for this model to write anything back. D5
+  /// stays decided: no code reached through this relation may set
+  /// `approvedAt` above or `DesignConcept.chosenAt`.
+  demoPages DemoPage[]
+
   @@unique([conceptId, key])
 }
 
@@ -571,6 +577,7 @@ model Project {
   contracts   Contract[]
   scopeItems  ScopeItem[]
   scopeTrades ScopeTrade[]
+  phases      Phase[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -658,6 +665,12 @@ model ScopeItem {
   tradedOut ScopeTrade? @relation("TradeOut")
   tradedIn  ScopeTrade? @relation("TradeIn")
 
+  /// Which phase (L2) is building this item. Nullable — an item can be
+  /// agreed long before a phase exists to carry it, and the registry must
+  /// not force an assignment just to be editable.
+  phaseId String?
+  phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+
   @@unique([projectId, key])
 }
 
@@ -697,6 +710,130 @@ model ScopeTrade {
   createdAt DateTime @default(now())
 
   @@index([projectId])
+}
+
+// ---------------------------------------------------------------------------
+// Phases and the live demo surface (build plan L2, 2026-09-20; spec §4 stage
+// 6, §6). A Phase binds scope items, page designs (through DemoPage below),
+// a demo, and a milestone. Portal-visible progress is derived from this and
+// the registry (lib/phase.ts's computePhaseProgress) — never a hand-typed
+// percentage (F5's own slippage, and the trap this section exists to avoid).
+// ---------------------------------------------------------------------------
+
+/// A slice of the build, ordered. "Phase 3 of 5" reads `number` against the
+/// sibling count; nothing on this model is a status a person sets by hand —
+/// what stage a phase is at is read off its scope items' own `status`.
+model Phase {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Project-scoped ordinal, not a global one — two projects both have a
+  /// "phase 1".
+  number  Int
+  titleFa String
+  titleEn String
+
+  /// A minimal stand-in for the real thing (spec §8's milestone linkage,
+  /// L6). Free text — "Payment 2 of 4" — rather than a relation to
+  /// BillingEntry/Subscription, neither of which exists yet. Widen this to a
+  /// real Milestone model when L6 lands rather than before; a relation to an
+  /// object that does not exist yet is a column that acquires a wrong
+  /// meaning before a right one (R1's own reasoning, reapplied).
+  milestoneLabel String?
+
+  scopeItems ScopeItem[]
+  demos      Demo[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, number])
+}
+
+/// The live staging site, embedded (D2) — never a set of captures, and never
+/// a rewriting proxy (D2 rejects that outright). `stagingUrl` must be HTTPS
+/// or a browser will not frame it at all (L2.2) — validated where this is
+/// written, not only read back.
+model Demo {
+  id      String @id @default(cuid())
+  phaseId String
+  phase   Phase  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  stagingUrl String
+
+  /// D2's "record the build reference on the demo," kept deliberately
+  /// trivial — a plain string, not yet an object. L3b grows this into a real
+  /// `Build` with its own change list; nothing here should make that
+  /// migration harder than adding a column and copying values across.
+  buildRef String?
+
+  /// The review window is a *convention*, not machinery (D2, L2.2): Root
+  /// stops deploying to staging between these two dates by habit, and the
+  /// review frame (L3) will generate its "do not expect changes right now"
+  /// sentence from them. No deploy-lock exists or is planned here.
+  reviewWindowStart DateTime?
+  reviewWindowEnd   DateTime?
+
+  pages          DemoPage[]
+  unmatchedPaths DemoUnmatchedPath[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([phaseId])
+}
+
+/// The page list a demo declares "from the registry" (L2.1) — what makes a
+/// reported path mean anything at all. Declared by Root, never inferred: an
+/// unrecognized path becomes a DemoUnmatchedPath, never a guessed DemoPage.
+model DemoPage {
+  id     String @id @default(cuid())
+  demoId String
+  demo   Demo   @relation(fields: [demoId], references: [id], onDelete: Cascade)
+
+  key     String
+  labelFa String
+  labelEn String
+
+  /// What `lib/demoPages.ts`'s `normalizePath()` reduces a reported path to,
+  /// for comparison. See that file for exactly what does and does not fold
+  /// together — a trailing slash and a locale prefix, yes; a pagination
+  /// segment, deliberately not (L2.1 names that case as genuinely
+  /// undetermined, not a bug to fix here).
+  canonicalPath String
+
+  /// The design-image toggle (L2.1: "near zero, conditional on the
+  /// mapping"). Optional — a demo can declare a page before any design
+  /// exists for it. Reads `PageDesign.imageUrl` and `.key` only; nothing in
+  /// this stage writes `approvedAt` or `chosenAt` (D5 stays decided).
+  pageDesignId String?
+  pageDesign   PageDesign? @relation(fields: [pageDesignId], references: [id], onDelete: SetNull)
+
+  @@unique([demoId, key])
+  @@index([demoId, canonicalPath])
+}
+
+/// "A page we did not expect" (L2.2) — every reported path that did not
+/// match a declared DemoPage, deduplicated by its own normalized form and
+/// counted rather than dropped. A note filed against an unrouted path is the
+/// dead-end failure (F2) rebuilt one level down; this table is what keeps
+/// that failure from being silent, and what the desk reads to notice it.
+model DemoUnmatchedPath {
+  id     String @id @default(cuid())
+  demoId String
+  demo   Demo   @relation(fields: [demoId], references: [id], onDelete: Cascade)
+
+  /// Already run through normalizePath() — two raw paths that normalize the
+  /// same are one "we did not expect this" fact, not two, so the raw path is
+  /// not kept at all.
+  normalizedPath String
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  count       Int      @default(1)
+
+  @@unique([demoId, normalizedPath])
 }
 
 /// The fourteen articles plus Appendix 1, as the editable **draft**. Body text

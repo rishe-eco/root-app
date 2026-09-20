@@ -23,6 +23,7 @@ import { clockTime, formatCount, initialOf, pick, relativeTime } from '@/lib/for
 import { logText as buildLogText } from '@/lib/changelog';
 import StatusBadge from '@/components/StatusBadge';
 import Lock from '@/components/Lock';
+import DemoViewport from '@/components/DemoViewport';
 import Topbar from './Topbar';
 
 const MIN_SIGN_NAME = 2;
@@ -284,6 +285,51 @@ export default function ContractDetail() {
               <span className="num-latin">{contract.ref}</span>
             </p>
           </div>
+
+          {/* 0 · Coarse progress & the live demo (build plan L2) — derived,
+              never a hand-typed percentage (F5's own slippage). Absent
+              entirely for a project with no phases yet, which is an honest
+              "nothing to show" rather than a zeroed-out progress bar. */}
+          {contract.project && contract.project.progress.totalPhases > 0 ? (
+            <section className="sec" id="s0">
+              <div className="sec-head">
+                <h2 className="t-h3">{t('detail.demoTitle')}</h2>
+              </div>
+              <p className="sec-help">{t('detail.demoHelp')}</p>
+
+              <div className="progress-card">
+                <span className="t-small">
+                  {t('demo.progress.line', {
+                    current: contract.project.progress.currentPhaseNumber,
+                    total: contract.project.progress.totalPhases,
+                    n: formatCount(contract.project.progress.currentPhaseNumber ?? 0, locale),
+                    nTotal: formatCount(contract.project.progress.totalPhases, locale),
+                  })}
+                  {' · '}
+                  {pick(
+                    {
+                      titleFa: contract.project.progress.currentPhaseTitleFa ?? '',
+                      titleEn: contract.project.progress.currentPhaseTitleEn ?? '',
+                    },
+                    'title',
+                    locale,
+                  )}
+                </span>
+              </div>
+
+              {(() => {
+                const currentPhase = contract.project!.phases.find(
+                  (p) => p.number === contract.project!.progress.currentPhaseNumber,
+                );
+                const demo = currentPhase?.demos[0];
+                return demo ? (
+                  <DemoViewport demo={demo} />
+                ) : (
+                  <p className="t-small muted">{t('detail.demoNone')}</p>
+                );
+              })()}
+            </section>
+          ) : null}
 
           {/* 1 · Design selection & approval ------------------------------ */}
           <section className="sec" id="s1">

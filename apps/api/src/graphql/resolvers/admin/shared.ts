@@ -60,3 +60,24 @@ export async function resolveDesignImage(
   }
   return { imageUrl: `/files/${file.id}`, imageFileId: file.id };
 }
+
+/**
+ * Every mutation on a Project-owned object (`ScopeItem`, `Phase`, `Demo`, …)
+ * that must still return `Contract!` (T9 in V2.md) picks the project's
+ * earliest-created contract to reload — this is exactly right while a
+ * project has at most one contract (true of everything L1/L2 create) and is
+ * a named, commented shortcut for the day a project has two. First used by
+ * L1's registry mutations; L2's phase and demo mutations reuse it rather
+ * than growing a second copy (house rule 3). Throws `NO_CONTRACT` rather
+ * than guessing if a project somehow has none.
+ */
+export async function firstContractId(projectId: string): Promise<string> {
+  const contract = await prisma.contract.findFirst({
+    where: { projectId },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (!contract) {
+    throw new GraphQLError('This project has no contract yet.', { extensions: { code: 'NO_CONTRACT' } });
+  }
+  return contract.id;
+}

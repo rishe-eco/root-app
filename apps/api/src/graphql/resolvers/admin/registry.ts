@@ -10,6 +10,7 @@ import {
   reorderTargetIndex,
 } from '../../../lib/scope.js';
 import { reload } from '../contracts.js';
+import { firstContractId } from './shared.js';
 
 /**
  * The scope registry (build plan L1; spec §3): create/edit/reorder items, set
@@ -19,23 +20,12 @@ import { reload } from '../contracts.js';
  * Every mutation here that touches a `ScopeItem` returns `Contract!`, exactly
  * as the pre-L1 `addScopeItem`/`updateScopeItem`/`deleteScopeItem` did — the
  * registry moved from Contract to Project underneath, but the desk's Scope
- * tab still opens on a contract, so `firstContractId` picks the project's
- * (for now, only ever) contract to reload. A project spanning more than one
- * contract will need a real answer here; L1 does not yet build the screen
- * that would create one, so this is a deliberate, documented shortcut — see
- * docs/development/L1.md.
+ * tab still opens on a contract, so `firstContractId` (shared.ts) picks the
+ * project's (for now, only ever) contract to reload. A project spanning more
+ * than one contract will need a real answer here; neither L1 nor L2 builds
+ * the screen that would create one, so this is a deliberate, documented
+ * shortcut — see docs/development/L1.md.
  */
-async function firstContractId(projectId: string): Promise<string> {
-  const contract = await prisma.contract.findFirst({
-    where: { projectId },
-    orderBy: { createdAt: 'asc' },
-  });
-  if (!contract) {
-    throw new GraphQLError('This project has no contract yet.', { extensions: { code: 'NO_CONTRACT' } });
-  }
-  return contract.id;
-}
-
 async function loadScopeItem(scopeItemId: string) {
   const item = await prisma.scopeItem.findUnique({ where: { id: scopeItemId } });
   if (!item) {

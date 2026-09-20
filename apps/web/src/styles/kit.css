@@ -423,3 +423,73 @@
   margin-block: var(--space-12);
 }
 .rule-cyan { border-block-start-color: var(--color-rule); }
+
+/* ---- Demo viewport (build plan L2) ------------------------------------- */
+/* The live-demo frame — shared by the desk phase board and the portal, so it
+   lives here rather than in desk.css or portal.css (house rule 3). */
+
+.demo-viewport {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.demo-viewport-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.demo-preset-btns {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+.demo-phone-note {
+  color: var(--color-text-muted);
+}
+.demo-frame-outer {
+  position: relative;
+  inline-size: 100%;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-panel);
+}
+.demo-frame-outer-native { block-size: 70vh; }
+.demo-frame-scaled {
+  border: 0;
+  transform-origin: top left;
+  /* rtl-safe: transform-origin is a physical, not logical, property, and the
+     scaled iframe must always anchor to the pane's own top-left regardless
+     of document direction — the staging site inside it has its own dir. */
+  direction: ltr;
+}
+.demo-frame-native { border: 0; inline-size: 100%; block-size: 100%; }
+.demo-frame-design {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  max-block-size: 70vh;
+  object-fit: contain;
+  background: var(--color-raised);
+}
+.demo-current-page { color: var(--color-text-muted); }
+
+/* ---- Desk phase board -------------------------------------------------- */
+
+.phase-board { display: flex; flex-direction: column; gap: var(--space-6); }
+.phase-progress-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.phase-card { display: flex; flex-direction: column; gap: var(--space-4); }
+.phase-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.demo-card { display: flex; flex-direction: column; gap: var(--space-3); border-block-start: 1px solid var(--color-border); padding-block-start: var(--space-4); }
+.demo-page-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.unmatched-bucket { display: flex; flex-direction: column; gap: var(--space-2); }
+.unmatched-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+
+/* ---- Portal coarse progress --------------------------------------------- */
+
+.progress-card { display: flex; flex-direction: column; gap: var(--space-2); }

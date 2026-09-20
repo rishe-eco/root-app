@@ -466,7 +466,40 @@
     "commentsHelp": "What the customer sees on their own contract page. Replying moves the contract to Waiting on Customer.",
     "commentsEmpty": "Nothing said yet.",
     "commentPlaceholder": "Write a reply…",
-    "commentCta": "Post reply"
+    "commentCta": "Post reply",
+    "edit": "Edit",
+    "tabPhases": "Phases",
+    "demoError": {
+      "STAGING_NOT_HTTPS": "The staging URL must be HTTPS — over plain HTTP the browser silently refuses to frame it, which looks like a blank pane rather than an error.",
+      "INVALID_STAGING_URL": "That is not a valid URL."
+    },
+    "phasesTitle": "Phases",
+    "addPhase": "Add phase",
+    "phasesEmpty": "No phases yet.",
+    "phaseNoProject": "This contract has no project to hold phases.",
+    "phaseMilestone": "Milestone (e.g. \"Payment 2 of 4\")",
+    "phaseScopeItems": "Scope items in this phase",
+    "phaseNoItems": "No items assigned yet.",
+    "phasePickItem": "Pick a scope item…",
+    "phaseAssign": "Assign",
+    "phaseUnassign": "Remove from this phase",
+    "confirmDeletePhase": "Delete this phase? Its scope items are not deleted — they simply lose this phase.",
+    "phaseProgressLabel": "Portal shows",
+    "demosTitle": "Demos",
+    "addDemo": "Add a demo",
+    "phaseNoDemo": "No demo on this phase yet.",
+    "demoStagingUrl": "Staging URL",
+    "demoBuildRef": "Build reference (commit or tag)",
+    "demoReviewStart": "Review window start",
+    "demoReviewEnd": "Review window end",
+    "confirmDeleteDemo": "Delete this demo? Its declared pages and unmatched-path history go with it.",
+    "demoPagesTitle": "Declared pages",
+    "addDemoPage": "Declare a page",
+    "demoPagePath": "Path (as it appears in the browser)",
+    "demoPageNoDesign": "No design image",
+    "confirmDeleteDemoPage": "Delete this declared page?",
+    "unmatchedTitle": "Pages we did not expect",
+    "unmatchedCount": "seen {{n}} times"
   },
   "upload": {
     "errAuth": "You do not have access to upload this.",
@@ -499,6 +532,9 @@
     "DISCARDED": "Discarded"
   },
   "detail": {
+    "demoTitle": "Progress & the live demo",
+    "demoHelp": "The current phase, walked at three widths — the same site Root is deploying to, not a screenshot of it.",
+    "demoNone": "No demo has been attached to the current phase yet.",
     "s1Title": "Design selection & approval",
     "s1Help": "Choose one concept, then approve each page design one by one. Approving the contract stays locked until every page is approved. Commenting is open at every stage.",
     "chosen": "Chosen",
@@ -640,5 +676,25 @@
     "title": "Nothing here",
     "body": "That address doesn't lead anywhere.",
     "cta": "Back to the landing"
+  },
+  "demo": {
+    "progress": {
+      "none": "No phases yet.",
+      "line": "Phase {{n}} of {{nTotal}}"
+    },
+    "viewport": {
+      "presetGroup": "Viewport width",
+      "preset": {
+        "mobile": "Mobile",
+        "tablet": "Tablet",
+        "desktop": "Desktop"
+      },
+      "showSite": "Show the site",
+      "showDesign": "Show the design",
+      "frameTitle": "Live demo",
+      "currentPage": "Currently viewing: {{label}}",
+      "noPageYet": "Browse the site above — the current page will appear here.",
+      "phoneNote": "Viewport widths are a desktop-review feature and cannot be simulated on your own phone screen — showing the site at your device's own width instead."
+    }
   }
 }
