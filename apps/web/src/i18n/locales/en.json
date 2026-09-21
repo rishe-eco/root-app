@@ -183,7 +183,45 @@
     "navApiTokens": "Tokens",
     "builds": {
       "title": "Builds",
-      "stub": "Nothing here yet — the build queue and change ledger are coming in a later stage."
+      "intro": "Declare a build once a phase is on staging. Every open feedback item needs a disposition first — an empty queue means done.",
+      "pickPhase": "Phase",
+      "pickPhasePlaceholder": "Choose a phase",
+      "noPhases": "No active phase yet.",
+      "refLabel": "Commit or tag (optional)",
+      "openQueueTitle": "Open feedback",
+      "queueEmpty": "Nothing open — the queue is empty.",
+      "scopeReadyTitle": "Ready to ship (in build)",
+      "scopeEmpty": "Nothing currently in build.",
+      "unpromptedTitle": "Unprompted changes",
+      "addUnprompted": "Add an unprompted change",
+      "outcomeLabel": "Disposition",
+      "outcome": {
+        "ADDRESSED": "Addressed",
+        "DECLINED": "Declined",
+        "CARRIED_FORWARD": "Still open, carried forward"
+      },
+      "noteLabel": "Note",
+      "declineReasonLabel": "Reason for declining",
+      "noteLangLabel": "Written in",
+      "lang": {
+        "en": "English",
+        "fa": "Persian"
+      },
+      "declare": "Declare build",
+      "pastBuildsTitle": "Declared builds",
+      "noBuilds": "No builds declared yet.",
+      "publish": "Publish",
+      "published": "Published",
+      "error": {
+        "MISSING_DISPOSITION": "Someone submitted new feedback since this list loaded — reload and try again.",
+        "CONCURRENT_BUILD": "Someone else declared a build at the same moment — try again.",
+        "ALREADY_PUBLISHED": "This build is already published.",
+        "NOT_RATIFIED": "An item nobody has ratified yet can only be carried forward.",
+        "SCOPE_ITEM_NOT_IN_BUILD": "That item is no longer in build.",
+        "DUPLICATE_DISPOSITION": "That item already has a disposition in this build.",
+        "DECLINE_REASON_REQUIRED": "Say why it was declined.",
+        "NOTE_REQUIRED": "Write a note — the note is the entry."
+      }
     },
     "backToPortal": "Back to the portal",
     "needsRootTitle": "Needs Root",
@@ -731,6 +769,11 @@
     "ratifiedLine": "Ratified by {{name}} on {{date}}",
     "selectForRatify": "Select for ratification",
     "ratifySelected": "Ratify {{n}} selected",
+    "addressedInBuild": "Addressed in build {{number}}",
+    "accept": "Confirm resolved",
+    "acceptedLine": "Accepted by {{name}} on {{date}}",
+    "unpromptedTitle": "Unprompted changes — not yet in this frame",
+    "writeUp": "Write up as a frame line",
     "intercept": {
       "decided": "This was settled on {{date}} — {{note}}. Do you want to formally reopen it?",
       "temporary": "\"{{label}}\" is marked temporary — do you want to comment anyway?"

@@ -1,15 +1,17 @@
 /**
  * Bilingual copy for the mail flows that exist today: customer invite,
  * password reset, reviewer invite, a new Review Room comment (C2.md §6), and
- * — build plan L3 — a published demo, a submitted feedback item, and a
- * ratified batch. The first user-facing text written on the API side —
- * everything else lives in `apps/web/src/i18n/locales/*.json`, a different
- * workspace this module deliberately doesn't reach into.
+ * — build plan L3/L3b — a published demo, a submitted feedback item, a
+ * ratified batch, and a published build. The first user-facing text written
+ * on the API side — everything else lives in
+ * `apps/web/src/i18n/locales/*.json`, a different workspace this module
+ * deliberately doesn't reach into.
  *
- * The three L3 templates are not polish (build plan L3's second banked
- * trap): the spec's own diagnosis of why the customer left for WhatsApp is
- * that the built-in channel was a dead end, and submit-in-place without "the
- * team has been notified" rebuilds that dead end with better styling.
+ * The L3 templates are not polish (build plan L3's second banked trap, and
+ * L3b.2's fourth rule for the build one): the spec's own diagnosis of why
+ * the customer left for WhatsApp is that the built-in channel was a dead
+ * end, and submit-in-place without "the team has been notified" rebuilds
+ * that dead end with better styling.
  *
  * A fifth was once promised alongside the first four — contract-revised —
  * and never built; no stage has needed it yet. See `later-tracks.md`'s C0
@@ -233,6 +235,46 @@ export function feedbackSubmittedEmail(
       <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
     `),
     text: `${params.recipientName} عزیز،\n\nبازخوردِ تازه‌ای روی دموی «${params.projectTitleFa}» ثبت شد.\n\n${params.deskUrl}`,
+  };
+}
+
+/**
+ * Build plan L3b.2's fourth rule: "publishing a build notifies." A build the
+ * customer is not told about is a deployment, not a version — this is the
+ * direct answer to F6's eighteen silent days, reusing C0's seam exactly as
+ * `demoPublishedEmail` does.
+ *
+ * `buildNumber` is printed as a bare Latin numeral in **both** languages,
+ * never through `toPersianDigits` — house rule 14's own exception for
+ * versions, refs and hashes, and the exact shape of bug a previous Persian
+ * pass found five times ("version ۴").
+ */
+export function buildPublishedEmail(
+  locale: string | null | undefined,
+  params: { customerName: string; projectTitleFa: string; projectTitleEn: string; buildNumber: number; portalUrl: string },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `Build ${params.buildNumber} is up — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Build <strong>${params.buildNumber}</strong> of <strong>${title}</strong> is on staging now.</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\nBuild ${params.buildNumber} of "${params.projectTitleEn}" is on staging now.\n\n${params.portalUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  return {
+    subject: `بیلد ${params.buildNumber} منتشر شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>بیلدِ <span dir="ltr">${params.buildNumber}</span> از «${title}» هم‌اکنون روی سرورِ آزمایشی است.</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\nبیلدِ ${params.buildNumber} از «${params.projectTitleFa}» هم‌اکنون روی سرورِ آزمایشی است.\n\n${params.portalUrl}`,
   };
 }
 

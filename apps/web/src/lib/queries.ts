@@ -150,6 +150,16 @@ export type FeedbackComment = {
   author: Pick<User, 'id' | 'name'>;
 };
 
+/** Just enough of a Build to trace "which build addressed this" from a
+ *  feedback item — never the full change list (that is `Build` below, read
+ *  only through the builds.author-gated queries). */
+export type BuildRef = {
+  id: string;
+  number: number;
+  ref: string | null;
+  deployedAt: string;
+};
+
 export type FeedbackItem = {
   id: string;
   status: FeedbackStatus;
@@ -159,6 +169,11 @@ export type FeedbackItem = {
   reopenedScopeItem: FrameLineScopeItemRef | null;
   demoPage: Pick<DemoPage, 'id' | 'key' | 'labelFa' | 'labelEn'> | null;
   frameLine: { id: string; kind: DemoFrameLineKind; textFa: string; textEn: string } | null;
+  /** Build plan L3b.2's first rule, as two fields: the developer's claim
+   *  (addressedInBuild), never the customer's own acceptance (acceptedAt). */
+  addressedInBuild: BuildRef | null;
+  acceptedAt: string | null;
+  acceptedBy: Pick<User, 'id' | 'name'> | null;
   comments: FeedbackComment[];
 };
 
@@ -172,12 +187,21 @@ export type DemoFrameLine = {
   feedbackItem: FeedbackItem | null;
 };
 
+/** Build plan L3b's third source, not yet written up as a line of its own —
+ *  staff-only (fields.ts's own comment); see `DemoFeedbackPanel`. */
+export type UnpromptedBuildChange = {
+  id: string;
+  note: string | null;
+  noteLang: string | null;
+};
+
 export type DemoFrame = {
   id: string;
   summaryFa: string | null;
   summaryEn: string | null;
   authoredBy: Pick<User, 'id' | 'name'>;
   lines: DemoFrameLine[];
+  unpromptedChanges: UnpromptedBuildChange[];
 };
 
 export type FeedbackInterceptionReason = 'DECIDED' | 'TEMPORARY';
@@ -458,6 +482,17 @@ export const FEEDBACK_ITEM_FIELDS = gql`
       id
       name
     }
+    addressedInBuild {
+      id
+      number
+      ref
+      deployedAt
+    }
+    acceptedAt
+    acceptedBy {
+      id
+      name
+    }
     reopenedScopeItem {
       id
       labelFa
@@ -627,6 +662,11 @@ export const CONTRACT_FIELDS = gql`
             authoredBy {
               id
               name
+            }
+            unpromptedChanges {
+              id
+              note
+              noteLang
             }
             lines {
               id
@@ -1485,8 +1525,8 @@ export const UPDATE_DEMO_FRAME_SUMMARY = gql`
 
 export const ADD_DEMO_FRAME_LINE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation AddDemoFrameLine($demoId: ID!, $kind: DemoFrameLineKind!, $textFa: String!, $textEn: String!) {
-    addDemoFrameLine(demoId: $demoId, kind: $kind, textFa: $textFa, textEn: $textEn) {
+  mutation AddDemoFrameLine($demoId: ID!, $kind: DemoFrameLineKind!, $textFa: String!, $textEn: String!, $buildChangeEntryId: ID) {
+    addDemoFrameLine(demoId: $demoId, kind: $kind, textFa: $textFa, textEn: $textEn, buildChangeEntryId: $buildChangeEntryId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1551,6 +1591,176 @@ export const RATIFY_FEEDBACK = gql`
   mutation RatifyFeedback($demoId: ID!, $itemIds: [ID!]!) {
     ratifyFeedback(demoId: $demoId, itemIds: $itemIds) {
       ...ContractFields
+    }
+  }
+`;
+
+/**
+ * Build plan L3b.2's second, separate write — the customer (or staff)
+ * confirms an ADDRESSED item is actually resolved. Returns FeedbackItem!,
+ * not Contract!: unlike submitFeedback, this only ever changes a row
+ * Apollo's cache already knows about (T9's ordinary case applies cleanly).
+ */
+export const ACCEPT_FEEDBACK = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  mutation AcceptFeedback($itemId: ID!) {
+    acceptFeedback(itemId: $itemId) {
+      ...FeedbackItemFields
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Builds and the resolution ledger (build plan L3b; spec §6's gap). Gated on
+// builds.author, never contracts.manage — none of these mutations or queries
+// return Contract!, on purpose: see resolvers/builds.ts's own comment on why
+// a DEVELOPER holding only builds.author must never reach that payload.
+// ---------------------------------------------------------------------------
+
+export type BuildChangeOutcome = 'ADDRESSED' | 'DECLINED' | 'CARRIED_FORWARD';
+
+export type BuildChangeEntry = {
+  id: string;
+  feedbackItem: FeedbackItem | null;
+  scopeItem: Pick<ScopeItem, 'id' | 'key' | 'labelFa' | 'labelEn'> | null;
+  outcome: BuildChangeOutcome | null;
+  note: string | null;
+  noteLang: string | null;
+  createdAt: string;
+};
+
+export type Build = {
+  id: string;
+  number: number;
+  deployedAt: string;
+  declaredBy: Pick<User, 'id' | 'name'>;
+  ref: string | null;
+  publishedAt: string | null;
+  changes: BuildChangeEntry[];
+  createdAt: string;
+};
+
+/** scopeItemsAwaitingBuild's own thin shape — not the full ScopeItem (that
+ *  query never selects position/checked/temporary/… so asserting the full
+ *  type against it would claim fields that were never fetched). */
+export type ScopeItemAwaitingBuild = {
+  id: string;
+  key: string;
+  labelFa: string;
+  labelEn: string;
+  status: ScopeStatus;
+};
+
+/** The build-authoring form's phase picker — thin, never touches Contract. */
+export type BuildPhase = {
+  id: string;
+  number: number;
+  titleFa: string;
+  titleEn: string;
+  projectId: string;
+  projectTitleFa: string;
+  projectTitleEn: string;
+};
+
+/** One entry sent to declareBuild — mirrors BuildChangeInput. */
+export type BuildChangeInput = {
+  feedbackItemId?: string | null;
+  scopeItemId?: string | null;
+  outcome?: BuildChangeOutcome | null;
+  note?: string | null;
+  noteLang?: string | null;
+};
+
+const BUILD_FIELDS = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  fragment BuildFields on Build {
+    id
+    number
+    deployedAt
+    ref
+    publishedAt
+    createdAt
+    declaredBy {
+      id
+      name
+    }
+    changes {
+      id
+      outcome
+      note
+      noteLang
+      createdAt
+      feedbackItem {
+        ...FeedbackItemFields
+      }
+      scopeItem {
+        id
+        key
+        labelFa
+        labelEn
+      }
+    }
+  }
+`;
+
+export const PHASES_FOR_BUILDS = gql`
+  query PhasesForBuilds {
+    phasesForBuilds {
+      id
+      number
+      titleFa
+      titleEn
+      projectId
+      projectTitleFa
+      projectTitleEn
+    }
+  }
+`;
+
+export const OPEN_FEEDBACK_QUEUE = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  query OpenFeedbackQueue($projectId: ID!) {
+    openFeedbackQueue(projectId: $projectId) {
+      ...FeedbackItemFields
+    }
+  }
+`;
+
+export const SCOPE_ITEMS_AWAITING_BUILD = gql`
+  query ScopeItemsAwaitingBuild($projectId: ID!) {
+    scopeItemsAwaitingBuild(projectId: $projectId) {
+      id
+      key
+      labelFa
+      labelEn
+      status
+    }
+  }
+`;
+
+export const PROJECT_BUILDS = gql`
+  ${BUILD_FIELDS}
+  query ProjectBuilds($projectId: ID!) {
+    projectBuilds(projectId: $projectId) {
+      ...BuildFields
+    }
+  }
+`;
+
+export const DECLARE_BUILD = gql`
+  ${BUILD_FIELDS}
+  mutation DeclareBuild($phaseId: ID!, $ref: String, $changes: [BuildChangeInput!]!) {
+    declareBuild(phaseId: $phaseId, ref: $ref, changes: $changes) {
+      ...BuildFields
+    }
+  }
+`;
+
+export const PUBLISH_BUILD = gql`
+  ${BUILD_FIELDS}
+  mutation PublishBuild($buildId: ID!) {
+    publishBuild(buildId: $buildId) {
+      ...BuildFields
     }
   }
 `;

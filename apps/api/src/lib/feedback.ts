@@ -35,3 +35,21 @@ export function checkInterception(
   if (scopeItem.temporary) return { intercepted: true, reason: 'TEMPORARY', scopeItemId: scopeItem.id };
   return { intercepted: false };
 }
+
+/**
+ * Build plan L3b.2's first rule, from the other side: ADDRESSED is the
+ * developer's claim, not final, so a new comment against the same target
+ * after it is exactly "the customer met it in the next review and reopened
+ * it" — the honest reading is OPEN again, not a comment sitting silently
+ * under a fate the customer has just contradicted. `submitFeedback` calls
+ * this on every append to an existing item; see `resolvers/feedback.ts`.
+ *
+ * ACCEPTED and DECLINED are deliberately left alone here: whether a fully
+ * closed item can be reopened by a stray comment is a decision this stage
+ * does not make for anyone (see docs/development/L3b.md) — `acceptFeedback`
+ * is the only door out of ADDRESSED in the other direction, and this stage
+ * builds no door out of ACCEPTED or DECLINED at all.
+ */
+export function reopensOnComment(status: 'OPEN' | 'RATIFIED' | 'ADDRESSED' | 'ACCEPTED' | 'DECLINED'): boolean {
+  return status === 'ADDRESSED';
+}

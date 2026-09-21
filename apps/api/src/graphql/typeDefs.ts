@@ -316,6 +316,8 @@ export const typeDefs = /* GraphQL */ `
     scopeItem: ScopeItem
     "The one feedback item anchored to this line, if any (D4: duplicates collapse on target)."
     feedbackItem: FeedbackItem
+    "Build plan L3b's third source, provenance only — set when this line is the PM's write-up of an unprompted build change."
+    buildChangeEntry: BuildChangeEntry
   }
 
   """
@@ -330,16 +332,23 @@ export const typeDefs = /* GraphQL */ `
     summaryEn: String
     authoredBy: User!
     lines: [DemoFrameLine!]!
+    """
+    Build plan L3b's third source, not yet written up as a line of its own —
+    "what's new" the registry cannot know about (a refactor, a fix found in
+    passing). Staff (contracts.manage) only; empty for anyone else, and
+    empty is not a claim that nothing changed — see fields.ts's own comment.
+    """
+    unpromptedChanges: [BuildChangeEntry!]!
     createdAt: DateTime!
     updatedAt: DateTime!
   }
 
   """
   Fates a feedback item can occupy (spec §6: "every item shows its fate —
-  accepted / done / declined-because"). This stage writes and reads OPEN and
-  RATIFIED; ADDRESSED/ACCEPTED/DECLINED are the states build plan L3b's
-  build ledger will write — present here so the surface this stage builds
-  can already render them, the same precedent L1 used for ScopeStatus.ACCEPTED.
+  accepted / done / declined-because"). L3 wrote and read only OPEN and
+  RATIFIED; build plan L3b is what actually writes ADDRESSED, ACCEPTED and
+  DECLINED — present in the enum since L3 on the same precedent L1 used for
+  ScopeStatus.ACCEPTED (built before anything could reach it).
   """
   enum FeedbackStatus {
     "Submitted, unratified — an opinion (F8), visible but inert."
@@ -377,6 +386,16 @@ export const typeDefs = /* GraphQL */ `
     reopenedScopeItem: ScopeItem
     ratifiedAt: DateTime
     ratifiedBy: User
+    """
+    Build plan L3b.2's first rule, as two fields rather than one: the
+    developer's claim, and which build carried it. Not the customer's
+    acceptance — see acceptedAt. Cleared the moment a new comment reopens
+    the item (lib/feedback.ts's reopensOnComment).
+    """
+    addressedInBuild: Build
+    "The second, separate write: the customer met this in the next review and did not reopen it. Set only by acceptFeedback, and only from ADDRESSED."
+    acceptedAt: DateTime
+    acceptedBy: User
     "Oldest first — the opening voice, then whoever piled on."
     comments: [FeedbackComment!]!
     createdAt: DateTime!
@@ -409,6 +428,93 @@ export const typeDefs = /* GraphQL */ `
     matched: Boolean!
     page: DemoPage
     normalizedPath: String!
+  }
+
+  # ---------------------------------------------------------------------
+  # Builds and the resolution ledger (build plan L3b; spec §6's gap). Named
+  # without the bare word "revision" or "round" — see schema.prisma's own
+  # comment on Build for why (L3b.3's first banked trap). Everything below
+  # is gated on builds.author, never contracts.manage, and nothing here
+  # returns Contract! — see resolvers/builds.ts's own comment on why.
+  # ---------------------------------------------------------------------
+
+  "A phase, thin — the build-authoring form's phase picker (builds.author). Never touches Contract."
+  type BuildPhase {
+    id: ID!
+    number: Int!
+    titleFa: String!
+    titleEn: String!
+    projectId: ID!
+    projectTitleFa: String!
+    projectTitleEn: String!
+  }
+
+  """
+  Which claim a change entry makes about a feedback item — never the
+  customer's acceptance, which is FeedbackItem.acceptedAt, a separate write
+  (build plan L3b.2's first rule).
+  """
+  enum BuildChangeOutcome {
+    "The developer's claim. Requires the item to already be RATIFIED."
+    ADDRESSED
+    "Requires note — declined-*because*, structurally (L3b.2's third rule)."
+    DECLINED
+    """
+    The explicit "still open, carried forward" — the only legal disposition
+    for a merely-OPEN (unratified) item.
+    """
+    CARRIED_FORWARD
+  }
+
+  """
+  One entry in a build's change list (build plan L3b.1) — a feedback item's
+  disposition, a scope item shipping, or an unprompted change nobody asked
+  for. One list, one optional origin, not two lists.
+  """
+  type BuildChangeEntry {
+    id: ID!
+    feedbackItem: FeedbackItem
+    scopeItem: ScopeItem
+    "Set exactly when feedbackItem is."
+    outcome: BuildChangeOutcome
+    """
+    The authored prose — required (structurally) when outcome is DECLINED,
+    or when there is no origin at all: "the note is the entry."
+    """
+    note: String
+    """
+    Which language note was authored in ("fa"/"en"), not a second required
+    translation column. Null exactly when note is.
+    """
+    noteLang: String
+    createdAt: DateTime!
+  }
+
+  """
+  A declared state of the staging site, belonging to a phase (build plan
+  L3b.1) — D2's bare Demo.buildRef string, grown into the object. Not a
+  revision: nothing here is hash-sealed.
+  """
+  type Build {
+    id: ID!
+    "Latin figures, always (house rule 14) — project-wide and monotonic, never reset per phase."
+    number: Int!
+    deployedAt: DateTime!
+    declaredBy: User!
+    ref: String
+    "Null means declared but not yet told to the customer (L3b.2's fourth rule)."
+    publishedAt: DateTime
+    changes: [BuildChangeEntry!]!
+    createdAt: DateTime!
+  }
+
+  "One entry in declareBuild's change list — see BuildChangeEntry for what each field means once written."
+  input BuildChangeInput {
+    feedbackItemId: ID
+    scopeItemId: ID
+    outcome: BuildChangeOutcome
+    note: String
+    noteLang: String
   }
 
   type Article {
@@ -1105,6 +1211,16 @@ export const typeDefs = /* GraphQL */ `
 
     "Staff (contracts.manage). One project, with its registry and any trades."
     project(id: ID!): Project
+
+    # --- Builds and the resolution ledger (build plan L3b) ---
+    "Staff (builds.author). Every phase across every active project, thin — the build-authoring form's phase picker."
+    phasesForBuilds: [BuildPhase!]!
+    "Staff (builds.author). Every OPEN/RATIFIED feedback item on this project, oldest first — the queue declareBuild's disposition list must exhaust."
+    openFeedbackQueue(projectId: ID!): [FeedbackItem!]!
+    "Staff (builds.author). Every scope item on this project currently IN_BUILD and assigned to a phase."
+    scopeItemsAwaitingBuild(projectId: ID!): [ScopeItem!]!
+    "Staff (builds.author). Every build declared for this project, newest first."
+    projectBuilds(projectId: ID!): [Build!]!
   }
 
   input CreateContractInput {
@@ -1243,8 +1359,8 @@ export const typeDefs = /* GraphQL */ `
     generateDemoFrame(demoId: ID!): Contract!
     "Freehand context beside the generated lines. Either field omitted leaves it unchanged; pass an empty string to clear one."
     updateDemoFrameSummary(demoId: ID!, summaryFa: String, summaryEn: String): Contract!
-    "A line Root types by hand — no scope item behind it, so it can never trigger interception (D4)."
-    addDemoFrameLine(demoId: ID!, kind: DemoFrameLineKind!, textFa: String!, textEn: String!): Contract!
+    "A line Root types by hand — no scope item behind it, so it can never trigger interception (D4). buildChangeEntryId, when given, writes up one of DemoFrame.unpromptedChanges (build plan L3b's third source)."
+    addDemoFrameLine(demoId: ID!, kind: DemoFrameLineKind!, textFa: String!, textEn: String!, buildChangeEntryId: ID): Contract!
     updateDemoFrameLine(lineId: ID!, textFa: String!, textEn: String!): Contract!
     "Cascades to its feedback item, if any."
     deleteDemoFrameLine(lineId: ID!): Contract!
@@ -1281,6 +1397,26 @@ export const typeDefs = /* GraphQL */ `
     idempotent shape resolveReviewThread already uses.
     """
     ratifyFeedback(demoId: ID!, itemIds: [ID!]!): Contract!
+
+    """
+    The customer (or staff) confirms an ADDRESSED item is actually resolved
+    (build plan L3b.2's second, separate write). Refused (NOT_ADDRESSED)
+    from any status other than ADDRESSED.
+    """
+    acceptFeedback(itemId: ID!): FeedbackItem!
+
+    # --- Builds and the resolution ledger (build plan L3b) ---
+    """
+    Staff (builds.author). Declares a build for a phase — number is
+    project-wide and monotonic. Requires a disposition (ADDRESSED, DECLINED
+    with its reason, or the explicit CARRIED_FORWARD) for every currently
+    open feedback item on the project first (MISSING_DISPOSITION otherwise)
+    — a fate must never be silent. Every FeedbackItem/ScopeItem transition a
+    change entry implies happens now, not at publishBuild.
+    """
+    declareBuild(phaseId: ID!, ref: String, changes: [BuildChangeInput!]!): Build!
+    "Staff (builds.author). Notifies the project's customer — a build they are not told about is a deployment, not a version. Refused a second time (ALREADY_PUBLISHED)."
+    publishBuild(buildId: ID!): Build!
 
     setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String): Contract!
 

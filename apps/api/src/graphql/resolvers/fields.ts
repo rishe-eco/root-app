@@ -345,6 +345,34 @@ export const ScopeItem = {
   checked: (s: { checkedAt: Date | null }) => s.checkedAt !== null,
 };
 
+/**
+ * Build plan L3b's third source, surfaced for the PM to turn into genuine
+ * bilingual prose (DemoFrameLine.buildChangeEntryId's own comment) —
+ * "appears in the next review frame without anyone remembering to mention
+ * it" (L3b's acceptance criterion) means *listed here automatically*, not
+ * auto-written as a line: a raw note authored in one language is not
+ * something this stage may silently promote into both textFa and textEn
+ * (build plan L3b.3's Persian-authorship decision). Staff (contracts.manage)
+ * only — a `DEVELOPER` holding only `builds.author` never opens this panel,
+ * and an empty list for anyone else is not a signal that nothing changed.
+ */
+export const DemoFrame = {
+  unpromptedChanges: async (f: { demoId: string }, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    if (!can(user, 'contracts.manage')) return [];
+    const demo = await prisma.demo.findUniqueOrThrow({ where: { id: f.demoId }, select: { phaseId: true } });
+    return prisma.buildChangeEntry.findMany({
+      where: {
+        build: { phaseId: demo.phaseId },
+        feedbackItemId: null,
+        scopeItemId: null,
+        frameLine: { is: null },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  },
+};
+
 export const Project = {
   /**
    * A live query regardless of how the parent `Project` object was reached —
@@ -393,7 +421,13 @@ export const Project = {
                 authoredBy: true,
                 lines: {
                   orderBy: [{ kind: 'asc' }, { position: 'asc' }],
-                  include: { scopeItem: true, feedbackItem: { include: feedbackItemInclude } },
+                  include: {
+                    scopeItem: true,
+                    feedbackItem: { include: feedbackItemInclude },
+                    // Build plan L3b's third source, provenance only — see
+                    // DemoFrameLine.buildChangeEntryId's own comment.
+                    buildChangeEntry: true,
+                  },
                 },
               },
             },

@@ -1,11 +1,12 @@
 import { DateTimeResolver } from 'graphql-scalars';
-import { Contract, ContractRevision, DesignConcept, DesignDraft, PageDesign, Project, ScopeItem, User } from './fields.js';
+import { Contract, ContractRevision, DesignConcept, DesignDraft, PageDesign, Project, ScopeItem, DemoFrame, User } from './fields.js';
 import { Query } from './query.js';
 import { authMutations } from './auth.js';
 import { customerMutations } from './customer.js';
 import { adminMutations } from './admin/index.js';
 import { demoMutations } from './demo.js';
 import { feedbackMutations } from './feedback.js';
+import { buildQueries, buildMutations } from './builds.js';
 import { LibraryEntry, libraryMutations, libraryQueries, publicLibraryQueries } from './library.js';
 import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
@@ -32,6 +33,7 @@ export const resolvers = {
   PageDesign,
   Project,
   ScopeItem,
+  DemoFrame,
   User,
   LibraryEntry,
   ReviewDocument: reviewThreadFields.ReviewDocument,
@@ -42,6 +44,10 @@ export const resolvers = {
     ...publicLibraryQueries,
     ...reviewQueries,
     ...apiTokenQueries,
+    // build plan L3b: builds.author-gated, not contracts.manage — see
+    // resolvers/builds.ts's own comment on why this stays out of the admin
+    // barrel entirely.
+    ...buildQueries,
   },
 
   Mutation: {
@@ -55,6 +61,8 @@ export const resolvers = {
     // build plan L3: same reasoning — submitFeedback/ratifyFeedback are
     // ownership-gated against project.customerId, not capability-gated.
     ...feedbackMutations,
+    // build plan L3b: builds.author-gated — see resolvers/builds.ts.
+    ...buildMutations,
     ...libraryMutations,
     ...reviewMutations,
     ...reviewThreadMutations,

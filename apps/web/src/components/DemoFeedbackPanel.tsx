@@ -12,6 +12,7 @@ import {
   PUBLISH_DEMO,
   SUBMIT_FEEDBACK,
   RATIFY_FEEDBACK,
+  ACCEPT_FEEDBACK,
   type Demo,
   type DemoFrameLine,
   type DemoFrameLineKind,
@@ -52,6 +53,27 @@ function interceptionSentence(
   return t('feedback.intercept.temporary', { label });
 }
 
+/**
+ * The customer's own half of L3b.2's first rule: an ADDRESSED item shows a
+ * button, never an automatic transition — acceptFeedback is a distinct
+ * mutation call, at a distinct moment, from whoever is looking. Available
+ * to staff too (the same ownership-or-staff shape every mutation in this
+ * panel already uses).
+ */
+function AcceptButton({ itemId, t }: { itemId: string; t: T }) {
+  const [accept, { loading }] = useMutation(ACCEPT_FEEDBACK);
+  return (
+    <button
+      type="button"
+      className="btn btn-secondary btn-sm"
+      disabled={loading}
+      onClick={() => accept({ variables: { itemId } })}
+    >
+      {t('feedback.accept')}
+    </button>
+  );
+}
+
 function FeedbackThread({ item, t, locale }: { item: FeedbackItem; t: T; locale: 'fa' | 'en' }) {
   return (
     <div className="feedback-thread">
@@ -69,6 +91,19 @@ function FeedbackThread({ item, t, locale }: { item: FeedbackItem; t: T; locale:
       {item.ratifiedAt ? (
         <p className="t-caption">
           {t('feedback.ratifiedLine', { name: item.ratifiedBy?.name ?? '', date: fullDateTime(item.ratifiedAt, locale) })}
+        </p>
+      ) : null}
+      {/* Build plan L3b.2's first rule, shown as two separate facts — the
+          developer's claim, never presented as the customer's acceptance. */}
+      {item.addressedInBuild ? (
+        <p className="t-caption">
+          {t('feedback.addressedInBuild', { number: item.addressedInBuild.number })}
+        </p>
+      ) : null}
+      {item.status === 'ADDRESSED' ? <AcceptButton itemId={item.id} t={t} /> : null}
+      {item.acceptedAt ? (
+        <p className="t-caption">
+          {t('feedback.acceptedLine', { name: item.acceptedBy?.name ?? '', date: fullDateTime(item.acceptedAt, locale) })}
         </p>
       ) : null}
     </div>
@@ -208,6 +243,21 @@ export default function DemoFeedbackPanel({
   const [newLineEn, setNewLineEn] = useState('');
   const [summaryFa, setSummaryFa] = useState(demo.frame?.summaryFa ?? '');
   const [summaryEn, setSummaryEn] = useState(demo.frame?.summaryEn ?? '');
+
+  // Build plan L3b's third source: an unprompted build change, written up
+  // into a genuine bilingual line by hand — never auto-translated (L3b.3's
+  // Persian-authorship decision). writeUpFa/writeUpEn start from the raw
+  // note only on the side matching its authored language, so the other
+  // language is never silently seeded with text the customer cannot read.
+  const [writeUpId, setWriteUpId] = useState<string | null>(null);
+  const [writeUpFa, setWriteUpFa] = useState('');
+  const [writeUpEn, setWriteUpEn] = useState('');
+
+  function startWriteUp(entry: { id: string; note: string | null; noteLang: string | null }) {
+    setWriteUpId(entry.id);
+    setWriteUpFa(entry.noteLang === 'fa' ? (entry.note ?? '') : '');
+    setWriteUpEn(entry.noteLang === 'en' ? (entry.note ?? '') : '');
+  }
 
   async function onSubmitTarget(
     target: { targetDemoPageId?: string; targetFrameLineId?: string },
@@ -351,6 +401,59 @@ export default function DemoFeedbackPanel({
                     {t('workspace.save')}
                   </button>
                 </form>
+              ) : null}
+
+              {/* Build plan L3b's third source, surfaced so nobody has to
+                  remember it exists (fields.ts's own comment on
+                  unpromptedChanges) — a change nobody asked for, not yet
+                  written up as a real bilingual line. */}
+              {demo.frame.unpromptedChanges.length > 0 ? (
+                <div className="demo-frame-bucket">
+                  <p className="t-eyebrow">{t('feedback.unpromptedTitle')}</p>
+                  {demo.frame.unpromptedChanges.map((entry) =>
+                    writeUpId === entry.id ? (
+                      <form
+                        key={entry.id}
+                        className="card editor-card auth-form"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          await addLine({
+                            variables: { demoId: demo.id, kind: 'NEW', textFa: writeUpFa, textEn: writeUpEn, buildChangeEntryId: entry.id },
+                          });
+                          setWriteUpId(null);
+                        }}
+                      >
+                        <div className="editor-grid-2">
+                          <div className="field">
+                            <label className="label">{t('workspace.titleFa')}</label>
+                            <input className="input" dir="rtl" required value={writeUpFa} onChange={(e) => setWriteUpFa(e.target.value)} />
+                          </div>
+                          <div className="field">
+                            <label className="label">{t('workspace.titleEn')}</label>
+                            <input className="input" dir="ltr" required value={writeUpEn} onChange={(e) => setWriteUpEn(e.target.value)} />
+                          </div>
+                        </div>
+                        <div className="workspace-row">
+                          <button className="btn btn-primary btn-sm" type="submit">
+                            {t('workspace.save')}
+                          </button>
+                          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setWriteUpId(null)}>
+                            {t('feedback.cancel')}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="demo-frame-line" key={entry.id}>
+                        <div className="demo-frame-line-head">
+                          <span className="t-small">{entry.note}</span>
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => startWriteUp(entry)}>
+                            {t('feedback.writeUp')}
+                          </button>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
               ) : null}
             </>
           ) : null}

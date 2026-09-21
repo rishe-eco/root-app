@@ -109,6 +109,11 @@ model User {
   ratifiedFeedback   FeedbackItem[]    @relation("FeedbackRatifiedBy")
   feedbackComments   FeedbackComment[]
 
+  // Builds and the resolution ledger (build plan L3b; spec §6's gap) — see
+  // Build's own comment.
+  declaredBuilds   Build[]
+  acceptedFeedback FeedbackItem[] @relation("FeedbackAcceptedBy")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -584,6 +589,7 @@ model Project {
   scopeItems  ScopeItem[]
   scopeTrades ScopeTrade[]
   phases      Phase[]
+  builds      Build[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -688,6 +694,13 @@ model ScopeItem {
   /// chose to proceed (D4's interception, recorded rather than only prompted).
   reopenedFeedback FeedbackItem[]  @relation("FeedbackReopenedScopeItem")
 
+  /// A build's change list naming "this was on the plan" (build plan L3b) —
+  /// each entry moves this item to IN_DEMO at declaration time. A row here
+  /// per build that shipped it, not per phase — the same item could
+  /// conceivably be re-shipped after a regression, though nothing in this
+  /// stage produces that on purpose.
+  buildChangeEntries BuildChangeEntry[]
+
   @@unique([projectId, key])
 }
 
@@ -761,6 +774,7 @@ model Phase {
 
   scopeItems ScopeItem[]
   demos      Demo[]
+  builds     Build[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -943,6 +957,14 @@ model DemoFrameLine {
 
   feedbackItem FeedbackItem?
 
+  /// Build plan L3b's third source, turned into genuine bilingual prose: set
+  /// when a PM used addDemoFrameLine to write up an unprompted build change
+  /// (schema.prisma's DemoFrameLine — see BuildChangeEntry.note's comment on
+  /// why the raw note is not copied here automatically). Unique — at most one
+  /// line is ever the write-up of a given entry. Null for every other line.
+  buildChangeEntryId String?           @unique
+  buildChangeEntry   BuildChangeEntry? @relation(fields: [buildChangeEntryId], references: [id], onDelete: SetNull)
+
   @@index([frameId, kind, position])
 }
 
@@ -1007,7 +1029,27 @@ model FeedbackItem {
   ratifiedById String?
   ratifiedBy   User?     @relation("FeedbackRatifiedBy", fields: [ratifiedById], references: [id])
 
-  comments FeedbackComment[]
+  /// Build plan L3b.2's first rule, held as two columns rather than one: the
+  /// developer's claim. Set by declareBuild the moment a change entry
+  /// disposes this item ADDRESSED; cleared (never left dangling) the moment
+  /// a new comment reopens it (lib/feedback.ts's reopensOnComment) — a stale
+  /// pointer at a build that no longer describes this item's current state
+  /// would be exactly the silent-in-Root's-favour failure this rule exists
+  /// to prevent.
+  addressedInBuildId String?
+  addressedInBuild   Build?  @relation(fields: [addressedInBuildId], references: [id], onDelete: SetNull)
+
+  /// The second, separate write L3b.2 insists on: the customer (or staff)
+  /// met this in the next review and did not reopen it. Written only by
+  /// acceptFeedback, and only from ADDRESSED — never inferred from
+  /// addressedInBuildId being set, which would collapse the very distinction
+  /// this pair of fields exists to hold apart.
+  acceptedAt   DateTime?
+  acceptedById String?
+  acceptedBy   User?     @relation("FeedbackAcceptedBy", fields: [acceptedById], references: [id])
+
+  comments           FeedbackComment[]
+  buildChangeEntries BuildChangeEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1032,6 +1074,139 @@ model FeedbackComment {
   createdAt DateTime @default(now())
 
   @@index([feedbackItemId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Builds and the resolution ledger (build plan L3b, 2026-09-21; spec §6's
+// gap) — the loop's other half. L3 lets the customer submit and promises
+// every item shows its fate; this is where a fate gets written, by the
+// developer, at the moment they put a new version on staging. Also the
+// review frame's third source of "what's new" — a change that came from
+// neither a scope item nor a feedback item (a refactor, a fix found in
+// passing) — see BuildChangeEntry and DemoFrameLine.buildChangeEntryId.
+// ---------------------------------------------------------------------------
+
+/// A declared state of the staging site at a point in time, belonging to a
+/// phase (build plan L3b.1) — D2's bare `Demo.buildRef` string, grown
+/// straight into the object rather than kept alongside it. **Not a
+/// revision**: nothing here is hash-sealed, and a build is a pointer at a
+/// live site, sealed against nothing (L3b.3's first banked trap — the same
+/// naming collision as L3's `review`, one stage later). **Not a `ReviewRound`**
+/// either — that is the Review Room's own word for a different freeze.
+model Build {
+  id String @id @default(cuid())
+
+  phaseId String
+  phase   Phase  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  /// Denormalized off `phase.projectId` so the numbering below can be
+  /// project-wide without a join through Phase on every read.
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Latin figures, always (house rule 14) — a version, not a count.
+  /// **Project-wide and monotonic**, never reset per phase: a per-phase
+  /// counter makes "version 2" ambiguous the day a project has a second
+  /// phase with its own build, which is exactly the sentence a customer
+  /// repeats back to Root. See lib/build.ts's nextBuildNumber and
+  /// @@unique below, which is the backstop against two concurrent declares.
+  number Int
+
+  deployedAt   DateTime @default(now())
+  declaredById String
+  declaredBy   User     @relation(fields: [declaredById], references: [id])
+
+  /// Commit or tag. Optional — this stage does not integrate with git, and a
+  /// build may be declared before a ref is even decided.
+  ref String?
+
+  /// Publishing notifies the project's customer (build plan L3b.2's fourth
+  /// rule) — null means declared but not yet told about, the same shape
+  /// `Demo.publishedAt` already uses for "a deployment is not a version
+  /// until someone is told." Every FeedbackItem/ScopeItem transition a
+  /// build's change list makes happens at *declaration*, not held back for
+  /// this second click — L3b's own framing is that the fate is written "at
+  /// the moment they put a new version on staging."
+  publishedAt DateTime?
+
+  changes BuildChangeEntry[]
+
+  createdAt    DateTime       @default(now())
+  FeedbackItem FeedbackItem[]
+
+  @@unique([projectId, number])
+  @@index([phaseId])
+}
+
+/// Which claim a change entry makes about a feedback item — never the
+/// customer's acceptance, which is FeedbackItem.acceptedAt, a separate write
+/// (build plan L3b.2's first rule: two fields, never one).
+enum BuildChangeOutcome {
+  /// The developer's claim. Requires the feedback item to already be
+  /// RATIFIED (lib/build.ts's outcomeAllowedForStatus) — addressing an
+  /// opinion nobody has ratified yet would let a build bypass D3's own gate.
+  ADDRESSED
+  /// Requires `note` — the CHECK below holds "declined-*because*" at the
+  /// database (build plan L3b.2's third rule), not only in a resolver that
+  /// could forget to ask. Also requires RATIFIED, same reasoning as ADDRESSED.
+  DECLINED
+  /// The explicit "still open, carried forward" (L3b.2's second rule) — the
+  /// only legal disposition for a merely-OPEN (unratified) item, and always
+  /// legal for a RATIFIED one too. Writes nothing to the item's own status:
+  /// nothing changed, so nothing about the row should say otherwise.
+  CARRIED_FORWARD
+}
+
+/// One entry in a build's change list — the developer's disposition of a
+/// feedback item, the record of a scope item shipping, or an unprompted
+/// change nobody asked for (build plan L3b.1's table: one list, one optional
+/// origin, not two lists). **Authored prose about the product, never an
+/// audit trail** — L3b.3's test for telling this apart from `ChangeLog`: the
+/// system writes a ChangeLog, a person writes a change entry.
+model BuildChangeEntry {
+  id      String @id @default(cuid())
+  buildId String
+  build   Build  @relation(fields: [buildId], references: [id], onDelete: Cascade)
+
+  /// At most one of these, or neither (build plan L3b.1's table) — enforced
+  /// by BuildChangeEntry_at_most_one_origin below, the same route
+  /// FeedbackItem_exactly_one_target already takes for the stricter version
+  /// of this shape (exactly one, never neither).
+  feedbackItemId String?
+  feedbackItem   FeedbackItem? @relation(fields: [feedbackItemId], references: [id], onDelete: SetNull)
+  scopeItemId    String?
+  scopeItem      ScopeItem?    @relation(fields: [scopeItemId], references: [id], onDelete: SetNull)
+
+  /// Set exactly when feedbackItemId is (validated in lib/build.ts, not
+  /// CHECK-enforced — the same "can be tightened later" precedent L1 left
+  /// ScopeItem.declinedReason on). A scope-item-origin or no-origin entry is
+  /// not something ratified or declined; it is simply documented as done.
+  outcome BuildChangeOutcome?
+
+  /// The authored prose. Required — structurally, via the CHECK below — when
+  /// `outcome` is DECLINED ("declined-*because*") or when there is no origin
+  /// at all ("the note *is* the entry", L3b.1). Optional otherwise: a scope
+  /// item or an ADDRESSED/CARRIED_FORWARD feedback item is already labelled
+  /// by what it points at.
+  note String?
+
+  /// Which language `note` was authored in ("fa" or "en") — not a second,
+  /// required translation column. Build plan L3b.3's Persian-authorship
+  /// decision: the developer may not write Persian, and a change note the
+  /// customer cannot read is worse than one the PM renders at review time
+  /// (see DemoFrameLine.buildChangeEntryId). Null exactly when note is.
+  noteLang String?
+
+  /// The line a PM eventually wrote up from this entry, in genuine bilingual
+  /// prose, once it reached a review frame (DemoFrameLine's own comment).
+  /// Null until then; always null for a feedback- or scope-item-origin entry,
+  /// which already have a home in the frame without this.
+  frameLine DemoFrameLine?
+
+  createdAt DateTime @default(now())
+
+  @@index([buildId])
+  @@index([feedbackItemId])
 }
 
 /// The fourteen articles plus Appendix 1, as the editable **draft**. Body text

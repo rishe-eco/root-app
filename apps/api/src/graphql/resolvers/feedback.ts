@@ -3,7 +3,7 @@ import type { Prisma, User } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
 import { can } from '../../lib/capabilities.js';
-import { checkInterception } from '../../lib/feedback.js';
+import { checkInterception, reopensOnComment } from '../../lib/feedback.js';
 import { sendMail } from '../../lib/mail.js';
 import { feedbackSubmittedEmail, feedbackRatifiedEmail } from '../../lib/mailTemplates.js';
 import { env } from '../../lib/env.js';
@@ -29,6 +29,11 @@ export const feedbackItemInclude = {
   frameLine: true,
   reopenedScopeItem: true,
   ratifiedBy: true,
+  // Build plan L3b: the developer's claim (addressedInBuild) and the
+  // customer's separate acceptance (acceptedBy) — see FeedbackItem's own
+  // schema comment on why these are never the same write.
+  addressedInBuild: true,
+  acceptedBy: true,
   comments: { orderBy: { createdAt: 'asc' as const }, include: { author: true } },
 } satisfies Prisma.FeedbackItemInclude;
 
@@ -142,6 +147,18 @@ export const feedbackMutations = {
         });
       }
 
+      // Build plan L3b.2's first rule, from the other side: a new comment
+      // against an item the developer already claimed ADDRESSED is exactly
+      // "the customer met it in the next review and reopened it" — move it
+      // back to OPEN and drop the stale build pointer, rather than letting a
+      // comment that contradicts the claim sit silently under it.
+      if (existing && reopensOnComment(existing.status)) {
+        await tx.feedbackItem.update({
+          where: { id: feedbackItem.id },
+          data: { status: 'OPEN', addressedInBuildId: null },
+        });
+      }
+
       await tx.feedbackComment.create({ data: { feedbackItemId: feedbackItem.id, authorId: user.id, body } });
       return feedbackItem.id;
     });
@@ -212,5 +229,36 @@ export const feedbackMutations = {
     }
 
     return reload(await firstContractId(demo.phase.projectId));
+  },
+
+  /**
+   * Build plan L3b.2's second, separate write: the customer (or staff) meets
+   * an ADDRESSED item in the next review and confirms it is actually
+   * resolved. Refused (NOT_ADDRESSED) from any other status — in particular
+   * never from RATIFIED or OPEN directly, which would let this mutation do
+   * the developer's job, and never a no-op re-confirm of an already-ACCEPTED
+   * item, which would blur exactly when the acceptance happened.
+   *
+   * Ownership-gated like `submitFeedback`/`ratifyFeedback` (house rule 2):
+   * the project's own customer, or staff — never a role test.
+   */
+  acceptFeedback: async (_p: unknown, args: { itemId: string }, ctx: Context) => {
+    const user = requireUser(ctx);
+    const item = await prisma.feedbackItem.findUnique({ where: { id: args.itemId } });
+    if (!item) throw notFound('feedback item');
+    // Reuses the same ownership check every other mutation in this file
+    // does, keyed through the item's own demo (house rule 3).
+    await loadDemoForActor(item.demoId, user);
+
+    if (item.status !== 'ADDRESSED') {
+      throw new GraphQLError('This item is not currently addressed.', { extensions: { code: 'NOT_ADDRESSED' } });
+    }
+
+    await prisma.feedbackItem.update({
+      where: { id: item.id },
+      data: { status: 'ACCEPTED', acceptedAt: new Date(), acceptedById: user.id },
+    });
+
+    return prisma.feedbackItem.findUniqueOrThrow({ where: { id: item.id }, include: feedbackItemInclude });
   },
 };

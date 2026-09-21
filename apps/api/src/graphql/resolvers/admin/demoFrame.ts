@@ -115,16 +115,39 @@ export const demoFrameMutations = {
     return reload(await firstContractId(demo.phase.projectId));
   },
 
-  /** A line Root types by hand — no scope item behind it, so it can never
-   *  trigger interception (D4 keys off the target's own scope item). */
+  /**
+   * A line Root types by hand — no scope item behind it, so it can never
+   * trigger interception (D4 keys off the target's own scope item).
+   *
+   * Build plan L3b's third source: `buildChangeEntryId`, when given, is the
+   * PM's write-up of an unprompted build change (schema.prisma's
+   * DemoFrameLine comment) — validated to belong to a build on this same
+   * demo's phase and not already written up elsewhere, since the unique
+   * index on `buildChangeEntryId` would otherwise refuse it with a less
+   * specific error.
+   */
   addDemoFrameLine: async (
     _p: unknown,
-    args: { demoId: string; kind: DemoFrameLineKind; textFa: string; textEn: string },
+    args: { demoId: string; kind: DemoFrameLineKind; textFa: string; textEn: string; buildChangeEntryId?: string | null },
     ctx: Context,
   ) => {
     const admin = requireCapability(ctx, 'contracts.manage');
     const demo = await loadDemo(args.demoId);
     const frame = await ensureFrame(demo.id, admin.id);
+
+    if (args.buildChangeEntryId) {
+      const entry = await prisma.buildChangeEntry.findUnique({
+        where: { id: args.buildChangeEntryId },
+        include: { build: true, frameLine: true },
+      });
+      if (!entry || entry.build.phaseId !== demo.phaseId) {
+        throw new GraphQLError('No such unprompted change on this phase.', { extensions: { code: 'NOT_FOUND' } });
+      }
+      if (entry.frameLine) {
+        throw new GraphQLError('This change already has a frame line.', { extensions: { code: 'ALREADY_WRITTEN_UP' } });
+      }
+    }
+
     const highest = await prisma.demoFrameLine.aggregate({ where: { frameId: frame.id }, _max: { position: true } });
     await prisma.demoFrameLine.create({
       data: {
@@ -132,6 +155,7 @@ export const demoFrameMutations = {
         kind: args.kind,
         textFa: args.textFa,
         textEn: args.textEn,
+        buildChangeEntryId: args.buildChangeEntryId ?? null,
         position: (highest._max.position ?? -1) + 1,
       },
     });

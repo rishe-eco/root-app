@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkInterception } from './feedback.js';
+import { checkInterception, reopensOnComment } from './feedback.js';
 
 test('checkInterception: null target (a page, or a hand-authored line) never intercepts', () => {
   assert.deepEqual(checkInterception(null), { intercepted: false });
@@ -23,4 +23,14 @@ test('checkInterception: a temporary item intercepts with reason TEMPORARY', () 
 test('checkInterception: decided wins when an item is somehow both', () => {
   const result = checkInterception({ id: 's1', decidedAt: new Date('2026-01-01'), temporary: true });
   assert.deepEqual(result, { intercepted: true, reason: 'DECIDED', scopeItemId: 's1' });
+});
+
+// --- reopensOnComment (build plan L3b.2's first rule, from the other side) -
+
+test('reopensOnComment: only ADDRESSED reopens on a new comment', () => {
+  assert.equal(reopensOnComment('ADDRESSED'), true);
+  assert.equal(reopensOnComment('OPEN'), false);
+  assert.equal(reopensOnComment('RATIFIED'), false);
+  assert.equal(reopensOnComment('ACCEPTED'), false);
+  assert.equal(reopensOnComment('DECLINED'), false);
 });
