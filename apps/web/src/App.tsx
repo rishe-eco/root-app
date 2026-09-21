@@ -18,6 +18,7 @@ import Contracts from '@/portal/Contracts';
 import ContractDetail from '@/portal/ContractDetail';
 import ContractPrint from '@/portal/ContractPrint';
 import Stub from '@/portal/Stub';
+import Support from '@/portal/Support';
 import DeskLayout from '@/desk/DeskLayout';
 import DeskHome from '@/desk/DeskHome';
 import Overview from '@/desk/Overview';
@@ -30,12 +31,14 @@ import Review from '@/desk/Review';
 import ReviewDocumentScreen from '@/desk/ReviewDocumentScreen';
 import ReviewAdmin from '@/desk/ReviewAdmin';
 import Builds from '@/desk/Builds';
+import Tickets from '@/desk/Tickets';
 import ApiTokens from '@/desk/ApiTokens';
 import ContractWorkspace from '@/desk/workspace/ContractWorkspace';
 import WorkspaceContractTab from '@/desk/workspace/ContractTab';
 import WorkspaceDesignTab from '@/desk/workspace/DesignTab';
 import WorkspaceScopeTab from '@/desk/workspace/ScopeTab';
 import WorkspacePhasesTab from '@/desk/workspace/PhasesTab';
+import WorkspaceDependenciesTab from '@/desk/workspace/DependenciesTab';
 import WorkspaceActivityTab from '@/desk/workspace/ActivityTab';
 
 /** `/` and any unprefixed path get sent to the visitor's best-guess locale. */
@@ -95,7 +98,8 @@ export default function App() {
           <Route path="contracts/:id/print" element={<ContractPrint />} />
           <Route path="services" element={<Stub section="services" />} />
           <Route path="billing" element={<Stub section="billing" />} />
-          <Route path="support" element={<Stub section="support" />} />
+          {/* Build plan L4: the support rail goes live — see Support.tsx. */}
+          <Route path="support" element={<Support />} />
         </Route>
 
         {/* Staff shell — /admin never redirected here; that route was never
@@ -110,6 +114,7 @@ export default function App() {
             <Route path="design" element={<WorkspaceDesignTab />} />
             <Route path="scope" element={<WorkspaceScopeTab />} />
             <Route path="phases" element={<WorkspacePhasesTab />} />
+            <Route path="dependencies" element={<WorkspaceDependenciesTab />} />
             <Route path="activity" element={<WorkspaceActivityTab />} />
           </Route>
           <Route path="customers" element={<Customers />} />
@@ -121,6 +126,7 @@ export default function App() {
           <Route path="review/:roundId/:documentId" element={<ReviewDocumentScreen />} />
           <Route path="reviewAdmin" element={<ReviewAdmin />} />
           <Route path="builds" element={<Builds />} />
+          <Route path="tickets" element={<Tickets />} />
           <Route path="apiTokens" element={<ApiTokens />} />
         </Route>
 

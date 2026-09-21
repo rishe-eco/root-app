@@ -35,6 +35,10 @@ export const feedbackItemInclude = {
   addressedInBuild: true,
   acceptedBy: true,
   comments: { orderBy: { createdAt: 'asc' as const }, include: { author: true } },
+  // Build plan L4: shallow on purpose — every caller of this include that
+  // also asks for `ticket` selects only its scalar fields (id, type, …),
+  // never a nested field that would need this row's own deeper includes.
+  ticket: true,
 } satisfies Prisma.FeedbackItemInclude;
 
 const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extensions: { code: 'NOT_FOUND' } });

@@ -1,5 +1,5 @@
 import { DateTimeResolver } from 'graphql-scalars';
-import { Contract, ContractRevision, DesignConcept, DesignDraft, PageDesign, Project, ScopeItem, DemoFrame, User } from './fields.js';
+import { Contract, ContractRevision, DesignConcept, DesignDraft, PageDesign, Project, ScopeItem, DemoFrame, Dependency, User } from './fields.js';
 import { Query } from './query.js';
 import { authMutations } from './auth.js';
 import { customerMutations } from './customer.js';
@@ -7,6 +7,7 @@ import { adminMutations } from './admin/index.js';
 import { demoMutations } from './demo.js';
 import { feedbackMutations } from './feedback.js';
 import { buildQueries, buildMutations } from './builds.js';
+import { ticketQueries, ticketMutations } from './tickets.js';
 import { LibraryEntry, libraryMutations, libraryQueries, publicLibraryQueries } from './library.js';
 import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
@@ -34,6 +35,7 @@ export const resolvers = {
   Project,
   ScopeItem,
   DemoFrame,
+  Dependency,
   User,
   LibraryEntry,
   ReviewDocument: reviewThreadFields.ReviewDocument,
@@ -48,6 +50,9 @@ export const resolvers = {
     // resolvers/builds.ts's own comment on why this stays out of the admin
     // barrel entirely.
     ...buildQueries,
+    // build plan L4: myTickets is ownership-gated, allTickets and
+    // adminRequestCount are contracts.manage — see resolvers/tickets.ts.
+    ...ticketQueries,
   },
 
   Mutation: {
@@ -63,6 +68,9 @@ export const resolvers = {
     ...feedbackMutations,
     // build plan L3b: builds.author-gated — see resolvers/builds.ts.
     ...buildMutations,
+    // build plan L4: a mix of ownership (createTicket, addTicketMessage) and
+    // contracts.manage (everything else) — see resolvers/tickets.ts.
+    ...ticketMutations,
     ...libraryMutations,
     ...reviewMutations,
     ...reviewThreadMutations,

@@ -393,7 +393,20 @@
       "statusExpired": "منقضی‌شده",
       "revoke": "ابطال",
       "revokeConfirm": "{{name}} باطل شود؟ هر چیزی که از آن استفاده می‌کند بی‌درنگ از کار می‌افتد."
-    }
+    },
+    "navTickets": "تیکت‌ها",
+    "tickets": {
+      "title": "میز پشتیبانی",
+      "lede": "هر تیکت، جابه‌جایی بین کانال‌ها، و شمارِ درخواست‌های مدیریتی.",
+      "adminRequestCount": "درخواست‌های مدیریتی",
+      "statusLabel": "وضعیت",
+      "urgencyLabel": "فوریت",
+      "moveChannelLabel": "جابه‌جایی به کانال",
+      "billable": "قابلِ‌صورت‌حساب",
+      "empty": "هنوز تیکتی ثبت نشده است."
+    },
+    "overdueDependenciesTitle": "وابستگی‌های دیرکرده",
+    "overdueDependenciesEmpty": "چیزی دیرکرده نیست."
   },
   "workspace": {
     "tabContract": "قرارداد",
@@ -537,7 +550,25 @@
     "demoPageNoDesign": "بدونِ تصویرِ طرح",
     "confirmDeleteDemoPage": "این صفحه‌ی اعلام‌شده حذف شود؟",
     "unmatchedTitle": "صفحاتی که انتظارشان را نداشتیم",
-    "unmatchedCount": "{{n}} بار دیده‌شده"
+    "unmatchedCount": "{{n}} بار دیده‌شده",
+    "tabDependencies": "وابستگی‌ها",
+    "dependenciesTitle": "وابستگی‌ها",
+    "dependenciesHelp": "تعهدهای دو طرف — کارفرما و ریشه — با مهلت و مرحله‌ی تأیید، روی یک تخته.",
+    "addDependency": "افزودنِ وابستگی",
+    "dependencySideLabel": "طرفِ متعهد",
+    "dependencySide": {
+      "CUSTOMER": "کارفرما",
+      "ROOT": "ریشه"
+    },
+    "dependencyDueAt": "مهلت",
+    "dependenciesEmpty": "هنوز وابستگی‌ای ثبت نشده است.",
+    "dependencyVerify": "تأییدِ انجام",
+    "dependencyUnverify": "لغوِ تأیید",
+    "dependencyVerifyNoteLabel": "چه کاری انجام شد؟",
+    "dependencyVerifyNotePlaceholder": "برای نمونه: یک فایلِ آزمایشی را روی میزبان مستقر کردیم.",
+    "dependencyVerifiedLine": "تأییدشده توسط {{name}} در {{date}}",
+    "dependencyOverdue": "دیرکرده",
+    "confirmDeleteDependency": "این وابستگی حذف شود؟"
   },
   "upload": {
     "errAuth": "اجازه‌ی بارگذاریِ این فایل را نداری.",
@@ -643,7 +674,10 @@
       "approvedLabel": "✓ الحاقیه تأیید شد",
       "signCta": "امضای الحاقیه",
       "signedAt": "امضا شد"
-    }
+    },
+    "commitmentsCap": "تعهدهای شما",
+    "commitmentVerified": "تأیید شد",
+    "commitmentOverdue": "دیرکرده"
   },
   "print": {
     "back": "بازگشت به قرارداد",
@@ -706,8 +740,6 @@
     "servicesBody": "نخستین خدمت — واردکردن گروهیِ محصول به فروشگاهت — در حال ساخت است. هر وقت واقعاً کامل شد اینجا می‌آید، نه زودتر.",
     "billingTitle": "صورت‌حساب",
     "billingBody": "صورت‌حساب و مانده‌ی حسابت اینجا خواهد بود.",
-    "supportTitle": "پشتیبانی",
-    "supportBody": "تیکت‌ها و پاسخ‌ها اینجا خواهند بود.",
     "comingLater": "به‌زودی"
   },
   "notFound": {
@@ -778,6 +810,51 @@
       "decided": "این مورد در {{date}} تصمیم‌گیری‌شده بود — {{note}}. می‌خواهی رسماً بازش کنی؟",
       "temporary": "«{{label}}» به‌عنوانِ موقتی علامت‌گذاری شده — می‌خواهی همچنان نظر بدهی؟"
     },
-    "confirmReopen": "بله، رسماً بازش کن"
+    "confirmReopen": "بله، رسماً بازش کن",
+    "convertToTicket": "تبدیل به تیکتِ تغییر",
+    "convertedToTicket": "به تیکت تبدیل شد",
+    "briefCurrentState": "وضعِ فعلی",
+    "briefDesiredState": "وضعِ مطلوب"
+  },
+  "support": {
+    "pageTitle": "پشتیبانی",
+    "pageLede": "برای دریافتِ کمک یا گزارشِ یک مشکل، تیکت ثبت کنید. هر پاسخ همین‌جا ثبت می‌شود.",
+    "newTicket": "تیکتِ تازه",
+    "subjectLabel": "موضوع",
+    "bodyLabel": "توضیح",
+    "submit": "ثبتِ تیکت",
+    "empty": "هنوز تیکتی ثبت نکرده‌اید.",
+    "replyPlaceholder": "پاسخ…",
+    "reply": "ارسالِ پاسخ",
+    "briefTitle": "خلاصه‌ی درخواست",
+    "briefPage": "صفحه",
+    "briefCurrentState": "وضعِ فعلی",
+    "briefDesiredState": "وضعِ مطلوب",
+    "briefAnnotation": "یادداشتِ بازبین",
+    "type": {
+      "label": "نوع",
+      "CHANGE_REQUEST": "درخواستِ تغییر",
+      "BUG": "خطا",
+      "QUESTION": "پرسش",
+      "ADMIN_REQUEST": "درخواستِ مدیریتی",
+      "ALL": "همه"
+    },
+    "urgency": {
+      "label": "فوریت",
+      "NOT_URGENT": "عادی",
+      "URGENT": "فوری"
+    },
+    "status": {
+      "OPEN": "باز",
+      "IN_PROGRESS": "در حالِ انجام",
+      "RESOLVED": "حل‌شده",
+      "CLOSED": "بسته‌شده",
+      "ALL": "همه"
+    },
+    "error": {
+      "INVALID_TICKET_TYPE": "این نوع را فقط تیمِ ریشه می‌تواند انتخاب کند.",
+      "EMPTY_SUBJECT": "موضوع را وارد کنید.",
+      "EMPTY_COMMENT": "پیام نمی‌تواند خالی باشد."
+    }
   }
 }

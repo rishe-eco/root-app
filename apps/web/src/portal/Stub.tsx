@@ -5,10 +5,11 @@ import Lock from '@/components/Lock';
 import Topbar from './Topbar';
 
 /**
- * Services, Billing and Support are modelled in the database and reserved in
- * the nav, but not built yet. The page says so rather than pretending.
+ * Services and Billing are modelled in the database and reserved in the nav,
+ * but not built yet. The page says so rather than pretending. Support left
+ * this list at build plan L4 — see Support.tsx.
  */
-export default function Stub({ section }: { section: 'services' | 'billing' | 'support' }) {
+export default function Stub({ section }: { section: 'services' | 'billing' }) {
   const { t } = useTranslation();
   const me = useOutletContext<User>();
   const title = t(`stub.${section}Title`);

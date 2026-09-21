@@ -393,7 +393,20 @@
       "statusExpired": "Expired",
       "revoke": "Revoke",
       "revokeConfirm": "Revoke {{name}}? Anything using it stops working immediately."
-    }
+    },
+    "navTickets": "Tickets",
+    "tickets": {
+      "title": "Support desk",
+      "lede": "Every ticket, moving between channels, and the admin-request count.",
+      "adminRequestCount": "Admin requests",
+      "statusLabel": "Status",
+      "urgencyLabel": "Urgency",
+      "moveChannelLabel": "Move to channel",
+      "billable": "Billable",
+      "empty": "No tickets yet."
+    },
+    "overdueDependenciesTitle": "Overdue dependencies",
+    "overdueDependenciesEmpty": "Nothing is overdue."
   },
   "workspace": {
     "tabContract": "Contract",
@@ -537,7 +550,25 @@
     "demoPageNoDesign": "No design image",
     "confirmDeleteDemoPage": "Delete this declared page?",
     "unmatchedTitle": "Pages we did not expect",
-    "unmatchedCount": "seen {{n}} times"
+    "unmatchedCount": "seen {{n}} times",
+    "tabDependencies": "Dependencies",
+    "dependenciesTitle": "Dependencies",
+    "dependenciesHelp": "Commitments on both sides — customer and Root — with a due date and a verification step, on one board.",
+    "addDependency": "Add a dependency",
+    "dependencySideLabel": "Owed by",
+    "dependencySide": {
+      "CUSTOMER": "Customer",
+      "ROOT": "Root"
+    },
+    "dependencyDueAt": "Due",
+    "dependenciesEmpty": "No dependencies tracked yet.",
+    "dependencyVerify": "Verify",
+    "dependencyUnverify": "Unverify",
+    "dependencyVerifyNoteLabel": "What was done?",
+    "dependencyVerifyNotePlaceholder": "E.g., we deployed a test file to the host.",
+    "dependencyVerifiedLine": "Verified by {{name}} on {{date}}",
+    "dependencyOverdue": "Overdue",
+    "confirmDeleteDependency": "Delete this dependency?"
   },
   "upload": {
     "errAuth": "You do not have access to upload this.",
@@ -643,7 +674,10 @@
       "approvedLabel": "✓ Amendment approved",
       "signCta": "Sign amendment",
       "signedAt": "Signed"
-    }
+    },
+    "commitmentsCap": "Your commitments",
+    "commitmentVerified": "Verified",
+    "commitmentOverdue": "Overdue"
   },
   "print": {
     "back": "Back to contract",
@@ -706,8 +740,6 @@
     "servicesBody": "The first service — bulk product import into your store — is being built. It will appear here when it's genuinely finished, not before.",
     "billingTitle": "Billing",
     "billingBody": "Your statement and balance will live here.",
-    "supportTitle": "Support",
-    "supportBody": "Tickets and replies will live here.",
     "comingLater": "Coming later"
   },
   "notFound": {
@@ -778,6 +810,51 @@
       "decided": "This was settled on {{date}} — {{note}}. Do you want to formally reopen it?",
       "temporary": "\"{{label}}\" is marked temporary — do you want to comment anyway?"
     },
-    "confirmReopen": "Yes, formally reopen it"
+    "confirmReopen": "Yes, formally reopen it",
+    "convertToTicket": "Convert to change ticket",
+    "convertedToTicket": "Converted to a ticket",
+    "briefCurrentState": "Current state",
+    "briefDesiredState": "Desired state"
+  },
+  "support": {
+    "pageTitle": "Support",
+    "pageLede": "File a ticket for help or to report something broken. Every reply lands here.",
+    "newTicket": "New ticket",
+    "subjectLabel": "Subject",
+    "bodyLabel": "Description",
+    "submit": "Submit ticket",
+    "empty": "You haven't filed a ticket yet.",
+    "replyPlaceholder": "Reply…",
+    "reply": "Send reply",
+    "briefTitle": "The brief",
+    "briefPage": "Page",
+    "briefCurrentState": "Current state",
+    "briefDesiredState": "Desired state",
+    "briefAnnotation": "Reviewer's note",
+    "type": {
+      "label": "Type",
+      "CHANGE_REQUEST": "Change request",
+      "BUG": "Bug",
+      "QUESTION": "Question",
+      "ADMIN_REQUEST": "Admin request",
+      "ALL": "All"
+    },
+    "urgency": {
+      "label": "Urgency",
+      "NOT_URGENT": "Not urgent",
+      "URGENT": "Urgent"
+    },
+    "status": {
+      "OPEN": "Open",
+      "IN_PROGRESS": "In progress",
+      "RESOLVED": "Resolved",
+      "CLOSED": "Closed",
+      "ALL": "All"
+    },
+    "error": {
+      "INVALID_TICKET_TYPE": "Only Root may file a ticket as an admin request.",
+      "EMPTY_SUBJECT": "Add a subject.",
+      "EMPTY_COMMENT": "A message can't be empty."
+    }
   }
 }

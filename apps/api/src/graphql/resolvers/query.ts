@@ -193,4 +193,40 @@ export const Query = {
       include: { scopeItems: { orderBy: { position: 'asc' } } },
     });
   },
+
+  /**
+   * The dependency board (build plan L5; spec §7) — "overdue surfaces on
+   * both dashboards." This is the staff half: every overdue dependency
+   * across every project, both sides, on the one board — never scoped to
+   * one project, since the point of the desk dashboard is to notice Root's
+   * own slippage too, not only a customer's.
+   *
+   * Lives here rather than in `resolvers/admin/dependencies.ts`, matching
+   * `Query.project`'s own precedent: reads for this domain sit in the
+   * shared query file, writes sit in the admin barrel.
+   */
+  overdueDependencies: async (_p: unknown, _a: unknown, ctx: Context) => {
+    requireCapability(ctx, 'contracts.manage');
+    return prisma.dependency.findMany({
+      where: { verifiedAt: null, dueAt: { lt: new Date() } },
+      include: { project: true, createdBy: true, verifiedBy: true },
+      orderBy: { dueAt: 'asc' },
+    });
+  },
+
+  /**
+   * The customer's own half of the same board (spec §11: "own commitments
+   * with due dates staring back") — every overdue CUSTOMER-side dependency
+   * across every project the caller owns. Never a ROOT-side row: a customer
+   * seeing "Root is late" is not what this query is for, and nothing in the
+   * spec's own portal projection asks for it.
+   */
+  myOverdueDependencies: async (_p: unknown, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    return prisma.dependency.findMany({
+      where: { side: 'CUSTOMER', verifiedAt: null, dueAt: { lt: new Date() }, project: { customerId: user.id } },
+      include: { project: true, createdBy: true, verifiedBy: true },
+      orderBy: { dueAt: 'asc' },
+    });
+  },
 };

@@ -184,6 +184,8 @@ export const typeDefs = /* GraphQL */ `
   """
   type Project {
     id: ID!
+    "Build plan L5: whose board this is, for a cross-project dependency dashboard."
+    customer: User!
     titleFa: String!
     titleEn: String!
     status: ProjectStatus!
@@ -193,6 +195,43 @@ export const typeDefs = /* GraphQL */ `
     phases: [Phase!]!
     "Derived fresh on every read (lib/phase.ts) — never a stored percentage (F5)."
     progress: ProjectProgress!
+    "The dependency board (build plan L5) — every commitment, both sides, soonest-due first."
+    dependencies: [Dependency!]!
+  }
+
+  # ---------------------------------------------------------------------
+  # The dependency board (build plan L5; spec §7) — symmetric commitments,
+  # customer-side and Root-side, one board under one rule.
+  # ---------------------------------------------------------------------
+
+  enum DependencySide {
+    CUSTOMER
+    ROOT
+  }
+
+  """
+  One tracked commitment — owner (via side), a due date, and a verification
+  step that is the whole feature (build plan L5's banked trap): "they said we
+  have a host" is what failed at the engagement this is drawn from; "we
+  deployed a test file to the host" is what verifiedNote exists to hold. A
+  verifiedAt with no recorded *how* would rebuild exactly that promise.
+  """
+  type Dependency {
+    id: ID!
+    side: DependencySide!
+    titleFa: String!
+    titleEn: String!
+    dueAt: DateTime!
+    "Derived fresh on every read (lib/dependency.ts) — never a stored flag."
+    overdue: Boolean!
+    createdBy: User!
+    createdAt: DateTime!
+    verifiedAt: DateTime
+    verifiedBy: User
+    "What was actually done to verify it. Required together with verifiedAt/verifiedBy, never on its own."
+    verifiedNote: String
+    "Whose commitment this is — present so a cross-project list (the staff dashboard) can say."
+    project: Project!
   }
 
   # ---------------------------------------------------------------------
@@ -398,6 +437,8 @@ export const typeDefs = /* GraphQL */ `
     acceptedBy: User
     "Oldest first — the opening voice, then whoever piled on."
     comments: [FeedbackComment!]!
+    "Set once this item becomes a change ticket (build plan L4, createTicketFromFeedback) — never more than one, and never unset again."
+    ticket: Ticket
     createdAt: DateTime!
   }
 
@@ -515,6 +556,86 @@ export const typeDefs = /* GraphQL */ `
     outcome: BuildChangeOutcome
     note: String
     noteLang: String
+  }
+
+  # ---------------------------------------------------------------------
+  # Tickets and the three channels (build plan L4; spec §5, §6). Surfaces
+  # the as-built Ticket/TicketMessage models, modelled since the first
+  # migration and unreachable from the API until now.
+  # ---------------------------------------------------------------------
+
+  """
+  Beside the original three (build plan L4), never a customer's own choice
+  directly (INVALID_TICKET_TYPE on createTicket) — moved here by staff via
+  moveTicketChannel once a support ticket is recognized as one (spec §5).
+  Counted by Query.adminRequestCount — the only input to the parked §10.2
+  decision on whether site administration becomes a product.
+  """
+  enum TicketType {
+    CHANGE_REQUEST
+    BUG
+    QUESTION
+    ADMIN_REQUEST
+  }
+
+  enum TicketUrgency {
+    URGENT
+    NOT_URGENT
+  }
+
+  enum TicketStatus {
+    OPEN
+    IN_PROGRESS
+    RESOLVED
+    CLOSED
+  }
+
+  type TicketMessage {
+    id: ID!
+    author: User!
+    body: String!
+    createdAt: DateTime!
+  }
+
+  """
+  Build plan L4: customerId and projectId are kept apart on purpose — a
+  change ticket derived from a demo belongs to a project, a support ticket
+  raised after delivery may not (banked trap: both, nullable where it
+  matters, decided here rather than inherited).
+  """
+  type Ticket {
+    id: ID!
+    customer: User!
+    "Null for a ticket with no engagement behind it — a support ticket after delivery, most often."
+    project: Project
+    type: TicketType!
+    urgency: TicketUrgency!
+    status: TicketStatus!
+    subject: String!
+    """
+    Root marks a ticket billable for a major change request — the flag this
+    schema has always modelled. The BillingEntry edge it would create stays
+    L6's to build (build plan L4's second banked trap); nothing reads this
+    flag yet.
+    """
+    billable: Boolean!
+    "The ratified feedback item this ticket was converted from, if any (build plan L4)."
+    sourceFeedbackItem: FeedbackItem
+    "The page or frame line this concerns, snapshotted at conversion time — never a live view."
+    briefPageFa: String
+    briefPageEn: String
+    "The reviewer's own words, verbatim, oldest first — the annotation."
+    briefAnnotation: String
+    "Written by whoever performed the conversion: what the page shows today."
+    briefCurrentState: String
+    "Written by whoever performed the conversion: what it should show instead. Together with briefCurrentState and the two fields above, this is the brief."
+    briefDesiredState: String
+    "Which language briefCurrentState/briefDesiredState were authored in. Null exactly when they are."
+    briefLang: String
+    "Oldest first."
+    messages: [TicketMessage!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
   }
 
   type Article {
@@ -1221,6 +1342,20 @@ export const typeDefs = /* GraphQL */ `
     scopeItemsAwaitingBuild(projectId: ID!): [ScopeItem!]!
     "Staff (builds.author). Every build declared for this project, newest first."
     projectBuilds(projectId: ID!): [Build!]!
+
+    # --- Tickets and the three channels (build plan L4) ---
+    "The caller's own tickets, newest first — the portal's support screen."
+    myTickets: [Ticket!]!
+    "Staff (contracts.manage). Every ticket, optionally filtered — the support desk's own queue."
+    allTickets(status: TicketStatus, type: TicketType, projectId: ID): [Ticket!]!
+    "Staff (contracts.manage). Every ADMIN_REQUEST ticket ever filed, regardless of status — spec §10.2's demand signal."
+    adminRequestCount: Int!
+
+    # --- The dependency board (build plan L5) ---
+    "Staff (contracts.manage). Every overdue dependency across every project, both sides — the full board."
+    overdueDependencies: [Dependency!]!
+    "The caller's own overdue CUSTOMER-side commitments, across every project they own."
+    myOverdueDependencies: [Dependency!]!
   }
 
   input CreateContractInput {
@@ -1417,6 +1552,58 @@ export const typeDefs = /* GraphQL */ `
     declareBuild(phaseId: ID!, ref: String, changes: [BuildChangeInput!]!): Build!
     "Staff (builds.author). Notifies the project's customer — a build they are not told about is a deployment, not a version. Refused a second time (ALREADY_PUBLISHED)."
     publishBuild(buildId: ID!): Build!
+
+    # --- Tickets and the three channels (build plan L4) ---
+    """
+    The customer's own support intake (spec §5) — the portal's support rail
+    goes live. type may not be ADMIN_REQUEST here (INVALID_TICKET_TYPE) —
+    that classification is staff's to apply, via moveTicketChannel, once a
+    ticket is recognized as one.
+    """
+    createTicket(type: TicketType!, subject: String!, body: String!, urgency: TicketUrgency, projectId: ID): Ticket!
+    "Staff, or the ticket's own customer (house rule 2)."
+    addTicketMessage(ticketId: ID!, body: String!): Ticket!
+    "Staff (contracts.manage)."
+    setTicketStatus(ticketId: ID!, status: TicketStatus!): Ticket!
+    "Staff (contracts.manage)."
+    setTicketUrgency(ticketId: ID!, urgency: TicketUrgency!): Ticket!
+    "Staff (contracts.manage). Only ever flips the flag — the BillingEntry edge is L6's, not built here."
+    setTicketBillable(ticketId: ID!, billable: Boolean!): Ticket!
+    """
+    Moving a ticket between channels is a first-class action (spec §5), not
+    a copy-paste that would lose its message history — this updates the row
+    in place.
+    """
+    moveTicketChannel(ticketId: ID!, type: TicketType!): Ticket!
+    """
+    Staff (contracts.manage). A ratified feedback item becomes a change
+    ticket — the brief (spec §5, §6). Refused (NOT_RATIFIED) unless the item
+    is currently RATIFIED, and refused (ALREADY_CONVERTED) if one already
+    exists for it. currentState/desiredState are written by whoever performs
+    the conversion — see docs/development/L4.md for why this stage does not
+    auto-generate them. lang is "fa" or "en" (INVALID_LANG otherwise).
+    """
+    createTicketFromFeedback(itemId: ID!, currentState: String!, desiredState: String!, lang: String!): Ticket!
+
+    # --- The dependency board (build plan L5) ---
+    """
+    Staff (contracts.manage). side names who owes it — CUSTOMER or ROOT, the
+    same board, the same rule. Returns the whole contract (T9), reached via
+    project.dependencies.
+    """
+    createDependency(projectId: ID!, side: DependencySide!, titleFa: String!, titleEn: String!, dueAt: DateTime!): Contract!
+    "Staff (contracts.manage)."
+    updateDependency(dependencyId: ID!, titleFa: String!, titleEn: String!, dueAt: DateTime!): Contract!
+    """
+    Staff (contracts.manage). note is required (VERIFICATION_NOTE_REQUIRED
+    otherwise) — "we deployed a test file to the host," never only a
+    timestamp. This is the stage's own banked trap, held here structurally.
+    """
+    verifyDependency(dependencyId: ID!, note: String!): Contract!
+    "Staff (contracts.manage). Clears a verification made in error."
+    unverifyDependency(dependencyId: ID!): Contract!
+    "Staff (contracts.manage)."
+    deleteDependency(dependencyId: ID!): Contract!
 
     setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String): Contract!
 

@@ -2,7 +2,16 @@ import { can, isStaff, type Capability } from '@/lib/access';
 import type { User } from '@/lib/queries';
 
 export type DeskSection = {
-  key: 'overview' | 'contracts' | 'customers' | 'library' | 'review' | 'reviewAdmin' | 'builds' | 'apiTokens';
+  key:
+    | 'overview'
+    | 'contracts'
+    | 'customers'
+    | 'library'
+    | 'review'
+    | 'reviewAdmin'
+    | 'builds'
+    | 'tickets'
+    | 'apiTokens';
   /** null means "any staff capability", which is what Overview needs. */
   capability: Capability | null;
 };
@@ -25,6 +34,14 @@ export const DESK_SECTIONS: DeskSection[] = [
   // remit for one verb. A stub today (L3b builds the real screen): the open
   // feedback queue and the build-authoring form.
   { key: 'builds', capability: 'builds.author' },
+  // Build plan L4: the support desk — every ticket, the channel-move action,
+  // and the ADMIN_REQUEST counter (spec §10.2). Gated on `contracts.manage`
+  // rather than a new capability: nothing in the plan asks for a narrower
+  // "support only" staff persona yet, and every other Root-side working
+  // surface added since L1 (phases, demo frames, the registry) reused this
+  // same capability rather than growing its own. Revisit if that persona
+  // ever earns itself.
+  { key: 'tickets', capability: 'contracts.manage' },
   // Last, and it is not an ordering accident: this is the only section that
   // hands out a credential rather than editing content, so it sits at the end
   // of the nav where settings live rather than among the working surfaces.

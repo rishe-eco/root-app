@@ -509,6 +509,18 @@
 .feedback-status-addressed, .feedback-status-accepted { background: var(--color-panel); color: var(--color-text-muted); }
 .feedback-status-declined { background: var(--color-panel); color: var(--color-text-muted); }
 
+/* Tickets and the three channels (build plan L4) — same shape as the
+   feedback-status badges above, over TicketStatus's own four values. */
+.ticket-status-open { background: var(--color-secondary-soft); color: var(--cyan-700); }
+.ticket-status-in_progress { background: var(--gold-100); color: var(--gold-600); }
+.ticket-status-resolved, .ticket-status-closed { background: var(--color-panel); color: var(--color-text-muted); }
+
+/* The dependency board (build plan L5) — one board, two sides, so overdue
+   gets one visual treatment regardless of which side owes it. */
+.dependency-board { display: flex; flex-direction: column; gap: var(--space-3); }
+.dependency-overdue { border-color: var(--color-error); }
+.dependency-overdue-badge { background: var(--color-error); color: #fff; }
+
 /* ---- Portal coarse progress --------------------------------------------- */
 
 .progress-card { display: flex; flex-direction: column; gap: var(--space-2); }

@@ -114,6 +114,13 @@ model User {
   declaredBuilds   Build[]
   acceptedFeedback FeedbackItem[] @relation("FeedbackAcceptedBy")
 
+  // The dependency board (build plan L5; spec §7) — see Dependency's own
+  // comment. Both relations are staff in practice today (createDependency and
+  // verifyDependency are both contracts.manage-gated — see
+  // docs/development/L5.md), but the schema does not assume that.
+  createdDependencies  Dependency[] @relation("DependencyCreatedBy")
+  verifiedDependencies Dependency[] @relation("DependencyVerifiedBy")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -585,11 +592,16 @@ model Project {
 
   status ProjectStatus @default(ACTIVE)
 
-  contracts   Contract[]
-  scopeItems  ScopeItem[]
-  scopeTrades ScopeTrade[]
-  phases      Phase[]
-  builds      Build[]
+  contracts    Contract[]
+  scopeItems   ScopeItem[]
+  scopeTrades  ScopeTrade[]
+  phases       Phase[]
+  builds       Build[]
+  /// Build plan L4 — nullable on the Ticket side; a project reads this as
+  /// "every ticket ever attached to it," never the other way around.
+  tickets      Ticket[]
+  /// Build plan L5 — symmetric commitments, both sides, one board.
+  dependencies Dependency[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1051,6 +1063,11 @@ model FeedbackItem {
   comments           FeedbackComment[]
   buildChangeEntries BuildChangeEntry[]
 
+  /// Build plan L4: set once this item becomes a change ticket
+  /// (createTicketFromFeedback) — the back half of Ticket.sourceFeedbackItem.
+  /// Null for every item still living purely in the build-feedback channel.
+  ticket Ticket?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1362,10 +1379,18 @@ model BillingEntry {
   @@index([customerId, paidAt])
 }
 
+/// Build plan L4, spec §5: the three inbound channels are build feedback
+/// (FeedbackItem), support (this model, as-built), and admin requests — a
+/// type beside the original three, never a customer's own choice
+/// (resolvers/tickets.ts refuses it on createTicket). ADMIN_REQUEST exists to
+/// be *counted*: the count is the only input to the parked §10.2 decision on
+/// whether site administration becomes a product, so it is queryable
+/// (Query.adminRequestCount), not merely visible on one ticket at a time.
 enum TicketType {
   CHANGE_REQUEST
   BUG
   QUESTION
+  ADMIN_REQUEST
 }
 
 enum TicketUrgency {
@@ -1380,10 +1405,22 @@ enum TicketStatus {
   CLOSED
 }
 
+/// Surfaced at L4 — modelled since the first migration, unreachable from the
+/// API until now. `customerId` names who it belongs to; `projectId` (added at
+/// L4) names which engagement, and only when there is one — a change ticket
+/// derived from a demo belongs to a project, but a support ticket raised
+/// after delivery may not (build plan L4's banked trap: both fields, kept
+/// apart, decided here rather than inherited as one ambiguous edge).
 model Ticket {
   id         String @id @default(cuid())
   customerId String
   customer   User   @relation(fields: [customerId], references: [id])
+
+  /// Nullable on purpose (build plan L4) — see this model's own comment.
+  /// SetNull: a project being archived or removed must not take its
+  /// customer's support history down with it.
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   type    TicketType
   urgency TicketUrgency @default(NOT_URGENT)
@@ -1391,8 +1428,45 @@ model Ticket {
   subject String
 
   /// Root marks a ticket billable for a major change request; that is what
-  /// creates the Billing charge.
+  /// *would* create the Billing charge. The BillingEntry edge itself is
+  /// designed and deliberately left unbuilt here (build plan L4's second
+  /// banked trap) — it belongs with L6's billing work, and building it in
+  /// both places means building it twice. This flag is only ever toggled by
+  /// setTicketBillable; nothing reads it yet.
   billable Boolean @default(false)
+
+  /// Build plan L4: "a ratified item becomes a change ticket — it is the
+  /// brief." Set once, by createTicketFromFeedback, never again — a ticket
+  /// converted from feedback has exactly one source, and a second conversion
+  /// of the same item is refused (ALREADY_CONVERTED) rather than producing a
+  /// second ticket for one piece of feedback.
+  sourceFeedbackItemId String?       @unique
+  sourceFeedbackItem   FeedbackItem? @relation(fields: [sourceFeedbackItemId], references: [id], onDelete: SetNull)
+
+  /// The brief, snapshotted at conversion time — same reasoning as
+  /// DemoFrameLine.textFa/textEn and Appendix 1 (build plan L1): a scope
+  /// item's or frame line's label edited later must not silently rewrite
+  /// what a past brief said. briefPageFa/En and briefAnnotation are compiled
+  /// automatically from data already in hand (the target's own label, and
+  /// the feedback thread verbatim); briefCurrentState/briefDesiredState are
+  /// deliberately **not** auto-generated — see docs/development/L4.md for
+  /// why synthesizing "what it looks like now vs. what it should look like"
+  /// from a pile of comments would be inventing structure the raw data does
+  /// not have, the same reasoning L3b applied to bilingual build notes.
+  /// All five, or none — held by a CHECK (Ticket_brief_all_or_none), the same
+  /// route this codebase's other "these columns agree" rules already take.
+  briefPageFa       String?
+  briefPageEn       String?
+  /// The reviewer's own words, verbatim, oldest first — the annotation.
+  briefAnnotation   String?
+  /// Written by whoever performs the conversion — what the page shows today.
+  briefCurrentState String?
+  /// Written by whoever performs the conversion — what it should show instead.
+  briefDesiredState String?
+  /// Which language briefCurrentState/briefDesiredState were authored in
+  /// ("fa"/"en") — the same noteLang shape BuildChangeEntry already uses, not
+  /// a second required translation pair. Null exactly when they are.
+  briefLang         String?
 
   messages TicketMessage[]
 
@@ -1400,6 +1474,8 @@ model Ticket {
   updatedAt DateTime @updatedAt
 
   @@index([customerId, status])
+  @@index([projectId])
+  @@index([type])
 }
 
 model TicketMessage {
@@ -1412,6 +1488,61 @@ model TicketMessage {
   body     String
 
   createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// The dependency board (build plan L5; spec §7) — symmetric commitments,
+// customer-side and Root-side, on one board under one rule. Overdue surfaces
+// on both dashboards (Query.overdueDependencies for staff,
+// Query.myOverdueDependencies for the customer). A Root-side row is the same
+// object as a customer-side one — never a second model that could only nag
+// the customer — because Root's own slippage (F5) is one of the frictions
+// this exists to make visible.
+// ---------------------------------------------------------------------------
+
+/// Which party owes this commitment. Not a role, not a capability — a plain
+/// tag on the row, since both sides live on the one board under the one rule.
+enum DependencySide {
+  CUSTOMER
+  ROOT
+}
+
+/// One tracked commitment — owner (via side), a due date, and a verification
+/// step. **Verification is the whole feature** (build plan L5's banked
+/// trap): "they said we have a host" is what failed at the engagement this is
+/// drawn from; "we deployed a test file to the host" is what verifiedNote
+/// exists to hold. verifiedAt with no recorded *how* would rebuild the very
+/// promise this replaces, so the two are held together — see the CHECK
+/// (Dependency_verified_both_or_neither) and lib/dependency.ts.
+model Dependency {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  side    DependencySide
+  titleFa String
+  titleEn String
+
+  dueAt DateTime
+
+  createdById String
+  createdBy   User     @relation("DependencyCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  /// Null means unverified — "overdue" (lib/dependency.ts's isOverdue) is
+  /// purely dueAt < now() AND verifiedAt IS NULL, derived fresh on every
+  /// read, never a stored flag (the same F5 discipline ProjectProgress
+  /// already holds to).
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   User?     @relation("DependencyVerifiedBy", fields: [verifiedById], references: [id])
+  /// What was actually done to verify it — required together with
+  /// verifiedAt/verifiedById, never on its own. This field *is* the banked
+  /// trap's fix: a timestamp with no note here would be exactly "they said,"
+  /// dressed up as though it were checked.
+  verifiedNote String?
+
+  @@index([projectId, dueAt])
 }
 
 // ---------------------------------------------------------------------------

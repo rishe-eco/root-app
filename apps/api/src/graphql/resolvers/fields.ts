@@ -7,6 +7,7 @@ import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } fr
 import { agreedScopeSnapshot } from '../../lib/scope.js';
 import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
 import { computeProjectProgress } from '../../lib/phase.js';
+import { isOverdue } from '../../lib/dependency.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
 import { feedbackItemInclude } from './feedback.js';
 
@@ -375,6 +376,15 @@ export const DemoFrame = {
 
 export const Project = {
   /**
+   * Build plan L5: whose board this is, for the desk's cross-project
+   * dependency dashboard (`Query.overdueDependencies`, which spans many
+   * customers at once and so cannot rely on the caller already knowing).
+   * `customerId` is a plain scalar column, present on every `Project` row
+   * regardless of which query reached it — no include needed for this one.
+   */
+  customer: (p: { customerId: string }) => prisma.user.findUniqueOrThrow({ where: { id: p.customerId } }),
+
+  /**
    * A live query regardless of how the parent `Project` object was reached —
    * `Contract.project` (via `contractInclude`) never fetches trades, and
    * `Query.project` need not either, so this is the one place that always
@@ -464,6 +474,32 @@ export const Project = {
     });
     return computeProjectProgress(phases);
   },
+
+  /**
+   * The dependency board (build plan L5; spec §7) — every commitment on this
+   * project, both sides, soonest-due first. Not filtered to CUSTOMER here:
+   * the desk's own workspace tab reads this same field for the full board,
+   * and a customer seeing Root's own commitments alongside their own is the
+   * symmetry the stage is built on, not a leak to plug. `Dependency.overdue`
+   * is derived per row (`lib/dependency.ts`), never a stored flag.
+   */
+  dependencies: (p: { id: string }) =>
+    prisma.dependency.findMany({
+      where: { projectId: p.id },
+      include: { project: true, createdBy: true, verifiedBy: true },
+      orderBy: { dueAt: 'asc' },
+    }),
+};
+
+/**
+ * Build plan L5: `overdue` is computed fresh on every read from `dueAt` and
+ * `verifiedAt` — the same F5 discipline `ProjectProgress` already holds to
+ * for phase progress. A verified dependency is never overdue no matter how
+ * late the verification came; an unverified one is overdue the instant its
+ * due date passes, with nothing for anyone to remember to flip.
+ */
+export const Dependency = {
+  overdue: (d: { dueAt: Date; verifiedAt: Date | null }) => isOverdue(d),
 };
 
 export const User = {

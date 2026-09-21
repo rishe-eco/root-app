@@ -96,6 +96,37 @@ export type ScopeTrade = {
 };
 
 // ---------------------------------------------------------------------------
+// The dependency board (build plan L5; spec §7) — symmetric commitments,
+// customer-side and Root-side, one board under one rule.
+// ---------------------------------------------------------------------------
+
+export type DependencySide = 'CUSTOMER' | 'ROOT';
+
+export type Dependency = {
+  id: string;
+  side: DependencySide;
+  titleFa: string;
+  titleEn: string;
+  dueAt: string;
+  /** Derived server-side (lib/dependency.ts) — never a hand-typed flag (F5). */
+  overdue: boolean;
+  createdBy: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+  verifiedAt: string | null;
+  verifiedBy: Pick<User, 'id' | 'name'> | null;
+  /** What was actually done to verify it — the banked trap's own fix. Set exactly when verifiedAt is. */
+  verifiedNote: string | null;
+};
+
+/** The staff dashboard's own cross-project shape — a Dependency plus which
+ *  project (and whose) it belongs to, since that board spans every customer
+ *  at once (unlike Project.dependencies, reached from one project already
+ *  known by context). */
+export type DependencyWithProject = Dependency & {
+  project: { id: string; titleFa: string; titleEn: string; customer: Pick<User, 'id' | 'name' | 'clientName'> };
+};
+
+// ---------------------------------------------------------------------------
 // Phases and the live demo surface (build plan L2). One list, reached only
 // through `Contract.project.phases` — there is no standalone "phase" query,
 // matching T9: every mutation here returns the whole contract.
@@ -175,6 +206,10 @@ export type FeedbackItem = {
   acceptedAt: string | null;
   acceptedBy: Pick<User, 'id' | 'name'> | null;
   comments: FeedbackComment[];
+  /** Build plan L4 — set once this item becomes a change ticket. Thin: the
+   *  desk reads only whether one exists, never the ticket's own fields from
+   *  here (that is `allTickets`/`myTickets`'s job). */
+  ticket: { id: string } | null;
 };
 
 export type DemoFrameLine = {
@@ -436,7 +471,9 @@ export type Contract = {
   gate: Gate;
   concepts: DesignConcept[];
   scopeItems: ScopeItem[];
-  project: { id: string; scopeTrades: ScopeTrade[]; phases: Phase[]; progress: ProjectProgress } | null;
+  project:
+    | { id: string; scopeTrades: ScopeTrade[]; phases: Phase[]; progress: ProjectProgress; dependencies: Dependency[] }
+    | null;
   articles: Article[];
   /** Appendix 1 as frozen into the current published revision (build plan
    *  L1) — the registry's agreed set at publish time, not the live registry
@@ -522,12 +559,41 @@ export const FEEDBACK_ITEM_FIELDS = gql`
         name
       }
     }
+    ticket {
+      id
+    }
+  }
+`;
+
+/** Build plan L5 — reused by the contract workspace's own tab and the staff
+ *  cross-project dashboard, so the two never silently ask for different
+ *  shapes of the same row. */
+export const DEPENDENCY_FIELDS = gql`
+  fragment DependencyFields on Dependency {
+    id
+    side
+    titleFa
+    titleEn
+    dueAt
+    overdue
+    createdAt
+    createdBy {
+      id
+      name
+    }
+    verifiedAt
+    verifiedNote
+    verifiedBy {
+      id
+      name
+    }
   }
 `;
 
 /** One shape for the detail screen, so every mutation can return it whole. */
 export const CONTRACT_FIELDS = gql`
   ${FEEDBACK_ITEM_FIELDS}
+  ${DEPENDENCY_FIELDS}
   fragment ContractFields on Contract {
     id
     ref
@@ -615,6 +681,9 @@ export const CONTRACT_FIELDS = gql`
         currentPhaseTitleEn
         itemsAcceptedInPhase
         itemsTotalInPhase
+      }
+      dependencies {
+        ...DependencyFields
       }
       phases {
         id
@@ -1761,6 +1830,256 @@ export const PUBLISH_BUILD = gql`
   mutation PublishBuild($buildId: ID!) {
     publishBuild(buildId: $buildId) {
       ...BuildFields
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Tickets and the three channels (build plan L4; spec §5, §6). Never returns
+// Contract! — a ticket is its own object, reached by myTickets/allTickets,
+// not through a contract's own fields.
+// ---------------------------------------------------------------------------
+
+export type TicketType = 'CHANGE_REQUEST' | 'BUG' | 'QUESTION' | 'ADMIN_REQUEST';
+export type TicketUrgency = 'URGENT' | 'NOT_URGENT';
+export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+
+export type TicketMessage = {
+  id: string;
+  author: Pick<User, 'id' | 'name'>;
+  body: string;
+  createdAt: string;
+};
+
+export type Ticket = {
+  id: string;
+  customer: Pick<User, 'id' | 'name' | 'clientName'>;
+  project: { id: string; titleFa: string; titleEn: string } | null;
+  type: TicketType;
+  urgency: TicketUrgency;
+  status: TicketStatus;
+  subject: string;
+  billable: boolean;
+  sourceFeedbackItem: Pick<FeedbackItem, 'id'> | null;
+  briefPageFa: string | null;
+  briefPageEn: string | null;
+  briefAnnotation: string | null;
+  briefCurrentState: string | null;
+  briefDesiredState: string | null;
+  briefLang: string | null;
+  messages: TicketMessage[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+const TICKET_FIELDS = gql`
+  fragment TicketFields on Ticket {
+    id
+    type
+    urgency
+    status
+    subject
+    billable
+    briefPageFa
+    briefPageEn
+    briefAnnotation
+    briefCurrentState
+    briefDesiredState
+    briefLang
+    createdAt
+    updatedAt
+    customer {
+      id
+      name
+      clientName
+    }
+    project {
+      id
+      titleFa
+      titleEn
+    }
+    sourceFeedbackItem {
+      id
+    }
+    messages {
+      id
+      body
+      createdAt
+      author {
+        id
+        name
+      }
+    }
+  }
+`;
+
+export const MY_TICKETS = gql`
+  ${TICKET_FIELDS}
+  query MyTickets {
+    myTickets {
+      ...TicketFields
+    }
+  }
+`;
+
+export const ALL_TICKETS = gql`
+  ${TICKET_FIELDS}
+  query AllTickets($status: TicketStatus, $type: TicketType, $projectId: ID) {
+    allTickets(status: $status, type: $type, projectId: $projectId) {
+      ...TicketFields
+    }
+  }
+`;
+
+export const ADMIN_REQUEST_COUNT = gql`
+  query AdminRequestCount {
+    adminRequestCount
+  }
+`;
+
+export const CREATE_TICKET = gql`
+  ${TICKET_FIELDS}
+  mutation CreateTicket($type: TicketType!, $subject: String!, $body: String!, $urgency: TicketUrgency, $projectId: ID) {
+    createTicket(type: $type, subject: $subject, body: $body, urgency: $urgency, projectId: $projectId) {
+      ...TicketFields
+    }
+  }
+`;
+
+export const ADD_TICKET_MESSAGE = gql`
+  ${TICKET_FIELDS}
+  mutation AddTicketMessage($ticketId: ID!, $body: String!) {
+    addTicketMessage(ticketId: $ticketId, body: $body) {
+      ...TicketFields
+    }
+  }
+`;
+
+export const SET_TICKET_STATUS = gql`
+  ${TICKET_FIELDS}
+  mutation SetTicketStatus($ticketId: ID!, $status: TicketStatus!) {
+    setTicketStatus(ticketId: $ticketId, status: $status) {
+      ...TicketFields
+    }
+  }
+`;
+
+export const SET_TICKET_URGENCY = gql`
+  ${TICKET_FIELDS}
+  mutation SetTicketUrgency($ticketId: ID!, $urgency: TicketUrgency!) {
+    setTicketUrgency(ticketId: $ticketId, urgency: $urgency) {
+      ...TicketFields
+    }
+  }
+`;
+
+export const SET_TICKET_BILLABLE = gql`
+  ${TICKET_FIELDS}
+  mutation SetTicketBillable($ticketId: ID!, $billable: Boolean!) {
+    setTicketBillable(ticketId: $ticketId, billable: $billable) {
+      ...TicketFields
+    }
+  }
+`;
+
+export const MOVE_TICKET_CHANNEL = gql`
+  ${TICKET_FIELDS}
+  mutation MoveTicketChannel($ticketId: ID!, $type: TicketType!) {
+    moveTicketChannel(ticketId: $ticketId, type: $type) {
+      ...TicketFields
+    }
+  }
+`;
+
+export const CREATE_TICKET_FROM_FEEDBACK = gql`
+  ${TICKET_FIELDS}
+  mutation CreateTicketFromFeedback($itemId: ID!, $currentState: String!, $desiredState: String!, $lang: String!) {
+    createTicketFromFeedback(itemId: $itemId, currentState: $currentState, desiredState: $desiredState, lang: $lang) {
+      ...TicketFields
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// The dependency board (build plan L5; spec §7). createDependency/
+// updateDependency/verifyDependency/unverifyDependency/deleteDependency all
+// return Contract! (T9), reached via project.dependencies — same convention
+// every other registry-adjacent mutation since L1 already follows.
+// ---------------------------------------------------------------------------
+
+export const CREATE_DEPENDENCY = gql`
+  ${CONTRACT_FIELDS}
+  mutation CreateDependency($projectId: ID!, $side: DependencySide!, $titleFa: String!, $titleEn: String!, $dueAt: DateTime!) {
+    createDependency(projectId: $projectId, side: $side, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt) {
+      ...ContractFields
+    }
+  }
+`;
+
+export const UPDATE_DEPENDENCY = gql`
+  ${CONTRACT_FIELDS}
+  mutation UpdateDependency($dependencyId: ID!, $titleFa: String!, $titleEn: String!, $dueAt: DateTime!) {
+    updateDependency(dependencyId: $dependencyId, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt) {
+      ...ContractFields
+    }
+  }
+`;
+
+export const VERIFY_DEPENDENCY = gql`
+  ${CONTRACT_FIELDS}
+  mutation VerifyDependency($dependencyId: ID!, $note: String!) {
+    verifyDependency(dependencyId: $dependencyId, note: $note) {
+      ...ContractFields
+    }
+  }
+`;
+
+export const UNVERIFY_DEPENDENCY = gql`
+  ${CONTRACT_FIELDS}
+  mutation UnverifyDependency($dependencyId: ID!) {
+    unverifyDependency(dependencyId: $dependencyId) {
+      ...ContractFields
+    }
+  }
+`;
+
+export const DELETE_DEPENDENCY = gql`
+  ${CONTRACT_FIELDS}
+  mutation DeleteDependency($dependencyId: ID!) {
+    deleteDependency(dependencyId: $dependencyId) {
+      ...ContractFields
+    }
+  }
+`;
+
+/** The staff dashboard's own query — every overdue commitment, both sides,
+ *  across every project (Query.overdueDependencies never returns Contract!:
+ *  a cross-project list has no one contract to be). */
+export const OVERDUE_DEPENDENCIES = gql`
+  ${DEPENDENCY_FIELDS}
+  query OverdueDependencies {
+    overdueDependencies {
+      ...DependencyFields
+      project {
+        id
+        titleFa
+        titleEn
+        customer {
+          id
+          name
+          clientName
+        }
+      }
+    }
+  }
+`;
+
+/** The portal's own half — the caller's own overdue CUSTOMER-side rows. */
+export const MY_OVERDUE_DEPENDENCIES = gql`
+  ${DEPENDENCY_FIELDS}
+  query MyOverdueDependencies {
+    myOverdueDependencies {
+      ...DependencyFields
     }
   }
 `;

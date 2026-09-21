@@ -180,6 +180,11 @@
 .logitem .lwho { font-size: var(--text-small); font-weight: var(--weight-medium); }
 .logitem .lwhat { font-size: var(--text-small); color: var(--color-text-muted); }
 .logitem .lwhen { font-size: var(--text-caption); color: var(--color-text-subtle); }
+/* The dependency board (build plan L5) — an overdue commitment gets the same
+   border this codebase already uses for "needs attention," never a second
+   colour system invented for one card. */
+.commitment-overdue { border-inline-start-color: var(--color-error); }
+.commitment-overdue .lwhen { color: var(--color-error); }
 
 /* ---- Stub sections (Services / Billing / Support) ---------------------- */
 .stub { display: flex; flex-direction: column; gap: var(--space-4); max-inline-size: 52ch; }

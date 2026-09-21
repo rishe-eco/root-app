@@ -5,8 +5,9 @@ import { useLocale, lp } from '@/lib/locale';
 import { isStaff } from '@/lib/access';
 import { ME, type User } from '@/lib/queries';
 
-/** Later phases. Present in the rail so the shape of the product is honest. */
-const SOON = ['services', 'billing', 'support'] as const;
+/** Later phases. Present in the rail so the shape of the product is honest.
+ *  `support` left this list at build plan L4 — it is a real screen now. */
+const SOON = ['services', 'billing'] as const;
 
 export default function PortalLayout() {
   const { t } = useTranslation();
@@ -57,6 +58,15 @@ export default function PortalLayout() {
           >
             <span className="side-glyph" />
             <span>{t('portal.navContracts')}</span>
+          </NavLink>
+
+          {/* Build plan L4: support is live — a real link, no "soon" tag. */}
+          <NavLink
+            className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
+            to={lp(locale, '/app/support')}
+          >
+            <span className="side-glyph" />
+            <span>{t('portal.navSupport')}</span>
           </NavLink>
 
           {SOON.map((key) => (

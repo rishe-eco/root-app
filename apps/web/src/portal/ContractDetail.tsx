@@ -711,6 +711,33 @@ export default function ContractDetail() {
             )}
           </div>
 
+          {/* Build plan L5, spec §7/§11: "own commitments with due dates
+              staring back." Customer-side only — Root's own commitments are
+              tracked on the same board (symmetry is the point of the
+              stage), but this card is the customer's, not a status report
+              on Root. */}
+          {contract.project && contract.project.dependencies.some((d) => d.side === 'CUSTOMER') ? (
+            <div className="rail-card">
+              <p className="rail-cap">{t('detail.commitmentsCap')}</p>
+              <div className="log">
+                {contract.project.dependencies
+                  .filter((d) => d.side === 'CUSTOMER')
+                  .map((d) => (
+                    <div className={`logitem${d.overdue ? ' commitment-overdue' : ''}`} key={d.id}>
+                      <span className="lwhat">{pick(d, 'title', locale)}</span>
+                      <span className="lwhen">
+                        {d.verifiedAt
+                          ? t('detail.commitmentVerified')
+                          : d.overdue
+                            ? t('detail.commitmentOverdue')
+                            : relativeTime(d.dueAt, locale)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          ) : null}
+
           {/* Two lineages, two columns — never interleaved, so it stays clear
               which one moved (V3.md §4.2). */}
           <div className="rail-card">

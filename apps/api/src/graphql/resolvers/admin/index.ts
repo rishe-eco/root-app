@@ -5,6 +5,7 @@ import { amendmentMutations } from './amendments.js';
 import { registryMutations } from './registry.js';
 import { phaseMutations } from './phases.js';
 import { demoFrameMutations } from './demoFrame.js';
+import { dependencyMutations } from './dependencies.js';
 
 /**
  * Everything only Root may do: invites, authoring a contract's draft,
@@ -37,4 +38,8 @@ export const adminMutations = {
   // `submitFeedback`/`ratifyFeedback` (resolvers/feedback.ts) are likewise
   // deliberately *not* here: the project's own customer calls both.
   ...demoFrameMutations,
+  // The dependency board (build plan L5) — `contracts.manage` only. Reading
+  // one's own overdue commitments (`myOverdueDependencies`) is ownership-
+  // gated instead, and lives in query.ts, not here — see that file's comment.
+  ...dependencyMutations,
 };

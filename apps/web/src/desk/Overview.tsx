@@ -7,9 +7,11 @@ import {
   ACTIVITY,
   ALL_CONTRACT_STATUS_COUNTS,
   NEEDS_ROOT_QUEUE,
+  OVERDUE_DEPENDENCIES,
   type ActivityItem,
   type ContractRef,
   type StatusCount,
+  type DependencyWithProject,
   type User,
 } from '@/lib/queries';
 import { ALL_STATUSES, formatCount, pick, relativeTime } from '@/lib/format';
@@ -43,12 +45,20 @@ export default function Overview() {
     variables: { reviewOnly: true },
     skip: !allowed,
   });
+  // Build plan L5: "overdue surfaces on both dashboards" — this is the
+  // staff half, both sides at once, so Root's own slippage is exactly as
+  // visible here as a customer's (spec §7's symmetry).
+  const { data: dependenciesData } = useQuery<{ overdueDependencies: DependencyWithProject[] }>(
+    OVERDUE_DEPENDENCIES,
+    { skip: !allowed },
+  );
 
   const counts = new Map(
     (countsData?.allContractStatusCounts ?? []).map((c) => [c.status, c.count] as const),
   );
   const queue = queueData?.needsRootQueue ?? [];
   const activity = activityData?.activity ?? [];
+  const overdueDependencies = dependenciesData?.overdueDependencies ?? [];
 
   return (
     <div className="desk-section">
@@ -115,6 +125,36 @@ export default function Overview() {
                     <span className="t-caption desk-muted">{relativeTime(item.createdAt, locale)}</span>
                   </div>
                 </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Build plan L5, spec §7: the full dependency board, both sides —
+            Root's own overdue commitments surface here exactly like a
+            customer's, never a panel that can only nag one side. */}
+        <section className="rail-card">
+          <p className="rail-cap">{t('desk.overdueDependenciesTitle')}</p>
+          {overdueDependencies.length === 0 ? (
+            <p className="t-small desk-muted">{t('desk.overdueDependenciesEmpty')}</p>
+          ) : (
+            <div className="queue-list">
+              {/* Not a Link: a Dependency names its Project, not a Contract,
+                  and this dashboard has no contract id to route to — see
+                  docs/development/L5.md on why a project can outlive the
+                  one contract this codebase still assumes it has. */}
+              {overdueDependencies.map((dep) => (
+                <div key={dep.id} className="queue-row">
+                  <div className="queue-row-main">
+                    <span className="t-small">
+                      <span className="badge">{t(`workspace.dependencySide.${dep.side}`)}</span> {pick(dep, 'title', locale)}
+                    </span>
+                    <span className="t-caption desk-muted">
+                      {dep.project.customer.clientName ?? dep.project.customer.name} · {pick(dep.project, 'title', locale)}
+                    </span>
+                  </div>
+                  <span className="t-caption desk-muted">{relativeTime(dep.dueAt, locale)}</span>
+                </div>
               ))}
             </div>
           )}

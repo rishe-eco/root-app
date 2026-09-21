@@ -13,6 +13,7 @@ import {
   SUBMIT_FEEDBACK,
   RATIFY_FEEDBACK,
   ACCEPT_FEEDBACK,
+  CREATE_TICKET_FROM_FEEDBACK,
   type Demo,
   type DemoFrameLine,
   type DemoFrameLineKind,
@@ -74,7 +75,87 @@ function AcceptButton({ itemId, t }: { itemId: string; t: T }) {
   );
 }
 
-function FeedbackThread({ item, t, locale }: { item: FeedbackItem; t: T; locale: 'fa' | 'en' }) {
+/**
+ * Build plan L4: "a ratified item becomes a change ticket — it is the
+ * brief." Staff-only, and only while the item is RATIFIED and has not
+ * already been converted (`item.ticket`) — the unique `sourceFeedbackItemId`
+ * on the server is the real backstop; this is only what keeps the form from
+ * being offered a second time. currentState/desiredState are written here,
+ * by hand — see docs/development/L4.md for why this stage does not
+ * auto-generate them from the comment thread.
+ */
+function ConvertToTicketForm({ itemId, t }: { itemId: string; t: T }) {
+  const [open, setOpen] = useState(false);
+  const [currentState, setCurrentState] = useState('');
+  const [desiredState, setDesiredState] = useState('');
+  const [lang, setLang] = useState<'fa' | 'en'>('en');
+  const [error, setError] = useState<string | null>(null);
+  const [convert, { loading, data }] = useMutation(CREATE_TICKET_FROM_FEEDBACK);
+
+  if (data) {
+    return <span className="badge">{t('feedback.convertedToTicket')}</span>;
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>
+        {t('feedback.convertToTicket')}
+      </button>
+    );
+  }
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!currentState.trim() || !desiredState.trim()) return;
+    try {
+      await convert({ variables: { itemId, currentState: currentState.trim(), desiredState: desiredState.trim(), lang } });
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  return (
+    <form className="card editor-card auth-form" onSubmit={submit}>
+      <div className="field">
+        <label className="label">{t('feedback.briefCurrentState')}</label>
+        <textarea className="input" rows={2} value={currentState} onChange={(e) => setCurrentState(e.target.value)} />
+      </div>
+      <div className="field">
+        <label className="label">{t('feedback.briefDesiredState')}</label>
+        <textarea className="input" rows={2} value={desiredState} onChange={(e) => setDesiredState(e.target.value)} />
+      </div>
+      <div className="field">
+        <label className="label">{t('desk.builds.noteLangLabel')}</label>
+        <select className="input" value={lang} onChange={(e) => setLang(e.target.value as 'fa' | 'en')}>
+          <option value="en">{t('desk.builds.lang.en')}</option>
+          <option value="fa">{t('desk.builds.lang.fa')}</option>
+        </select>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      <div className="workspace-row">
+        <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
+          {t('feedback.convertToTicket')}
+        </button>
+        <button className="btn btn-ghost btn-sm" type="button" onClick={() => setOpen(false)}>
+          {t('feedback.cancel')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function FeedbackThread({
+  item,
+  t,
+  locale,
+  canAuthor,
+}: {
+  item: FeedbackItem;
+  t: T;
+  locale: 'fa' | 'en';
+  canAuthor: boolean;
+}) {
   return (
     <div className="feedback-thread">
       <div className="feedback-thread-head">
@@ -105,6 +186,13 @@ function FeedbackThread({ item, t, locale }: { item: FeedbackItem; t: T; locale:
         <p className="t-caption">
           {t('feedback.acceptedLine', { name: item.acceptedBy?.name ?? '', date: fullDateTime(item.acceptedAt, locale) })}
         </p>
+      ) : null}
+      {/* Build plan L4: a ratified item may become a change ticket — the
+          brief. Never offered for an item already converted. */}
+      {canAuthor && item.status === 'RATIFIED' && !item.ticket ? (
+        <ConvertToTicketForm itemId={item.id} t={t} />
+      ) : item.ticket ? (
+        <span className="badge">{t('feedback.convertedToTicket')}</span>
       ) : null}
     </div>
   );
@@ -514,7 +602,7 @@ export default function DemoFeedbackPanel({
 
                   {line.feedbackItem ? (
                     <>
-                      <FeedbackThread item={line.feedbackItem} t={t} locale={locale} />
+                      <FeedbackThread item={line.feedbackItem} t={t} locale={locale} canAuthor={canAuthor} />
                       {line.feedbackItem.status === 'OPEN' ? (
                         <label className="feedback-ratify-check">
                           <input type="checkbox" checked={selected.has(line.feedbackItem.id)} onChange={() => toggle(line.feedbackItem!.id)} />
@@ -565,7 +653,7 @@ export default function DemoFeedbackPanel({
                 </div>
                 {item ? (
                   <>
-                    <FeedbackThread item={item} t={t} locale={locale} />
+                    <FeedbackThread item={item} t={t} locale={locale} canAuthor={canAuthor} />
                     {item.status === 'OPEN' ? (
                       <label className="feedback-ratify-check">
                         <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggle(item.id)} />

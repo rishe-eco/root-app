@@ -79,11 +79,18 @@ export const buildQueries = {
 
   /** Staff (builds.author). Every OPEN/RATIFIED feedback item on this
    *  project, oldest first — the queue declareBuild's disposition list must
-   *  exhaust. "An empty queue means done" (build plan D6). */
+   *  exhaust. "An empty queue means done" (build plan D6).
+   *
+   *  Build plan L4: an item already converted to a ticket (`ticket` set) is
+   *  excluded — it has been moved to a different channel, and requiring a
+   *  build disposition for it forever would mean the queue could never
+   *  drain once a single item took that path. `declareBuild`'s own read
+   *  below applies the same exclusion, so the two can never disagree about
+   *  what "open" means. */
   openFeedbackQueue: async (_p: unknown, args: { projectId: string }, ctx: Context) => {
     requireCapability(ctx, 'builds.author');
     return prisma.feedbackItem.findMany({
-      where: { status: { in: ['OPEN', 'RATIFIED'] }, demo: { phase: { projectId: args.projectId } } },
+      where: { status: { in: ['OPEN', 'RATIFIED'] }, ticket: null, demo: { phase: { projectId: args.projectId } } },
       include: feedbackItemInclude,
       orderBy: { createdAt: 'asc' },
     });
@@ -133,8 +140,10 @@ export const buildMutations = {
     const phase = await prisma.phase.findUnique({ where: { id: args.phaseId } });
     if (!phase) throw notFound('phase');
 
+    // Build plan L4: excludes items already moved to the ticket channel —
+    // see openFeedbackQueue's own comment above, which this must agree with.
     const openItems = await prisma.feedbackItem.findMany({
-      where: { status: { in: ['OPEN', 'RATIFIED'] }, demo: { phase: { projectId: phase.projectId } } },
+      where: { status: { in: ['OPEN', 'RATIFIED'] }, ticket: null, demo: { phase: { projectId: phase.projectId } } },
       select: { id: true, status: true },
     });
     const openIds = openItems.map((i) => i.id);
