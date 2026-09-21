@@ -6,6 +6,7 @@ import { registryMutations } from './registry.js';
 import { phaseMutations } from './phases.js';
 import { demoFrameMutations } from './demoFrame.js';
 import { dependencyMutations } from './dependencies.js';
+import { billingMutations } from './billing.js';
 
 /**
  * Everything only Root may do: invites, authoring a contract's draft,
@@ -42,4 +43,8 @@ export const adminMutations = {
   // one's own overdue commitments (`myOverdueDependencies`) is ownership-
   // gated instead, and lives in query.ts, not here — see that file's comment.
   ...dependencyMutations,
+  // Billing (build plan L6) — `contracts.manage` only, same reasoning.
+  // `myBillingEntries`/`myBillingReport`/`mySubscriptions` are
+  // ownership-gated instead, and live in query.ts, not here.
+  ...billingMutations,
 };

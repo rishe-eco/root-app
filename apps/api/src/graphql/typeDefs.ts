@@ -197,6 +197,8 @@ export const typeDefs = /* GraphQL */ `
     progress: ProjectProgress!
     "The dependency board (build plan L5) — every commitment, both sides, soonest-due first."
     dependencies: [Dependency!]!
+    "The product-import panel's run history (build plan L7) — newest first."
+    serviceRuns: [ServiceRun!]!
   }
 
   # ---------------------------------------------------------------------
@@ -927,6 +929,168 @@ export const typeDefs = /* GraphQL */ `
   }
 
   # ---------------------------------------------------------------------
+  # Billing — subscriptions, invoices, the report (build plan L6; spec §8).
+  # BillingEntry existed and was unsurfaced; SUBSCRIPTION joins the original
+  # three sources, and this stage builds the edge from a billable ticket
+  # (build plan L4's second banked trap) and the milestone linkage (a phase's
+  # own milestoneLabel, never a separate Milestone model — see
+  # schema.prisma's own comment on BillingEntry.phaseId).
+  # ---------------------------------------------------------------------
+
+  enum BillingSource {
+    CONTRACT
+    SERVICE
+    TICKET
+    SUBSCRIPTION
+  }
+
+  enum SubscriptionPeriod {
+    MONTHLY
+    QUARTERLY
+    YEARLY
+  }
+
+  """
+  Recurring charges the customer signs up to (build plan L6; spec §8) — SMS
+  API expense is the live case. Generates BillingEntry rows lazily, on read
+  (lib/billing.ts) — there is no scheduler in this app, and lazy-on-read is
+  the one option that cannot silently stop running, which is the failure
+  mode that matters when the subject is money.
+  """
+  type Subscription {
+    id: ID!
+    customer: User!
+    "Optional — an ongoing customer relationship may have no single project."
+    project: Project
+    labelFa: String!
+    labelEn: String!
+    "Toman, per period. A string — BigInt does not survive JSON."
+    amount: String!
+    period: SubscriptionPeriod!
+    activeFrom: DateTime!
+    "Null means ongoing."
+    activeUntil: DateTime
+    createdAt: DateTime!
+  }
+
+  """
+  Record-keeping only — no payment gateway (schema.prisma's own comment on
+  the model this surfaces). Created and marked paid by Root; a customer never
+  writes one.
+  """
+  type BillingEntry {
+    id: ID!
+    customer: User!
+    contract: Contract
+    "The milestone whose acceptance releases this payment (spec §8), if any."
+    phase: Phase
+    "Set only for a SUBSCRIPTION-sourced entry — which period this bills for."
+    subscription: Subscription
+    periodStart: DateTime
+    periodEnd: DateTime
+    "The billable ticket this entry was created for (build plan L4/L6), if any."
+    ticket: Ticket
+    source: BillingSource!
+    descriptionFa: String!
+    descriptionEn: String!
+    "Toman. A string — BigInt does not survive JSON."
+    amount: String!
+    issuedAt: DateTime!
+    "Null means outstanding."
+    paidAt: DateTime
+  }
+
+  "One row of the report's per-source breakdown."
+  type BillingSourceTotal {
+    source: BillingSource!
+    totalIssued: String!
+    totalPaid: String!
+    totalOutstanding: String!
+  }
+
+  "The spend view (spec §8): totals over time, split by source, outstanding balance."
+  type BillingReport {
+    totalIssued: String!
+    totalPaid: String!
+    totalOutstanding: String!
+    bySource: [BillingSourceTotal!]!
+  }
+
+  # ---------------------------------------------------------------------
+  # Services — the product-import panel (build plan L7; spec §9). The first
+  # of a class: "a service = a panel + a run history + a billing edge."
+  # Upload -> validate -> preview diff -> explicit apply -> run history.
+  # ---------------------------------------------------------------------
+
+  enum ServiceRunStatus {
+    UPLOADED
+    "The gate — applyServiceRun refuses (NOT_PREVIEWED) from any other status."
+    PREVIEWED
+    "Committed — this run's rows become the store the next run diffs against."
+    APPLIED
+    "The file could not be read or validated at all — never partially previewed."
+    FAILED
+  }
+
+  enum ServiceRowAction {
+    CREATE
+    UPDATE
+    "Present in the upload and identical to what is already on record — counted, not dropped."
+    UNCHANGED
+    REJECTED
+  }
+
+  "One parsed row, kept whether or not the run is ever applied (spec §9: rejected rows carry their reason)."
+  type ServiceRunRow {
+    id: ID!
+    rowNumber: Int!
+    "Stored exactly as uploaded — never through R1's fold (lib/serviceImport.ts)."
+    sku: String!
+    nameFa: String!
+    nameEn: String
+    "Toman. A string — BigInt does not survive JSON. Null on a REJECTED row with no parseable price."
+    price: String
+    stock: Int
+    action: ServiceRowAction!
+    "Required exactly when action is REJECTED — see schema.prisma's CHECK."
+    rejectReason: String
+  }
+
+  "Derived from a run's own rows, never stored (the same F5 discipline every other computed summary in this codebase holds to)."
+  type ServiceRunSummary {
+    createCount: Int!
+    updateCount: Int!
+    unchangedCount: Int!
+    rejectedCount: Int!
+  }
+
+  """
+  One upload's audit trail (spec §9: "each run is auditable... and
+  chargeable"). A run exists the moment a file is attached, whether or not
+  it is ever previewed or applied.
+  """
+  type ServiceRun {
+    id: ID!
+    project: Project!
+    fileUrl: String!
+    fileName: String!
+    fileBytes: Int!
+    uploadedBy: User!
+    createdAt: DateTime!
+    status: ServiceRunStatus!
+    "Required exactly when status is FAILED."
+    failureReason: String
+    previewedAt: DateTime
+    appliedAt: DateTime
+    appliedBy: User
+    "Oldest first, by position in the sheet."
+    rows: [ServiceRunRow!]!
+    summary: ServiceRunSummary!
+    "Build plan L6's edge: the charge this run produced, if any."
+    billingEntry: BillingEntry
+  }
+
+  # ---------------------------------------------------------------------
   # Library (R1) — bilingual as *data*. titleOriginal/titleTranslated and
   # the abstracts are rows, never locale-file keys (R1.md §0.1) — the
   # desk.library.* namespace in en.json/fa.json is the editor's chrome only.
@@ -1356,6 +1520,28 @@ export const typeDefs = /* GraphQL */ `
     overdueDependencies: [Dependency!]!
     "The caller's own overdue CUSTOMER-side commitments, across every project they own."
     myOverdueDependencies: [Dependency!]!
+
+    # --- Billing (build plan L6) ---
+    "The caller's own billing entries, newest first — lazily generates any newly-due subscription periods first (lib/billing.ts)."
+    myBillingEntries: [BillingEntry!]!
+    "The caller's own spend report (spec §8)."
+    myBillingReport: BillingReport!
+    "The caller's own subscriptions."
+    mySubscriptions: [Subscription!]!
+    "Staff (contracts.manage). Every billing entry, optionally narrowed to one customer or one project, newest first."
+    allBillingEntries(customerId: ID, projectId: ID): [BillingEntry!]!
+    "Staff (contracts.manage). The report across one customer, or across every customer when customerId is omitted."
+    billingReport(customerId: ID): BillingReport!
+    "Staff (contracts.manage). Every subscription, optionally narrowed to one customer."
+    allSubscriptions(customerId: ID): [Subscription!]!
+
+    # --- Services (build plan L7) ---
+    "The caller's own projects — the services panel's own way to find a project without a contract in hand."
+    myProjects: [Project!]!
+    "Staff, or the project's own customer. Newest first."
+    projectServiceRuns(projectId: ID!): [ServiceRun!]!
+    "Staff (contracts.manage). Every run, optionally narrowed to one project — spec §11's desk-side service-runs list."
+    allServiceRuns(projectId: ID): [ServiceRun!]!
   }
 
   input CreateContractInput {
@@ -1604,6 +1790,61 @@ export const typeDefs = /* GraphQL */ `
     unverifyDependency(dependencyId: ID!): Contract!
     "Staff (contracts.manage)."
     deleteDependency(dependencyId: ID!): Contract!
+
+    # --- Billing (build plan L6) ---
+    """
+    Staff (contracts.manage). Authors a one-off entry — a contract milestone,
+    a service run not billed through its own edge, or a manual ticket
+    charge. source may not be SUBSCRIPTION here (INVALID_SOURCE) — those are
+    only ever generated lazily from a Subscription's own periods (build plan
+    L6's first banked trap: this mutation is not the scheduler).
+    """
+    createBillingEntry(customerId: ID!, contractId: ID, phaseId: ID, source: BillingSource!, descriptionFa: String!, descriptionEn: String!, amount: String!): BillingEntry!
+    "Staff (contracts.manage)."
+    markBillingEntryPaid(entryId: ID!): BillingEntry!
+    "Staff (contracts.manage). Reverses a mark-paid made in error."
+    unmarkBillingEntryPaid(entryId: ID!): BillingEntry!
+    """
+    Staff (contracts.manage). Build plan L4's second banked trap, built here:
+    the edge from a billable ticket to the charge it produces. Refused
+    unless the ticket is billable (NOT_BILLABLE) or already billed
+    (ALREADY_BILLED — the unique ticketId is the backstop).
+    """
+    createTicketBillingEntry(ticketId: ID!, amount: String!, descriptionFa: String!, descriptionEn: String!): BillingEntry!
+    "Staff (contracts.manage)."
+    createSubscription(customerId: ID!, projectId: ID, labelFa: String!, labelEn: String!, amount: String!, period: SubscriptionPeriod!, activeFrom: DateTime!): Subscription!
+    "Staff (contracts.manage). label and amount only — period and activeFrom are fixed at creation; ending it is endSubscription, not an edit."
+    updateSubscription(subscriptionId: ID!, labelFa: String!, labelEn: String!, amount: String!): Subscription!
+    "Staff (contracts.manage). Stops future periods from being generated past activeUntil. Refused if already ended (ALREADY_ENDED)."
+    endSubscription(subscriptionId: ID!, activeUntil: DateTime!): Subscription!
+
+    # --- Services (build plan L7) ---
+    """
+    Attaches a file already uploaded through POST /upload?class=SERVICE_IMPORT
+    as a new run. Staff, or the project's own customer. Refused
+    (ALREADY_ATTACHED) if the file already names a run.
+    """
+    createServiceRun(projectId: ID!, fileId: ID!): ServiceRun!
+    """
+    Parses and validates the run's file, then diffs it against the store —
+    spec §9's "preview diff against the store." An unreadable file or a
+    missing required column sets status FAILED with failureReason rather
+    than raising an error — a legitimate outcome, not a client mistake.
+    Refused (ALREADY_APPLIED) once the run has been applied.
+    """
+    previewServiceRun(runId: ID!): ServiceRun!
+    """
+    Build plan L7's banked trap: refused (NOT_PREVIEWED) unless the run is
+    currently PREVIEWED, and refused (ALREADY_APPLIED) if it already is.
+    There is no path from upload to apply that skips a preview.
+    """
+    applyServiceRun(runId: ID!): ServiceRun!
+    """
+    Staff (contracts.manage). Build plan L6's edge: the charge an applied
+    run produced. Refused (NOT_APPLIED) unless the run is APPLIED, and
+    refused (ALREADY_BILLED) if one already exists. Returns the run.
+    """
+    createServiceRunBillingEntry(runId: ID!, amount: String!, descriptionFa: String!, descriptionEn: String!): ServiceRun!
 
     setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String): Contract!
 

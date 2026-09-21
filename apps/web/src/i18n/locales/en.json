@@ -403,10 +403,29 @@
       "urgencyLabel": "Urgency",
       "moveChannelLabel": "Move to channel",
       "billable": "Billable",
+      "billAction": "Charge",
+      "billAmountPlaceholder": "Amount (Toman)",
+      "billedAmount": "Charged {{amount}} Toman",
       "empty": "No tickets yet."
     },
     "overdueDependenciesTitle": "Overdue dependencies",
-    "overdueDependenciesEmpty": "Nothing is overdue."
+    "overdueDependenciesEmpty": "Nothing is overdue.",
+    "navBilling": "Billing",
+    "navServices": "Services",
+    "billing": {
+      "title": "Billing",
+      "lede": "The report across customers, the ledger, and subscriptions.",
+      "customerFilter": "Customer",
+      "allCustomers": "All customers",
+      "customerLabel": "Customer",
+      "selectCustomer": "Select a customer",
+      "subscriptionsTitle": "Subscriptions",
+      "addSubscription": "Add subscription",
+      "subscriptionsEmpty": "No subscriptions yet.",
+      "entriesTitle": "Entries",
+      "addEntry": "Add entry",
+      "entriesEmpty": "No billing entries yet."
+    }
   },
   "workspace": {
     "tabContract": "Contract",
@@ -735,13 +754,6 @@
     "amendmentApproved": "approved amendment {{arg}}",
     "justNow": "Just now"
   },
-  "stub": {
-    "servicesTitle": "Services",
-    "servicesBody": "The first service — bulk product import into your store — is being built. It will appear here when it's genuinely finished, not before.",
-    "billingTitle": "Billing",
-    "billingBody": "Your statement and balance will live here.",
-    "comingLater": "Coming later"
-  },
   "notFound": {
     "title": "Nothing here",
     "body": "That address doesn't lead anywhere.",
@@ -855,6 +867,40 @@
       "INVALID_TICKET_TYPE": "Only Root may file a ticket as an admin request.",
       "EMPTY_SUBJECT": "Add a subject.",
       "EMPTY_COMMENT": "A message can't be empty."
+    }
+  },
+  "billing": {
+    "pageTitle": "Billing",
+    "pageLede": "Your invoices, what each one is gated on, and the report.",
+    "totalIssued": "Total issued",
+    "totalPaid": "Total paid",
+    "totalOutstanding": "Outstanding",
+    "subscriptionsTitle": "Subscriptions",
+    "subscriptionEnded": "Ended",
+    "subscriptionEndedOn": "Ended {{date}}",
+    "entriesTitle": "Entries",
+    "empty": "No billing entries yet.",
+    "toman": "{{amount}} Toman",
+    "paid": "Paid",
+    "outstanding": "Outstanding",
+    "markPaid": "Mark paid",
+    "markUnpaid": "Mark unpaid",
+    "amountLabel": "Amount (Toman)",
+    "periodLabel": "Period",
+    "activeFromLabel": "Active from",
+    "sourceLabel": "Source",
+    "endSubscription": "End subscription",
+    "source": {
+      "CONTRACT": "Contract",
+      "SERVICE": "Service",
+      "TICKET": "Ticket",
+      "SUBSCRIPTION": "Subscription"
+    },
+    "period": {
+      "MONTHLY": "Monthly",
+      "QUARTERLY": "Quarterly",
+      "YEARLY": "Yearly",
+      "range": "{{start}} – {{end}}"
     }
   }
 }

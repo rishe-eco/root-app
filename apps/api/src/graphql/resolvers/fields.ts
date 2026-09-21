@@ -8,6 +8,7 @@ import { agreedScopeSnapshot } from '../../lib/scope.js';
 import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
 import { computeProjectProgress } from '../../lib/phase.js';
 import { isOverdue } from '../../lib/dependency.js';
+import { summarizeRows } from '../../lib/serviceImport.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
 import { feedbackItemInclude } from './feedback.js';
 
@@ -489,6 +490,23 @@ export const Project = {
       include: { project: true, createdBy: true, verifiedBy: true },
       orderBy: { dueAt: 'asc' },
     }),
+
+  /** Build plan L7 — the product-import panel's run history, newest first.
+   *  Neither `contractInclude` nor `Query.project`'s own include fetches
+   *  this, matching `scopeTrades`/`dependencies`'s own precedent above. */
+  serviceRuns: (p: { id: string }) =>
+    prisma.serviceRun.findMany({
+      where: { projectId: p.id },
+      include: {
+        project: { select: { id: true, customerId: true, titleFa: true, titleEn: true } },
+        file: true,
+        uploadedBy: true,
+        appliedBy: true,
+        billingEntry: true,
+        rows: { orderBy: { rowNumber: 'asc' } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
 };
 
 /**
@@ -500,6 +518,51 @@ export const Project = {
  */
 export const Dependency = {
   overdue: (d: { dueAt: Date; verifiedAt: Date | null }) => isOverdue(d),
+};
+
+/**
+ * Build plan L6: BigInt does not survive JSON (the predecessor plan's §6.3
+ * trap, and Contract.amount's own precedent above) — every Toman figure
+ * this stage adds crosses the wire as a string, converted here and nowhere
+ * else.
+ */
+export const BillingEntry = {
+  amount: (e: { amount: bigint }) => e.amount.toString(),
+};
+
+export const Subscription = {
+  amount: (s: { amount: bigint }) => s.amount.toString(),
+};
+
+export const BillingSourceTotal = {
+  totalIssued: (r: { totalIssued: bigint }) => r.totalIssued.toString(),
+  totalPaid: (r: { totalPaid: bigint }) => r.totalPaid.toString(),
+  totalOutstanding: (r: { totalOutstanding: bigint }) => r.totalOutstanding.toString(),
+};
+
+export const BillingReport = {
+  totalIssued: (r: { totalIssued: bigint }) => r.totalIssued.toString(),
+  totalPaid: (r: { totalPaid: bigint }) => r.totalPaid.toString(),
+  totalOutstanding: (r: { totalOutstanding: bigint }) => r.totalOutstanding.toString(),
+};
+
+/** Build plan L7. `fileUrl` is `/files/<id>` — the same PRIVATE-file route
+ *  every other class already downloads through (routes/files.ts), which
+ *  re-checks ownership on every request rather than trusting this field to
+ *  have been reached legitimately. `summary` is derived from `rows`, never
+ *  stored (the same F5 discipline every other computed total in this
+ *  codebase holds to). */
+export const ServiceRun = {
+  fileUrl: (r: { file: { id: string } }) => `/files/${r.file.id}`,
+  fileName: (r: { file: { originalName: string } }) => r.file.originalName,
+  fileBytes: (r: { file: { bytes: number } }) => r.file.bytes,
+  summary: (r: { rows: Array<{ action: 'CREATE' | 'UPDATE' | 'UNCHANGED' | 'REJECTED' }> }) => summarizeRows(r.rows),
+};
+
+export const ServiceRunRow = {
+  // BigInt does not survive JSON (Contract.amount's own precedent above).
+  // Null on a REJECTED row whose price could not be parsed at all.
+  price: (r: { price: bigint | null }) => (r.price === null ? null : r.price.toString()),
 };
 
 export const User = {

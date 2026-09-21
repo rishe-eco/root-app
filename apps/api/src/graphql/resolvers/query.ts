@@ -3,6 +3,18 @@ import { prisma } from '../../lib/prisma.js';
 import { clampLimit } from '../../lib/pagination.js';
 import { requireUser, requireCapability, type Context } from '../../context.js';
 import { contractInclude, loadForActor } from './contracts.js';
+import { ensureDueEntriesFor, computeBillingReport } from '../../lib/billing.js';
+
+/** Shared with resolvers/admin/billing.ts, whose mutations return the same
+ *  shape — one include, imported both places, rather than two copies that
+ *  could drift (house rule 3). */
+export const billingEntryInclude = {
+  customer: true,
+  contract: true,
+  phase: true,
+  subscription: true,
+  ticket: true,
+} satisfies Prisma.BillingEntryInclude;
 
 /**
  * Reads. Every one of them starts by establishing who is asking — a customer's
@@ -227,6 +239,91 @@ export const Query = {
       where: { side: 'CUSTOMER', verifiedAt: null, dueAt: { lt: new Date() }, project: { customerId: user.id } },
       include: { project: true, createdBy: true, verifiedBy: true },
       orderBy: { dueAt: 'asc' },
+    });
+  },
+
+  /**
+   * Billing (build plan L6; spec §8) — the caller's own entries. Lazily
+   * catches up every one of the caller's subscriptions first
+   * (`ensureDueEntriesFor`, lib/billing.ts) so a customer opening this for
+   * the first time in months sees every period they owe, not only the ones
+   * some earlier read happened to generate.
+   */
+  myBillingEntries: async (_p: unknown, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    await ensureDueEntriesFor(prisma, { customerId: user.id });
+    return prisma.billingEntry.findMany({
+      where: { customerId: user.id },
+      include: billingEntryInclude,
+      orderBy: { issuedAt: 'desc' },
+    });
+  },
+
+  myBillingReport: async (_p: unknown, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    await ensureDueEntriesFor(prisma, { customerId: user.id });
+    const entries = await prisma.billingEntry.findMany({ where: { customerId: user.id } });
+    return computeBillingReport(entries);
+  },
+
+  mySubscriptions: async (_p: unknown, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    return prisma.subscription.findMany({
+      where: { customerId: user.id },
+      include: { customer: true, project: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
+  /** Staff (contracts.manage). Every billing entry, optionally narrowed —
+   *  the desk's own report and ledger screen. */
+  allBillingEntries: async (
+    _p: unknown,
+    args: { customerId?: string | null; projectId?: string | null },
+    ctx: Context,
+  ) => {
+    requireCapability(ctx, 'contracts.manage');
+    // An entry names a project only indirectly, through whichever origin it
+    // came from — so "this project's billing" is an OR across all four
+    // possible origins rather than one column, none of which is projectId
+    // itself (build plan D1's registry lives on Project; BillingEntry
+    // predates it and was never re-keyed).
+    const where: Prisma.BillingEntryWhereInput = {
+      ...(args.customerId ? { customerId: args.customerId } : {}),
+      ...(args.projectId
+        ? {
+            OR: [
+              { phase: { projectId: args.projectId } },
+              { contract: { projectId: args.projectId } },
+              { subscription: { projectId: args.projectId } },
+              { ticket: { projectId: args.projectId } },
+            ],
+          }
+        : {}),
+    };
+    await ensureDueEntriesFor(prisma, args.customerId ? { customerId: args.customerId } : {});
+    return prisma.billingEntry.findMany({ where, include: billingEntryInclude, orderBy: { issuedAt: 'desc' } });
+  },
+
+  /** Staff (contracts.manage). One customer's report, or the whole book
+   *  when customerId is omitted (spec §8: "for the desk, the same query
+   *  across customers"). */
+  billingReport: async (_p: unknown, args: { customerId?: string | null }, ctx: Context) => {
+    requireCapability(ctx, 'contracts.manage');
+    await ensureDueEntriesFor(prisma, args.customerId ? { customerId: args.customerId } : {});
+    const entries = await prisma.billingEntry.findMany({
+      where: args.customerId ? { customerId: args.customerId } : {},
+    });
+    return computeBillingReport(entries);
+  },
+
+  /** Staff (contracts.manage). */
+  allSubscriptions: async (_p: unknown, args: { customerId?: string | null }, ctx: Context) => {
+    requireCapability(ctx, 'contracts.manage');
+    return prisma.subscription.findMany({
+      where: args.customerId ? { customerId: args.customerId } : {},
+      include: { customer: true, project: true },
+      orderBy: { createdAt: 'desc' },
     });
   },
 };

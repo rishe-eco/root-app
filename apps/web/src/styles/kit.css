@@ -521,6 +521,18 @@
 .dependency-overdue { border-color: var(--color-error); }
 .dependency-overdue-badge { background: var(--color-error); color: #fff; }
 
+/* Services — the product-import panel (build plan L7). ServiceRunStatus
+   mirrors the ticket-status badges' shape; ServiceRowAction gets its own
+   set since REJECTED needs to read as a warning, not merely "closed." */
+.service-status-uploaded { background: var(--color-secondary-soft); color: var(--cyan-700); }
+.service-status-previewed { background: var(--gold-100); color: var(--gold-600); }
+.service-status-applied { background: var(--color-panel); color: var(--color-text-muted); }
+.service-status-failed { background: var(--color-error); color: #fff; }
+.service-action-create { background: var(--color-secondary-soft); color: var(--cyan-700); }
+.service-action-update { background: var(--gold-100); color: var(--gold-600); }
+.service-action-unchanged { background: var(--color-panel); color: var(--color-text-muted); }
+.service-action-rejected { background: var(--color-error); color: #fff; }
+
 /* ---- Portal coarse progress --------------------------------------------- */
 
 .progress-card { display: flex; flex-direction: column; gap: var(--space-2); }

@@ -11,12 +11,13 @@ import {
   SET_TICKET_URGENCY,
   SET_TICKET_BILLABLE,
   MOVE_TICKET_CHANNEL,
+  CREATE_TICKET_BILLING_ENTRY,
   type Ticket,
   type TicketType,
   type TicketStatus,
   type User,
 } from '@/lib/queries';
-import { formatCount, initialOf, relativeTime, clockTime, pick } from '@/lib/format';
+import { formatCount, formatAmount, initialOf, relativeTime, clockTime, pick } from '@/lib/format';
 
 /**
  * The support desk (build plan L4; spec §5) — every ticket, the channel-move
@@ -41,8 +42,23 @@ function TicketRow({ ticket, me }: { ticket: Ticket; me: User }) {
   const [setUrgency] = useMutation(SET_TICKET_URGENCY);
   const [setBillable] = useMutation(SET_TICKET_BILLABLE);
   const [moveChannel] = useMutation(MOVE_TICKET_CHANNEL);
+  const [createBillingEntry, { loading: billing }] = useMutation(CREATE_TICKET_BILLING_ENTRY);
+  const [billAmount, setBillAmount] = useState('');
 
   const hasBrief = ticket.briefCurrentState !== null && ticket.briefDesiredState !== null;
+
+  async function onBill() {
+    if (!billAmount.trim()) return;
+    await createBillingEntry({
+      variables: {
+        ticketId: ticket.id,
+        amount: billAmount.trim(),
+        descriptionFa: ticket.subject,
+        descriptionEn: ticket.subject,
+      },
+    });
+    setBillAmount('');
+  }
 
   async function onReply() {
     if (!body.trim()) return;
@@ -135,6 +151,34 @@ function TicketRow({ ticket, me }: { ticket: Ticket; me: User }) {
               </label>
             </div>
           </div>
+
+          {/* Build plan L6: the billable-ticket -> BillingEntry edge L4 left
+              unbuilt on purpose. Only shown once the flag is set — an entry
+              is never created silently, and once one exists this becomes a
+              read-only status rather than a form offered twice. */}
+          {ticket.billable ? (
+            ticket.billingEntry ? (
+              <p className="t-small">
+                {t('desk.tickets.billedAmount', { amount: formatAmount(ticket.billingEntry.amount, locale) })}
+                {' — '}
+                {ticket.billingEntry.paidAt ? t('billing.paid') : t('billing.outstanding')}
+              </p>
+            ) : (
+              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                <input
+                  className="input"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder={t('desk.tickets.billAmountPlaceholder')}
+                  value={billAmount}
+                  onChange={(e) => setBillAmount(e.target.value)}
+                />
+                <button type="button" className="btn btn-secondary btn-sm" disabled={billing || !billAmount.trim()} onClick={onBill}>
+                  {t('desk.tickets.billAction')}
+                </button>
+              </div>
+            )
+          ) : null}
 
           <div className="thread">
             {ticket.messages.map((m) => {

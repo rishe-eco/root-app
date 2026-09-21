@@ -11,6 +11,8 @@ export type DeskSection = {
     | 'reviewAdmin'
     | 'builds'
     | 'tickets'
+    | 'billing'
+    | 'services'
     | 'apiTokens';
   /** null means "any staff capability", which is what Overview needs. */
   capability: Capability | null;
@@ -42,6 +44,16 @@ export const DESK_SECTIONS: DeskSection[] = [
   // same capability rather than growing its own. Revisit if that persona
   // ever earns itself.
   { key: 'tickets', capability: 'contracts.manage' },
+  // Build plan L6: the report, the ledger, and subscription authoring.
+  // `contracts.manage`, same reasoning as `tickets` above — nothing in the
+  // plan asks for a narrower "billing only" staff persona.
+  { key: 'billing', capability: 'contracts.manage' },
+  // Build plan L7: the service panels — the product import, and whatever
+  // follows it. Same `contracts.manage` reasoning as the two rows above. The
+  // stage's own framing is that a service is a panel plus a run history plus
+  // a billing edge, so the second service is a row in a registry rather than
+  // a second section here.
+  { key: 'services', capability: 'contracts.manage' },
   // Last, and it is not an ordering accident: this is the only section that
   // hands out a credential rather than editing content, so it sits at the end
   // of the nav where settings live rather than among the working surfaces.

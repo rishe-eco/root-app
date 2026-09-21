@@ -5,10 +5,6 @@ import { useLocale, lp } from '@/lib/locale';
 import { isStaff } from '@/lib/access';
 import { ME, type User } from '@/lib/queries';
 
-/** Later phases. Present in the rail so the shape of the product is honest.
- *  `support` left this list at build plan L4 — it is a real screen now. */
-const SOON = ['services', 'billing'] as const;
-
 export default function PortalLayout() {
   const { t } = useTranslation();
   const locale = useLocale();
@@ -69,17 +65,23 @@ export default function PortalLayout() {
             <span>{t('portal.navSupport')}</span>
           </NavLink>
 
-          {SOON.map((key) => (
-            <NavLink
-              key={key}
-              className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
-              to={lp(locale, `/app/${key}`)}
-            >
-              <span className="side-glyph" />
-              <span>{t(`portal.nav${key[0].toUpperCase()}${key.slice(1)}`)}</span>
-              <span className="side-soon-tag">{t('portal.soon')}</span>
-            </NavLink>
-          ))}
+          {/* Build plan L6: billing is live — a real link, no "soon" tag. */}
+          <NavLink
+            className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
+            to={lp(locale, '/app/billing')}
+          >
+            <span className="side-glyph" />
+            <span>{t('portal.navBilling')}</span>
+          </NavLink>
+
+          {/* Build plan L7: services is live — a real link, no "soon" tag. Last of the four, and every rail item is now real. */}
+          <NavLink
+            className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
+            to={lp(locale, '/app/services')}
+          >
+            <span className="side-glyph" />
+            <span>{t('portal.navServices')}</span>
+          </NavLink>
 
           {isStaff(me) ? (
             <NavLink

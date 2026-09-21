@@ -84,3 +84,34 @@ export async function uploadResearchText(entryId: string, file: File): Promise<U
   }
   return body as unknown as UploadResult;
 }
+
+// ---------------------------------------------------------------------------
+// The product-import panel (build plan L7; spec §9) — the first upload a
+// customer performs themself, matching the panel being self-serve.
+// ---------------------------------------------------------------------------
+
+export const SERVICE_IMPORT_MAX_BYTES = 10 * 1024 * 1024;
+
+/** T4: a hint for the file input, nothing more — the server sniffs the real
+ *  bytes (lib/files.ts). Excel only, matching the spec's own framing
+ *  ("the productization of Nahal's outstanding Excel panel"). */
+export const SERVICE_IMPORT_ACCEPT =
+  '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/** Attaches nothing itself — `createServiceRun(projectId, fileId)` (GraphQL)
+ *  is the separate step that turns the uploaded file into a run, the same
+ *  two-step shape `uploadDesignImage` + `setConceptImage` already uses. */
+export async function uploadServiceImport(projectId: string, file: File): Promise<UploadResult> {
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(
+    `/upload?class=SERVICE_IMPORT&projectId=${encodeURIComponent(projectId)}`,
+    { method: 'POST', credentials: 'include', body: form },
+  );
+  const body = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (!res.ok) {
+    throw new UploadFailure(ERROR_KEYS[body?.error ?? ''] ?? 'upload.errGeneric');
+  }
+  return body as unknown as UploadResult;
+}

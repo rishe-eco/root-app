@@ -103,12 +103,17 @@ filesRouter.post(
     }
 
     const { fileClass, policy } = policyFor(String(req.query.class ?? ''));
-    if (!can(user, policy.uploader)) {
+    // Build plan L7: `'projectOwner'` is not a capability at all — it is
+    // checked below, once the named project is loaded, against ownership
+    // rather than the capability table (house rule 2). Every other class's
+    // uploader stays a plain capability check, unchanged.
+    if (policy.uploader !== 'projectOwner' && !can(user, policy.uploader)) {
       throw new UploadError(403, 'FORBIDDEN', 'You do not have access to that.');
     }
 
     const contractId = typeof req.query.contractId === 'string' ? req.query.contractId : null;
     const entryId = typeof req.query.entryId === 'string' ? req.query.entryId : null;
+    const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : null;
 
     let entry: LibraryEntry | null = null;
     if (policy.owner === 'contract') {
@@ -122,6 +127,20 @@ filesRouter.post(
       const contract = await prisma.contract.findUnique({ where: { id: contractId } });
       if (!contract) {
         throw new UploadError(404, 'NOT_FOUND', 'No such contract.');
+      }
+    } else if (policy.owner === 'project') {
+      // Build plan L7 — the first upload a customer performs themself
+      // (house rule 2: an ownership check against the project's own
+      // customer, staff bypass, never a role test).
+      if (!projectId) {
+        throw new UploadError(400, 'PROJECT_REQUIRED', 'This kind of file belongs to a project; name which one.');
+      }
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!project) {
+        throw new UploadError(404, 'NOT_FOUND', 'No such project.');
+      }
+      if (!can(user, 'contracts.manage') && project.customerId !== user.id) {
+        throw new UploadError(403, 'FORBIDDEN', 'You do not have access to that.');
       }
     } else {
       // owner === 'entry' (R1.md §6). "No such thing", not "not allowed" —
@@ -200,6 +219,7 @@ filesRouter.post(
             bytes: data.length,
             originalName: safeDownloadName(field.name, type.ext),
             contractId,
+            projectId: policy.owner === 'project' ? projectId : null,
             uploadedById: user.id,
           },
         });
@@ -245,7 +265,12 @@ filesRouter.get(
   wrap(async (req, res) => {
     const file = await prisma.storedFile.findUnique({
       where: { id: req.params.id },
-      include: { contract: { select: { customerId: true, publishedAt: true } } },
+      include: {
+        contract: { select: { customerId: true, publishedAt: true } },
+        // Build plan L7 — a SERVICE_IMPORT file has no contract at all;
+        // ownership runs through the project instead.
+        project: { select: { customerId: true } },
+      },
     });
 
     // One answer for "no such file" and "not yours". Distinguishing them would
@@ -265,11 +290,13 @@ filesRouter.get(
       if (!can(ctx.user, 'contracts.manage')) {
         // Exactly the rule `loadForActor` applies to the contract itself: your
         // own, and published. A design image is part of a contract, so it
-        // cannot be more visible than the contract that owns it.
+        // cannot be more visible than the contract that owns it. A
+        // SERVICE_IMPORT file (build plan L7) has no publishedAt-shaped gate
+        // to inherit — a project is never "unpublished" the way a contract
+        // draft is — so its half of this check is ownership alone.
         const owned =
-          file.contract !== null &&
-          file.contract.customerId === ctx.user.id &&
-          file.contract.publishedAt !== null;
+          (file.contract !== null && file.contract.customerId === ctx.user.id && file.contract.publishedAt !== null) ||
+          (file.project !== null && file.project.customerId === ctx.user.id);
         if (!owned) return deny();
       }
     }

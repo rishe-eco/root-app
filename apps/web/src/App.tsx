@@ -17,8 +17,9 @@ import PortalLayout from '@/portal/PortalLayout';
 import Contracts from '@/portal/Contracts';
 import ContractDetail from '@/portal/ContractDetail';
 import ContractPrint from '@/portal/ContractPrint';
-import Stub from '@/portal/Stub';
 import Support from '@/portal/Support';
+import PortalBilling from '@/portal/Billing';
+import PortalServices from '@/portal/Services';
 import DeskLayout from '@/desk/DeskLayout';
 import DeskHome from '@/desk/DeskHome';
 import Overview from '@/desk/Overview';
@@ -32,6 +33,8 @@ import ReviewDocumentScreen from '@/desk/ReviewDocumentScreen';
 import ReviewAdmin from '@/desk/ReviewAdmin';
 import Builds from '@/desk/Builds';
 import Tickets from '@/desk/Tickets';
+import DeskBilling from '@/desk/Billing';
+import DeskServices from '@/desk/Services';
 import ApiTokens from '@/desk/ApiTokens';
 import ContractWorkspace from '@/desk/workspace/ContractWorkspace';
 import WorkspaceContractTab from '@/desk/workspace/ContractTab';
@@ -96,10 +99,12 @@ export default function App() {
               printable contract is no less private than the screen it came
               from. The chrome around it is hidden at print time, not here. */}
           <Route path="contracts/:id/print" element={<ContractPrint />} />
-          <Route path="services" element={<Stub section="services" />} />
-          <Route path="billing" element={<Stub section="billing" />} />
+          {/* Build plan L7: the services rail goes live — see portal/Services.tsx. */}
+          <Route path="services" element={<PortalServices />} />
           {/* Build plan L4: the support rail goes live — see Support.tsx. */}
           <Route path="support" element={<Support />} />
+          {/* Build plan L6: the billing rail goes live — see portal/Billing.tsx. */}
+          <Route path="billing" element={<PortalBilling />} />
         </Route>
 
         {/* Staff shell — /admin never redirected here; that route was never
@@ -127,6 +132,8 @@ export default function App() {
           <Route path="reviewAdmin" element={<ReviewAdmin />} />
           <Route path="builds" element={<Builds />} />
           <Route path="tickets" element={<Tickets />} />
+          <Route path="billing" element={<DeskBilling />} />
+          <Route path="services" element={<DeskServices />} />
           <Route path="apiTokens" element={<ApiTokens />} />
         </Route>
 

@@ -57,18 +57,37 @@ const PDF: AcceptedType = {
   magic: [{ offset: 0, bytes: [0x25, 0x50, 0x44, 0x46, 0x2d] }], // "%PDF-"
 };
 
+/** .xlsx is a zip container — this is the standard local-file-header magic
+ *  every zip (and therefore every .xlsx) starts with. Build plan L7: the
+ *  product-import panel accepts Excel only, matching the spec's own framing
+ *  ("the productization of Nahal's outstanding Excel panel") — a real
+ *  workbook-or-not check happens again at parse time (lib/serviceImport.ts),
+ *  this is only the door. */
+const XLSX: AcceptedType = {
+  mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ext: '.xlsx',
+  magic: [{ offset: 0, bytes: [0x50, 0x4b, 0x03, 0x04] }],
+};
+
 export type ClassPolicy = {
   visibility: FileVisibility;
   maxBytes: number;
   accepted: AcceptedType[];
-  /** What a caller must be able to do in order to upload into this class. */
-  uploader: Capability;
+  /**
+   * What a caller must be able to do in order to upload into this class —
+   * or, build plan L7's addition, `'projectOwner'`: the project's own
+   * customer, or staff. A plain `Capability` cannot express this, because
+   * `CUSTOMER` holds none (lib/capabilities.ts) — a service-import upload
+   * is the first upload a customer performs themself, matching the panel
+   * being self-serve (spec §9).
+   */
+  uploader: Capability | 'projectOwner';
   /**
    * Which owning row an upload must name (R1.md §6). The rules that decide
    * whether a file may exist at all live on that row, so an upload that names
    * nothing cannot be checked against them.
    */
-  owner: 'contract' | 'entry';
+  owner: 'contract' | 'entry' | 'project';
 };
 
 /**
@@ -94,6 +113,15 @@ export const POLICY: Record<FileClass, ClassPolicy> = {
     // Library entry, not a separate privilege.
     uploader: 'library.write',
     owner: 'entry',
+  },
+  SERVICE_IMPORT: {
+    visibility: 'PRIVATE',
+    // A real product catalogue can run to thousands of rows; 10 MB is
+    // generous headroom over anything a spreadsheet of that size needs.
+    maxBytes: 10 * 1024 * 1024,
+    accepted: [XLSX],
+    uploader: 'projectOwner',
+    owner: 'project',
   },
 };
 

@@ -106,6 +106,8 @@ export type UploadOpts = {
   fileClass?: string;
   contractId?: string | null;
   entryId?: string | null;
+  /** Build plan L7 — the SERVICE_IMPORT owner param. */
+  projectId?: string | null;
   filename?: string;
   body?: Buffer;
   type?: string;
@@ -123,6 +125,7 @@ export async function upload(base: string, opts: UploadOpts = {}) {
   const params = new URLSearchParams({ class: opts.fileClass ?? 'DESIGN_IMAGE' });
   if (opts.contractId) params.set('contractId', opts.contractId);
   if (opts.entryId) params.set('entryId', opts.entryId);
+  if (opts.projectId) params.set('projectId', opts.projectId);
 
   const res = await fetch(`${base}/upload?${params}`, {
     method: 'POST',

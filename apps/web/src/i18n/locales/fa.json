@@ -403,10 +403,29 @@
       "urgencyLabel": "فوریت",
       "moveChannelLabel": "جابه‌جایی به کانال",
       "billable": "قابلِ‌صورت‌حساب",
+      "billAction": "صورت‌حساب کردن",
+      "billAmountPlaceholder": "مبلغ (تومان)",
+      "billedAmount": "{{amount}} تومان صورت‌حساب شد",
       "empty": "هنوز تیکتی ثبت نشده است."
     },
     "overdueDependenciesTitle": "وابستگی‌های دیرکرده",
-    "overdueDependenciesEmpty": "چیزی دیرکرده نیست."
+    "overdueDependenciesEmpty": "چیزی دیرکرده نیست.",
+    "navBilling": "صورت‌حساب",
+    "navServices": "خدمات",
+    "billing": {
+      "title": "صورت‌حساب",
+      "lede": "گزارش در میان مشتری‌ها، دفترِ صورت‌حساب‌ها، و اشتراک‌ها.",
+      "customerFilter": "مشتری",
+      "allCustomers": "همهٔ مشتری‌ها",
+      "customerLabel": "مشتری",
+      "selectCustomer": "یک مشتری انتخاب کنید",
+      "subscriptionsTitle": "اشتراک‌ها",
+      "addSubscription": "افزودن اشتراک",
+      "subscriptionsEmpty": "هنوز اشتراکی ثبت نشده است.",
+      "entriesTitle": "ردیف‌ها",
+      "addEntry": "افزودن ردیف",
+      "entriesEmpty": "هنوز ردیفِ صورت‌حسابی ثبت نشده است."
+    }
   },
   "workspace": {
     "tabContract": "قرارداد",
@@ -735,13 +754,6 @@
     "amendmentApproved": "الحاقیه‌ی {{arg}} را تأیید کرد",
     "justNow": "همین حالا"
   },
-  "stub": {
-    "servicesTitle": "خدمات",
-    "servicesBody": "نخستین خدمت — واردکردن گروهیِ محصول به فروشگاهت — در حال ساخت است. هر وقت واقعاً کامل شد اینجا می‌آید، نه زودتر.",
-    "billingTitle": "صورت‌حساب",
-    "billingBody": "صورت‌حساب و مانده‌ی حسابت اینجا خواهد بود.",
-    "comingLater": "به‌زودی"
-  },
   "notFound": {
     "title": "اینجا چیزی نیست",
     "body": "این نشانی به جایی نمی‌رسد.",
@@ -855,6 +867,40 @@
       "INVALID_TICKET_TYPE": "این نوع را فقط تیمِ ریشه می‌تواند انتخاب کند.",
       "EMPTY_SUBJECT": "موضوع را وارد کنید.",
       "EMPTY_COMMENT": "پیام نمی‌تواند خالی باشد."
+    }
+  },
+  "billing": {
+    "pageTitle": "صورت‌حساب",
+    "pageLede": "فاکتورهایت، اینکه هرکدام در گروِ چیست، و گزارش.",
+    "totalIssued": "جمعِ صادرشده",
+    "totalPaid": "جمعِ پرداخت‌شده",
+    "totalOutstanding": "مانده",
+    "subscriptionsTitle": "اشتراک‌ها",
+    "subscriptionEnded": "پایان‌یافته",
+    "subscriptionEndedOn": "در {{date}} پایان یافت",
+    "entriesTitle": "ردیف‌ها",
+    "empty": "هنوز ردیفِ صورت‌حسابی ثبت نشده است.",
+    "toman": "{{amount}} تومان",
+    "paid": "پرداخت‌شده",
+    "outstanding": "پرداخت‌نشده",
+    "markPaid": "پرداخت‌شده علامت بزن",
+    "markUnpaid": "پرداخت‌نشده علامت بزن",
+    "amountLabel": "مبلغ (تومان)",
+    "periodLabel": "دوره",
+    "activeFromLabel": "شروعِ فعالیت",
+    "sourceLabel": "منبع",
+    "endSubscription": "پایانِ اشتراک",
+    "source": {
+      "CONTRACT": "قرارداد",
+      "SERVICE": "خدمت",
+      "TICKET": "تیکت",
+      "SUBSCRIPTION": "اشتراک"
+    },
+    "period": {
+      "MONTHLY": "ماهانه",
+      "QUARTERLY": "فصلی",
+      "YEARLY": "سالانه",
+      "range": "{{start}} – {{end}}"
     }
   }
 }

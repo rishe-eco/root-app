@@ -1867,6 +1867,8 @@ export type Ticket = {
   briefCurrentState: string | null;
   briefDesiredState: string | null;
   briefLang: string | null;
+  /** Build plan L6: the charge this billable ticket produced, if any. */
+  billingEntry: { id: string; amount: string; paidAt: string | null } | null;
   messages: TicketMessage[];
   createdAt: string;
   updatedAt: string;
@@ -1888,6 +1890,11 @@ const TICKET_FIELDS = gql`
     briefLang
     createdAt
     updatedAt
+    billingEntry {
+      id
+      amount
+      paidAt
+    }
     customer {
       id
       name
@@ -2080,6 +2087,414 @@ export const MY_OVERDUE_DEPENDENCIES = gql`
   query MyOverdueDependencies {
     myOverdueDependencies {
       ...DependencyFields
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Billing — subscriptions, invoices, the report (build plan L6; spec §8).
+// BillingEntry/Subscription are their own objects (never Contract!) — the
+// same "not part of the registry-adjacent reload convention" shape Ticket
+// already uses.
+// ---------------------------------------------------------------------------
+
+export type BillingSource = 'CONTRACT' | 'SERVICE' | 'TICKET' | 'SUBSCRIPTION';
+export type SubscriptionPeriod = 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+
+export type Subscription = {
+  id: string;
+  customer: Pick<User, 'id' | 'name' | 'clientName'>;
+  project: { id: string; titleFa: string; titleEn: string } | null;
+  labelFa: string;
+  labelEn: string;
+  /** Toman — a string, since BigInt does not survive JSON. */
+  amount: string;
+  period: SubscriptionPeriod;
+  activeFrom: string;
+  activeUntil: string | null;
+  createdAt: string;
+};
+
+export type BillingEntry = {
+  id: string;
+  customer: Pick<User, 'id' | 'name' | 'clientName'>;
+  contract: { id: string; ref: string } | null;
+  phase: { id: string; titleFa: string; titleEn: string; milestoneLabel: string | null } | null;
+  subscription: Pick<Subscription, 'id' | 'labelFa' | 'labelEn'> | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  ticket: { id: string; subject: string } | null;
+  source: BillingSource;
+  descriptionFa: string;
+  descriptionEn: string;
+  /** Toman — a string, since BigInt does not survive JSON. */
+  amount: string;
+  issuedAt: string;
+  paidAt: string | null;
+};
+
+export type BillingSourceTotal = {
+  source: BillingSource;
+  totalIssued: string;
+  totalPaid: string;
+  totalOutstanding: string;
+};
+
+export type BillingReport = {
+  totalIssued: string;
+  totalPaid: string;
+  totalOutstanding: string;
+  bySource: BillingSourceTotal[];
+};
+
+const SUBSCRIPTION_FIELDS = gql`
+  fragment SubscriptionFields on Subscription {
+    id
+    labelFa
+    labelEn
+    amount
+    period
+    activeFrom
+    activeUntil
+    createdAt
+    customer {
+      id
+      name
+      clientName
+    }
+    project {
+      id
+      titleFa
+      titleEn
+    }
+  }
+`;
+
+const BILLING_ENTRY_FIELDS = gql`
+  fragment BillingEntryFields on BillingEntry {
+    id
+    source
+    descriptionFa
+    descriptionEn
+    amount
+    issuedAt
+    paidAt
+    periodStart
+    periodEnd
+    customer {
+      id
+      name
+      clientName
+    }
+    contract {
+      id
+      ref
+    }
+    phase {
+      id
+      titleFa
+      titleEn
+      milestoneLabel
+    }
+    subscription {
+      id
+      labelFa
+      labelEn
+    }
+    ticket {
+      id
+      subject
+    }
+  }
+`;
+
+const BILLING_REPORT_FIELDS = gql`
+  fragment BillingReportFields on BillingReport {
+    totalIssued
+    totalPaid
+    totalOutstanding
+    bySource {
+      source
+      totalIssued
+      totalPaid
+      totalOutstanding
+    }
+  }
+`;
+
+export const MY_BILLING_ENTRIES = gql`
+  ${BILLING_ENTRY_FIELDS}
+  query MyBillingEntries {
+    myBillingEntries {
+      ...BillingEntryFields
+    }
+  }
+`;
+
+export const MY_BILLING_REPORT = gql`
+  ${BILLING_REPORT_FIELDS}
+  query MyBillingReport {
+    myBillingReport {
+      ...BillingReportFields
+    }
+  }
+`;
+
+export const MY_SUBSCRIPTIONS = gql`
+  ${SUBSCRIPTION_FIELDS}
+  query MySubscriptions {
+    mySubscriptions {
+      ...SubscriptionFields
+    }
+  }
+`;
+
+export const ALL_BILLING_ENTRIES = gql`
+  ${BILLING_ENTRY_FIELDS}
+  query AllBillingEntries($customerId: ID, $projectId: ID) {
+    allBillingEntries(customerId: $customerId, projectId: $projectId) {
+      ...BillingEntryFields
+    }
+  }
+`;
+
+export const BILLING_REPORT = gql`
+  ${BILLING_REPORT_FIELDS}
+  query BillingReport($customerId: ID) {
+    billingReport(customerId: $customerId) {
+      ...BillingReportFields
+    }
+  }
+`;
+
+export const ALL_SUBSCRIPTIONS = gql`
+  ${SUBSCRIPTION_FIELDS}
+  query AllSubscriptions($customerId: ID) {
+    allSubscriptions(customerId: $customerId) {
+      ...SubscriptionFields
+    }
+  }
+`;
+
+export const CREATE_BILLING_ENTRY = gql`
+  ${BILLING_ENTRY_FIELDS}
+  mutation CreateBillingEntry($customerId: ID!, $contractId: ID, $phaseId: ID, $source: BillingSource!, $descriptionFa: String!, $descriptionEn: String!, $amount: String!) {
+    createBillingEntry(customerId: $customerId, contractId: $contractId, phaseId: $phaseId, source: $source, descriptionFa: $descriptionFa, descriptionEn: $descriptionEn, amount: $amount) {
+      ...BillingEntryFields
+    }
+  }
+`;
+
+export const MARK_BILLING_ENTRY_PAID = gql`
+  ${BILLING_ENTRY_FIELDS}
+  mutation MarkBillingEntryPaid($entryId: ID!) {
+    markBillingEntryPaid(entryId: $entryId) {
+      ...BillingEntryFields
+    }
+  }
+`;
+
+export const UNMARK_BILLING_ENTRY_PAID = gql`
+  ${BILLING_ENTRY_FIELDS}
+  mutation UnmarkBillingEntryPaid($entryId: ID!) {
+    unmarkBillingEntryPaid(entryId: $entryId) {
+      ...BillingEntryFields
+    }
+  }
+`;
+
+export const CREATE_TICKET_BILLING_ENTRY = gql`
+  ${BILLING_ENTRY_FIELDS}
+  mutation CreateTicketBillingEntry($ticketId: ID!, $amount: String!, $descriptionFa: String!, $descriptionEn: String!) {
+    createTicketBillingEntry(ticketId: $ticketId, amount: $amount, descriptionFa: $descriptionFa, descriptionEn: $descriptionEn) {
+      ...BillingEntryFields
+    }
+  }
+`;
+
+export const CREATE_SUBSCRIPTION = gql`
+  ${SUBSCRIPTION_FIELDS}
+  mutation CreateSubscription($customerId: ID!, $projectId: ID, $labelFa: String!, $labelEn: String!, $amount: String!, $period: SubscriptionPeriod!, $activeFrom: DateTime!) {
+    createSubscription(customerId: $customerId, projectId: $projectId, labelFa: $labelFa, labelEn: $labelEn, amount: $amount, period: $period, activeFrom: $activeFrom) {
+      ...SubscriptionFields
+    }
+  }
+`;
+
+export const UPDATE_SUBSCRIPTION = gql`
+  ${SUBSCRIPTION_FIELDS}
+  mutation UpdateSubscription($subscriptionId: ID!, $labelFa: String!, $labelEn: String!, $amount: String!) {
+    updateSubscription(subscriptionId: $subscriptionId, labelFa: $labelFa, labelEn: $labelEn, amount: $amount) {
+      ...SubscriptionFields
+    }
+  }
+`;
+
+export const END_SUBSCRIPTION = gql`
+  ${SUBSCRIPTION_FIELDS}
+  mutation EndSubscription($subscriptionId: ID!, $activeUntil: DateTime!) {
+    endSubscription(subscriptionId: $subscriptionId, activeUntil: $activeUntil) {
+      ...SubscriptionFields
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Services — the product-import panel (build plan L7; spec §9). "A service =
+// a panel + a run history + a billing edge."
+// ---------------------------------------------------------------------------
+
+export type ServiceRunStatus = 'UPLOADED' | 'PREVIEWED' | 'APPLIED' | 'FAILED';
+export type ServiceRowAction = 'CREATE' | 'UPDATE' | 'UNCHANGED' | 'REJECTED';
+
+export type ServiceRunRow = {
+  id: string;
+  rowNumber: number;
+  sku: string;
+  nameFa: string;
+  nameEn: string | null;
+  /** Toman — a string, since BigInt does not survive JSON. Null on a
+   *  REJECTED row with no parseable price. */
+  price: string | null;
+  stock: number | null;
+  action: ServiceRowAction;
+  rejectReason: string | null;
+};
+
+export type ServiceRunSummary = {
+  createCount: number;
+  updateCount: number;
+  unchangedCount: number;
+  rejectedCount: number;
+};
+
+export type ServiceRun = {
+  id: string;
+  project: { id: string; titleFa: string; titleEn: string };
+  fileUrl: string;
+  fileName: string;
+  fileBytes: number;
+  uploadedBy: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+  status: ServiceRunStatus;
+  failureReason: string | null;
+  previewedAt: string | null;
+  appliedAt: string | null;
+  appliedBy: Pick<User, 'id' | 'name'> | null;
+  rows: ServiceRunRow[];
+  summary: ServiceRunSummary;
+  billingEntry: { id: string; amount: string; paidAt: string | null } | null;
+};
+
+const SERVICE_RUN_FIELDS = gql`
+  fragment ServiceRunFields on ServiceRun {
+    id
+    fileUrl
+    fileName
+    fileBytes
+    createdAt
+    status
+    failureReason
+    previewedAt
+    appliedAt
+    project {
+      id
+      titleFa
+      titleEn
+    }
+    uploadedBy {
+      id
+      name
+    }
+    appliedBy {
+      id
+      name
+    }
+    rows {
+      id
+      rowNumber
+      sku
+      nameFa
+      nameEn
+      price
+      stock
+      action
+      rejectReason
+    }
+    summary {
+      createCount
+      updateCount
+      unchangedCount
+      rejectedCount
+    }
+    billingEntry {
+      id
+      amount
+      paidAt
+    }
+  }
+`;
+
+export const MY_PROJECTS = gql`
+  query MyProjects {
+    myProjects {
+      id
+      titleFa
+      titleEn
+    }
+  }
+`;
+
+export const PROJECT_SERVICE_RUNS = gql`
+  ${SERVICE_RUN_FIELDS}
+  query ProjectServiceRuns($projectId: ID!) {
+    projectServiceRuns(projectId: $projectId) {
+      ...ServiceRunFields
+    }
+  }
+`;
+
+export const ALL_SERVICE_RUNS = gql`
+  ${SERVICE_RUN_FIELDS}
+  query AllServiceRuns($projectId: ID) {
+    allServiceRuns(projectId: $projectId) {
+      ...ServiceRunFields
+    }
+  }
+`;
+
+export const CREATE_SERVICE_RUN = gql`
+  ${SERVICE_RUN_FIELDS}
+  mutation CreateServiceRun($projectId: ID!, $fileId: ID!) {
+    createServiceRun(projectId: $projectId, fileId: $fileId) {
+      ...ServiceRunFields
+    }
+  }
+`;
+
+export const PREVIEW_SERVICE_RUN = gql`
+  ${SERVICE_RUN_FIELDS}
+  mutation PreviewServiceRun($runId: ID!) {
+    previewServiceRun(runId: $runId) {
+      ...ServiceRunFields
+    }
+  }
+`;
+
+export const APPLY_SERVICE_RUN = gql`
+  ${SERVICE_RUN_FIELDS}
+  mutation ApplyServiceRun($runId: ID!) {
+    applyServiceRun(runId: $runId) {
+      ...ServiceRunFields
+    }
+  }
+`;
+
+export const CREATE_SERVICE_RUN_BILLING_ENTRY = gql`
+  ${SERVICE_RUN_FIELDS}
+  mutation CreateServiceRunBillingEntry($runId: ID!, $amount: String!, $descriptionFa: String!, $descriptionEn: String!) {
+    createServiceRunBillingEntry(runId: $runId, amount: $amount, descriptionFa: $descriptionFa, descriptionEn: $descriptionEn) {
+      ...ServiceRunFields
     }
   }
 `;
