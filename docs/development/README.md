@@ -234,21 +234,33 @@ string for display (see `detail.pending.designBody`, `detail.versions.awaiting`)
 ```bash
 npm run typecheck            # both workspaces
 npm test                     # unit — pure functions, no database, ~0.5s
-npm run test:integration     # resolvers against Postgres (needs root_website_test)
+npm run test:integration     # resolvers against Postgres (creates root_website_test if missing)
 npm run e2e                  # the browser, against the built app
 ```
 
 The integration suite refuses to start unless `DATABASE_URL` names a `*_test`
-database — it truncates every table it finds. Create it once:
+database — it truncates every table it finds. `npm run test:integration` and
+e2e both create that database if it is missing and migrate it first
+(`apps/api/prisma/test-db.ts`); `npm run test:db --workspace=apps/api` does
+only that. The server is the `docker compose up -d db` one.
+
+**Two checkouts at once** (a git worktree per stage being built in parallel)
+must not share a test database, a storage directory or the e2e ports — the
+suites truncate, and `reuseExistingServer` would attach one checkout's e2e to
+the other's servers. Give each worktree its own three:
 
 ```bash
-createdb root_website_test
-DATABASE_URL="postgresql://root:root@localhost:5432/root_website_test?schema=public" \
-  npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+export ROOT_TEST_DB=root_wt_p07_test E2E_API_PORT=4201 E2E_WEB_PORT=4273
 ```
+
+A fresh worktree has no `node_modules` and no `apps/api/.env`: run
+`npm install` and `npx prisma generate --schema apps/api/prisma/schema.prisma`
+first. The integration runner pins every variable it needs, so it does not
+read `.env`; `npm run dev:api` still does.
 
 Playwright's browser download is geo-blocked here; `playwright.config.ts` sets
 `channel: 'chrome'` and drives the installed Chrome. Nothing needs downloading.
+On a machine with Edge and no Chrome, `E2E_BROWSER_CHANNEL=msedge`.
 
 **Migrations.** Generate with `prisma migrate dev`, then **read the SQL it
 produced** and add by hand anything Prisma cannot express. Verify with

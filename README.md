@@ -143,7 +143,7 @@ Three layers, three commands, in ascending order of what they need.
 
 ```bash
 npm test              # unit — pure functions, no database, ~0.5s
-npm run test:integration   # resolvers against Postgres  (needs root_website_test)
+npm run test:integration   # resolvers against Postgres  (creates root_website_test)
 npm run e2e           # the browser, against the built app
 ```
 
@@ -155,17 +155,15 @@ reads all five files `ChangeAction` lives in and asserts they agree.
 **Integration** (`apps/api/src/test/`) runs the real resolvers against a real
 database — ownership, roles, and which refusal code comes back for each way of
 asking too early. It refuses to start unless `DATABASE_URL` names a `*_test`
-database, because it truncates every table it finds. Create it once with:
-
-```bash
-createdb root_website_test
-DATABASE_URL="postgresql://root:root@localhost:5432/root_website_test?schema=public" \
-  npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
-```
+database, because it truncates every table it finds. It creates and migrates
+that database itself if it is missing (`apps/api/prisma/test-db.ts`), against
+the `docker compose up -d db` server; `ROOT_TEST_DB` names a different one, for
+a second checkout running at the same time (see `docs/development/README.md`).
 
 **End-to-end** (`apps/web/e2e/`) drives the built app in a browser: the whole
 gate flow as a customer, the admin, and the bilingual/RTL front. It starts its
-own API on 4101 and preview server on 4173 against `root_website_test`, so it
+own API on 4101 and preview server on 4173 against `root_website_test` (each
+movable: `E2E_API_PORT`, `E2E_WEB_PORT`, `ROOT_TEST_DB`), so it
 never touches the dev servers or the dev database.
 
 > **Playwright's browser download is geo-blocked from here** — the CDN answers
