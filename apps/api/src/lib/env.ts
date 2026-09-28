@@ -17,6 +17,44 @@ try {
 const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v);
 
 /**
+ * P0-7 (defect D-8): the session cookie carries no `__Host-` prefix today, so
+ * nothing stops a same-site subdomain — a staging site or an uploaded mockup,
+ * both living under `m-root.com` per the journeys build plan's PD-8 — from
+ * planting or overwriting it for the parent domain (cookie tossing). The
+ * prefix is what closes that: a browser refuses any `Set-Cookie` by a
+ * `__Host-` name that carries a `Domain` attribute, lacks `Secure`, or names a
+ * path other than `/`. `Secure` is what the prefix costs — plain-HTTP
+ * development cannot give it — so development keeps the unprefixed name
+ * rather than silently never seeing its own cookie.
+ *
+ * A pure function, not a schema default, because the right value depends on
+ * `NODE_ENV` and `z.object`'s per-field defaults cannot see a sibling field.
+ */
+export function defaultCookieName(nodeEnv: string): string {
+  return nodeEnv === 'production' ? '__Host-root_session' : 'root_session';
+}
+
+/**
+ * The trap changing the default alone would leave open: an operator's
+ * existing `.env` (or `docker-compose.prod.yml`'s own `${COOKIE_NAME:-…}`
+ * fallback, before this change) sets `COOKIE_NAME=root_session` explicitly,
+ * which would keep booting, keep working, and keep the weak cookie forever —
+ * same-site hardening only on paper. Refuse instead of defaulting around it.
+ *
+ * A plain function, exported and tested on its own (`env.test.ts`), so the
+ * refusal is checked without booting a second process with `NODE_ENV=production`.
+ */
+export function assertCookieNameIsHardened(nodeEnv: string, cookieName: string): void {
+  if (nodeEnv === 'production' && !cookieName.startsWith('__Host-')) {
+    throw new Error(
+      'Invalid environment:\n  - COOKIE_NAME must start with "__Host-" in production ' +
+        '(see .env.production.example) — the prefix is what stops a sibling ' +
+        'subdomain from planting or overwriting this cookie',
+    );
+  }
+}
+
+/**
  * Fail loudly at boot rather than mysteriously at the first request. In
  * particular JWT_SECRET has no default — an unset signing key is a silent
  * security hole, not a convenience.
@@ -37,7 +75,13 @@ const schema = z.object({
    * also sits in the chain, 0 when nothing is in front.
    */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
-  COOKIE_NAME: z.string().default('root_session'),
+  /**
+   * No default in the schema itself — the right default depends on
+   * `NODE_ENV`, which this object cannot see while it is still being parsed —
+   * see `defaultCookieName` and the production check below, both applied
+   * after `safeParse` returns.
+   */
+  COOKIE_NAME: z.string().optional(),
   SESSION_DAYS: z.coerce.number().default(14),
   INVITE_DAYS: z.coerce.number().default(14),
   RESET_HOURS: z.coerce.number().default(2),
@@ -135,8 +179,12 @@ if (parsed.data.NODE_ENV === 'production' && parsed.data.ANTHROPIC_E2E_STUB) {
   throw new Error('Invalid environment:\n  - ANTHROPIC_E2E_STUB must never be set in production');
 }
 
+const cookieName = parsed.data.COOKIE_NAME ?? defaultCookieName(parsed.data.NODE_ENV);
+assertCookieNameIsHardened(parsed.data.NODE_ENV, cookieName);
+
 export const env = {
   ...parsed.data,
+  COOKIE_NAME: cookieName,
   // Development and test write beside the app, which is fine precisely because
   // nothing there is swapped out from under them.
   STORAGE_DIR: parsed.data.STORAGE_DIR ?? fileURLToPath(new URL('../../storage', import.meta.url)),

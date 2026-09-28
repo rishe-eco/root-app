@@ -260,6 +260,9 @@ boot, which is the intent: a server running against a schema it does not expect
 is worse than one that is down. Check with `docker compose -f
 docker-compose.prod.yml logs -f api`.
 
+The P0-7 deploy (the `__Host-root_session` cookie rename) signs everyone out
+once, on that one deploy only — free, since production has no real users yet.
+
 **Rollback (web)** — the previous releases are still on disk:
 
 ```bash

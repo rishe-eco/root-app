@@ -42,6 +42,10 @@ const ERROR_KEYS: Record<string, string> = {
   // in the request path after this.
   RIGHTS_FORBID_HOSTING: 'desk.library.errRightsForbidHosting',
   ALREADY_HAS_FILE: 'desk.library.errAlreadyHasFile',
+  // P0-7: originCheck.ts refuses a cross-site request that carries the
+  // session cookie. A same-origin upload from the portal itself never hits
+  // this — it exists for the case reported to the user is not "your fault".
+  ORIGIN_REFUSED: 'upload.errOrigin',
 };
 
 export class UploadFailure extends Error {

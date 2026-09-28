@@ -12,6 +12,7 @@ import { typeDefs } from './graphql/typeDefs.js';
 import { resolvers } from './graphql/resolvers/index.js';
 import { buildContext, type Context } from './context.js';
 import { ensureStorageReady } from './lib/storage.js';
+import { originCheck } from './lib/originCheck.js';
 import { filesRouter, filesErrorHandler } from './routes/files.js';
 import { askRouter, askErrorHandler } from './routes/ask.js';
 
@@ -27,6 +28,11 @@ app.use(
     credentials: true,
   }),
 );
+// P0-7 (defect D-8): after cookieParser (it reads req.cookies) and before
+// every state-changing, cookie-authenticated route — filesRouter, askRouter
+// and /graphql alike — so none of them can be reached by a same-site forged
+// request before this has had a chance to refuse it. See lib/originCheck.ts.
+app.use(originCheck);
 
 // Before the first request, not on the first upload — the same reason env.ts
 // validates at boot. A STORAGE_DIR that cannot be created is a deployment

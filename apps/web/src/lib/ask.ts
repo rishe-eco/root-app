@@ -34,7 +34,12 @@ export type AskErrorCode =
   | 'TOO_LARGE'
   | 'UPSTREAM_FAILED'
   | 'INTERNAL'
-  | 'NETWORK';
+  | 'NETWORK'
+  // P0-7: originCheck.ts refuses a cross-site request that carries the
+  // session cookie, ahead of routes/ask.ts ever running. A signed-in reader's
+  // own same-origin question never reaches this; it exists so the message
+  // shown for it is not the generic "something went wrong".
+  | 'ORIGIN_REFUSED';
 
 export type AskCallbacks = {
   onDelta: (text: string) => void;
@@ -56,6 +61,7 @@ function isAskErrorCode(value: unknown): value is AskErrorCode {
         'TOO_LARGE',
         'UPSTREAM_FAILED',
         'INTERNAL',
+        'ORIGIN_REFUSED',
       ] as const
     ).includes(value as never)
   );
