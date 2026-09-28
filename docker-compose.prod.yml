@@ -59,7 +59,10 @@ services:
       # socket, and req.ip is what gets written to Signature.ip on a legal
       # signing record — so this number is load-bearing, not cosmetic.
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
-      COOKIE_NAME: ${COOKIE_NAME:-root_session}
+      # P0-7 (defect D-8): the default is the __Host- form, not the bare name
+      # — see .env.production.example. The API refuses to boot in production
+      # if COOKIE_NAME is set to anything without that prefix.
+      COOKIE_NAME: ${COOKIE_NAME:-__Host-root_session}
       SESSION_DAYS: ${SESSION_DAYS:-14}
       INVITE_DAYS: ${INVITE_DAYS:-14}
       RESET_HOURS: ${RESET_HOURS:-2}

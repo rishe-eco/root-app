@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Prisma } from '@prisma/client';
 import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
-import { startAskServer, readSSE } from './http.js';
+import { startAskServer, readSSE, cookieFor } from './http.js';
 import { exec, ok, stop as stopGraphql } from './graphql.js';
 import { storage } from '../lib/storage.js';
 import { __setAnthropicClientForTests } from '../lib/anthropicClient.js';
 import { __resetAskRateLimitForTests, recordSpend, DAILY_SPEND_CEILING_USD } from '../lib/askRateLimit.js';
+import { env } from '../lib/env.js';
 
 /**
  * R4: "Ask the Lab" / "Ask this paper" (routes/ask.ts) against a real
@@ -125,10 +126,19 @@ function fakeAnthropic(opts: {
   return { client: client as unknown as Anthropic, streamRequests, uploads };
 }
 
-async function ask(body: Record<string, unknown>) {
+/** P0-7: `cookie` and `origin` let a test exercise `originCheck.ts`'s wiring
+ *  against a real request. Every existing call site omits both, which keeps
+ *  it out of the picture exactly as a real anonymous "Ask the Lab" request
+ *  would (no session cookie, so the middleware passes it through regardless
+ *  of Origin). */
+async function ask(body: Record<string, unknown>, opts: { cookie?: string; origin?: string } = {}) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (opts.cookie) headers.cookie = opts.cookie;
+  if (opts.origin !== undefined) headers.origin = opts.origin;
+
   const res = await fetch(`${base}/ask`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
   const frames = res.headers.get('content-type')?.includes('text/event-stream') ? await readSSE(res) : [];
@@ -407,4 +417,47 @@ test('rate limiting refuses before the daily spend ceiling and before any candid
   });
   assert.equal(sixth.status, 429);
   assert.equal(streamRequests.length, 5, 'the 6th request never reached the model at all');
+});
+
+// ---------------------------------------------------------------------------
+// P0-7 (defect D-8): /ask is reachable anonymously, but a signed-in customer's
+// browser attaches the session cookie to it exactly as it does to any other
+// same-site request — including one a sibling staging/mockup subdomain forges
+// (journeys build plan PD-8). lib/originCheck.ts's own tests cover the
+// decision exhaustively; this confirms the route is actually wired up to it.
+// ---------------------------------------------------------------------------
+
+test('a foreign Origin with a session cookie attached is refused before any candidate lookup', async () => {
+  await prisma.libraryEntry.create({ data: entryData() });
+  const { client, streamRequests } = fakeAnthropic();
+  __setAnthropicClientForTests(client);
+
+  const res = await ask(
+    { question: 'beekeeping', locale: 'en' },
+    { cookie: cookieFor(f.admin), origin: 'https://evil.example' },
+  );
+  assert.equal(res.status, 403);
+  assert.equal((res.jsonBody as { error: string } | null)?.error, 'ORIGIN_REFUSED');
+  assert.equal(streamRequests.length, 0, 'a refused request must never reach the model');
+});
+
+test('the same request with no cookie at all — the anonymous "Ask the Lab" case — is unaffected', async () => {
+  await prisma.libraryEntry.create({ data: entryData() });
+  const { client } = fakeAnthropic();
+  __setAnthropicClientForTests(client);
+
+  const res = await ask({ question: 'beekeeping', locale: 'en' }, { origin: 'https://evil.example' });
+  assert.notEqual(res.status, 403);
+});
+
+test("the app's own Origin with a session cookie proceeds exactly as before", async () => {
+  await prisma.libraryEntry.create({ data: entryData() });
+  const { client } = fakeAnthropic();
+  __setAnthropicClientForTests(client);
+
+  const res = await ask(
+    { question: 'beekeeping', locale: 'en' },
+    { cookie: cookieFor(f.admin), origin: new URL(env.APP_ORIGIN).origin },
+  );
+  assert.notEqual(res.status, 403);
 });

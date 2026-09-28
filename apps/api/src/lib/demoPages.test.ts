@@ -91,6 +91,57 @@ test('a custom locale list is honoured instead of the default', () => {
 });
 
 // ---------------------------------------------------------------------------
+// { stripHtml: true } — build plan J9, MOCKUP demos only. Every case above
+// this point is unaffected by the option's existence: the option is opt-in
+// and every call above passes no third argument at all, which is exactly
+// what "without changing a single existing call site's behaviour" requires
+// — the two tests directly below assert that in the negative, explicitly.
+// ---------------------------------------------------------------------------
+
+test('without the option, ".html" and "/index.html" normalize exactly as before', () => {
+  assert.equal(normalizePath('/about.html'), '/about.html');
+  assert.equal(normalizePath('/index.html'), '/index.html');
+  assert.equal(normalizePath('/products/index.html'), '/products/index.html');
+});
+
+test('with the option, a trailing "/index.html" folds to the directory', () => {
+  assert.equal(normalizePath('/index.html', undefined, { stripHtml: true }), '/');
+  assert.equal(normalizePath('/products/index.html', undefined, { stripHtml: true }), '/products');
+});
+
+test('with the option, a trailing ".html" folds to the extensionless path', () => {
+  assert.equal(normalizePath('/about.html', undefined, { stripHtml: true }), '/about');
+  assert.equal(
+    normalizePath('/fa/products/list.html', undefined, { stripHtml: true }),
+    '/products/list',
+  );
+});
+
+test('with the option, a path with no ".html" at all is untouched', () => {
+  assert.equal(normalizePath('/products', undefined, { stripHtml: true }), '/products');
+  assert.equal(normalizePath('/', undefined, { stripHtml: true }), '/');
+});
+
+test('with the option, only a trailing ".html" is folded — one elsewhere in the path is left alone', () => {
+  assert.equal(
+    normalizePath('/archive/2024.html/amendment', undefined, { stripHtml: true }),
+    '/archive/2024.html/amendment',
+  );
+});
+
+test('the option composes with matchDemoPath, e.g. a declared "/about" matches a reported "/about.html"', () => {
+  const mockupPages = [{ id: 'p1', canonicalPath: '/about' }];
+  // matchDemoPath itself does not take the option (it is demo-kind-agnostic
+  // today, per the file's own header comment) — this asserts the pieces the
+  // MOCKUP resolver (J9, later) will actually combine still agree once it
+  // normalizes both sides with the option itself.
+  assert.equal(
+    normalizePath('/about.html', undefined, { stripHtml: true }),
+    normalizePath(mockupPages[0].canonicalPath, undefined, { stripHtml: true }),
+  );
+});
+
+// ---------------------------------------------------------------------------
 // matchDemoPath — the resolver's one dependency
 // ---------------------------------------------------------------------------
 

@@ -42,13 +42,43 @@ import { foldPersian } from './library.js';
 
 const DEFAULT_LOCALES = ['fa', 'en'];
 
+export type NormalizePathOptions = {
+  /**
+   * Drops a trailing `/index.html` (folds to the directory) and a trailing
+   * `.html` (folds to the extensionless path) — build plan J9. A third,
+   * optional parameter rather than folding into the existing `locales`
+   * one: `locales` is a plain array today, every call site passes it
+   * positionally, and turning the second parameter into an options bag
+   * would be a breaking type change for every one of them for the sake of a
+   * flag only one caller will ever set. A trailing optional parameter costs
+   * nothing to a call site that does not know it exists.
+   *
+   * **Opt-in, and SITE demos never pass it.** A SITE demo's own server
+   * decides for itself whether `/about` and `/about.html` are the same
+   * page — that is business logic this file deliberately leaves alone (see
+   * the file's own comment on pagination paths) — and folding the
+   * extension away for every demo would silently overrule whatever that
+   * server actually does. A MOCKUP demo is different: it is served *by this
+   * app*, straight out of the uploaded zip, so `/about.html` is a fact
+   * about the bundle's file names, not a fact about the site being copied.
+   * The customer talks about "the about page"; a designer mapping a
+   * registry page to a bundle path should not have to spell `.html` to
+   * match a report of it, so only the MOCKUP path sets this option.
+   */
+  stripHtml?: boolean;
+};
+
 /**
  * Reduces a raw reported path (or a full URL) to its canonical form for
  * comparison. Never throws — a malformed input degrades to the least
  * surprising reading rather than crashing the mutation that calls this on
  * every page-change event.
  */
-export function normalizePath(raw: string, locales: readonly string[] = DEFAULT_LOCALES): string {
+export function normalizePath(
+  raw: string,
+  locales: readonly string[] = DEFAULT_LOCALES,
+  options: NormalizePathOptions = {},
+): string {
   const pathname = extractPathname(raw);
   const decoded = decodeSafely(pathname);
   const folded = foldPersian(decoded);
@@ -56,6 +86,15 @@ export function normalizePath(raw: string, locales: readonly string[] = DEFAULT_
   let segments = folded.split('/').filter((s) => s.length > 0);
   if (segments.length > 0 && locales.includes(segments[0])) {
     segments = segments.slice(1);
+  }
+
+  if (options.stripHtml && segments.length > 0) {
+    const last = segments[segments.length - 1];
+    if (last === 'index.html') {
+      segments = segments.slice(0, -1);
+    } else if (last.endsWith('.html') && last.length > '.html'.length) {
+      segments = [...segments.slice(0, -1), last.slice(0, -'.html'.length)];
+    }
   }
 
   return '/' + segments.join('/');

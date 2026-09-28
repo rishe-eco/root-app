@@ -6,6 +6,7 @@ import { can, type Capability } from './lib/capabilities.js';
 import { readSession } from './auth/tokens.js';
 import { authenticateApiToken, looksLikeApiToken } from './lib/apiTokens.js';
 import { env } from './lib/env.js';
+import { sessionCookieOptions } from './lib/sessionCookie.js';
 
 /**
  * *How* the caller proved who they are — never *whether*, which is `user`.
@@ -128,12 +129,14 @@ export function requireSessionCapability(ctx: Context, capability: Capability): 
 
 export const setSessionCookie = (res: Response, token: string) =>
   res.cookie(env.COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: env.NODE_ENV === 'production',
+    ...sessionCookieOptions(env.NODE_ENV),
     maxAge: env.SESSION_DAYS * 24 * 60 * 60 * 1000,
-    path: '/',
   });
 
+// P0-7 (defect D-8): this used to pass only `{ path: '/' }`, which in
+// production would be refused by the browser for a `__Host-` cookie (no
+// `Secure`) and quietly leave the session in place after "sign out". Sharing
+// `sessionCookieOptions` with `setSessionCookie` makes that impossible to
+// reintroduce — see lib/sessionCookie.ts.
 export const clearSessionCookie = (res: Response) =>
-  res.clearCookie(env.COOKIE_NAME, { path: '/' });
+  res.clearCookie(env.COOKIE_NAME, sessionCookieOptions(env.NODE_ENV));

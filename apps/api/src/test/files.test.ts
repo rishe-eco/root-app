@@ -5,6 +5,7 @@ import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
 import { exec, ok, stop } from './graphql.js';
 import { startFileServer, cookieFor, upload, PNG } from './http.js';
 import { storage } from '../lib/storage.js';
+import { env } from '../lib/env.js';
 
 /**
  * Upload and download, against a real database and a real socket.
@@ -49,6 +50,46 @@ test('an anonymous caller cannot upload', async () => {
   const res = await upload(base, { contractId: f.contract.id });
   assert.equal(res.status, 401);
   assert.equal(await prisma.storedFile.count(), 0);
+});
+
+// ---------------------------------------------------------------------------
+// P0-7 (defect D-8): the Origin check — a same-site page (a future staging
+// site or mockup, journeys build plan PD-8) must not be able to ride the
+// session cookie into an upload. lib/originCheck.ts carries the decision
+// table and its own exhaustive unit tests; these confirm the wiring actually
+// refuses a real HTTP request before the route runs, and that nothing is
+// written to disk or the database when it does.
+// ---------------------------------------------------------------------------
+
+test('a foreign Origin with the session cookie attached is refused before the upload runs', async () => {
+  const res = await upload(base, {
+    as: f.admin,
+    contractId: f.contract.id,
+    origin: 'https://evil.example',
+  });
+  assert.equal(res.status, 403);
+  assert.equal(res.body!.error, 'ORIGIN_REFUSED');
+  assert.equal(await prisma.storedFile.count(), 0);
+});
+
+test("the app's own Origin proceeds exactly as before", async () => {
+  const res = await upload(base, {
+    as: f.admin,
+    contractId: f.contract.id,
+    origin: new URL(env.APP_ORIGIN).origin,
+  });
+  assert.equal(res.status, 201);
+});
+
+test('no Origin header at all proceeds — a non-browser client (curl, a server call)', async () => {
+  const res = await upload(base, { as: f.admin, contractId: f.contract.id });
+  assert.equal(res.status, 201);
+});
+
+test('a foreign Origin with no session cookie is not ORIGIN_REFUSED — it reaches the route’s own UNAUTHENTICATED', async () => {
+  const res = await upload(base, { contractId: f.contract.id, origin: 'https://evil.example' });
+  assert.equal(res.status, 401);
+  assert.notEqual(res.body?.error, 'ORIGIN_REFUSED');
 });
 
 test('a customer cannot upload a design image — only Root produces designs', async () => {
