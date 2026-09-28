@@ -2,7 +2,7 @@ import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, isAbsolute } from 'node:path';
+import { dirname, join, isAbsolute } from 'node:path';
 
 import { createLocalStorage } from './storage.js';
 
@@ -85,7 +85,7 @@ describe('writes are atomic', () => {
   test('no .part files are left behind on success', async () => {
     const key = await storage.put('PRIVATE', Buffer.from('x'), '.png');
     const { readdir } = await import('node:fs/promises');
-    const dir = storage.path(key).replace(/\/[^/]+$/, '');
+    const dir = dirname(storage.path(key)); // not a '/' split: the path is native, and '\' on Windows
     assert.equal((await readdir(dir)).some((f) => f.endsWith('.part')), false);
   });
 });

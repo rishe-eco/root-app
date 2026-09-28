@@ -1,12 +1,14 @@
-import { execFileSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type { APIRequestContext, Page } from '@playwright/test';
 
 const API_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../api');
 
-export const TEST_DATABASE_URL =
-  'postgresql://root:root@localhost:5432/root_website_test?schema=public';
+/** Must agree with playwright.config.ts, which reads the same variable. */
+export const TEST_DATABASE_URL = `postgresql://root:root@localhost:5432/${
+  process.env.ROOT_TEST_DB || 'root_website_test'
+}?schema=public`;
 
 /** A minimal valid PNG, for specs that exercise the design-image upload flow. */
 export const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -48,14 +50,16 @@ export function resetTestDatabase() {
   if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
   const env = { ...process.env, DATABASE_URL: TEST_DATABASE_URL };
 
-  execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
+  // execSync (a shell), not execFileSync: on Windows `npx` is npx.cmd, which
+  // Node will not spawn without one.
+  execSync('npx prisma migrate deploy', {
     cwd: API_DIR,
     env,
     stdio: 'pipe',
     timeout: 60_000,
   });
 
-  execFileSync('npx', ['prisma', 'db', 'execute', '--stdin', '--url', TEST_DATABASE_URL], {
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
     cwd: API_DIR,
     input: `
       DO $$
@@ -74,7 +78,7 @@ export function resetTestDatabase() {
     timeout: 60_000,
   });
 
-  execFileSync('npx', ['tsx', 'prisma/seed.ts'], {
+  execSync('npx tsx prisma/seed.ts', {
     cwd: API_DIR,
     env,
     stdio: 'pipe',
@@ -93,7 +97,7 @@ export function resetTestDatabase() {
  */
 export function renameContractDraft(titleEn: string) {
   if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
-  execFileSync('npx', ['prisma', 'db', 'execute', '--stdin', '--url', TEST_DATABASE_URL], {
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
     cwd: API_DIR,
     input: `UPDATE "Contract" SET "titleEn" = '${titleEn.replace(/'/g, "''")}' WHERE "ref" = '${CONTRACT_REF}';`,
     stdio: 'pipe',
@@ -103,7 +107,7 @@ export function renameContractDraft(titleEn: string) {
 
 /** The API port `playwright.config.ts`'s webServer runs on — duplicated here
  *  rather than imported, same reasoning as TEST_DATABASE_URL above. */
-const E2E_API_URL = 'http://localhost:4101';
+const E2E_API_URL = `http://localhost:${process.env.E2E_API_PORT || 4101}`;
 
 export type TestBlock = { id: string; kind: 'HEADING' | 'PARAGRAPH' | 'CODE' | 'LIST' | 'QUOTE' | 'TABLE'; depth?: number; text: string };
 
