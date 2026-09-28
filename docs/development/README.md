@@ -9,7 +9,8 @@ your stage's file. They are written to be self-contained.
 > plan are built and merged too.** Everything through C2 and R4 is on `main`;
 > the Persian pass's mechanical half (§1) closed on 2026-08-14; L1–L7 landed
 > 2026-09-20/21. **L8 is not built, on purpose** — owed when the first wedge
-> customer arrives (`root-studio-lifecycle-build-plan.md` §0.1). **What's left
+> customer arrives (`root-studio-lifecycle-build-plan.md` §0.1), and absorbed
+> by the journeys plan's J7, whose agreement gate is L8's gate change. **What's left
 > on the old plan:** R3 (conditional on corpus size —
 > check before starting it), and the Persian pass's §2 (the founder's own
 > read-through) and §3.2 (moving the style guide into `root-sot` canon) — see
@@ -87,7 +88,8 @@ R3   concept tree                ← conditional, see below       [R3.md]
 the Persian pass                 ← §1 done 2026-08-14, §2/§3 open
                                                      [persian-pass.md]
 L8   wedge contract shape        ← not built, on purpose: owed when the
-                                    first wedge customer arrives
+                                    first wedge customer arrives — and
+                                    paid by the journeys plan's J7
 ──── the journeys build plan (P0 → J12), planned, not started ───────
 P0    pre-flight: CSP, docs, DNS/TLS, same-site hardening, SMS slot
 S1    roles, the capability split, visibility, assignment
