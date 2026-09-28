@@ -38,7 +38,7 @@ const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extens
 async function loadTicketForActor(ticketId: string, user: { id: string; roles: unknown[] }) {
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId }, include: ticketInclude });
   if (!ticket) throw notFound('ticket');
-  const staff = can(user as Parameters<typeof can>[0], 'contracts.manage');
+  const staff = can(user as Parameters<typeof can>[0], 'tickets.answer');
   if (!staff && ticket.customerId !== user.id) throw notFound('ticket');
   return ticket;
 }
@@ -54,13 +54,13 @@ export const ticketQueries = {
     });
   },
 
-  /** Staff (contracts.manage). Every ticket, optionally filtered — the support desk's own queue. */
+  /** Staff (tickets.answer). Every ticket, optionally filtered — the support desk's own queue. */
   allTickets: async (
     _p: unknown,
     args: { status?: TicketStatus | null; type?: TicketType | null; projectId?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'tickets.answer');
     return prisma.ticket.findMany({
       where: {
         ...(args.status ? { status: args.status } : {}),
@@ -73,13 +73,13 @@ export const ticketQueries = {
   },
 
   /**
-   * Staff (contracts.manage). Build plan L4, spec §10.2: the only input to
+   * Staff (tickets.answer). Build plan L4, spec §10.2: the only input to
    * the parked business decision on whether site administration becomes a
    * product. Counts every ADMIN_REQUEST ticket regardless of its current
    * status — the signal this exists for is demand, not an open backlog.
    */
   adminRequestCount: async (_p: unknown, _a: unknown, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'tickets.answer');
     return prisma.ticket.count({ where: { type: 'ADMIN_REQUEST' } });
   },
 };
@@ -101,7 +101,7 @@ export const ticketMutations = {
     ctx: Context,
   ) => {
     const user = requireUser(ctx);
-    const staff = can(user, 'contracts.manage');
+    const staff = can(user, 'tickets.answer');
     if (!canChooseTicketType(staff, args.type)) {
       throw new GraphQLError('Only staff may file a ticket directly as an admin request.', {
         extensions: { code: 'INVALID_TICKET_TYPE' },
@@ -145,18 +145,18 @@ export const ticketMutations = {
     return prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id }, include: ticketInclude });
   },
 
-  /** Staff (contracts.manage). */
+  /** Staff (tickets.answer). */
   setTicketStatus: async (_p: unknown, args: { ticketId: string; status: TicketStatus }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'tickets.answer');
     const ticket = await prisma.ticket.findUnique({ where: { id: args.ticketId } });
     if (!ticket) throw notFound('ticket');
     await prisma.ticket.update({ where: { id: ticket.id }, data: { status: args.status } });
     return prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id }, include: ticketInclude });
   },
 
-  /** Staff (contracts.manage). */
+  /** Staff (tickets.answer). */
   setTicketUrgency: async (_p: unknown, args: { ticketId: string; urgency: TicketUrgency }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'tickets.answer');
     const ticket = await prisma.ticket.findUnique({ where: { id: args.ticketId } });
     if (!ticket) throw notFound('ticket');
     await prisma.ticket.update({ where: { id: ticket.id }, data: { urgency: args.urgency } });
@@ -164,13 +164,13 @@ export const ticketMutations = {
   },
 
   /**
-   * Staff (contracts.manage). Only ever flips the flag — the BillingEntry
+   * Staff (tickets.answer). Only ever flips the flag — the BillingEntry
    * edge this schema comment describes is L6's to build, not this stage's
    * (build plan L4's second banked trap: building it here means building it
    * twice).
    */
   setTicketBillable: async (_p: unknown, args: { ticketId: string; billable: boolean }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'tickets.answer');
     const ticket = await prisma.ticket.findUnique({ where: { id: args.ticketId } });
     if (!ticket) throw notFound('ticket');
     await prisma.ticket.update({ where: { id: ticket.id }, data: { billable: args.billable } });
@@ -178,7 +178,7 @@ export const ticketMutations = {
   },
 
   /**
-   * Staff (contracts.manage). Moving a ticket between channels is a
+   * Staff (tickets.answer). Moving a ticket between channels is a
    * first-class action (spec §5), not a copy-paste that would lose its
    * message history — this updates the row in place. A "move" to the
    * channel it is already in is accepted rather than refused, matching this
@@ -186,7 +186,7 @@ export const ticketMutations = {
    * pedantic NO_OP error.
    */
   moveTicketChannel: async (_p: unknown, args: { ticketId: string; type: TicketType }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'tickets.answer');
     const ticket = await prisma.ticket.findUnique({ where: { id: args.ticketId } });
     if (!ticket) throw notFound('ticket');
     await prisma.ticket.update({ where: { id: ticket.id }, data: { type: args.type } });
@@ -212,7 +212,7 @@ export const ticketMutations = {
     args: { itemId: string; currentState: string; desiredState: string; lang: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'tickets.answer');
     const item = await prisma.feedbackItem.findUnique({
       where: { id: args.itemId },
       include: {

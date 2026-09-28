@@ -32,7 +32,7 @@ const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extens
 async function loadServiceRunForActor(runId: string, user: { id: string; roles: unknown[] }) {
   const run = await prisma.serviceRun.findUnique({ where: { id: runId }, include: serviceRunInclude });
   if (!run) throw notFound('service run');
-  const staff = can(user as Parameters<typeof can>[0], 'contracts.manage');
+  const staff = can(user as Parameters<typeof can>[0], 'customers.manage');
   if (!staff && run.project.customerId !== user.id) throw notFound('service run');
   return run;
 }
@@ -40,7 +40,7 @@ async function loadServiceRunForActor(runId: string, user: { id: string; roles: 
 async function loadProjectForActor(projectId: string, user: { id: string; roles: unknown[] }) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw notFound('project');
-  const staff = can(user as Parameters<typeof can>[0], 'contracts.manage');
+  const staff = can(user as Parameters<typeof can>[0], 'customers.manage');
   if (!staff && project.customerId !== user.id) throw notFound('project');
   return project;
 }
@@ -66,11 +66,11 @@ export const serviceQueries = {
     });
   },
 
-  /** Staff (contracts.manage). Every run, optionally narrowed to one project —
+  /** Staff (customers.manage). Every run, optionally narrowed to one project —
    *  spec §11's "service runs" on the desk side. */
   allServiceRuns: async (_p: unknown, args: { projectId?: string | null }, ctx: Context) => {
     const user = requireUser(ctx);
-    if (!can(user, 'contracts.manage')) {
+    if (!can(user, 'customers.manage')) {
       throw new GraphQLError('You do not have access to that.', { extensions: { code: 'FORBIDDEN' } });
     }
     return prisma.serviceRun.findMany({

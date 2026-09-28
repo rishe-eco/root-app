@@ -53,7 +53,7 @@ export const typeDefs = /* GraphQL */ `
     roles: [Role!]!
     """
     What this person may do, unioned across their roles. Plain strings rather
-    than an enum because the names are dotted ("contracts.manage") and a
+    than an enum because the names are dotted ("contracts.readAll") and a
     GraphQL enum value cannot contain a dot.
 
     **The client branches on these, never on roles.** Testing a role on the
@@ -376,7 +376,7 @@ export const typeDefs = /* GraphQL */ `
     """
     Build plan L3b's third source, not yet written up as a line of its own —
     "what's new" the registry cannot know about (a refactor, a fix found in
-    passing). Staff (contracts.manage) only; empty for anyone else, and
+    passing). Staff (contract readers) only; empty for anyone else, and
     empty is not a claim that nothing changed — see fields.ts's own comment.
     """
     unpromptedChanges: [BuildChangeEntry!]!
@@ -477,7 +477,7 @@ export const typeDefs = /* GraphQL */ `
   # Builds and the resolution ledger (build plan L3b; spec §6's gap). Named
   # without the bare word "revision" or "round" — see schema.prisma's own
   # comment on Build for why (L3b.3's first banked trap). Everything below
-  # is gated on builds.author, never contracts.manage, and nothing here
+  # is gated on builds.author, never a contract verb, and nothing here
   # returns Contract! — see resolvers/builds.ts's own comment on why.
   # ---------------------------------------------------------------------
 
@@ -870,6 +870,9 @@ export const typeDefs = /* GraphQL */ `
     status: ContractStatus!
     amount: String
     customer: User!
+    "Journeys build plan S1 — the assignment edges. Null when unassigned."
+    designer: User
+    developer: User
     publishedAt: DateTime
     updatedAt: DateTime!
     gate: Gate!
@@ -1494,7 +1497,7 @@ export const typeDefs = /* GraphQL */ `
     "Staff (apiTokens.manage). The caller's own tokens, newest first, revoked ones included."
     myApiTokens: [ApiToken!]!
 
-    "Staff (contracts.manage). One project, with its registry and any trades."
+    "Staff (contracts.readAll or contracts.readActive). One project, with its registry and any trades."
     project(id: ID!): Project
 
     # --- Builds and the resolution ledger (build plan L3b) ---
@@ -1510,13 +1513,13 @@ export const typeDefs = /* GraphQL */ `
     # --- Tickets and the three channels (build plan L4) ---
     "The caller's own tickets, newest first — the portal's support screen."
     myTickets: [Ticket!]!
-    "Staff (contracts.manage). Every ticket, optionally filtered — the support desk's own queue."
+    "Staff (tickets.answer). Every ticket, optionally filtered — the support desk's own queue."
     allTickets(status: TicketStatus, type: TicketType, projectId: ID): [Ticket!]!
-    "Staff (contracts.manage). Every ADMIN_REQUEST ticket ever filed, regardless of status — spec §10.2's demand signal."
+    "Staff (tickets.answer). Every ADMIN_REQUEST ticket ever filed, regardless of status — spec §10.2's demand signal."
     adminRequestCount: Int!
 
     # --- The dependency board (build plan L5) ---
-    "Staff (contracts.manage). Every overdue dependency across every project, both sides — the full board."
+    "Staff (contracts.readAll). Every overdue dependency across every project, both sides — the full board."
     overdueDependencies: [Dependency!]!
     "The caller's own overdue CUSTOMER-side commitments, across every project they own."
     myOverdueDependencies: [Dependency!]!
@@ -1528,11 +1531,11 @@ export const typeDefs = /* GraphQL */ `
     myBillingReport: BillingReport!
     "The caller's own subscriptions."
     mySubscriptions: [Subscription!]!
-    "Staff (contracts.manage). Every billing entry, optionally narrowed to one customer or one project, newest first."
+    "Staff (billing.manage). Every billing entry, optionally narrowed to one customer or one project, newest first."
     allBillingEntries(customerId: ID, projectId: ID): [BillingEntry!]!
-    "Staff (contracts.manage). The report across one customer, or across every customer when customerId is omitted."
+    "Staff (billing.manage). The report across one customer, or across every customer when customerId is omitted."
     billingReport(customerId: ID): BillingReport!
-    "Staff (contracts.manage). Every subscription, optionally narrowed to one customer."
+    "Staff (billing.manage). Every subscription, optionally narrowed to one customer."
     allSubscriptions(customerId: ID): [Subscription!]!
 
     # --- Services (build plan L7) ---
@@ -1540,7 +1543,7 @@ export const typeDefs = /* GraphQL */ `
     myProjects: [Project!]!
     "Staff, or the project's own customer. Newest first."
     projectServiceRuns(projectId: ID!): [ServiceRun!]!
-    "Staff (contracts.manage). Every run, optionally narrowed to one project — spec §11's desk-side service-runs list."
+    "Staff (customers.manage). Every run, optionally narrowed to one project — spec §11's desk-side service-runs list."
     allServiceRuns(projectId: ID): [ServiceRun!]!
   }
 
@@ -1550,6 +1553,9 @@ export const typeDefs = /* GraphQL */ `
     titleFa: String!
     titleEn: String!
     amount: String
+    "Journeys build plan S1 — sales picks both at creation. Refused: ASSIGNEE_LACKS_CAPABILITY, ASSIGNEE_INACTIVE."
+    designerId: ID
+    developerId: ID
   }
 
   type Mutation {
@@ -1749,11 +1755,11 @@ export const typeDefs = /* GraphQL */ `
     createTicket(type: TicketType!, subject: String!, body: String!, urgency: TicketUrgency, projectId: ID): Ticket!
     "Staff, or the ticket's own customer (house rule 2)."
     addTicketMessage(ticketId: ID!, body: String!): Ticket!
-    "Staff (contracts.manage)."
+    "Staff (tickets.answer)."
     setTicketStatus(ticketId: ID!, status: TicketStatus!): Ticket!
-    "Staff (contracts.manage)."
+    "Staff (tickets.answer)."
     setTicketUrgency(ticketId: ID!, urgency: TicketUrgency!): Ticket!
-    "Staff (contracts.manage). Only ever flips the flag — the BillingEntry edge is L6's, not built here."
+    "Staff (tickets.answer). Only ever flips the flag — the BillingEntry edge is L6's, not built here."
     setTicketBillable(ticketId: ID!, billable: Boolean!): Ticket!
     """
     Moving a ticket between channels is a first-class action (spec §5), not
@@ -1762,7 +1768,7 @@ export const typeDefs = /* GraphQL */ `
     """
     moveTicketChannel(ticketId: ID!, type: TicketType!): Ticket!
     """
-    Staff (contracts.manage). A ratified feedback item becomes a change
+    Staff (tickets.answer). A ratified feedback item becomes a change
     ticket — the brief (spec §5, §6). Refused (NOT_RATIFIED) unless the item
     is currently RATIFIED, and refused (ALREADY_CONVERTED) if one already
     exists for it. currentState/desiredState are written by whoever performs
@@ -1773,49 +1779,49 @@ export const typeDefs = /* GraphQL */ `
 
     # --- The dependency board (build plan L5) ---
     """
-    Staff (contracts.manage). side names who owes it — CUSTOMER or ROOT, the
+    Staff (contracts.author). side names who owes it — CUSTOMER or ROOT, the
     same board, the same rule. Returns the whole contract (T9), reached via
     project.dependencies.
     """
     createDependency(projectId: ID!, side: DependencySide!, titleFa: String!, titleEn: String!, dueAt: DateTime!): Contract!
-    "Staff (contracts.manage)."
+    "Staff (contracts.author)."
     updateDependency(dependencyId: ID!, titleFa: String!, titleEn: String!, dueAt: DateTime!): Contract!
     """
-    Staff (contracts.manage). note is required (VERIFICATION_NOTE_REQUIRED
+    Staff (dependencies.verifyGeneral). note is required (VERIFICATION_NOTE_REQUIRED
     otherwise) — "we deployed a test file to the host," never only a
     timestamp. This is the stage's own banked trap, held here structurally.
     """
     verifyDependency(dependencyId: ID!, note: String!): Contract!
-    "Staff (contracts.manage). Clears a verification made in error."
+    "Staff (dependencies.verifyGeneral). Clears a verification made in error."
     unverifyDependency(dependencyId: ID!): Contract!
-    "Staff (contracts.manage)."
+    "Staff (contracts.author)."
     deleteDependency(dependencyId: ID!): Contract!
 
     # --- Billing (build plan L6) ---
     """
-    Staff (contracts.manage). Authors a one-off entry — a contract milestone,
+    Staff (billing.manage). Authors a one-off entry — a contract milestone,
     a service run not billed through its own edge, or a manual ticket
     charge. source may not be SUBSCRIPTION here (INVALID_SOURCE) — those are
     only ever generated lazily from a Subscription's own periods (build plan
     L6's first banked trap: this mutation is not the scheduler).
     """
     createBillingEntry(customerId: ID!, contractId: ID, phaseId: ID, source: BillingSource!, descriptionFa: String!, descriptionEn: String!, amount: String!): BillingEntry!
-    "Staff (contracts.manage)."
+    "Staff (billing.manage)."
     markBillingEntryPaid(entryId: ID!): BillingEntry!
-    "Staff (contracts.manage). Reverses a mark-paid made in error."
+    "Staff (billing.manage). Reverses a mark-paid made in error."
     unmarkBillingEntryPaid(entryId: ID!): BillingEntry!
     """
-    Staff (contracts.manage). Build plan L4's second banked trap, built here:
+    Staff (billing.manage). Build plan L4's second banked trap, built here:
     the edge from a billable ticket to the charge it produces. Refused
     unless the ticket is billable (NOT_BILLABLE) or already billed
     (ALREADY_BILLED — the unique ticketId is the backstop).
     """
     createTicketBillingEntry(ticketId: ID!, amount: String!, descriptionFa: String!, descriptionEn: String!): BillingEntry!
-    "Staff (contracts.manage)."
+    "Staff (billing.manage)."
     createSubscription(customerId: ID!, projectId: ID, labelFa: String!, labelEn: String!, amount: String!, period: SubscriptionPeriod!, activeFrom: DateTime!): Subscription!
-    "Staff (contracts.manage). label and amount only — period and activeFrom are fixed at creation; ending it is endSubscription, not an edit."
+    "Staff (billing.manage). label and amount only — period and activeFrom are fixed at creation; ending it is endSubscription, not an edit."
     updateSubscription(subscriptionId: ID!, labelFa: String!, labelEn: String!, amount: String!): Subscription!
-    "Staff (contracts.manage). Stops future periods from being generated past activeUntil. Refused if already ended (ALREADY_ENDED)."
+    "Staff (billing.manage). Stops future periods from being generated past activeUntil. Refused if already ended (ALREADY_ENDED)."
     endSubscription(subscriptionId: ID!, activeUntil: DateTime!): Subscription!
 
     # --- Services (build plan L7) ---
@@ -1840,7 +1846,7 @@ export const typeDefs = /* GraphQL */ `
     """
     applyServiceRun(runId: ID!): ServiceRun!
     """
-    Staff (contracts.manage). Build plan L6's edge: the charge an applied
+    Staff (billing.manage). Build plan L6's edge: the charge an applied
     run produced. Refused (NOT_APPLIED) unless the run is APPLIED, and
     refused (ALREADY_BILLED) if one already exists. Returns the run.
     """
@@ -1858,6 +1864,13 @@ export const typeDefs = /* GraphQL */ `
 
     publishContract(contractId: ID!): Contract!
     setContractStatus(contractId: ID!, status: ContractStatus!): Contract!
+    """
+    Staff (contracts.author). Journeys build plan S1: who designs and who
+    develops this contract. An omitted argument is left as is; null unassigns.
+    Refused: ASSIGNEE_LACKS_CAPABILITY (the person cannot do that job),
+    ASSIGNEE_INACTIVE (their account is not active).
+    """
+    assignContract(contractId: ID!, designerId: ID, developerId: ID): Contract!
 
     "The current contract revision must be signed."
     issueAmendment(contractId: ID!, titleFa: String!, titleEn: String!, bodyFa: String!, bodyEn: String!, relatesToArticle: Int): Contract!

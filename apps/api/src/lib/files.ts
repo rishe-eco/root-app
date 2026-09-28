@@ -102,7 +102,11 @@ export const POLICY: Record<FileClass, ClassPolicy> = {
     visibility: 'PRIVATE',
     maxBytes: 2 * 1024 * 1024,
     accepted: [PNG, JPEG, WEBP],
-    uploader: 'contracts.manage',
+    // Journeys build plan S1: the designer's verb, not a contract author's —
+    // miss this and design uploads 403 for the designer while the design
+    // resolvers admit them (the plan's S1 trap). The assignment half is
+    // checked in routes/files.ts once the contract is loaded.
+    uploader: 'design.author',
     owner: 'contract',
   },
   RESEARCH_TEXT: {

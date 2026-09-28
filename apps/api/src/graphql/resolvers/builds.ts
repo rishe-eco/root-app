@@ -19,18 +19,24 @@ import { buildPublishedEmail } from '../../lib/mailTemplates.js';
 import { env } from '../../lib/env.js';
 import { feedbackItemInclude } from './feedback.js';
 import { firstContractId } from './admin/shared.js';
+import { requireBuildAuthorOnProject } from './access.js';
+import { can } from '../../lib/capabilities.js';
 
 /**
  * Builds and the resolution ledger (build plan L3b; spec §6's gap). Lives
  * outside `resolvers/admin/` on purpose, same reasoning as
  * `resolvers/demo.ts` and `resolvers/feedback.ts`: everything here is gated
- * on `builds.author`, a different capability from `contracts.manage` — a
- * `DEVELOPER` holding only `builds.author` must reach every mutation and
- * query below without ever touching a resolver gated on the admin's verb.
+ * on `builds.author`, a different capability from any contract verb — a
+ * `DEVELOPER` must reach every mutation and query below without holding
+ * `contracts.author`. Since journeys build plan S1 it is also gated on the
+ * assignment edge: a developer sees and builds the projects of the contracts
+ * they develop (`requireBuildAuthorOnProject`), not every project — the same
+ * rule the demo and frame mutations apply, so the queue and the demo cannot
+ * disagree about whose work this is. `assignments.override` (ADMIN) sees all.
  *
  * **Nothing here returns `Contract!`.** Every other admin-side mutation in
  * this codebase does, so Apollo's cache stays consistent (T9 in V2.md) — but
- * that convention was built for callers who already hold `contracts.manage`.
+ * that convention was built for callers who hold `contracts.author`.
  * A `Contract!` payload carries `amount`, `customer`, `draft`'s escape hatch,
  * and the rest of what a `DEVELOPER` must never see (build plan D6). Every
  * mutation and query in this file returns a `Build!`, a `FeedbackItem!`, a
@@ -57,12 +63,14 @@ type BuildChangeInputArg = {
 };
 
 export const buildQueries = {
-  /** Staff (builds.author). Every phase across every active project, thin —
-   *  the build-authoring form's phase picker. Never touches Contract. */
+  /** Staff (builds.author). Every phase across the active projects this
+   *  caller develops (every active project, with `assignments.override`),
+   *  thin — the build-authoring form's phase picker. Never touches Contract. */
   phasesForBuilds: async (_p: unknown, _a: unknown, ctx: Context) => {
-    requireCapability(ctx, 'builds.author');
+    const user = requireCapability(ctx, 'builds.author');
+    const mine = can(user, 'assignments.override') ? {} : { contracts: { some: { developerId: user.id } } };
     const phases = await prisma.phase.findMany({
-      where: { project: { status: 'ACTIVE' } },
+      where: { project: { status: 'ACTIVE', ...mine } },
       include: { project: true },
       orderBy: [{ project: { createdAt: 'asc' } }, { number: 'asc' }],
     });
@@ -88,7 +96,7 @@ export const buildQueries = {
    *  below applies the same exclusion, so the two can never disagree about
    *  what "open" means. */
   openFeedbackQueue: async (_p: unknown, args: { projectId: string }, ctx: Context) => {
-    requireCapability(ctx, 'builds.author');
+    await requireBuildAuthorOnProject(ctx, args.projectId);
     return prisma.feedbackItem.findMany({
       where: { status: { in: ['OPEN', 'RATIFIED'] }, ticket: null, demo: { phase: { projectId: args.projectId } } },
       include: feedbackItemInclude,
@@ -100,7 +108,7 @@ export const buildQueries = {
    *  IN_BUILD and assigned to a phase — candidates for a "this was on the
    *  plan" change entry. */
   scopeItemsAwaitingBuild: async (_p: unknown, args: { projectId: string }, ctx: Context) => {
-    requireCapability(ctx, 'builds.author');
+    await requireBuildAuthorOnProject(ctx, args.projectId);
     return prisma.scopeItem.findMany({
       where: { projectId: args.projectId, status: 'IN_BUILD', phaseId: { not: null } },
       orderBy: { position: 'asc' },
@@ -109,7 +117,7 @@ export const buildQueries = {
 
   /** Staff (builds.author). Every build declared for this project, newest first. */
   projectBuilds: async (_p: unknown, args: { projectId: string }, ctx: Context) => {
-    requireCapability(ctx, 'builds.author');
+    await requireBuildAuthorOnProject(ctx, args.projectId);
     return prisma.build.findMany({
       where: { projectId: args.projectId },
       include: buildInclude,
@@ -139,6 +147,7 @@ export const buildMutations = {
     const developer = requireCapability(ctx, 'builds.author');
     const phase = await prisma.phase.findUnique({ where: { id: args.phaseId } });
     if (!phase) throw notFound('phase');
+    await requireBuildAuthorOnProject(ctx, phase.projectId);
 
     // Build plan L4: excludes items already moved to the ticket channel —
     // see openFeedbackQueue's own comment above, which this must agree with.
@@ -285,6 +294,7 @@ export const buildMutations = {
       include: { project: { include: { customer: true } } },
     });
     if (!build) throw notFound('build');
+    await requireBuildAuthorOnProject(ctx, build.projectId);
     if (build.publishedAt) {
       throw new GraphQLError('This build is already published.', { extensions: { code: 'ALREADY_PUBLISHED' } });
     }

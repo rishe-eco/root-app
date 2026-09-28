@@ -114,7 +114,17 @@ test('createTicketFromFeedback converts a RATIFIED item into a CHANGE_REQUEST ti
   // would mean the queue could never drain (see resolvers/builds.ts).
   const queue = ok(
     await exec('query($p: ID!){ openFeedbackQueue(projectId: $p) { id } }', {
-      as: await prisma.user.create({ data: { email: 'dev@test.local', name: 'Dev', roles: ['DEVELOPER'], state: 'ACTIVE' } }),
+      // Assigned as the contract's developer (journeys build plan S1): the
+      // queue is the assigned developer's, not every developer's.
+      as: await prisma.user.create({
+        data: {
+          email: 'dev@test.local',
+          name: 'Dev',
+          roles: ['DEVELOPER'],
+          state: 'ACTIVE',
+          developedContracts: { connect: { id: f.contract.id } },
+        },
+      }),
       variables: { p: f.contract.projectId },
     }),
   );
@@ -181,7 +191,7 @@ test('createTicketFromFeedback requires both currentState and desiredState, and 
   assert.equal(badLang.code, 'INVALID_LANG');
 });
 
-test('createTicketFromFeedback is refused for a customer and a DEVELOPER — builds.author is not contracts.manage', async () => {
+test('createTicketFromFeedback is refused for a customer and a DEVELOPER — builds.author is not tickets.answer', async () => {
   const { itemId } = await seedRatifiedFeedback();
   const developer = await prisma.user.create({
     data: { email: 'dev2@test.local', name: 'Dev', roles: ['DEVELOPER'], state: 'ACTIVE' },

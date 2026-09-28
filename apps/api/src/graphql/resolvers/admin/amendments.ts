@@ -27,7 +27,7 @@ export const amendmentMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const contract = await loadContract(args.contractId);
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -85,7 +85,7 @@ export const amendmentMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const amendment = await prisma.amendment.findUnique({
       where: { id: args.amendmentId },
       include: { contractRevision: { select: { contractId: true } } },
@@ -121,7 +121,7 @@ export const amendmentMutations = {
   },
 
   deleteAmendment: async (_p: unknown, args: { amendmentId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const amendment = await prisma.amendment.findUnique({
       where: { id: args.amendmentId },
       include: { contractRevision: { select: { contractId: true } } },
@@ -139,7 +139,7 @@ export const amendmentMutations = {
   },
 
   publishAmendment: async (_p: unknown, args: { amendmentId: string }, ctx: Context) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    const admin = requireCapability(ctx, 'contracts.author');
     const amendment = await prisma.amendment.findUnique({
       where: { id: args.amendmentId },
       include: { contractRevision: { select: { contractId: true } } },

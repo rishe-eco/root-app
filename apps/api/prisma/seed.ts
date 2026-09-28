@@ -44,6 +44,12 @@ const CONTRIBUTOR_PASSWORD = process.env.SEED_CONTRIBUTOR_PASSWORD ?? 'change-me
 // to give that role something to sign into and F3's CONTRIBUTOR before it.
 const DEVELOPER_EMAIL = process.env.SEED_DEVELOPER_EMAIL ?? 'developer@root.local';
 const DEVELOPER_PASSWORD = process.env.SEED_DEVELOPER_PASSWORD ?? 'change-me-please';
+// Journeys build plan S1 (P0-6): one account per new staff role, so S1's
+// e2e can sign into each desk and see the nav that role is meant to see.
+const SALES_EMAIL = process.env.SEED_SALES_EMAIL ?? 'sales@root.local';
+const SALES_PASSWORD = process.env.SEED_SALES_PASSWORD ?? 'change-me-please';
+const DESIGNER_EMAIL = process.env.SEED_DESIGNER_EMAIL ?? 'designer@root.local';
+const DESIGNER_PASSWORD = process.env.SEED_DESIGNER_PASSWORD ?? 'change-me-please';
 
 async function main() {
   const admin = await prisma.user.upsert({
@@ -107,7 +113,7 @@ async function main() {
     },
   });
 
-  await prisma.user.upsert({
+  const developer = await prisma.user.upsert({
     where: { email: DEVELOPER_EMAIL },
     update: {},
     create: {
@@ -116,6 +122,30 @@ async function main() {
       roles: ['DEVELOPER'],
       state: 'ACTIVE',
       passwordHash: await bcrypt.hash(DEVELOPER_PASSWORD, 12),
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: SALES_EMAIL },
+    update: {},
+    create: {
+      email: SALES_EMAIL,
+      name: 'Sales',
+      roles: ['SALES'],
+      state: 'ACTIVE',
+      passwordHash: await bcrypt.hash(SALES_PASSWORD, 12),
+    },
+  });
+
+  const designer = await prisma.user.upsert({
+    where: { email: DESIGNER_EMAIL },
+    update: {},
+    create: {
+      email: DESIGNER_EMAIL,
+      name: 'Designer',
+      roles: ['DESIGNER'],
+      state: 'ACTIVE',
+      passwordHash: await bcrypt.hash(DESIGNER_PASSWORD, 12),
     },
   });
 
@@ -157,6 +187,11 @@ async function main() {
       amount: BigInt(180_000_000),
       status: 'WAITING_ON_CUSTOMER',
       publishedAt: new Date(),
+      // Journeys build plan S1: the seeded designer and developer are this
+      // contract's, so each can author their half of it straight after a
+      // fresh seed — the acceptance check "the seeded developer opens a demo".
+      designerId: designer.id,
+      developerId: developer.id,
     },
   });
 

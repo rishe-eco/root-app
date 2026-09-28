@@ -30,7 +30,7 @@ test('a reviewer reaches the Review Room and nothing else', () => {
   const reviewer = holding('REVIEWER');
   assert.deepEqual([...capabilitiesOf(reviewer)], ['review.participate']);
   assert.equal(can(reviewer, 'library.write'), false);
-  assert.equal(can(reviewer, 'contracts.manage'), false);
+  assert.equal(can(reviewer, 'contracts.readActive'), false);
   assert.equal(can(reviewer, 'review.admin'), false);
 });
 
@@ -69,4 +69,86 @@ test('the empty set grants nothing rather than throwing', () => {
   const nobody = { roles: [] as Role[] };
   assert.deepEqual([...capabilitiesOf(nobody)], []);
   for (const cap of CAPABILITIES) assert.equal(can(nobody, cap), false);
+});
+
+/**
+ * Journeys build plan S1 — the grant table as a literal, one row per role,
+ * read against the code rather than restating it. `capabilities.ts` is where
+ * the grants are *explained*; this is where a changed grant has to be
+ * *meant*: widening a role is now two edits in two files, and the second one
+ * is a table a reviewer can read at a glance.
+ *
+ * ADMIN is absent on purpose — it is `CAPABILITIES` by construction and has
+ * its own test above. Every capability not listed for a role must be false
+ * for it, which is what makes this a table rather than a list of spot checks.
+ */
+const EXPECTED: Record<Exclude<Role, 'ADMIN'>, readonly string[]> = {
+  CUSTOMER: [],
+  CONTRIBUTOR: ['library.write'],
+  REVIEWER: ['review.participate'],
+  DEVELOPER: [
+    'contracts.readActive',
+    'feedback.answer',
+    'answers.direct.demo',
+    'builds.author',
+    'dependencies.verifyTechnical',
+  ],
+  SALES: [
+    'contracts.readAll',
+    'contracts.readActive',
+    'contracts.author',
+    'money.read',
+    'customers.manage',
+    'tickets.answer',
+    'billing.manage',
+    'feedback.answer',
+    'feedback.approveAnswers',
+    'answers.direct.agreement',
+    'answers.direct.design',
+    'answers.direct.mockup',
+    'answers.direct.demo',
+    'templates.scope',
+    'dependencies.verifyGeneral',
+  ],
+  DESIGNER: [
+    'contracts.readActive',
+    'feedback.answer',
+    'answers.direct.design',
+    'answers.direct.mockup',
+    'design.author',
+    'templates.types',
+  ],
+};
+
+for (const [role, expected] of Object.entries(EXPECTED) as Array<[Role, readonly string[]]>) {
+  test(`the ${role} row of the grant table, every capability checked`, () => {
+    for (const cap of CAPABILITIES) {
+      assert.equal(can(holding(role), cap), expected.includes(cap), `${role} × ${cap}`);
+    }
+    // And nothing listed here that the table does not know about — a typo in
+    // EXPECTED would otherwise pass as "correctly not granted".
+    for (const cap of expected) assert.ok((CAPABILITIES as readonly string[]).includes(cap), cap);
+  });
+}
+
+test('no staff role but ADMIN holds the two escape hatches', () => {
+  // `assignments.override` and `staff.manage` are the rows whose blast
+  // radius is other people's work and other people's accounts.
+  for (const role of ['SALES', 'DESIGNER', 'DEVELOPER', 'CONTRIBUTOR', 'REVIEWER'] as Role[]) {
+    assert.equal(can(holding(role), 'assignments.override'), false, role);
+    assert.equal(can(holding(role), 'staff.manage'), false, role);
+  }
+});
+
+test('money is visible to exactly the roles that sell', () => {
+  // PD-14 / journeys Q-S3: design and development never see what it costs.
+  assert.equal(can(holding('DESIGNER'), 'money.read'), false);
+  assert.equal(can(holding('DEVELOPER'), 'money.read'), false);
+  assert.equal(can(holding('SALES'), 'money.read'), true);
+});
+
+test('contracts.manage is gone, not aliased', () => {
+  // S1 removed it. A leftover alias would be a verb no role is meant to hold,
+  // silently admitting ADMIN alone wherever it is still checked.
+  assert.equal((CAPABILITIES as readonly string[]).includes('contracts.manage'), false);
 });

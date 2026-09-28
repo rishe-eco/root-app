@@ -30,11 +30,20 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-/** A DEVELOPER account, holding builds.author alone (build plan D6) — not
- *  seeded by `seedFixture` itself, since most suites never need one. */
+/** A DEVELOPER account (build plan D6) — not seeded by `seedFixture`
+ *  itself, since most suites never need one. Assigned as the fixture
+ *  contract's developer: since journeys build plan S1 the builds queue and
+ *  every build mutation are the *assigned* developer's (`s1.test.ts` covers
+ *  the unassigned refusal). */
 async function createDeveloper() {
   return prisma.user.create({
-    data: { email: 'developer@test.local', name: 'Developer', roles: ['DEVELOPER'], state: 'ACTIVE' },
+    data: {
+      email: 'developer@test.local',
+      name: 'Developer',
+      roles: ['DEVELOPER'],
+      state: 'ACTIVE',
+      developedContracts: { connect: { id: f.contract.id } },
+    },
   });
 }
 
@@ -387,7 +396,7 @@ test('a plain customer cannot call any builds.author-gated mutation or query', a
   assert.equal(queueResult.code, 'FORBIDDEN');
 });
 
-test('a DEVELOPER holding only builds.author can declare and publish builds, and reach the open queue', async () => {
+test('a DEVELOPER (no contract verb, no money) can declare and publish builds, and reach the open queue', async () => {
   const { itemId, phase } = await seedRatifiedFeedback();
   const queue = ok(
     await exec('query($p: ID!){ openFeedbackQueue(projectId: $p) { id status } }', {
