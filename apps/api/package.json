@@ -8,7 +8,7 @@
     "build": "tsc -b",
     "start": "node dist/src/index.js",
     "typecheck": "tsc -b --noEmit",
-    "test": "tsx --test src/lib/*.test.ts",
+    "test": "tsx prisma/test-unit.ts",
     "test:integration": "tsx prisma/test-integration.ts",
     "test:db": "tsx prisma/test-db.ts",
     "prisma:generate": "prisma generate",
