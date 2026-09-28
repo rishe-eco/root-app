@@ -308,8 +308,9 @@ export ROOT_TEST_DB=root_wt_p07_test E2E_API_PORT=4201 E2E_WEB_PORT=4273
 
 A fresh worktree has no `node_modules` and no `apps/api/.env`: run
 `npm install` and `npx prisma generate --schema apps/api/prisma/schema.prisma`
-first. The integration runner pins every variable it needs, so it does not
-read `.env`; `npm run dev:api` still does.
+first. The unit and integration runners (`apps/api/prisma/test-unit.ts`,
+`test-integration.ts`) pin every variable they need, so neither needs `.env`;
+`npm run dev:api` still does.
 
 Playwright's browser download is geo-blocked here; `playwright.config.ts` sets
 `channel: 'chrome'` and drives the installed Chrome. Nothing needs downloading.
