@@ -1,20 +1,29 @@
 # Development plan — how the remaining stages get built
 
-**Written:** 2026-08-05 · **Revised 2026-08-14** · Against `root-app` @ `main`
+**Written:** 2026-08-05 · **Revised 2026-08-14, 2026-09-28** · Against
+`root-app` @ `main`
 **For:** the engineer picking up the next stage. Read this file, then read *only*
 your stage's file. They are written to be self-contained.
 
-> **Tracks V and C are complete, and track R but for R3.** Everything through
-> C2 and R4 is built and merged to `main`; the Persian pass's mechanical half
-> (§1) closed on 2026-08-14. **What's left:** R3 (conditional on corpus size —
+> **Tracks V, C and R are built, but for R3, and L1–L7 of the lifecycle build
+> plan are built and merged too.** Everything through C2 and R4 is on `main`;
+> the Persian pass's mechanical half (§1) closed on 2026-08-14; L1–L7 landed
+> 2026-09-20/21. **L8 is not built, on purpose** — owed when the first wedge
+> customer arrives (`root-studio-lifecycle-build-plan.md` §0.1). **What's left
+> on the old plan:** R3 (conditional on corpus size —
 > check before starting it), and the Persian pass's §2 (the founder's own
 > read-through) and §3.2 (moving the style guide into `root-sot` canon) — see
-> the dated note in the root [`README.md`](../../README.md).
+> the dated note in the root [`README.md`](../../README.md). **What's next:**
+> the journeys build plan — P0 through J12, eighteen stages — of which only
+> P0's test-lanes prep (`stage-p0-test-lanes`) and this file's own fix (P0-3)
+> are merged so far.
 
 ## ✅ Everything is merged — branch from `main`
 
 Every built stage is on `main`, and each was merged only after its own review.
 Cut your branch from `main` and there is nothing to reconcile first.
+**Verified again 2026-09-28:** `main` is at `6f674cc` (the test-lanes prep,
+merged after L6 + L7); still nothing to reconcile.
 
 *This section said the opposite until 2026-08-14, and said it long after it
 stopped being true* — "Nothing is merged; `main` is still at `478fb52`, which
@@ -31,8 +40,8 @@ whatever you were actually doing.
 
 | Layer | Lives in | Answers | Wins on |
 |---|---|---|---|
-| **Specs** | `root-sot/ecosystem/working/root-website-*.md` | *what* to build | what |
-| **Build plan** | `root-sot/ecosystem/working/root-website-build-plan.md` | *in what order* | order |
+| **Specs** | `root-sot/ecosystem/working/root-website-*.md`, plus `root-website-project-lifecycle.md` (the lifecycle spec) and `root-studio-user-journeys.md` (what the customer and each staff role experience) | *what* to build | what |
+| **Build plan** | `root-website-build-plan.md` (13 of 14 stages built, the last waiting on content not code), `root-studio-lifecycle-build-plan.md` (the L-stages — **done**, L1–L7 built, L8 owed), `root-studio-journeys-build-plan.md` (**current** — P0 through J12) | *in what order* | order |
 | **These files** | here, `docs/development/` | *how, against this code* | nothing |
 
 Where a stage file and a spec disagree about **what**, the spec wins and the
@@ -65,16 +74,52 @@ R2   public reader + search      ✔ 2026-08-11  e267676          [R2.md]
 C1   Review Room corpus          ✔ 2026-08-11  b5e6bed  ← early [C1.md]
 C2   Review Room comments        ✔ 2026-08-13  6bd43bb          [C2.md]
 R4   the agent                   ✔ 2026-08-13  c3fcf0f  ← early [R4.md]
+L1   registry → Project, lifecycle    ✔ 2026-09-20  19737e1     [L1.md]
+L2   phases, the live demo            ✔ 2026-09-21  6d77583     [L2.md]
+L3   review frames, feedback intake   ✔ 2026-09-21  c1cde62     [L3.md]
+L3b  builds, the resolution ledger    ✔ 2026-09-21  1892131     [L3b.md]
+L4   change tickets, three channels   ✔ 2026-09-21  62ecd9a     [L4.md]
+L5   the dependency board             ✔ 2026-09-21  62ecd9a     [L5.md]
+L6   billing                          ✔ 2026-09-21  0a51b53     [L6.md]
+L7   services — product-import panel  ✔ 2026-09-21  0a51b53     [L7.md]
 ──────────────────────────────── everything below is unbuilt ────────
 R3   concept tree                ← conditional, see below       [R3.md]
 the Persian pass                 ← §1 done 2026-08-14, §2/§3 open
                                                      [persian-pass.md]
+L8   wedge contract shape        ← not built, on purpose: owed when the
+                                    first wedge customer arrives
+──── the journeys build plan (P0 → J12), planned, not started ───────
+P0    pre-flight: CSP, docs, DNS/TLS, same-site hardening, SMS slot
+S1    roles, the capability split, visibility, assignment
+J1    phone identity, SMS, the notify router, rate limits, staff 2FA
+S3    customer and staff management (and the Tools rename)
+J2    requests — a project before a contract
+J3    steps, sequence, the wizard shell, status area, attention
+S2    one feedback model, the §3.1 rule, answers, approval queue
+T1    template types, scope templates, ScopeItem.kind
+J4    step 1 — requirements
+J5    step 2a — pages, features and deliverables
+J6    step 2b — the draft and its anchored notes
+J7    step 3 — approve and sign; the agreement gate; snapshot format 2
+J13   invoices — drafts, numbers, due dates, plan issuing, print
+T2+J8 step 4 — theme catalogue, wireframes and palette
+J9    step 5 — the mockup host, streamed bundle upload
+J10   step 6 — demo submission, readiness, per-phase approval
+J11   step 7 — the summary, handover, closing a contract
+J12   the customer dashboard and a home screen per staff role
 ```
 
-**Every remaining stage has a build-ready file.** The Persian pass had never been
-specified anywhere — the build plan lists it and never says what it is — so
+**R3 and the Persian pass each have their own build-ready file; L8 and the
+journeys stages do not yet.** The Persian pass had never been specified
+anywhere — the build plan lists it and never says what it is — so
 [`persian-pass.md`](persian-pass.md) *proposes* what it is. Argue with that
-definition before starting it.
+definition before starting it. L8 and the eighteen journeys stages are
+specified inline instead — `root-studio-lifecycle-build-plan.md` §3 (the L8
+subsection) and `root-studio-journeys-build-plan.md` §5, each to the level of
+models, mutations, refusal codes, screens and tests — and the journeys plan
+says its own intent plainly: each stage's build-ready file here is "a
+transcription plus whatever the code has moved on by then," written when that
+stage is actually picked up, not in advance.
 
 **R3 carries a condition the others do not.** The build plan places it
 *"deliberately after there are entries worth an ontology"*. If the corpus is
@@ -100,7 +145,13 @@ Review Room — but its two call sites were already written and V2 had just made
 the invite reachable from a screen, so it was opportunity rather than need.
 Track C now inherits a built seam.
 
-**Do one stage per branch, in order.**
+**One stage per branch, and stages run in the plan's order — except the
+parallel lanes `root-studio-journeys-build-plan.md` §3 allows.** Two, once J7
+is built: **J13** (invoices) can run alongside **J8–J11** (the design/build
+path), and **T2** (the theme catalogue) needs only S1/T1 and can run
+alongside anything after them. Take a parallel lane in its own git worktree,
+with its own test database and e2e ports — see "Two checkouts at once" under
+the working agreement below.
 
 There is also [`defects-found.md`](defects-found.md) — ten things found wrong
 with the code by reading it before track V was built, each assigned to the stage
@@ -322,6 +373,14 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`C1.md`](C1.md) | Review Room — documents, snapshots, the corpus | ✔ built |
 | [`C2.md`](C2.md) | Review Room — comments, threads, corpus admin | ✔ built |
 | [`R4.md`](R4.md) | Library — the agent | ✔ built |
+| [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
+| [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
+| [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |
+| [`L3b.md`](L3b.md) | builds and the resolution ledger — where a fate gets written | ✔ built |
+| [`L4.md`](L4.md) | ratified item → change ticket; the three channels | ✔ built |
+| [`L5.md`](L5.md) | the dependency board | ✔ built |
+| [`L6.md`](L6.md) | billing — subscriptions, invoices, the report | ✔ built |
+| [`L7.md`](L7.md) | services — the product-import panel | ✔ built |
 | [`R3.md`](R3.md) | Library — the concept tree | ready · **conditional** |
 | [`persian-pass.md`](persian-pass.md) | the Persian pass | §1 ✔ 2026-08-14 · §2/§3 open |
 | [`api-tokens.md`](api-tokens.md) | personal access tokens — a second credential | ✔ built · not a plan stage |

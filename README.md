@@ -322,6 +322,18 @@ reasoning and the list of what was deliberately not built:
 
 ## State of play
 
+**Status, 2026-09-28.** Everything in this section is the track V/C/R history
+below, current through the Persian pass's mechanical half (2026-08-14); R3 and
+the Persian pass's §2/§3.2 are still exactly as described there — nothing
+since has touched either. A second build plan has since landed on top of this
+one: `root-studio-lifecycle-build-plan.md`'s L1–L7 (the scope registry as a
+`Project`, phases, the demo review loop, change tickets, the dependency board,
+billing, the product-import panel) were built and merged 2026-09-20/21 — see
+`docs/development/L1.md`–`L7.md` — with L8 deliberately unbuilt, owed when the
+first wedge customer arrives. `root-studio-journeys-build-plan.md` (P0 through
+J12) is next; only its test-lanes prep is merged so far. Detail on all of this
+is in [`docs/development/README.md`](docs/development/README.md).
+
 **Built and working**
 
 - Landing and About, both languages, matching the handoff designs.
