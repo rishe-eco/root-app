@@ -269,6 +269,105 @@ ssh you@your-vps 'cd /srv/root && ln -sfn releases/<name> .current.tmp && mv -T 
 
 No Nginx reload needed; it resolves the root per request.
 
+**After any deploy that touches Nginx** — a new release, an edited
+`security-headers.conf`, a certbot run — confirm the header a browser will
+actually see, not just what the committed conf says. `nginx -t` only checks
+syntax; it does not tell you a stale worker is still serving the old snippet,
+or that `deploy/nginx/security-headers.conf` was edited on your machine but
+never copied to `/etc/nginx/snippets/root-security-headers.conf` on the box:
+
+```bash
+curl -sI https://yourdomain.com/ | grep -i content-security-policy
+```
+
+The line must show a `frame-src` naming both `https://*.staging.m-root.com`
+and `https://*.mockup.m-root.com` (P0-2, defect D-1) — no test in this
+repository can see an Nginx header, so this `curl` is the only check that
+exists for it.
+
+---
+
+## Staging and mockup domains
+
+**Warning, read before doing anything in this section:** until **P0-7**
+(same-site hardening — the `__Host-` session cookie and the `Origin` check on
+`/graphql`, `/upload` and `/ask`) is merged *and deployed*, **no staging site
+and no mockup may be served under `m-root.com`**, even if the DNS and
+certificates below are ready. The reason is D-8: a subdomain of the portal's
+own registrable domain is *same-site* with it, and same-site code — a
+customer's WordPress theme, an uploaded mockup, anything Root did not audit
+line by line — can plant a cookie for the parent domain or ride the session
+cookie on a same-site request that `SameSite=Lax` alone does not stop. P0-7 is
+the price of PD-8's choice (subdomains of `m-root.com`, rather than a separate
+registrable domain per project); it must be in place first, not after the
+first real site is live.
+
+This section is P0-5: the DNS and TLS lead time for the two wildcards PD-8
+and PD-9 put every staging site and mockup view under. It has no code in it —
+put it in motion the day this plan is accepted, because certificate issuance
+and DNS propagation are the slowest things in the whole plan.
+
+**1. Wildcard DNS.** Two records, both pointed at the VPS's address:
+
+```
+*.staging.m-root.com.   A   <vps-ip>
+*.mockup.m-root.com.    A   <vps-ip>
+```
+
+(or `AAAA`, if the VPS is reached over IPv6 — match whatever `A`/`AAAA` record
+`m-root.com` itself already uses.)
+
+**2. Wildcard certificates.** Let's Encrypt issues a wildcard certificate only
+through the **DNS-01** challenge — it proves you control the domain by asking
+you to publish a TXT record, not by fetching a file over HTTP, because a
+wildcard has no single host to serve one from. That means renewal needs API
+access to whatever DNS provider hosts `m-root.com`: **confirm the provider has
+a certbot DNS plugin before counting on this** (`certbot plugins` after
+installing lists what is available; most major providers — Cloudflare, Route
+53, DigitalOcean and the rest — have one). Without one, the wildcard still
+issues once by hand but cannot renew unattended, and a wildcard cert is not
+something to renew by hand every 90 days.
+
+```bash
+sudo certbot certonly --dns-<provider> -d '*.staging.m-root.com' -d '*.mockup.m-root.com'
+```
+
+Then prove renewal actually works before relying on it:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+**3. The staging wildcard's Nginx.** Staging sites are **deployed by the
+developer directly on Root's VPS**, outside root-app's own release process —
+this is Root building and hosting a customer's site, not a feature of the
+portal. Each one gets its **own Nginx server block** under the wildcard,
+named by its slug (`<project-slug>.staging.m-root.com`), sitting beside
+`/etc/nginx/sites-available/root` rather than inside it. Whatever that site
+is (WordPress, a static export, anything else Root can host there), its
+server block must:
+
+- send `Content-Security-Policy: frame-ancestors <APP_ORIGIN>` — naming only
+  the portal's own origin, so a page framing the staging site from anywhere
+  else fails to load rather than loading and silently listening to the
+  reporter snippet's `postMessage` broadcasts; and
+- **must not** send `X-Frame-Options: DENY` — that header cannot name an
+  origin the way `frame-ancestors` can, and if both are present a browser
+  that honours `X-Frame-Options` at all would refuse the one frame this whole
+  arrangement exists to allow: the portal's own L2 demo viewport.
+
+These are the third guard the reporter snippet's own README documents
+(`snippets/demo-reporter/README.md`, "The third guard: `frame-ancestors`") —
+read that file for why the header exists and what it is defending against;
+this section only says where it has to be set for each new site, not why.
+
+**4. The mockup wildcard's Nginx** — **not configured yet.** PD-9 has the
+mockup wildcard proxying to the API on loopback, the same way `/graphql` and
+`/upload` do, so that a single Node route can stream each view straight out
+of its stored zip. That server block arrives with stage **J9** and does not
+exist on the VPS until then; do not create one ahead of it; there is nothing
+here for the mockup wildcard to point at yet.
+
 ---
 
 ## Backups
