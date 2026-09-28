@@ -905,6 +905,12 @@ export const typeDefs = /* GraphQL */ `
     pending: PendingReview
   }
 
+  "Journeys build plan S1 — the two jobs a contract assigns: its designer and its developer."
+  enum AssignmentJob {
+    DESIGN
+    BUILD
+  }
+
   type StatusCount {
     status: ContractStatus!
     count: Int!
@@ -1457,6 +1463,8 @@ export const typeDefs = /* GraphQL */ `
 
     "Staff. Counts across every contract — not the caller's own, unlike contractStatusCounts."
     allContractStatusCounts: [StatusCount!]!
+    "Staff (contracts.author). Journeys build plan S1: the active accounts assignContract would accept for this job."
+    assignableUsers(job: AssignmentJob!): [User!]!
     "Staff. Contracts waiting on Root, longest-waiting first."
     needsRootQueue(limit: Int = 20): [ContractRef!]!
     """

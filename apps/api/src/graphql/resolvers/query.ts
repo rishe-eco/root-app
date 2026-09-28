@@ -153,6 +153,21 @@ export const Query = {
    * than a bug (V4.md §1.1). This is a different query for that reason, and
    * the customer-scoped one is left exactly as it was.
    */
+  /**
+   * Journeys build plan S1: who sales can assign as a contract's designer
+   * or developer — the active accounts holding the job's capability, which
+   * is exactly what `assignContract` will accept (a list and a refusal that
+   * could disagree would be a form that offers what it then refuses). Only
+   * the two assignment capabilities are answerable: this is not a general
+   * "who holds X" oracle for an author to probe the staff table with.
+   */
+  assignableUsers: async (_p: unknown, args: { job: 'DESIGN' | 'BUILD' }, ctx: Context) => {
+    requireCapability(ctx, 'contracts.author');
+    const capability = args.job === 'DESIGN' ? 'design.author' : 'builds.author';
+    const active = await prisma.user.findMany({ where: { state: 'ACTIVE' }, orderBy: { name: 'asc' } });
+    return active.filter((u) => can(u, capability));
+  },
+
   allContractStatusCounts: async (_p: unknown, _a: unknown, ctx: Context) => {
     requireCapability(ctx, 'contracts.readAll');
     const grouped = await prisma.contract.groupBy({

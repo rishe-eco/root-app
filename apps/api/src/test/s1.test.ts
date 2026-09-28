@@ -306,3 +306,14 @@ test('the Library, the Review Room and tokens are untouched for their roles', as
   const me = ok(await exec('{ me { capabilities } }', { as: staff.CONTRIBUTOR })) as { me: { capabilities: string[] } };
   assert.deepEqual(me.me.capabilities, ['library.write']);
 });
+
+test('assignableUsers lists exactly who assignContract would accept', async () => {
+  const q = 'query($j: AssignmentJob!){ assignableUsers(job: $j) { id } }';
+  const ids = async (job: string) =>
+    ((ok(await exec(q, { as: staff.SALES, variables: { j: job } })).assignableUsers as Array<{ id: string }>).map((u) => u.id)).sort();
+  await prisma.user.update({ where: { id: staff.DESIGNER_UNASSIGNED.id }, data: { state: 'DISABLED' } });
+  // ADMIN holds every capability, so ADMIN is assignable to both jobs.
+  assert.deepEqual(await ids('DESIGN'), [f.admin.id, staff.DESIGNER.id].sort());
+  assert.deepEqual(await ids('BUILD'), [f.admin.id, staff.DEVELOPER.id, staff.DEVELOPER_UNASSIGNED.id].sort());
+  assert.equal((await exec(q, { as: staff.DESIGNER, variables: { j: 'DESIGN' } })).code, 'FORBIDDEN');
+});
