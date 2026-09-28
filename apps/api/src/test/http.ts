@@ -7,6 +7,7 @@ import { filesRouter, filesErrorHandler } from '../routes/files.js';
 import { askRouter, askErrorHandler } from '../routes/ask.js';
 import { signSession } from '../auth/tokens.js';
 import { env } from '../lib/env.js';
+import { originCheck } from '../lib/originCheck.js';
 
 /**
  * A real HTTP server for the file routes.
@@ -24,6 +25,10 @@ import { env } from '../lib/env.js';
 export async function startFileServer(): Promise<{ base: string; close: () => Promise<void> }> {
   const app = express();
   app.use(cookieParser());
+  // P0-7: index.ts mounts originCheck after cookieParser and before
+  // filesRouter — mirrored here for the same reason the rest of this
+  // function mirrors index.ts's wiring.
+  app.use(originCheck);
   app.use(filesRouter);
   app.use(filesErrorHandler);
 
@@ -44,6 +49,11 @@ export async function startFileServer(): Promise<{ base: string; close: () => Pr
  *  transport, and a real server is the only way to exercise them. */
 export async function startAskServer(): Promise<{ base: string; close: () => Promise<void> }> {
   const app = express();
+  // /ask itself never reads a cookie (it is reachable anonymously), but
+  // originCheck does — P0-7 added it to index.ts ahead of askRouter, and it
+  // needs cookieParser to have already run, exactly as filesRouter's does.
+  app.use(cookieParser());
+  app.use(originCheck);
   app.use(askRouter);
   app.use(askErrorHandler);
 
@@ -111,6 +121,11 @@ export type UploadOpts = {
   filename?: string;
   body?: Buffer;
   type?: string;
+  /** P0-7: an `Origin` header to send, for originCheck.ts's tests. Omitted
+   *  entirely (not merely falsy) when left unset, matching a real fetch from
+   *  a non-browser client or a same-origin request Chromium chooses not to
+   *  label. */
+  origin?: string;
 };
 
 export async function upload(base: string, opts: UploadOpts = {}) {
@@ -127,10 +142,14 @@ export async function upload(base: string, opts: UploadOpts = {}) {
   if (opts.entryId) params.set('entryId', opts.entryId);
   if (opts.projectId) params.set('projectId', opts.projectId);
 
+  const headers: Record<string, string> = {};
+  if (opts.as) headers.cookie = cookieFor(opts.as);
+  if (opts.origin !== undefined) headers.origin = opts.origin;
+
   const res = await fetch(`${base}/upload?${params}`, {
     method: 'POST',
     body: form,
-    headers: opts.as ? { cookie: cookieFor(opts.as) } : {},
+    headers,
   });
   const json = res.ok || res.status < 500 ? await res.json().catch(() => null) : null;
   return { status: res.status, body: json as Record<string, string> | null };
