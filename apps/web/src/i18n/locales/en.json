@@ -121,7 +121,8 @@
         "TOO_LARGE": "This question pulled in more of the corpus than fits in one request.",
         "NOT_FOUND": "No such entry.",
         "NETWORK": "Could not reach the Lab — check your connection.",
-        "INTERNAL": "Something went wrong. Try again in a moment."
+        "INTERNAL": "Something went wrong. Try again in a moment.",
+        "ORIGIN_REFUSED": "This question could not be verified as coming from Root. Reload the page and try again."
       }
     }
   },
@@ -595,6 +596,7 @@
     "errTooLarge": "That file is too large.",
     "errType": "That file type is not accepted.",
     "errEmpty": "That file is empty.",
+    "errOrigin": "This upload could not be verified as coming from Root. Reload the page and try again.",
     "errGeneric": "The upload failed. Try again."
   },
   "contracts": {
