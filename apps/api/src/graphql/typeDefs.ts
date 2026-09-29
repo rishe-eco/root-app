@@ -355,6 +355,14 @@ export const typeDefs = /* GraphQL */ `
     verifiedNote: String
     "Whose commitment this is — present so a cross-project list (the staff dashboard) can say."
     project: Project!
+    """
+    Journeys build plan J4: set when the step-1 brief owns this row (domain,
+    host, content, gateway, smsLine or enamad). Such a row cannot be deleted
+    from the board (BRIEF_OWNED) — change the requirements instead.
+    """
+    briefKey: String
+    "Who verifies it: the developer (technical) or sales. Set by the brief's key."
+    technical: Boolean!
   }
 
   # ---------------------------------------------------------------------
@@ -388,6 +396,10 @@ export const typeDefs = /* GraphQL */ `
     titleEn: String!
     "A stand-in for a real Milestone/BillingEntry linkage (L6) — free text for now."
     milestoneLabel: String
+    "Journeys build plan J4 (PD-5): the contract this phase delivers."
+    contractId: ID!
+    "A calendar day (PD-19) — render in UTC. Null until sales dates it."
+    plannedEndAt: DateTime
     scopeItems: [ScopeItem!]!
     "Newest first."
     demos: [Demo!]!
@@ -874,8 +886,11 @@ export const typeDefs = /* GraphQL */ `
     number: Int!
     titleFa: String!
     titleEn: String!
+    "Null for a sensitive article when the viewer may not read the contract's money (PD-14)."
     bodyFa: String
     bodyEn: String
+    "Journeys build plan J4, PD-14: this article's prose is about money."
+    sensitive: Boolean!
   }
 
   type Comment {
@@ -1154,6 +1169,133 @@ export const typeDefs = /* GraphQL */ `
     (PD-21). Narrow by step (and, for the demo, phase).
     """
     feedbackItems(step: StepKind, phaseId: ID): [FeedbackItem!]!
+
+    """
+    Journeys build plan J4 — step 1. The brief (null until sales has written
+    one); its budget cap is null to staff without money.read.
+    """
+    brief: ContractBrief
+    "What step 1 still lacks, as codes; empty means the step is done. Never carries a value."
+    briefCompleteness: [BriefMissing!]!
+    "Null for staff without money.read who are not the customer (PD-14), and until a plan exists."
+    paymentPlan: PaymentPlan
+    "This contract's own phases (PD-5). Project.phases is every phase of the project."
+    phases: [Phase!]!
+  }
+
+  enum BriefKind {
+    NEW_SITE
+    FEATURE_FOR_EXISTING
+  }
+
+  "PD-13: THEME_PICK is the pre-made path, the other two the custom one."
+  enum DesignTier {
+    THEME_PICK
+    CLAUDE_ASSISTED
+    SENIOR_DESIGNER
+  }
+
+  "Descriptive, not generative: the rows are the plan."
+  enum PaymentSplit {
+    LUMP_SUM
+    INSTALLMENTS
+    MONTHLY
+  }
+
+  """
+  Step 1 as sales wrote it and the customer reads it. Dates are calendar days
+  (PD-19): render them in UTC. budgetCap is money (PD-14) and is not
+  Contract.amount — nothing prefills one from the other.
+  """
+  type ContractBrief {
+    id: ID!
+    kind: BriefKind!
+    existingSiteUrl: String
+    templateType: TemplateType!
+    designTier: DesignTier!
+    "Toman, as a decimal string. Null for staff without money.read who are not the customer."
+    budgetCap: String
+    idealDeadline: DateTime
+    hardDeadline: DateTime
+    domainName: String
+    domainProvidedBy: DependencySide
+    hostProvidedBy: DependencySide
+    contentProvidedBy: DependencySide
+    supportMonths: Int
+    premadeRounds: Int
+    wireframeIterations: Int!
+    mockupIterations: Int
+    demoIterationsPerPhase: Int
+    updatedAt: DateTime!
+  }
+
+  "One thing step 1 still lacks. key names which commitment (or phase id) where the code is about one."
+  type BriefMissing {
+    code: String!
+    key: String
+  }
+
+  type PaymentPlan {
+    id: ID!
+    split: PaymentSplit!
+    "Toman, as a decimal string — the sum of the rows."
+    total: String!
+    invoices: [PlannedInvoice!]!
+  }
+
+  type PlannedInvoice {
+    id: ID!
+    ordinal: Int!
+    labelFa: String!
+    labelEn: String!
+    "Toman, as a decimal string."
+    amount: String!
+    phaseId: ID
+    paymentTermDays: Int!
+  }
+
+  input CommitmentInput {
+    "domain, host, content, gateway, smsLine or enamad. Anything else is ignored."
+    key: String!
+    "Used for gateway, smsLine and enamad; the brief's own provider decides domain, host and content."
+    side: DependencySide
+    "YYYY-MM-DD. A commitment without a date is not created (COMMITMENT_UNDATED)."
+    dueAt: String
+  }
+
+  """
+  A replace, not a patch: an omitted optional field is cleared, and
+  wireframeIterations returns to its default of two. Dates are YYYY-MM-DD.
+  """
+  input BriefInput {
+    kind: BriefKind!
+    existingSiteUrl: String
+    templateTypeId: ID!
+    designTier: DesignTier!
+    "Toman, a whole number above zero, as a decimal string."
+    budgetCap: String
+    idealDeadline: String
+    hardDeadline: String
+    domainName: String
+    domainProvidedBy: DependencySide
+    hostProvidedBy: DependencySide
+    contentProvidedBy: DependencySide
+    supportMonths: Int
+    premadeRounds: Int
+    wireframeIterations: Int
+    mockupIterations: Int
+    demoIterationsPerPhase: Int
+    commitments: [CommitmentInput!]
+  }
+
+  input PlannedInvoiceInput {
+    labelFa: String!
+    labelEn: String!
+    "Toman, a whole number above zero, as a decimal string."
+    amount: String!
+    "Must be one of this contract's phases."
+    phaseId: ID
+    paymentTermDays: Int!
   }
 
   "Journeys build plan J3, PD-7."
@@ -2307,9 +2449,15 @@ export const typeDefs = /* GraphQL */ `
     setTemplateTypeThemes(typeId: ID!, themeIds: [ID!]!): [Theme!]!
 
     # --- Phases and the live demo surface (build plan L2) ---
-    "number is the project-scoped ordinal — @@unique([projectId, number])."
-    createPhase(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, milestoneLabel: String): Contract!
-    updatePhase(phaseId: ID!, titleFa: String!, titleEn: String!, milestoneLabel: String, contractId: ID): Contract!
+    """
+    number is the contract-scoped ordinal (J4) — PHASE_NUMBER_TAKEN if this
+    contract already has it. plannedEndAt is a YYYY-MM-DD calendar day
+    (INVALID_DATE). Both phase writes are step 1's: STEP_LOCKED once the
+    agreement is approved.
+    """
+    createPhase(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, milestoneLabel: String, plannedEndAt: String): Contract!
+    "plannedEndAt: omitted leaves it, null clears it. contractId, when given, must be the phase's own contract."
+    updatePhase(phaseId: ID!, titleFa: String!, titleEn: String!, milestoneLabel: String, plannedEndAt: String, contractId: ID): Contract!
     deletePhase(phaseId: ID!, contractId: ID): Contract!
     "phaseId: null unassigns the item from whatever phase it was on."
     assignScopeItemToPhase(scopeItemId: ID!, phaseId: ID, contractId: ID): Contract!
@@ -2540,7 +2688,8 @@ export const typeDefs = /* GraphQL */ `
     """
     createServiceRunBillingEntry(runId: ID!, amount: String!, descriptionFa: String!, descriptionEn: String!): ServiceRun!
 
-    setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String): Contract!
+    "sensitive (J4, PD-14): omitted, a new article takes the template's rule and an existing one keeps its flag."
+    setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String, sensitive: Boolean): Contract!
 
     """
     Freeze the current draft as the next contract revision. Refused on a signed
@@ -2550,7 +2699,36 @@ export const typeDefs = /* GraphQL */ `
     "Publish the draft design revision, carrying forward unchanged approvals."
     publishDesignRevision(contractId: ID!): Contract!
 
+    """
+    Hands the contract to the customer. On an AGREEMENT_FIRST contract this is
+    handing over step 1 (J4): BRIEF_MISSING without a brief row, and the customer
+    is told by email and SMS. Publishing what is published is a no-op.
+    """
     publishContract(contractId: ID!): Contract!
+
+    # --- Step 1 — requirements (journeys build plan J4) ---
+    """
+    contracts.author. Writes the brief and syncs its dependencies in the same
+    transaction (one row per key, however often it is set; a provider switched
+    to Root flips the row's side). STEP_NOT_ON_ROAD for a legacy contract,
+    STEP_LOCKED once the agreement is approved; INVALID_BUDGET, INVALID_DEADLINE,
+    DEADLINES_OUT_OF_ORDER, INVALID_SITE_URL, INVALID_SUPPORT_MONTHS,
+    INVALID_ALLOWANCE, INVALID_DATE, TEMPLATE_TYPE_INACTIVE.
+    """
+    setBrief(contractId: ID!, input: BriefInput!): Contract!
+    """
+    contracts.author. An extra (a completeness-checklist area) in or out of
+    scope — declined and agreed. NOT_AN_EXTRA for any other item,
+    EXTRA_IN_PROGRESS to switch one off once work has started.
+    """
+    setExtra(scopeItemId: ID!, included: Boolean!, contractId: ID): Contract!
+    """
+    contracts.author. Replace-all, in the order given: the server stores exactly
+    these rows and never regenerates them from the split. PLAN_ROWS_REQUIRED,
+    TOO_MANY_ROWS, LABEL_REQUIRED, INVALID_AMOUNT, INVALID_TERM,
+    PHASE_WRONG_CONTRACT, STEP_LOCKED.
+    """
+    setPaymentPlan(contractId: ID!, split: PaymentSplit!, invoices: [PlannedInvoiceInput!]!): Contract!
     setContractStatus(contractId: ID!, status: ContractStatus!): Contract!
     """
     Staff (contracts.author). Journeys build plan S1: who designs and who

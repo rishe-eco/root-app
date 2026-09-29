@@ -35,7 +35,7 @@ after(async () => {
 async function seedDemo(opts: { temporary?: boolean; decided?: boolean } = {}) {
   const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({
-    data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' },
+    data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' },
   });
   const demo = await prisma.demo.create({
     data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' },

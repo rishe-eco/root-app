@@ -67,7 +67,7 @@ const SUBMIT_ON_PAGE = `
  *  declared page — the minimum declareBuild has something to disposition. */
 async function seedOpenFeedback() {
   const projectId = f.contract.projectId;
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
   const page = await prisma.demoPage.create({
     data: { demoId: demo.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' },
@@ -167,7 +167,7 @@ test('declareBuild refuses (MISSING_DISPOSITION) when an open feedback item has 
 
 test('declareBuild succeeds with an honestly empty change list when nothing is open', async () => {
   const projectId = f.contract.projectId;
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const declared = ok(await exec(DECLARE_BUILD, { as: developer, variables: { phaseId: phase.id, changes: [] } }));
   assert.equal((declared.declareBuild as { number: number }).number, 1);
 });
@@ -280,7 +280,7 @@ test('publishBuild sets publishedAt and refuses a second time (ALREADY_PUBLISHED
   // A project with nothing open at all, so declareBuild's own disposition
   // requirement is satisfied trivially — this test is about publish, not intake.
   const projectId = f.contract.projectId;
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const declared = ok(await exec(DECLARE_BUILD, { as: developer, variables: { phaseId: phase.id, changes: [] } }));
   const buildId = (declared.declareBuild as { id: string }).id;
 
@@ -296,7 +296,7 @@ test('publishBuild sets publishedAt and refuses a second time (ALREADY_PUBLISHED
 test('build numbers are project-wide and monotonic, never reset per phase', async () => {
   const { phase, itemId } = await seedOpenFeedback();
   const projectId = f.contract.projectId;
-  const secondPhase = await prisma.phase.create({ data: { projectId, number: 2, titleFa: 'فاز ۲', titleEn: 'Phase 2' } });
+  const secondPhase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 2, titleFa: 'فاز ۲', titleEn: 'Phase 2' } });
 
   // ADDRESSED, not CARRIED_FORWARD — carrying forward deliberately leaves
   // the item open (L3b.2's second rule: nothing changed, so nothing about
@@ -321,7 +321,7 @@ test('build numbers are project-wide and monotonic, never reset per phase', asyn
 
 test('a scope-item-origin change entry moves the item to IN_DEMO', async () => {
   const projectId = f.contract.projectId;
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const scopeItem = await prisma.scopeItem.create({
     data: { projectId, key: 'checkout', kind: 'FEATURE', labelFa: 'پرداخت', labelEn: 'Checkout', status: 'IN_BUILD', phaseId: phase.id },
   });
@@ -339,7 +339,7 @@ test('a scope-item-origin change entry moves the item to IN_DEMO', async () => {
 
 test('an unprompted (no-origin) change entry surfaces on the next demo\'s frame as unpromptedChanges, and addDemoFrameLine writes it up', async () => {
   const projectId = f.contract.projectId;
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
 
   const declared = ok(
     await exec(DECLARE_BUILD, {
@@ -383,7 +383,7 @@ test('an unprompted (no-origin) change entry surfaces on the next demo\'s frame 
 
 test('unpromptedChanges is empty for a customer — staff-only, and empty is not a claim that nothing changed', async () => {
   const projectId = f.contract.projectId;
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   ok(
     await exec(DECLARE_BUILD, {
       as: developer,

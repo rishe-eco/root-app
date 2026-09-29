@@ -59,9 +59,14 @@ export function isActiveContract(c: Pick<ContractForVisibility, 'status' | 'proj
  * the customer ever sees it.
  */
 export function contractVisibleTo(user: Viewer, c: ContractForVisibility): boolean {
+  return contractVisibleToStaff(user, c) || (c.customerId === user.id && c.publishedAt !== null);
+}
+
+/** The staff half alone — for authoring guards, where the customer's own edge
+ *  must not count (a customer is never a build author; S1's fourth finding). */
+export function contractVisibleToStaff(user: Viewer, c: Pick<ContractForVisibility, 'status' | 'project'>): boolean {
   if (can(user, 'contracts.readAll')) return true;
-  if (can(user, 'contracts.readActive') && isActiveContract(c)) return true;
-  return c.customerId === user.id && c.publishedAt !== null;
+  return can(user, 'contracts.readActive') && isActiveContract(c);
 }
 
 /**
@@ -91,24 +96,43 @@ export function canAuthorBuild(user: Viewer, c: { developerId: string | null }):
 }
 
 /**
- * Projects hold demos, phases and builds; contracts hold assignees. Until
- * J4 puts a contract on each phase (`Phase.contractId`), a developer's claim
- * on a project's demos is "developer of any contract on it".
+ * A developer's claim on one phase — journeys build plan J4 (PD-5). **A phase
+ * belongs to a contract, and a contract has one developer**, so the claim on a
+ * phase is that contract's own `developerId` (or `assignments.override`): the
+ * two mechanisms of house rule 2, checked separately, exactly as
+ * `canAuthorBuild` states them — this only adds that the contract must be one
+ * the caller may see at all.
  *
- * Since J2 a project can hold a second contract (a new feature for an
- * existing site), so "any" is a real choice rather than a restatement: both
- * contracts' developers may work the shared demos. A **discarded** contract's
- * developer may not — the contract is dead, and a project that has moved on
- * to a second contract with a different developer must not leave the first
- * one holding the keys.
+ * It replaces S1's `canAuthorBuildOnProject`, which existed because a phase
+ * belonged to the project, so "developer of *any* contract on it" was the best
+ * answer available. With two contracts on a project that answer let the first
+ * contract's developer author the second's demos. A discarded contract's
+ * developer is out by the same rule as before: `contractVisibleToStaff` does
+ * not admit a discarded contract to a `contracts.readActive` holder.
  */
-export function canAuthorBuildOnProject(
+export function canAuthorBuildOnPhase(
   user: Viewer,
-  contracts: Array<{ developerId: string | null; status: ContractStatus }>,
+  phaseContract: Pick<ContractForVisibility, 'status' | 'project'> & { developerId: string | null },
+): boolean {
+  return contractVisibleToStaff(user, phaseContract) && canAuthorBuild(user, phaseContract);
+}
+
+/**
+ * The project-level question the developer's queue asks ("may I look at this
+ * project's builds at all?"): the caller holds a claim on **at least one of the
+ * project's phases**. `phaseContracts` are the contracts that own phases on the
+ * project, not every contract on it — a project whose phases are all another
+ * developer's is not the caller's, and one with no phases yet has no builds to
+ * see. Both are `NOT_ASSIGNED`, which the desk never reaches: it opens these
+ * queries from a phase `phasesForBuilds` offered.
+ */
+export function canAuthorBuildOnAnyPhase(
+  user: Viewer,
+  phaseContracts: Array<{ developerId: string | null; status: ContractStatus }>,
 ): boolean {
   if (!can(user, 'builds.author')) return false;
   if (can(user, 'assignments.override')) return true;
-  return contracts.some((c) => c.status !== 'DISCARDED' && c.developerId === user.id);
+  return phaseContracts.some((c) => c.status !== 'DISCARDED' && c.developerId === user.id);
 }
 
 /**
@@ -199,14 +223,27 @@ export function mayReadPlannedDates(user: Viewer, agreementApproved: boolean): b
 }
 
 /**
- * PD-14, the part S1 cannot leave for J4: the moment design and development
+ * PD-14, the part S1 could not leave for J4: the moment design and development
  * can read active contracts, the fee on those contracts is one field away.
  * The customer always reads their own; staff read it only with `money.read`.
- * J4 extends the same rule to the brief's budget, the payment plan and the
- * bodies of sensitive articles — this is the function they will call.
+ * S1 put the fee, the frozen fee and the draft behind it; **J4 adds the
+ * brief's budget cap, the payment plan and its invoices, and the bodies of
+ * sensitive articles** — published and draft — and feedback about any of them
+ * (`visibleItem`). One function for every money field, so no field can decide
+ * for itself who counts.
  */
 export function mayReadMoney(user: Viewer, c: { customerId: string }): boolean {
   return c.customerId === user.id || can(user, 'money.read');
+}
+
+/**
+ * An article's body (PD-14, J4): withheld when the article is `sensitive` — its
+ * prose is about money — and the viewer may not read the contract's money. The
+ * title and number are never withheld: that the article exists is not the
+ * secret.
+ */
+export function mayReadArticleBody(user: Viewer, c: { customerId: string }, article: { sensitive: boolean }): boolean {
+  return !article.sensitive || mayReadMoney(user, c);
 }
 
 /**

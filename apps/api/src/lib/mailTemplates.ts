@@ -560,3 +560,39 @@ export function requestArchivedEmail(
     text: `${params.customerName} عزیز،\n\nدرخواستِ شما با عنوانِ «${params.requestTitle}» بایگانی شد. دلیل:\n\n${params.reason}\n\n${params.portalUrl}`,
   };
 }
+
+/**
+ * Journeys build plan J4: sales has handed step 1 to the customer
+ * (`publishContract` on a new-road contract) — the first time the contract is
+ * theirs to read. It says what they will find and that the unfinished parts are
+ * Root's to complete, not theirs to fill in: a customer told "your requirements
+ * are ready" who then finds blanks reads the blanks as Root's mistake.
+ */
+export function briefSharedEmail(
+  locale: string | null | undefined,
+  params: { customerName: string; projectTitleFa: string; projectTitleEn: string; portalUrl: string },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `Your project requirements are ready to read — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Root has written down what you asked for on <strong>${title}</strong>: the kind of site, your budget and deadlines, what each side provides, the phases and the payment plan. Please read it and comment on anything that is not right. Some parts may still be marked as being completed by Root.</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\nRoot has written down what you asked for on "${params.projectTitleEn}". Please read it and comment on anything that is not right.\n\n${params.portalUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  return {
+    subject: `نیازمندی‌های پروژه‌ی شما برای خواندن آماده است — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>ریشه آنچه را برای «${title}» خواسته‌اید نوشته است: نوعِ سایت، بودجه و مهلت‌ها، تعهدِ هر طرف، فازها و برنامه‌ی پرداخت. لطفاً بخوانید و هر جا درست نیست نظر بگذارید. ممکن است بعضی بخش‌ها هنوز به‌عنوانِ «در حال تکمیل توسط ریشه» علامت خورده باشد.</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\nریشه آنچه را برای «${params.projectTitleFa}» خواسته‌اید نوشته است. لطفاً بخوانید و هر جا درست نیست نظر بگذارید.\n\n${params.portalUrl}`,
+  };
+}

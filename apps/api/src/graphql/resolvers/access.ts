@@ -1,17 +1,20 @@
 import { GraphQLError } from 'graphql';
-import type { User } from '@prisma/client';
+import type { Prisma, User } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { requireCapability, type Context } from '../../context.js';
+import { can } from '../../lib/capabilities.js';
 import {
-  canAuthorBuildOnProject,
+  canAuthorBuildOnAnyPhase,
+  canAuthorBuildOnPhase,
   canAuthorDesign,
   contractVisibleTo,
+  contractVisibleToStaff,
   projectVisibleToStaff,
 } from '../../lib/visibility.js';
 
 /**
- * The two authoring guards that need a row, not just a capability (journeys
- * build plan S1): design work on a contract, and build work on a project.
+ * The authoring guards that need a row, not just a capability (journeys build
+ * plan S1): design work on a contract, and build work on a phase or a project.
  * `lib/visibility.ts` decides; this file loads what it needs and turns "no"
  * into the right code.
  *
@@ -42,13 +45,44 @@ export async function requireDesignAuthorOn(ctx: Context, contractId: string): P
   return user;
 }
 
+/**
+ * Build work on one phase (journeys build plan J4): a phase belongs to a
+ * contract, so the claim is that contract's own developer — `canAuthorBuildOnPhase`.
+ * The staff half of visibility only: a customer is never a build author, so
+ * the project's own customer edge must not count here.
+ */
+export async function requireBuildAuthorOnPhase(ctx: Context, phaseId: string): Promise<User> {
+  const user = requireCapability(ctx, 'builds.author');
+  const phase = await prisma.phase.findUnique({
+    where: { id: phaseId },
+    select: { contract: { select: { status: true, developerId: true, project: { select: { status: true } } } } },
+  });
+  if (!phase || !contractVisibleToStaff(user, phase.contract)) {
+    throw new GraphQLError('No such phase.', { extensions: { code: 'NOT_FOUND' } });
+  }
+  if (!canAuthorBuildOnPhase(user, phase.contract)) {
+    throw new GraphQLError('You are not the developer of this phase.', {
+      extensions: { code: 'NOT_ASSIGNED' },
+    });
+  }
+  return user;
+}
+
+/**
+ * The project-level guard for the developer's queue reads — the caller has a
+ * claim on at least one of the project's phases (`canAuthorBuildOnAnyPhase`).
+ * The reads themselves are then narrowed to the phases the caller holds
+ * (`buildPhaseScope`), so a project with two contracts and two developers gives
+ * each of them their own queue.
+ */
 export async function requireBuildAuthorOnProject(ctx: Context, projectId: string): Promise<User> {
   const user = requireCapability(ctx, 'builds.author');
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
       status: true,
-      contracts: { select: { status: true, developerId: true } },
+      contracts: { select: { status: true } },
+      phases: { select: { contract: { select: { status: true, developerId: true } } } },
     },
   });
   // The staff half only: a customer is never a build author, so the
@@ -56,10 +90,21 @@ export async function requireBuildAuthorOnProject(ctx: Context, projectId: strin
   if (!project || !projectVisibleToStaff(user, project)) {
     throw new GraphQLError('No such project.', { extensions: { code: 'NOT_FOUND' } });
   }
-  if (!canAuthorBuildOnProject(user, project.contracts)) {
+  if (!canAuthorBuildOnAnyPhase(user, project.phases.map((p) => p.contract))) {
     throw new GraphQLError('You are not the developer of this project.', {
       extensions: { code: 'NOT_ASSIGNED' },
     });
   }
   return user;
+}
+
+/**
+ * The phases a build author works, as a `where` on `Phase` — every phase for
+ * `assignments.override`, otherwise those whose contract the caller develops
+ * and that are not discarded. What the developer's queue reads filter by, so
+ * the queue and the guards above agree about whose work a phase is.
+ */
+export function buildPhaseScope(user: User): Prisma.PhaseWhereInput {
+  if (can(user, 'assignments.override')) return {};
+  return { contract: { developerId: user.id, status: { not: 'DISCARDED' } } };
 }

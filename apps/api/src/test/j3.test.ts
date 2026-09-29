@@ -126,8 +126,8 @@ test('StepApproval: two NULL-phase rows for one step are refused; a different st
   // …and it is per step, not per contract.
   await insert('DESIGN');
 
-  const p1 = await prisma.phase.create({ data: { projectId: f.contract.projectId, number: 1, titleFa: 'ف۱', titleEn: 'P1' } });
-  const p2 = await prisma.phase.create({ data: { projectId: f.contract.projectId, number: 2, titleFa: 'ف۲', titleEn: 'P2' } });
+  const p1 = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 1, titleFa: 'ف۱', titleEn: 'P1' } });
+  const p2 = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 2, titleFa: 'ف۲', titleEn: 'P2' } });
   // A demo is approved once per phase: two different phases are fine…
   await insert('DEMO', p1.id);
   await insert('DEMO', p2.id);
@@ -152,7 +152,7 @@ test('StepApproval: two NULL-phase rows for one step are refused; a different st
 });
 
 test('a phase with an approval cannot be deleted out from under its lock (the FK restricts)', async () => {
-  const phase = await prisma.phase.create({ data: { projectId: f.contract.projectId, number: 1, titleFa: 'ف', titleEn: 'P' } });
+  const phase = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 1, titleFa: 'ف', titleEn: 'P' } });
   await prisma.stepApproval.create({ data: { contractId: f.contract.id, step: 'DEMO', phaseId: phase.id, approvedById: f.admin.id } });
   await assert.rejects(() => prisma.phase.delete({ where: { id: phase.id } }), /Foreign key constraint|StepApproval_phaseId_fkey/i);
 });
@@ -194,7 +194,7 @@ test('the migration backfills existing contracts DESIGN_FIRST and leaves new one
   assert.match(col.column_default, /AGREEMENT_FIRST/);
 });
 
-test('createContract states its sequence: DESIGN_FIRST until J4 makes the new road usable', async () => {
+test('createContract states its sequence: DESIGN_FIRST until J7 builds the agreement gate', async () => {
   const data = ok(
     await exec(
       `mutation($i: CreateContractInput!){ createContract(input: $i) { id sequence } }`,
@@ -241,7 +241,7 @@ test('a DESIGN_FIRST contract walks design → agreement exactly as the gate doe
 });
 
 test('a DESIGN_FIRST contract shows a demo step per phase, done when the phase’s items are all accepted', async () => {
-  const phase = await prisma.phase.create({ data: { projectId: f.contract.projectId, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
   let v = await view(f.customer);
   assert.deepEqual(steps(v), ['DESIGN=CURRENT', 'AGREEMENT=UPCOMING', 'DEMO:phase=UPCOMING']);
   assert.equal(v.wizard[2].phaseId, phase.id);
@@ -304,8 +304,8 @@ test('an AGREEMENT_FIRST contract starts at requirements, is Root’s move, and 
   assert.ok(v.timeline.some((t) => t.kind === 'STEP_APPROVED' && t.step === 'AGREEMENT' && t.by === 'ROOT'));
 });
 
-test('a project’s phases belong to its first contract; a second contract gets the placeholder demo (until J4)', async () => {
-  await prisma.phase.create({ data: { projectId: f.contract.projectId, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
+test('each contract’s road has the phases it delivers (J4, PD-5); one with none gets the placeholder demo', async () => {
+  const firstPhase = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
   const second = await prisma.contract.create({
     data: {
       ref: 'RC-TEST-002',
@@ -326,14 +326,24 @@ test('a project’s phases belong to its first contract; a second contract gets 
   // Neither the phases' builds nor a demo's progress leak onto the second contract's summary.
   assert.equal(other.statusSummary.lastProgressAt, null);
   assert.equal(other.statusSummary.daysSinceProgress, null);
+
+  // Give the second contract a phase of its own — with the same number, which
+  // is contract-scoped since J4 — and each road shows exactly its own.
+  const secondPhase = await prisma.phase.create({
+    data: { projectId: f.contract.projectId, contractId: second.id, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1 (second)' },
+  });
+  const firstAgain = await view(f.customer);
+  const secondAgain = await view(f.customer, { id: second.id });
+  assert.deepEqual(firstAgain.wizard.filter((w) => w.step === 'DEMO').map((w) => w.phaseId), [firstPhase.id]);
+  assert.deepEqual(secondAgain.wizard.filter((w) => w.step === 'DEMO').map((w) => w.phaseId), [secondPhase.id]);
 });
 
 // ---- assertStepOpen against the database ----------------------------------------------------
 
 test('assertStepOpenOn: STEP_LOCKED once the sealing approval exists — per step, per phase, and never on the legacy road', async () => {
   await prisma.contract.update({ where: { id: f.contract.id }, data: { sequence: 'AGREEMENT_FIRST' } });
-  const p1 = await prisma.phase.create({ data: { projectId: f.contract.projectId, number: 1, titleFa: 'ف۱', titleEn: 'P1' } });
-  const p2 = await prisma.phase.create({ data: { projectId: f.contract.projectId, number: 2, titleFa: 'ف۲', titleEn: 'P2' } });
+  const p1 = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 1, titleFa: 'ف۱', titleEn: 'P1' } });
+  const p2 = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 2, titleFa: 'ف۲', titleEn: 'P2' } });
 
   // Before any approval every step is open.
   for (const step of ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT', 'DESIGN'] as const) {
@@ -504,7 +514,7 @@ test('the pending banner becomes DRAFT_TO_REVIEW and ROUND_PUBLISHED attention, 
 });
 
 test('demo items addressed in a published build are the customer’s to accept — one line per phase, only once the build is published', async () => {
-  const phase = await prisma.phase.create({ data: { projectId: f.contract.projectId, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
   const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com', publishedAt: new Date('2026-09-10T08:00:00Z') } });
   const page = (key: string) =>
     prisma.demoPage.create({ data: { demoId: demo.id, key, labelFa: key, labelEn: key, canonicalPath: `/${key}` } });
@@ -724,7 +734,7 @@ async function enrich() {
   }
 
   // A phase with a published demo and a draft demo, and an addressed item in a published build.
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
   const published = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://one.example.com', publishedAt: new Date() } });
   await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://DRAFT.example.com' } });
   const build = await prisma.build.create({

@@ -1,10 +1,11 @@
-import type { Role as RoleName, StepKind } from '@prisma/client';
+import type { Prisma, Role as RoleName, StepKind } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { viewerOf, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
 import {
   isContractReader,
   mayReadContactOf,
+  mayReadArticleBody,
   mayReadMoney,
   requestVisibleTo,
   visibleComment,
@@ -19,6 +20,8 @@ import { isOverdue } from '../../lib/dependency.js';
 import { summarizeRows } from '../../lib/serviceImport.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
 import { feedbackItemInclude } from './feedback.js';
+import { withArticleSensitivity } from './articleSensitivity.js';
+import { isTemplateSensitiveArticle } from '../../lib/templates.js';
 
 /**
  * Field resolvers for the object types — the layer that decides what a stored
@@ -73,7 +76,9 @@ export const Contract = {
       include: feedbackItemInclude,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
-    return items.filter((i) => visibleItem(i, viewer, c));
+    // With the sensitivity of the article a DRAFT note is about (J4) — S2's
+    // version of this filter passed none.
+    return (await withArticleSensitivity(items)).filter((i) => visibleItem(i, viewer, c));
   },
 
   /**
@@ -107,14 +112,32 @@ export const Contract = {
    * The customer reads the *published* text, not Root's working copy. Ids are
    * synthesized per revision because a snapshot article is not a row — it is
    * a position in a frozen document.
+   *
+   * **The body of a sensitive article is null for staff without `money.read`
+   * who are not the customer** (PD-14, J4) — the title and number stay, since
+   * that the article exists is not the secret.
    */
-  articles: (c: FullContract) => {
+  articles: (c: FullContract, _a: unknown, ctx: Context) => {
     const snapshot = readContractSnapshot(c.currentContractRevision?.snapshot ?? null);
     if (!snapshot) return [];
-    return snapshot.articles.map((a) => ({
-      id: `${c.currentContractRevisionId}:${a.number}`,
-      ...a,
-    }));
+    const viewer = viewerOf(ctx);
+    return snapshot.articles.map((a) => {
+      // Sensitivity (PD-14, J4) is read from the live row with the same number
+      // — the snapshot carries no such flag and its bytes must not change. A
+      // row that has since been deleted falls back to the template's own rule
+      // (Fees, Payment Schedule), so deleting a money article from the draft
+      // cannot un-hide the published one.
+      const live = c.articles.find((row) => row.number === a.number);
+      const sensitive = live ? live.sensitive : isTemplateSensitiveArticle(a.number, a.titleEn);
+      const readable = mayReadArticleBody(viewer, c, { sensitive });
+      return {
+        id: `${c.currentContractRevisionId}:${a.number}`,
+        ...a,
+        sensitive,
+        bodyFa: readable ? a.bodyFa : null,
+        bodyEn: readable ? a.bodyEn : null,
+      };
+    });
   },
 
   /**
@@ -162,7 +185,13 @@ export const Contract = {
       titleFa: c.titleFa,
       titleEn: c.titleEn,
       amount: c.amount === null || !mayReadMoney(user, c) ? null : c.amount.toString(),
-      articles: c.articles,
+      // A sensitive article's body is withheld here too (J4): `contracts.author`
+      // and `money.read` are different capabilities, and the draft is where the
+      // fee is written in words.
+      articles: c.articles.map((a) => {
+        const readable = mayReadArticleBody(user, c, a);
+        return { ...a, bodyFa: readable ? a.bodyFa : null, bodyEn: readable ? a.bodyEn : null };
+      }),
       contentHash: hash,
       dirty,
     };
@@ -497,6 +526,53 @@ export const Build = {
   },
 };
 
+/**
+ * A project's or a contract's phases with their demos, review frames and
+ * feedback — one query shape for both (journeys build plan J4): `Project.phases`
+ * is every phase of the project (what the registry-level demo screens read),
+ * `Contract.phases` the ones this contract delivers (what step 1, the wizard's
+ * demo steps and the desk's phase board read). The draft-demo filter is the
+ * viewer's, exactly as L3 wrote it.
+ */
+export function phasesWhere(where: Prisma.PhaseWhereInput, ctx: Context) {
+  const user = viewerOf(ctx);
+  const staff = isContractReader(user);
+  return prisma.phase.findMany({
+    where,
+    orderBy: [{ number: 'asc' }, { createdAt: 'asc' }],
+    include: {
+      scopeItems: { orderBy: { position: 'asc' } },
+      demos: {
+        where: staff ? {} : { publishedAt: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          pages: { include: { pageDesign: true } },
+          unmatchedPaths: { orderBy: { lastSeenAt: 'desc' } },
+          frame: {
+            include: {
+              authoredBy: true,
+              lines: {
+                orderBy: [{ kind: 'asc' }, { position: 'asc' }],
+                include: {
+                  scopeItem: true,
+                  feedbackItem: { include: feedbackItemInclude },
+                  // Build plan L3b's third source, provenance only — see
+                  // DemoFrameLine.buildChangeEntryId's own comment.
+                  buildChangeEntry: true,
+                },
+              },
+            },
+          },
+          feedbackItems: {
+            orderBy: { createdAt: 'desc' },
+            include: feedbackItemInclude,
+          },
+        },
+      },
+    },
+  });
+}
+
 export const Project = {
   /**
    * Build plan L5: whose board this is, for the desk's cross-project
@@ -535,44 +611,7 @@ export const Project = {
    * every feedback item, come along eagerly for the same reason the pages
    * do: one round trip, matching this resolver's own existing shape.
    */
-  phases: (p: { id: string }, _a: unknown, ctx: Context) => {
-    const user = viewerOf(ctx);
-    const staff = isContractReader(user);
-    return prisma.phase.findMany({
-      where: { projectId: p.id },
-      orderBy: { number: 'asc' },
-      include: {
-        scopeItems: { orderBy: { position: 'asc' } },
-        demos: {
-          where: staff ? {} : { publishedAt: { not: null } },
-          orderBy: { createdAt: 'desc' },
-          include: {
-            pages: { include: { pageDesign: true } },
-            unmatchedPaths: { orderBy: { lastSeenAt: 'desc' } },
-            frame: {
-              include: {
-                authoredBy: true,
-                lines: {
-                  orderBy: [{ kind: 'asc' }, { position: 'asc' }],
-                  include: {
-                    scopeItem: true,
-                    feedbackItem: { include: feedbackItemInclude },
-                    // Build plan L3b's third source, provenance only — see
-                    // DemoFrameLine.buildChangeEntryId's own comment.
-                    buildChangeEntry: true,
-                  },
-                },
-              },
-            },
-            feedbackItems: {
-              orderBy: { createdAt: 'desc' },
-              include: feedbackItemInclude,
-            },
-          },
-        },
-      },
-    });
-  },
+  phases: (p: { id: string }, _a: unknown, ctx: Context) => phasesWhere({ projectId: p.id }, ctx),
 
   /**
    * Coarse progress (lib/phase.ts), derived fresh on every read — never a

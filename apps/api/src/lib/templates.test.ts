@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
+  ARTICLES,
   CHECKLIST,
   PAGES,
   PLACEHOLDER_SCOPE,
   SCOPE,
   TEMPLATE_KINDS,
   TEMPLATE_TYPES,
+  isTemplateSensitiveArticle,
   scopeKindForKey,
 } from './templates.js';
 import { KEY_PATTERN, SLUG_PATTERN, checkSlug, checkTemplateScope } from './templateScope.js';
@@ -57,6 +59,26 @@ test('the migration backfill states the same rule: its page list is PAGES, its n
   assert.deepEqual(inSql, PAGES.map(([key]) => key), 'migration page list and PAGES have drifted');
 
   assert.match(block, /"key" LIKE 'checklist\.%'/);
+});
+
+test('isTemplateSensitiveArticle: Fees and Payment Schedule, by number and title together (PD-14, J4)', () => {
+  const sensitive = ARTICLES.filter(([number, , titleEn]) => isTemplateSensitiveArticle(number, titleEn)).map(([number, , titleEn]) => [number, titleEn]);
+  assert.deepEqual(sensitive, [
+    [4, 'Fees'],
+    [5, 'Payment Schedule'],
+  ]);
+  // A hand-numbered contract's unrelated article 4, and a renamed money article, are not the template's.
+  assert.equal(isTemplateSensitiveArticle(4, 'Warranties'), false);
+  assert.equal(isTemplateSensitiveArticle(9, 'Fees'), false);
+});
+
+test('the J4 migration flags exactly the template’s money articles — the same pair, by number and title', () => {
+  const sql = read('../../prisma/migrations/20260930100000_j4_brief_plan_phases/migration.sql');
+  const block = sql.slice(sql.indexOf('-- BACKFILL:BEGIN'), sql.indexOf('-- BACKFILL:END'));
+  assert.ok(block.length > 0, 'the backfill markers are missing');
+  const pairs = [...block.matchAll(/"number" = (\d+) AND "titleEn" = '([^']*)'/g)].map((m) => [Number(m[1]), m[2]]);
+  const template = ARTICLES.filter(([number, , titleEn]) => isTemplateSensitiveArticle(number, titleEn)).map(([number, , titleEn]) => [number, titleEn]);
+  assert.deepEqual(pairs, template, 'the migration and the template have drifted');
 });
 
 test('the SDL, the schema and the template kinds agree on ScopeKind', () => {

@@ -18,9 +18,10 @@ import {
   requestSubmittedEmail,
   requestMessageEmail,
   requestArchivedEmail,
+  briefSharedEmail,
   type MailContent,
 } from './mailTemplates.js';
-import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms } from './smsTemplates.js';
+import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms, briefSharedSms } from './smsTemplates.js';
 
 /**
  * The notification router (journeys build plan J1). One call, `notify(user,
@@ -37,7 +38,8 @@ import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms }
  * `INVITE_CUSTOMER` — the identity flow where a customer may have no email at
  * all, so SMS is not an enhancement there, it can be the *only* way the
  * invite reaches them — and, since J2, for the three request events
- * (`REQUEST_SUBMITTED`, `REQUEST_MESSAGE`, `REQUEST_ARCHIVED`): a customer who
+ * (`REQUEST_SUBMITTED`, `REQUEST_MESSAGE`, `REQUEST_ARCHIVED`) and, since J4,
+ * `BRIEF_SHARED` (step 1 handed over): a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
@@ -113,6 +115,11 @@ export type NotifyEvent =
   | {
       kind: 'REQUEST_ARCHIVED';
       params: { customerName: string; requestTitle: string; reason: string; portalUrl: string };
+    }
+  // Journeys build plan J4 — sales handed step 1 to the customer.
+  | {
+      kind: 'BRIEF_SHARED';
+      params: { customerName: string; projectTitleFa: string; projectTitleEn: string; portalUrl: string };
     };
 
 /** Every event's email rendering — always defined, since every event this
@@ -147,6 +154,8 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return requestMessageEmail(locale, event.params);
     case 'REQUEST_ARCHIVED':
       return requestArchivedEmail(locale, event.params);
+    case 'BRIEF_SHARED':
+      return briefSharedEmail(locale, event.params);
   }
 }
 
@@ -168,6 +177,10 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
       return requestMessageSms(locale, event.params);
     case 'REQUEST_ARCHIVED':
       return requestArchivedSms(locale, event.params);
+    // J4: a customer who signs in by phone alone would otherwise never learn
+    // step 1 is theirs to read — the same reason the request events have one.
+    case 'BRIEF_SHARED':
+      return briefSharedSms(locale, event.params);
     default:
       return null;
   }

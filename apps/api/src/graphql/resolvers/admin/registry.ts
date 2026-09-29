@@ -11,7 +11,8 @@ import {
 } from '../../../lib/scope.js';
 import { scopeKindForKey } from '../../../lib/templates.js';
 import { reload } from '../contracts.js';
-import { assertProjectActive, primaryContractId, reloadOnProject } from './shared.js';
+import { assertProjectActive, contractOnProject, primaryContractId, reloadOnProject } from './shared.js';
+import { syncBriefDependencies } from '../brief.js';
 
 /**
  * The scope registry (build plan L1; spec §3): create/edit/reorder items, set
@@ -103,16 +104,26 @@ export const registryMutations = {
     args: { scopeItemId: string; status: ScopeStatus; reason?: string | null; contractId?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.author');
+    const user = requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
-    await prisma.scopeItem.update({
-      where: { id: item.id },
-      data: {
-        status: args.status,
-        declinedReason: args.status === 'DECLINED' ? (args.reason ?? null) : null,
-      },
+    const data = {
+      status: args.status,
+      declinedReason: args.status === 'DECLINED' ? (args.reason ?? null) : null,
+    };
+    if (item.kind !== 'EXTRA') {
+      await prisma.scopeItem.update({ where: { id: item.id }, data });
+      return reloadOnProject(item.projectId, args.contractId);
+    }
+    // An extra (J4) implies commitments on the dependency board, so changing its
+    // status here — the generic door, which `setExtra` deliberately is not —
+    // must leave the board saying what the registry says. Removals and side
+    // flips only: a row needs a date, and the brief's form is where one is set.
+    const contractId = await contractOnProject(item.projectId, args.contractId);
+    await prisma.$transaction(async (tx) => {
+      await tx.scopeItem.update({ where: { id: item.id }, data });
+      await syncBriefDependencies(tx, contractId, user.id);
     });
-    return reloadOnProject(item.projectId, args.contractId);
+    return reloadOnProject(item.projectId, contractId);
   },
 
   setScopeItemFlags: async (

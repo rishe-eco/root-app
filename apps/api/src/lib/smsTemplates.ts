@@ -30,6 +30,8 @@ export { LOCALES, resolveLocale };
  *     of unbounded length, which would make the segment count (and the price)
  *     the customer's to set; the email carries them and the SMS points at the
  *     page.
+ *   - `briefSharedSms` (journeys build plan J4): **one placeholder**, the URL —
+ *     no title, for the same reason.
  *
  * Codes are printed in Latin digits in both languages, never through
  * `toPersianDigits` — house rule 14's own exception for an identifier
@@ -78,4 +80,12 @@ export function requestArchivedSms(locale: string | null | undefined, params: { 
     return { text: `Your Root request was archived. See why: ${params.portalUrl}` };
   }
   return { text: `درخواست شما در ریشه بایگانی شد. دلیل را ببینید: ${params.portalUrl}` };
+}
+
+/** J4 — to the customer, when sales hands step 1 over. */
+export function briefSharedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `Your project requirements are ready on Root: ${params.portalUrl}` };
+  }
+  return { text: `نیازمندی‌های پروژه‌ی شما در ریشه آماده است: ${params.portalUrl}` };
 }

@@ -30,6 +30,30 @@ export const ARTICLES: Array<[number, string, string, string?, string?]> = [
   [15, 'پیوست ۱ — فهرست ویژگی‌ها', 'Appendix 1 — Feature list'],
 ];
 
+/**
+ * The articles whose prose is about money (journeys build plan J4, PD-14): *Fees*
+ * and *Payment Schedule*, by number and English title. The template sets
+ * `Article.sensitive` on exactly these, and the J4 migration backfilled the
+ * same pair, so a contract that predates the flag and one made after it agree.
+ * A bare number would flag a hand-numbered contract's unrelated article 4; the
+ * title alone would flag one renamed on purpose — both together is the template.
+ *
+ * **The convention, stated where the template lives: money appears only in
+ * these articles and in structured fields** (the brief's budget, the payment
+ * plan, the fee). Prose that names a price in any other article is invisible to
+ * the withholding — which is why the convention is written here and not left to
+ * be discovered. Everything withheld is withheld through `mayReadMoney`
+ * (`lib/visibility.ts`): staff without `money.read` who are not the customer.
+ */
+const SENSITIVE_ARTICLES: ReadonlyArray<readonly [number, string]> = [
+  [4, 'Fees'],
+  [5, 'Payment Schedule'],
+];
+
+export function isTemplateSensitiveArticle(number: number, titleEn: string): boolean {
+  return SENSITIVE_ARTICLES.some(([n, title]) => n === number && title === titleEn);
+}
+
 /** [key, labelFa, labelEn] */
 export const SCOPE: Array<[string, string, string]> = [
   ['bilingual', 'دوزبانه (فارسی-اول) با چیدمانِ راست‌به‌چپ', 'Bilingual (Persian-first) with full RTL'],

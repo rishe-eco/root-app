@@ -457,6 +457,14 @@ model Contract {
   /// is about (PD-1, PD-5).
   feedbackItems FeedbackItem[]
 
+  /// Journeys build plan J4 (PD-5) — step 1: what the customer asked for,
+  /// what they will pay and when, and the phases that deliver it. All three
+  /// hang off the contract, not the project: a second contract on the same
+  /// project (a feature for an existing site) has its own.
+  brief       ContractBrief?
+  paymentPlan PaymentPlan?
+  phases      Phase[]
+
   // ScopeItem re-parented to Project at L1 (build plan D1) — reached here via
   // `project.scopeItems`, never a direct relation. See Project and ScopeItem
   // below.
@@ -1139,8 +1147,27 @@ model Phase {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  /// Project-scoped ordinal, not a global one — two projects both have a
-  /// "phase 1".
+  /// Journeys build plan J4 (PD-5): **the contract this phase delivers.** Until
+  /// J4 a phase belonged to the project and "the project's first contract owns
+  /// the phases" was a policy (`ownsProjectWork`); now it is a column, and the
+  /// wizard's demo steps, a developer's claim on a phase and the payment
+  /// plan's links all read it. The migration backfilled every existing phase
+  /// with its project's primary contract. Restrict: a contract with phases is
+  /// not deletable out from under them. The project stays as the registry-level
+  /// owner (demos, builds and the registry are still the project's) — and
+  /// `projectId` must equal the contract's project, held by the mutations,
+  /// since Postgres cannot say "same project as my contract" without a
+  /// composite key nothing else needs.
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+
+  /// The day this phase is planned to end. A calendar day, not an instant
+  /// (PD-19): a `date` column, rendered in UTC.
+  plannedEndAt DateTime? @db.Date
+
+  /// Contract-scoped ordinal (J4; it was project-scoped before): two
+  /// contracts on one project each have a "phase 1" — the wizard and the
+  /// payment plan speak of *this contract's* phases.
   number  Int
   titleFa String
   titleEn String
@@ -1153,21 +1180,25 @@ model Phase {
   /// meaning before a right one (R1's own reasoning, reapplied).
   milestoneLabel String?
 
-  scopeItems     ScopeItem[]
-  demos          Demo[]
-  builds         Build[]
+  scopeItems      ScopeItem[]
+  demos           Demo[]
+  builds          Build[]
   /// Build plan L6, spec §8's milestone linkage — every charge gated on this
   /// phase's acceptance. See BillingEntry.phaseId's own comment for why this
   /// reuses the phase rather than a separate Milestone model.
-  billingEntries BillingEntry[]
+  billingEntries  BillingEntry[]
   /// Journeys build plan J3 — the demo approvals (one per phase, J10).
-  stepApprovals  StepApproval[]
-  feedbackItems  FeedbackItem[]
+  stepApprovals   StepApproval[]
+  feedbackItems   FeedbackItem[]
+  /// Journeys build plan J4 — the payment plan's invoices that fall due at
+  /// this phase's acceptance.
+  plannedInvoices PlannedInvoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([projectId, number])
+  @@unique([contractId, number])
+  @@index([projectId])
 }
 
 /// The live staging site, embedded (D2) — never a set of captures, and never
@@ -1734,6 +1765,17 @@ model Article {
   bodyFa  String?
   bodyEn  String?
 
+  /// Journeys build plan J4, PD-14: an article whose prose is about money
+  /// (the template sets it on *Fees* and *Payment Schedule*). Its body is
+  /// withheld — published and draft alike — from staff without `money.read`
+  /// who are not the customer, and feedback anchored to it is hidden from them
+  /// too (PD-21). **Convention, stated where the template lives
+  /// (`lib/templates.ts`): money appears only in those articles and in
+  /// structured fields.** Not part of the snapshot — a published revision's
+  /// bytes are unchanged — so a revision's articles read their sensitivity from
+  /// the live row with the same number.
+  sensitive Boolean @default(false)
+
   @@unique([contractId, number])
 }
 
@@ -2154,7 +2196,159 @@ model Dependency {
   /// dressed up as though it were checked.
   verifiedNote String?
 
+  /// Journeys build plan J4: the step-1 brief owns this row — `domain`, `host`,
+  /// `content`, `gateway`, `smsLine` or `enamad` (`lib/brief.ts`). **Partial
+  /// unique index `Dependency_briefKey_key`** on `(projectId, briefKey) WHERE
+  /// briefKey IS NOT NULL`, hand-written in the migration (Prisma cannot
+  /// express a `WHERE`): setting the brief twice never makes a second row. A
+  /// row with a key cannot be deleted from the board (`BRIEF_OWNED`) — change
+  /// the brief instead.
+  briefKey  String?
+  /// Who verifies it: the developer (`dependencies.verifyTechnical`) for a
+  /// technical row — the domain, the host — and sales
+  /// (`dependencies.verifyGeneral`) for the rest.
+  technical Boolean @default(false)
+
   @@index([projectId, dueAt])
+}
+
+// ---------------------------------------------------------------------------
+// Step 1 — requirements (journeys build plan J4)
+// ---------------------------------------------------------------------------
+
+/// Whether the customer wants a new site or a feature for one that exists
+/// (the founder's Q5: the second is a new contract on the existing project).
+enum BriefKind {
+  NEW_SITE
+  FEATURE_FOR_EXISTING
+}
+
+/// PD-13: three tiers underneath, two words on screen — `THEME_PICK` is the
+/// pre-made path, `CLAUDE_ASSISTED` and `SENIOR_DESIGNER` the custom one.
+/// Stored as the tier, rendered as the path.
+enum DesignTier {
+  THEME_PICK
+  CLAUDE_ASSISTED
+  SENIOR_DESIGNER
+}
+
+/// How the fee is split — **descriptive, not generative**: the rows are the
+/// plan. The desk form uses the split to *propose* rows; the server stores
+/// exactly the rows it is given and never regenerates them from this.
+enum PaymentSplit {
+  LUMP_SUM
+  INSTALLMENTS
+  MONTHLY
+}
+
+/// Step 1, as sales types it from the request chat and the customer reads it
+/// (journeys build plan J4). One row per contract (`contractId @unique`), and
+/// **an incomplete brief is a brief**: `setBrief` writes whatever it is given,
+/// `briefCompleteness` (lib/brief.ts) names what is still missing, and the
+/// portal shows that as "Root is completing this" rather than hiding the step.
+///
+/// **Two hand-written CHECKs** (Prisma cannot express them), each proven by a
+/// direct insert in `j4.test.ts`:
+///
+/// - `ContractBrief_deadlines_ordered` — the ideal deadline is not after the
+///   hard one when both are set. A NULL on either side makes the comparison
+///   NULL, which a CHECK passes — the intended reading ("when both set").
+/// - `ContractBrief_allowances_positive` — every allowance that is set is
+///   above zero. An unset allowance passes for the same NULL reason.
+///
+/// **Calendar days, not instants** (PD-19): the two deadlines are `date`
+/// columns, rendered in UTC. **`budgetCap` is money** (PD-14): resolved to null
+/// for staff without `money.read`, and it is *not* `Contract.amount` — the cap
+/// is what the customer said they can spend, the amount is what Root quoted,
+/// and nothing prefills one from the other.
+model ContractBrief {
+  id         String   @id @default(cuid())
+  contractId String   @unique
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  kind            BriefKind
+  /// The site a `FEATURE_FOR_EXISTING` brief is about.
+  existingSiteUrl String?
+
+  templateTypeId String
+  templateType   TemplateType @relation(fields: [templateTypeId], references: [id], onDelete: Restrict)
+
+  designTier DesignTier
+
+  budgetCap     BigInt?
+  idealDeadline DateTime? @db.Date
+  hardDeadline  DateTime? @db.Date
+
+  domainName        String?
+  /// Who provides the domain, the host and the content — the three commitments
+  /// every site needs. Setting one makes `briefDependencies` imply a row on
+  /// the dependency board on that side; switching it to `ROOT` flips the row.
+  domainProvidedBy  DependencySide?
+  hostProvidedBy    DependencySide?
+  contentProvidedBy DependencySide?
+
+  /// Months of support after delivery.
+  supportMonths Int?
+
+  /// The allowances J8–J10 count rounds against. `wireframeIterations`
+  /// defaults to two (the plan's number); the rest are unset until sales says.
+  premadeRounds          Int?
+  wireframeIterations    Int  @default(2)
+  mockupIterations       Int?
+  demoIterationsPerPhase Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// How the fee is paid (journeys build plan J4): a split, and the rows.
+/// **Money** (PD-14) — the whole plan is null to staff without `money.read`
+/// who are not the customer. Replaced wholesale by `setPaymentPlan`.
+model PaymentPlan {
+  id         String   @id @default(cuid())
+  contractId String   @unique
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  split PaymentSplit
+
+  invoices PlannedInvoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// One row of a payment plan — an invoice not yet issued. J13 issues them
+/// (`BillingEntry.plannedInvoiceId`); nothing here bills anyone. Stored
+/// exactly as sales typed it.
+///
+/// **Two hand-written CHECKs**, proven by direct insert:
+/// `PlannedInvoice_amount_positive` (`amount > 0`) and
+/// `PlannedInvoice_term_not_negative` (`paymentTermDays >= 0`).
+///
+/// `phaseId` links a row to the phase whose acceptance triggers it; it must be
+/// one of this contract's phases (held by `setPaymentPlan`,
+/// `PHASE_WRONG_CONTRACT`) and it is set null — not the row deleted — when
+/// that phase is.
+model PlannedInvoice {
+  id     String      @id @default(cuid())
+  planId String
+  plan   PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  /// 1-based position in the plan, assigned from the order the rows arrive.
+  ordinal Int
+  labelFa String
+  labelEn String
+  /// Toman.
+  amount  BigInt
+
+  phaseId String?
+  phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+
+  /// Days from issue to due.
+  paymentTermDays Int
+
+  @@unique([planId, ordinal])
+  @@index([phaseId])
 }
 
 // ---------------------------------------------------------------------------
@@ -2585,6 +2779,9 @@ model TemplateType {
   /// Journeys build plan T2: the themes a designer offers for this kind of
   /// site. Replaced wholesale by `setTemplateTypeThemes`.
   themes TemplateTypeTheme[]
+  /// Journeys build plan J4: the briefs that chose this type (Restrict — a
+  /// type in use is deactivated, never deleted).
+  briefs ContractBrief[]
 }
 
 /// One line of a type's scope list: the page, feature or deliverable a new

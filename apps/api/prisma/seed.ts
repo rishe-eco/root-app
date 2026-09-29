@@ -18,6 +18,7 @@ import {
   CHECKLIST,
   TEMPLATE_TYPES,
   PLACEHOLDER_SCOPE,
+  isTemplateSensitiveArticle,
   scopeKindForKey,
 } from '../src/lib/templates.js';
 
@@ -349,6 +350,8 @@ async function main() {
         titleEn,
         bodyFa: bodyFa ?? null,
         bodyEn: bodyEn ?? null,
+        // Fees and Payment Schedule (PD-14, J4) — the template's own rule.
+        sensitive: isTemplateSensitiveArticle(number, titleEn),
       },
     });
   }

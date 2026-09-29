@@ -38,6 +38,7 @@ import { Theme, themeMutations, themeQueries } from './themes.js';
 import { Request, requestMutations, requestQueries } from './requests.js';
 import { peopleMutations, peopleQueries } from './people.js';
 import { contractWizardFields, wizardMutations } from './wizard.js';
+import { briefMutations, contractBriefFields } from './brief.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -56,7 +57,9 @@ export const resolvers = {
   // Journeys build plan J3: the wizard's derived views and the staff notes
   // sit beside the fields they read (`Contract.pending`) — see wizard.ts for
   // why they are a separate file spread in here.
-  Contract: { ...ContractFields, ...contractWizardFields },
+  // Journeys build plan J4: step 1's own fields (brief, payment plan, this
+  // contract's phases) — see brief.ts.
+  Contract: { ...ContractFields, ...contractWizardFields, ...contractBriefFields },
   ContractRevision,
   DesignConcept,
   DesignDraft,
@@ -152,5 +155,8 @@ export const resolvers = {
     ...peopleMutations,
     // journeys build plan J3: addInternalNote — staff readers, see wizard.ts.
     ...wizardMutations,
+    // journeys build plan J4: setBrief / setExtra / setPaymentPlan —
+    // contracts.author, each under the contract's lock and assertStepOpen(REQUIREMENTS).
+    ...briefMutations,
   },
 };

@@ -6,9 +6,11 @@ import { can, type Capability } from '../../../lib/capabilities.js';
 import { draftState } from '../../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../../lib/scope.js';
 import { SEQUENCE_FOR_NEW_CONTRACTS } from '../../../lib/steps.js';
-import { ARTICLES, SCOPE, CHECKLIST, scopeKindForKey } from '../../../lib/templates.js';
+import { ARTICLES, SCOPE, CHECKLIST, isTemplateSensitiveArticle, scopeKindForKey } from '../../../lib/templates.js';
 import { loadContract, log, nudgeStatus, reload } from '../contracts.js';
 import { asConcurrentPublish } from './shared.js';
+import { notify } from '../../../lib/notify.js';
+import { env } from '../../../lib/env.js';
 
 /**
  * The contract draft (title, fee, articles) and its publish path, plus
@@ -228,6 +230,8 @@ export const contractAdminMutations = {
           titleEn,
           bodyFa: bodyFa ?? null,
           bodyEn: bodyEn ?? null,
+          // The template's money articles (PD-14, J4): Fees, Payment Schedule.
+          sensitive: isTemplateSensitiveArticle(number, titleEn),
         })),
       }),
       prisma.scopeItem.createMany({
@@ -258,15 +262,19 @@ export const contractAdminMutations = {
       titleEn: string;
       bodyFa?: string;
       bodyEn?: string;
+      /** Journeys build plan J4, PD-14: this article's prose is about money.
+       *  Omitted, a *new* article takes the template's rule (Fees, Payment
+       *  Schedule) and an existing one keeps its flag. */
+      sensitive?: boolean | null;
     },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
-    const { contractId, number, ...rest } = args;
+    const { contractId, number, sensitive, ...rest } = args;
     await prisma.article.upsert({
       where: { contractId_number: { contractId, number } },
-      create: { contractId, number, ...rest },
-      update: rest,
+      create: { contractId, number, ...rest, sensitive: sensitive ?? isTemplateSensitiveArticle(number, args.titleEn) },
+      update: { ...rest, ...(sensitive == null ? {} : { sensitive }) },
     });
     return reload(contractId);
   },
@@ -392,19 +400,59 @@ export const contractAdminMutations = {
     return reload(contract.id);
   },
 
+  /**
+   * Hands the contract to the customer — the first time they can see it.
+   *
+   * **On the new road this is handing over step 1** (journeys build plan J4): it
+   * requires a brief row (`BRIEF_MISSING`) — the kind of site and its template
+   * type are what the customer's first screen is about — and it tells the
+   * customer (`BRIEF_SHARED`, email and SMS). The rest of the brief may still be
+   * incomplete: the portal says so ("Root is completing this") instead of
+   * hiding the step, so a half-finished brief is a reason to be honest, not a
+   * reason to wait. A legacy (`DESIGN_FIRST`) contract publishes exactly as it
+   * always did, silently.
+   *
+   * Idempotent: publishing what is already published changes nothing and tells
+   * no one, so a double click cannot send the customer two messages.
+   */
   publishContract: async (_p: unknown, args: { contractId: string }, ctx: Context) => {
     const admin = requireCapability(ctx, 'contracts.author');
-    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    const contract = await prisma.contract.findUnique({
+      where: { id: args.contractId },
+      include: { customer: true, project: true, brief: { select: { id: true } } },
+    });
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
     }
     if (contract.publishedAt) return reload(contract.id);
+
+    const newRoad = contract.sequence === 'AGREEMENT_FIRST';
+    if (newRoad && !contract.brief) {
+      throw new GraphQLError('Fill in the requirements — at least the kind of site and its type — before handing this over.', {
+        extensions: { code: 'BRIEF_MISSING' },
+      });
+    }
 
     await prisma.contract.update({
       where: { id: contract.id },
       data: { publishedAt: new Date(), status: 'WAITING_ON_CUSTOMER' },
     });
     await log(contract.id, admin.id, 'PUBLISHED');
+
+    if (newRoad) {
+      // Best-effort, like every notification: `notify` never throws, and the
+      // hand-over has already happened.
+      const { customer, project } = contract;
+      await notify(customer, {
+        kind: 'BRIEF_SHARED',
+        params: {
+          customerName: customer.name,
+          projectTitleFa: project.titleFa,
+          projectTitleEn: project.titleEn,
+          portalUrl: `${env.APP_ORIGIN}/${customer.locale === 'en' ? 'en' : 'fa'}/app/contracts/${contract.id}`,
+        },
+      });
+    }
     return reload(contract.id);
   },
 

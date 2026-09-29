@@ -125,11 +125,12 @@ export async function reloadOnProject(projectId: string, named?: string | null) 
 
 /**
  * The contract a notification about this project's *work* (a demo, a build, a
- * piece of feedback) links to. Nothing on a demo, a phase or a build says
- * which contract it belongs to until J4 puts `Phase.contractId` on phases, so
- * this is a policy, not a lookup: **the newest contract that is still alive**,
- * because work on a project with two contracts is, in the overwhelming case,
- * work on the newer one.
+ * piece of feedback) links to. **Since J4 a phase names its contract**, so
+ * work that has a phase passes it as `preferred` and the link goes there —
+ * provided the recipient can open it (alive, and for a customer published). For
+ * work that names none, this is still a policy rather than a lookup: **the
+ * newest contract that is still alive**, because work on a project with two
+ * contracts is, in the overwhelming case, work on the newer one.
  *
  * The customer's link has to open, and a customer only opens a *published*
  * contract (`contractVisibleTo`) — so for a customer the newest published one
@@ -137,7 +138,23 @@ export async function reloadOnProject(projectId: string, named?: string | null) 
  * constraint. Either falls back to `primaryContractId` rather than failing:
  * this runs after the act it announces has already happened.
  */
-export async function linkContractId(projectId: string, audience: 'customer' | 'staff'): Promise<string> {
+export async function linkContractId(
+  projectId: string,
+  audience: 'customer' | 'staff',
+  preferred?: string | null,
+): Promise<string> {
+  if (preferred) {
+    const named = await prisma.contract.findFirst({
+      where: {
+        id: preferred,
+        projectId,
+        status: { not: 'DISCARDED' },
+        ...(audience === 'customer' ? { publishedAt: { not: null } } : {}),
+      },
+      select: { id: true },
+    });
+    if (named) return named.id;
+  }
   const alive = await prisma.contract.findFirst({
     where: {
       projectId,

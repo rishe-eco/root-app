@@ -334,10 +334,13 @@ test('assertStepOpen: the legacy road is never locked, whatever rows exist', () 
 
 // ---- the constant ---------------------------------------------------------------------
 
-test('SEQUENCE_FOR_NEW_CONTRACTS stays DESIGN_FIRST until J4 makes the new road usable', () => {
-  // A tripwire, not a spec: the day J4 flips it, this test is the line to
-  // change — and its failure is the reminder that createContract's callers
-  // (the legacy e2e specs, the integration files that sign a contract) now
-  // create contracts on the road with no agreement gate yet.
+test('SEQUENCE_FOR_NEW_CONTRACTS stays DESIGN_FIRST until J7 builds the agreement gate', () => {
+  // A tripwire, not a spec: **J7 flips it**, once an AGREEMENT_FIRST contract
+  // can be approved and signed (J4 built step 1 and did not flip it — an
+  // AGREEMENT_FIRST contract still cannot get past its own agreement, and the
+  // legacy e2e specs and the integration files that create a contract through
+  // the API and take it to signature would strand). The day J7 flips it, this
+  // test is the line to change — and its failure is the reminder that
+  // createContract's callers are now on the new road.
   assert.equal(SEQUENCE_FOR_NEW_CONTRACTS, 'DESIGN_FIRST');
 });

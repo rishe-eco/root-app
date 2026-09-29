@@ -18,8 +18,7 @@ import { notify } from '../../lib/notify.js';
 import { env } from '../../lib/env.js';
 import { feedbackItemInclude } from './feedback.js';
 import { linkContractId } from './admin/shared.js';
-import { requireBuildAuthorOnProject } from './access.js';
-import { can } from '../../lib/capabilities.js';
+import { buildPhaseScope, requireBuildAuthorOnPhase, requireBuildAuthorOnProject } from './access.js';
 
 /**
  * Builds and the resolution ledger (build plan L3b; spec §6's gap). Lives
@@ -65,6 +64,19 @@ const openDemoItems = (projectId: string, phaseId: string | null): Prisma.Feedba
   ...(phaseId ? { phaseId } : {}),
 });
 
+/**
+ * Narrows a read to the phases the caller works (journeys build plan J4): a
+ * project with two contracts and two developers gives each their own queue,
+ * because a phase's claim is its own contract's developer. For
+ * `assignments.override` the scope is empty and **no clause is added at all**:
+ * Prisma reads `phase: {}` on an optional relation as "has a phase", which is
+ * not the same as "any".
+ */
+const ownPhases = (user: Parameters<typeof buildPhaseScope>[0]): { phase?: Prisma.PhaseWhereInput } => {
+  const scope = buildPhaseScope(user);
+  return Object.keys(scope).length > 0 ? { phase: scope } : {};
+};
+
 type BuildChangeInputArg = {
   feedbackItemId?: string | null;
   scopeItemId?: string | null;
@@ -79,9 +91,8 @@ export const buildQueries = {
    *  thin — the build-authoring form's phase picker. Never touches Contract. */
   phasesForBuilds: async (_p: unknown, _a: unknown, ctx: Context) => {
     const user = requireCapability(ctx, 'builds.author');
-    const mine = can(user, 'assignments.override') ? {} : { contracts: { some: { developerId: user.id } } };
     const phases = await prisma.phase.findMany({
-      where: { project: { status: 'ACTIVE', ...mine } },
+      where: { project: { status: 'ACTIVE' }, ...buildPhaseScope(user) },
       include: { project: true },
       orderBy: [{ project: { createdAt: 'asc' } }, { number: 'asc' }],
     });
@@ -114,9 +125,9 @@ export const buildQueries = {
    *  uses the same `where`, so the two can never disagree about what "open"
    *  means. */
   openFeedbackQueue: async (_p: unknown, args: { projectId: string; phaseId?: string | null }, ctx: Context) => {
-    await requireBuildAuthorOnProject(ctx, args.projectId);
+    const user = await requireBuildAuthorOnProject(ctx, args.projectId);
     return prisma.feedbackItem.findMany({
-      where: openDemoItems(args.projectId, args.phaseId ?? null),
+      where: { ...openDemoItems(args.projectId, args.phaseId ?? null), ...ownPhases(user) },
       include: feedbackItemInclude,
       orderBy: { createdAt: 'asc' },
     });
@@ -126,18 +137,18 @@ export const buildQueries = {
    *  IN_BUILD and assigned to a phase — candidates for a "this was on the
    *  plan" change entry. */
   scopeItemsAwaitingBuild: async (_p: unknown, args: { projectId: string }, ctx: Context) => {
-    await requireBuildAuthorOnProject(ctx, args.projectId);
+    const user = await requireBuildAuthorOnProject(ctx, args.projectId);
     return prisma.scopeItem.findMany({
-      where: { projectId: args.projectId, status: 'IN_BUILD', phaseId: { not: null } },
+      where: { projectId: args.projectId, status: 'IN_BUILD', phaseId: { not: null }, ...ownPhases(user) },
       orderBy: { position: 'asc' },
     });
   },
 
   /** Staff (builds.author). Every build declared for this project, newest first. */
   projectBuilds: async (_p: unknown, args: { projectId: string }, ctx: Context) => {
-    await requireBuildAuthorOnProject(ctx, args.projectId);
+    const user = await requireBuildAuthorOnProject(ctx, args.projectId);
     return prisma.build.findMany({
-      where: { projectId: args.projectId },
+      where: { projectId: args.projectId, phase: buildPhaseScope(user) },
       include: buildInclude,
       orderBy: { number: 'desc' },
     });
@@ -171,7 +182,7 @@ export const buildMutations = {
     requireCapability(ctx, 'answers.direct.demo');
     const phase = await prisma.phase.findUnique({ where: { id: args.phaseId } });
     if (!phase) throw notFound('phase');
-    await requireBuildAuthorOnProject(ctx, phase.projectId);
+    await requireBuildAuthorOnPhase(ctx, phase.id);
 
     // Journeys build plan S2: the demo step's open items **on this phase** —
     // `openFeedbackQueue`'s own `where`, which this must agree with, and which
@@ -331,10 +342,10 @@ export const buildMutations = {
     requireCapability(ctx, 'builds.author');
     const build = await prisma.build.findUnique({
       where: { id: args.buildId },
-      include: { project: { include: { customer: true } } },
+      include: { project: { include: { customer: true } }, phase: { select: { contractId: true } } },
     });
     if (!build) throw notFound('build');
-    await requireBuildAuthorOnProject(ctx, build.projectId);
+    await requireBuildAuthorOnPhase(ctx, build.phaseId);
     if (build.publishedAt) {
       throw new GraphQLError('This build is already published.', { extensions: { code: 'ALREADY_PUBLISHED' } });
     }
@@ -342,9 +353,9 @@ export const buildMutations = {
     await prisma.build.update({ where: { id: build.id }, data: { publishedAt: new Date() } });
 
     const customer = build.project.customer;
-    // A build names no contract of its own until J4: link the customer to the
-    // newest published one (`linkContractId`).
-    const contractId = await linkContractId(build.projectId, 'customer');
+    // The build's phase names its contract (J4): link the customer there when
+    // they can open it (`linkContractId`).
+    const contractId = await linkContractId(build.projectId, 'customer', build.phase.contractId);
     await notify(customer, {
       kind: 'BUILD_PUBLISHED',
       params: {

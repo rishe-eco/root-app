@@ -30,6 +30,7 @@ const staff: Record<string, User> = {};
 let phaseId: string;
 let demoId: string;
 let dependencyId: string;
+let technicalDependencyId: string;
 
 before(async () => {
   await resetDatabase();
@@ -56,7 +57,7 @@ beforeEach(async () => {
   });
 
   const projectId = f.contract.projectId;
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
+  const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   phaseId = phase.id;
   const demo = await prisma.demo.create({ data: { phaseId, stagingUrl: 'https://nahal.staging.m-root.com' } });
   demoId = demo.id;
@@ -71,6 +72,21 @@ beforeEach(async () => {
     },
   });
   dependencyId = dep.id;
+  // J4: the same board also holds a technical row (the domain, the hosting),
+  // which the developer verifies and sales does not.
+  const technical = await prisma.dependency.create({
+    data: {
+      projectId,
+      side: 'CUSTOMER',
+      titleFa: 'میزبانی',
+      titleEn: 'Hosting',
+      dueAt: new Date('2026-10-01T00:00:00Z'),
+      createdById: f.admin.id,
+      technical: true,
+      briefKey: 'host',
+    },
+  });
+  technicalDependencyId = technical.id;
 });
 
 after(async () => {
@@ -125,6 +141,13 @@ const OPS: Record<string, (as: User) => ReturnType<typeof exec>> = {
       as,
       variables: { d: dependencyId },
     }),
+  // J4: a technical row is the developer's (and only on a project they
+  // develop — DEVELOPER_UNASSIGNED is NOT_ASSIGNED), never sales'.
+  'dependencies.verifyTechnical · verify': (as) =>
+    exec('mutation($d: ID!){ verifyDependency(dependencyId: $d, note: "deployed a test file") { id } }', {
+      as,
+      variables: { d: technicalDependencyId },
+    }),
   'billing.manage · ledger': (as) => exec('{ allBillingEntries { id } }', { as }),
   'tickets.answer · desk queue': (as) => exec('{ allTickets { id } }', { as }),
   'customers.manage · service runs': (as) => exec('{ allServiceRuns { id } }', { as }),
@@ -165,6 +188,7 @@ const MATRIX: Record<keyof typeof OPS, Outcome[]> = {
   'builds.author · demo CRUD':            ['OK', F,    F,    F,    'OK', N,    F,   F,   F],
   'builds.author · builds queue':         ['OK', F,    F,    F,    'OK', N,    F,   F,   F],
   'dependencies.verifyGeneral · verify':  ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
+  'dependencies.verifyTechnical · verify': ['OK', F,    F,    F,    'OK', N,    F,   F,   F],
   'billing.manage · ledger':              ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'tickets.answer · desk queue':          ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'customers.manage · service runs':      ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],

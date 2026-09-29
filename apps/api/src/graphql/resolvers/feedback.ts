@@ -22,7 +22,9 @@ import { computeWizard, stepOnRoad } from '../../lib/steps.js';
 import { notify, recipientsHolding } from '../../lib/notify.js';
 import { env } from '../../lib/env.js';
 import { loadForActor, reload } from './contracts.js';
-import { assertStepOpenOn, ownsProjectWork, wizardStateOn } from './wizard.js';
+import { assertStepOpenOn, wizardStateOn } from './wizard.js';
+import { isBriefField } from '../../lib/brief.js';
+import { sensitiveArticleKeys, withArticleSensitivity } from './articleSensitivity.js';
 
 /**
  * Feedback on every step (journeys build plan S2; spec §6 for the demo it
@@ -111,10 +113,12 @@ async function loadItemForStaff(itemId: string, user: User) {
     where: { id: itemId },
     include: { contract: contractForItem },
   });
-  if (!item || !contractVisibleTo(user, item.contract) || !visibleItem(item, user, item.contract)) {
-    throw notFound('feedback item');
-  }
-  return item;
+  if (!item || !contractVisibleTo(user, item.contract)) throw notFound('feedback item');
+  // The real sensitivity of the article a DRAFT note is about (J4): S2's
+  // version of this check passed none, because no article could be sensitive.
+  const [annotated] = await withArticleSensitivity([item]);
+  if (!visibleItem(annotated, user, item.contract)) throw notFound('feedback item');
+  return annotated;
 }
 
 const reloadItem = (id: string) => prisma.feedbackItem.findUniqueOrThrow({ where: { id }, include: feedbackItemInclude });
@@ -255,6 +259,9 @@ async function resolveTarget(
     throw invalidTarget();
   }
   if (!anchorMatchesStep(step, anchor)) throw invalidTarget();
+  // A REQUIREMENTS note is about a field some card renders (J4) — a name the
+  // brief does not have is a note nobody could find again.
+  if (step === 'REQUIREMENTS' && briefField !== null && !isBriefField(briefField)) throw invalidTarget();
 
   let scopeItem: ResolvedTarget['scopeItem'] = null;
   let phaseId: string | null = null;
@@ -293,7 +300,7 @@ async function resolveTarget(
   }
   if (anchor.demoId) {
     const demo = await prisma.demo.findFirst({
-      where: { id: anchor.demoId, phase: { projectId: contract.projectId } },
+      where: { id: anchor.demoId, phase: { contractId: contract.id } },
       select: { id: true, phaseId: true, publishedAt: true },
     });
     if (!demo) throw notFound('demo');
@@ -321,7 +328,7 @@ async function resolveTarget(
   // named, and must be one of this project's.
   if (step === 'DEMO' && phaseId === null) {
     if (!phaseIdArg) throw invalidTarget();
-    const phase = await prisma.phase.findFirst({ where: { id: phaseIdArg, projectId: contract.projectId }, select: { id: true } });
+    const phase = await prisma.phase.findFirst({ where: { id: phaseIdArg, contractId: contract.id }, select: { id: true } });
     if (!phase) throw notFound('phase');
     phaseId = phase.id;
   }
@@ -394,13 +401,11 @@ export const feedbackMutations = {
     if (!stepOnRoad(contract.sequence, args.step)) {
       throw refuse('STEP_NOT_ON_ROAD', 'This contract has no such step.');
     }
-    // Phases, demos and builds belong to the project's first contract until J4
-    // (`ownsProjectWork`): a second contract has no demo step of its own to
-    // comment on, and an item filed through it would collapse onto the first
-    // one's demo pages (the unique indexes are per page) under the wrong lock.
-    if ((args.step === 'DEMO' || args.step === 'MOCKUP') && !(await ownsProjectWork(contract.id, contract.projectId))) {
-      throw refuse('STEP_NOT_ON_ROAD', 'This contract has no such step.');
-    }
+    // (Until J4 a demo or mockup could only be commented on through the
+    // project's first contract, because phases belonged to the project. A phase
+    // names its contract now: `resolveTarget` looks the demo and the phase up
+    // *on this contract*, so a demo of a sibling contract is `NOT_FOUND` and an
+    // item cannot collapse onto another contract's page under the wrong lock.)
 
     const body = args.body.trim();
     if (!body) throw refuse('EMPTY_COMMENT', 'A comment needs a body.');
@@ -423,7 +428,10 @@ export const feedbackMutations = {
       };
     }
 
-    const money = isMoneyAnchored(target.anchor);
+    const money = isMoneyAnchored({
+      ...target.anchor,
+      articleSensitive: (await sensitiveArticleKeys([contract.id])).has(`${contract.id}:${target.anchor.articleNumber}`),
+    });
     const columns = anchorColumns(target.anchor);
     // A demo page or frame line is one row for the whole project (the indexes
     // are on the target alone), so that is what "already there" means for them.
@@ -729,9 +737,14 @@ export const feedbackQueries = {
         feedbackItem: { include: { ...feedbackItemInclude, contract: contractForItem, phase: { select: { number: true } } } },
       },
     });
+    const sensitive = await sensitiveArticleKeys(comments.map((c) => c.feedbackItem.contractId));
+    const aboutSensitive = (i: { contractId: string; articleNumber: number | null }) =>
+      i.articleNumber !== null && sensitive.has(`${i.contractId}:${i.articleNumber}`);
     return comments
       .filter(
-        (c) => contractVisibleTo(user, c.feedbackItem.contract) && visibleItem(c.feedbackItem, user, c.feedbackItem.contract),
+        (c) =>
+          contractVisibleTo(user, c.feedbackItem.contract) &&
+          visibleItem({ ...c.feedbackItem, articleSensitive: aboutSensitive(c.feedbackItem) }, user, c.feedbackItem.contract),
       )
       .map((c) => {
         const { feedbackItem } = c;
@@ -765,8 +778,17 @@ export const feedbackQueries = {
       include: { ...feedbackItemInclude, contract: contractForItem },
       take: 1000,
     });
+    const sensitive = await sensitiveArticleKeys(items.map((i) => i.contractId));
     const entries = items
-      .filter((i) => contractVisibleTo(user, i.contract) && visibleItem(i, user, i.contract))
+      .filter(
+        (i) =>
+          contractVisibleTo(user, i.contract) &&
+          visibleItem(
+            { ...i, articleSensitive: i.articleNumber !== null && sensitive.has(`${i.contractId}:${i.articleNumber}`) },
+            user,
+            i.contract,
+          ),
+      )
       .map((item) => {
         const route = answerRoute(user, item.step);
         // Only design, mockup and demo have a person assigned; the agreement's

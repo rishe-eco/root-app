@@ -42,10 +42,13 @@ export type DesignPath = 'PREMADE' | 'CUSTOM';
  * panels), and the legacy flow — `02-contract-flow`, `04-workspace`, and every
  * integration file that creates a contract through the API and drives it to a
  * signature — creates contracts *through this resolver*. So the resolver states
- * its value here, in one place, and **J4 (the first stage that makes an
- * `AGREEMENT_FIRST` contract usable) flips this line**. Contracts made
- * directly through Prisma (the seed's second contract, `j3.test.ts`) take the
- * schema default and are `AGREEMENT_FIRST`.
+ * its value here, in one place, and **J7 — which builds the agreement gate, the
+ * first point at which an `AGREEMENT_FIRST` contract can be approved and signed
+ * — flips this line.** (J3's note said J4 would; J4 built step 1 and left it: a
+ * contract that cannot get past its own agreement is not yet one anybody should
+ * be able to create by default.) Contracts made directly through Prisma (the
+ * seed's second contract, `j3.test.ts`, `j4.test.ts`) take the schema default
+ * and are `AGREEMENT_FIRST`.
  */
 export const SEQUENCE_FOR_NEW_CONTRACTS: ContractSequence = 'DESIGN_FIRST';
 

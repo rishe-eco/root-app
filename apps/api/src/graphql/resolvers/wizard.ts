@@ -8,8 +8,16 @@ import {
   assertStepOpen,
   computeWizard,
   legacyFinished,
+  type Finished,
   type WizardState,
 } from '../../lib/steps.js';
+import {
+  briefCompleteness,
+  isCommitmentKey,
+  isIncludedExtra,
+  type BriefMissing,
+  type CommitmentKey,
+} from '../../lib/brief.js';
 import { attentionFor, type AttentionInput, type FeedbackFacts } from '../../lib/attention.js';
 import { isMoneyAnchored } from '../../lib/feedbackRules.js';
 import { computeStatusSummary } from '../../lib/statusSummary.js';
@@ -23,7 +31,6 @@ import {
 } from '../../lib/visibility.js';
 import { loadForActor, reload, type FullContract } from './contracts.js';
 import { Contract as ContractFields } from './fields.js';
-import { primaryContractId } from './admin/shared.js';
 
 /**
  * The wizard's loader and its field resolvers (journeys build plan J3): one
@@ -41,55 +48,43 @@ import { primaryContractId } from './admin/shared.js';
  * viewer rather than a second implementation (`context.ts`).
  */
 
-/**
- * Whose the project's phases, demos and builds are. **Until J4 puts
- * `Phase.contractId` on phases they belong to the project, not to a contract**
- * — and a project can hold several contracts since J2 — so this is a policy
- * and not a lookup: the project's **first** contract (`primaryContractId`,
- * the same answer every project-scoped mutation gave before J2) owns them, and
- * a second contract's road shows one placeholder demo with no phase. Without
- * it, a new-road contract added to a project mid-flight would inherit another
- * contract's demos as its own. J4 replaces this with the column.
- */
-export async function ownsProjectWork(contractId: string, projectId: string): Promise<boolean> {
-  return (await primaryContractId(projectId)) === contractId;
-}
-
 type Facts = Awaited<ReturnType<typeof loadFacts>>;
 
 async function loadFacts(c: FullContract) {
-  const owns = await ownsProjectWork(c.id, c.projectId);
-  const [approvals, phases, dependencies, builds, contractRevisions, designRevisions, feedback] = await Promise.all([
+  // **Phases, demos and builds are this contract's own** (J4, PD-5): a phase
+  // names its contract, and a build and a demo are its phase's. Until J4 this
+  // was a policy — the project's first contract owned them all — and a second
+  // contract's road showed a placeholder; now each contract's road has exactly
+  // the phases it delivers.
+  const [approvals, phases, dependencies, builds, contractRevisions, designRevisions, feedback, brief, plan, sensitiveArticles] =
+    await Promise.all([
     prisma.stepApproval.findMany({
       where: { contractId: c.id },
       select: { id: true, step: true, phaseId: true, approvedAt: true, approvedById: true },
       orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
     }),
-    owns
-      ? prisma.phase.findMany({
-          where: { projectId: c.projectId },
-          orderBy: { number: 'asc' },
-          select: {
-            id: true,
-            number: true,
-            scopeItems: { select: { status: true } },
-            demos: {
-              where: { publishedAt: { not: null } },
-              select: { id: true },
-            },
-          },
-        })
-      : Promise.resolve([]),
+    prisma.phase.findMany({
+      where: { contractId: c.id },
+      orderBy: { number: 'asc' },
+      select: {
+        id: true,
+        number: true,
+        plannedEndAt: true,
+        scopeItems: { select: { status: true } },
+        demos: {
+          where: { publishedAt: { not: null } },
+          select: { id: true },
+        },
+      },
+    }),
     prisma.dependency.findMany({
       where: { projectId: c.projectId },
-      select: { id: true, side: true, titleFa: true, titleEn: true, dueAt: true, verifiedAt: true },
+      select: { id: true, side: true, titleFa: true, titleEn: true, dueAt: true, verifiedAt: true, briefKey: true },
     }),
-    owns
-      ? prisma.build.findMany({
-          where: { projectId: c.projectId, publishedAt: { not: null } },
-          select: { id: true, number: true, publishedAt: true },
-        })
-      : Promise.resolve([]),
+    prisma.build.findMany({
+      where: { projectId: c.projectId, phase: { contractId: c.id }, publishedAt: { not: null } },
+      select: { id: true, number: true, publishedAt: true },
+    }),
     prisma.contractRevision.findMany({
       where: { contractId: c.id, publishedAt: { not: null } },
       select: { id: true, version: true, publishedAt: true, approvedAt: true, signature: { select: { signedAt: true } } },
@@ -109,6 +104,7 @@ async function loadFacts(c: FullContract) {
         phaseId: true,
         status: true,
         briefField: true,
+        articleNumber: true,
         updatedAt: true,
         createdAt: true,
         addressedInBuild: { select: { publishedAt: true } },
@@ -117,8 +113,37 @@ async function loadFacts(c: FullContract) {
         },
       },
     }),
+    // Step 1's own rows (J4): the brief and the payment plan's amounts feed
+    // `briefCompleteness`, which is REQUIREMENTS' done signal — and the
+    // sensitive articles decide which DRAFT notes are about money (PD-21).
+    prisma.contractBrief.findUnique({ where: { contractId: c.id } }),
+    prisma.paymentPlan.findUnique({ where: { contractId: c.id }, select: { invoices: { select: { amount: true } } } }),
+    prisma.article.findMany({ where: { contractId: c.id, sensitive: true }, select: { number: true } }),
   ]);
-  return { approvals, phases, dependencies, builds, contractRevisions, designRevisions, feedback };
+  return { approvals, phases, dependencies, builds, contractRevisions, designRevisions, feedback, brief, plan, sensitiveArticles };
+}
+
+/** The steps' own checklist extras that are in scope — `AGREED` or beyond
+ *  (`INCLUDED_EXTRA_STATUSES`). Off `c.project.scopeItems`, already loaded. */
+const includedExtraKeys = (c: FullContract): string[] =>
+  c.project.scopeItems.filter((s) => s.kind === 'EXTRA' && isIncludedExtra(s.status)).map((s) => s.key);
+
+/** Step 1's missing list (`lib/brief.ts`), from the loaded facts — one
+ *  computation for the wizard's REQUIREMENTS signal and the `briefCompleteness`
+ *  field, so the step cannot be "done" on one screen and incomplete on the other. */
+function briefMissing(c: FullContract, facts: Facts): BriefMissing[] {
+  const commitmentDates: Partial<Record<CommitmentKey, Date>> = {};
+  for (const d of facts.dependencies) {
+    if (d.briefKey && isCommitmentKey(d.briefKey)) commitmentDates[d.briefKey] = d.dueAt;
+  }
+  return briefCompleteness({
+    brief: facts.brief,
+    commitmentDates,
+    includedExtraKeys: includedExtraKeys(c),
+    phases: facts.phases,
+    plan: facts.plan ? { invoiceAmounts: facts.plan.invoices.map((i) => i.amount) } : null,
+    fee: c.amount,
+  });
 }
 
 /** One load per contract per request: the four views share it. Keyed on the
@@ -135,26 +160,32 @@ function factsFor(ctx: Context, c: FullContract): Promise<Facts> {
 
 /**
  * The rows → `WizardState`. **The one place a new-road step's "done" signal
- * is wired**: J4 pushes REQUIREMENTS when the brief is handed over, J5 SCOPE,
- * J6 DRAFT, J11 SUMMARY (see `lib/steps.ts`). Today only the legacy road has
- * any, read off the gate and the phases' scope items.
+ * is wired**: REQUIREMENTS is done when `briefCompleteness` has nothing left
+ * to name (J4 — the brief is complete, not merely handed over: a half-filled
+ * brief the customer can already read is still Root's to finish), J5 pushes
+ * SCOPE, J6 DRAFT, J11 SUMMARY (see `lib/steps.ts`). The legacy road's are read
+ * off the gate and the phases' scope items.
  */
 function stateOf(c: FullContract, facts: Facts): WizardState {
   const gate = computeGate(c);
+  const finished: Finished[] =
+    c.sequence === 'DESIGN_FIRST'
+      ? legacyFinished({
+          designComplete: gate.designComplete,
+          signed: gate.signed,
+          signedAt: c.currentContractRevision?.signature?.signedAt ?? null,
+          acceptedPhaseIds: facts.phases.filter((p) => isPhaseAccepted(p)).map((p) => p.id),
+        })
+      : [];
+  if (c.sequence === 'AGREEMENT_FIRST' && facts.brief && briefMissing(c, facts).length === 0) {
+    finished.push({ step: 'REQUIREMENTS', phaseId: null, at: facts.brief.updatedAt });
+  }
   return {
     sequence: c.sequence,
     designPath: null, // J8 (PD-13) derives it from the design tier
     phases: facts.phases.map((p) => ({ id: p.id, number: p.number })),
     approvals: facts.approvals,
-    finished:
-      c.sequence === 'DESIGN_FIRST'
-        ? legacyFinished({
-            designComplete: gate.designComplete,
-            signed: gate.signed,
-            signedAt: c.currentContractRevision?.signature?.signedAt ?? null,
-            acceptedPhaseIds: facts.phases.filter((p) => isPhaseAccepted(p)).map((p) => p.id),
-          })
-        : [],
+    finished,
   };
 }
 
@@ -166,10 +197,11 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
  * addressed in a build the customer has not been told about yet (the build's
  * publish is when the customer learns of it, as L3b decided).
  */
-function feedbackFacts(customerId: string, items: Facts['feedback']): FeedbackFacts {
+function feedbackFacts(customerId: string, items: Facts['feedback'], sensitiveArticles: ReadonlySet<number>): FeedbackFacts {
   const out: FeedbackFacts = { unresolved: [], pendingApproval: [], answered: [] };
   for (const item of items) {
-    const fact = { step: item.step, phaseId: item.phaseId, money: isMoneyAnchored(item) };
+    const articleSensitive = item.articleNumber !== null && sensitiveArticles.has(item.articleNumber);
+    const fact = { step: item.step, phaseId: item.phaseId, money: isMoneyAnchored({ ...item, articleSensitive }) };
 
     for (const c of item.comments) {
       if (c.approval === 'PENDING') out.pendingApproval.push({ ...fact, since: c.createdAt });
@@ -223,7 +255,7 @@ async function loadAttentionInput(c: FullContract, facts: Facts, now: Date): Pro
         }
       : null,
     dependencies: facts.dependencies,
-    feedback: feedbackFacts(c.customerId, facts.feedback),
+    feedback: feedbackFacts(c.customerId, facts.feedback, new Set(facts.sensitiveArticles.map((a) => a.number))),
   };
 }
 
@@ -246,6 +278,15 @@ export const contractWizardFields = {
   // which is the panels' business (and the API's, field by field).
   wizard: async (c: FullContract, _a: unknown, ctx: Context) =>
     computeWizard(stateOf(c, await factsFor(ctx, c))),
+
+  /**
+   * What step 1 still lacks (`lib/brief.ts`), as codes — for the desk's "still
+   * missing" list and the portal's "Root is completing this". Empty means the
+   * step is done, which is the same computation that marks REQUIREMENTS done.
+   * A code names *that* something is missing, never what it should be: nothing
+   * here carries a money value (PD-14).
+   */
+  briefCompleteness: async (c: FullContract, _a: unknown, ctx: Context) => briefMissing(c, await factsFor(ctx, c)),
 
   attention: async (c: FullContract, _a: unknown, ctx: Context) => {
     const viewer = viewerOf(ctx);
@@ -365,8 +406,12 @@ export const wizardMutations = {
  * `assertStepOpen` (lib/steps.ts) over the database: the call every mutation
  * that edits a step's content makes before it writes. **S2's feedback
  * mutations call it** (submit, answer, approve and decline an answer — staff
- * cannot answer on a locked step either, journeys §3.1); the content
- * mutations below are still to wire.
+ * cannot answer on a locked step either, journeys §3.1) **and J4's step-1
+ * writes** (`setBrief`, `setExtra`, `setPaymentPlan`, and the phase edits, all
+ * REQUIREMENTS), each after `lockContract` where it writes. Nothing can lock
+ * REQUIREMENTS until J7 writes the AGREEMENT approval, so those calls cannot
+ * fire yet — they land now so J7 changes nothing here. The rest are still to
+ * wire.
  *
  * The survey J3 made, so the stages that wire it need not repeat it: three
  * groups of existing mutations edit content a `StepApproval` will one day lock.
@@ -392,7 +437,7 @@ export async function assertStepOpenOn(
 
 /**
  * A contract's `WizardState` as far as locks are concerned — its sequence,
- * the phases it owns (`ownsProjectWork`) and its `StepApproval` rows, with no
+ * the phases it owns (`Phase.contractId`) and its `StepApproval` rows, with no
  * "finished" signals (a lock does not depend on them). What `assertStepOpenOn`
  * and `approveStep` (which needs to know that a step is on this contract's
  * road before it approves it) both read, so the two cannot disagree.
@@ -405,16 +450,12 @@ export async function wizardStateOn(
     where: { id: contractId },
     select: {
       sequence: true,
-      projectId: true,
       stepApprovals: { select: { step: true, phaseId: true, approvedAt: true } },
     },
   });
   if (!contract) {
     throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
   }
-  const phases =
-    (await ownsProjectWork(contractId, contract.projectId))
-      ? await db.phase.findMany({ where: { projectId: contract.projectId }, select: { id: true, number: true } })
-      : [];
+  const phases = await db.phase.findMany({ where: { contractId }, select: { id: true, number: true } });
   return { sequence: contract.sequence, designPath: null, phases, approvals: contract.stepApprovals, finished: [] };
 }

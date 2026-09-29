@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import type { ContractStatus, ProjectStatus, Role } from '@prisma/client';
 import {
   canAuthorBuild,
-  canAuthorBuildOnProject,
+  canAuthorBuildOnAnyPhase,
+  canAuthorBuildOnPhase,
   canAuthorDesign,
   contractVisibleTo,
+  contractVisibleToStaff,
   isActiveContract,
   isContractReader,
   mayReadInternalNotes,
+  mayReadArticleBody,
   mayReadContactOf,
   mayReadMoney,
   mayReadPlannedDates,
@@ -102,7 +105,7 @@ test('canAuthorDesign: the capability and the assignment, or the override', () =
   assert.equal(canAuthorDesign(person('a', 'ADMIN'), { designerId: null }), true);
 });
 
-test('canAuthorBuild and its project form', () => {
+test('canAuthorBuild, and its phase forms (J4)', () => {
   const dev = person('dev', 'DEVELOPER');
   assert.equal(canAuthorBuild(dev, { developerId: 'dev' }), true);
   assert.equal(canAuthorBuild(dev, { developerId: 'x' }), false);
@@ -110,24 +113,69 @@ test('canAuthorBuild and its project form', () => {
   assert.equal(canAuthorBuild(person('a', 'ADMIN'), { developerId: null }), true);
 
   const live = (developerId: string | null) => ({ developerId, status: 'IN_PROGRESS' as ContractStatus });
-  assert.equal(canAuthorBuildOnProject(dev, [live('x'), live('dev')]), true);
-  assert.equal(canAuthorBuildOnProject(dev, [live('x')]), false);
-  assert.equal(canAuthorBuildOnProject(dev, []), false);
-  assert.equal(canAuthorBuildOnProject(person('a', 'ADMIN'), []), true);
+  assert.equal(canAuthorBuildOnAnyPhase(dev, [live('x'), live('dev')]), true);
+  assert.equal(canAuthorBuildOnAnyPhase(dev, [live('x')]), false);
+  assert.equal(canAuthorBuildOnAnyPhase(dev, []), false);
+  assert.equal(canAuthorBuildOnAnyPhase(person('a', 'ADMIN'), []), true);
 });
 
-test('canAuthorBuildOnProject: a second contract (J2) — either live contract\'s developer, never a discarded one\'s', () => {
+test('canAuthorBuildOnPhase: the claim on a phase is its own contract\'s developer — never the project\'s other contract\'s', () => {
+  const dev = person('dev', 'DEVELOPER');
+  const other = person('other', 'DEVELOPER');
+  const phaseOf = (developerId: string | null, status: ContractStatus = 'IN_PROGRESS') => ({
+    developerId,
+    status,
+    project: { status: 'ACTIVE' as ProjectStatus },
+  });
+  // Two contracts on one project, two developers: each holds only their own
+  // contract's phases — S1's project-wide "any contract" answer is gone.
+  assert.equal(canAuthorBuildOnPhase(dev, phaseOf('dev')), true);
+  assert.equal(canAuthorBuildOnPhase(dev, phaseOf('other')), false);
+  assert.equal(canAuthorBuildOnPhase(other, phaseOf('other')), true);
+  // A discarded contract's developer is out (contractVisibleToStaff), the
+  // override is not.
+  assert.equal(canAuthorBuildOnPhase(dev, phaseOf('dev', 'DISCARDED')), false);
+  assert.equal(canAuthorBuildOnPhase(person('a', 'ADMIN'), phaseOf('dev', 'DISCARDED')), true);
+  // The capability first: a designer named in the developer column is refused.
+  assert.equal(canAuthorBuildOnPhase(person('des', 'DESIGNER'), phaseOf('des')), false);
+  // And a customer is never a build author, whatever they own.
+  assert.equal(canAuthorBuildOnPhase(person('cust', 'CUSTOMER'), phaseOf('cust')), false);
+});
+
+test('contractVisibleToStaff is the staff half of contractVisibleTo — the customer edge does not count', () => {
+  const owner = person('cust', 'CUSTOMER');
+  assert.equal(contractVisibleTo(owner, contract()), true);
+  assert.equal(contractVisibleToStaff(owner, contract()), false);
+  assert.equal(contractVisibleToStaff(person('s', 'SALES'), contract({ publishedAt: null })), true);
+  assert.equal(contractVisibleToStaff(person('d', 'DEVELOPER'), contract({ status: 'DISCARDED' })), false);
+});
+
+test('mayReadArticleBody: a sensitive body needs the contract\'s money; an ordinary one never does (PD-14, J4)', () => {
+  const c = { customerId: 'cust' };
+  const secret = { sensitive: true };
+  const plain = { sensitive: false };
+  assert.equal(mayReadArticleBody(person('cust', 'CUSTOMER'), c, secret), true, 'the customer always reads their own');
+  assert.equal(mayReadArticleBody(person('s', 'SALES'), c, secret), true);
+  assert.equal(mayReadArticleBody(person('a', 'ADMIN'), c, secret), true);
+  for (const role of ['DESIGNER', 'DEVELOPER', 'CONTRIBUTOR', 'REVIEWER'] as Role[]) {
+    assert.equal(mayReadArticleBody(person('x', role), c, secret), false, role);
+    assert.equal(mayReadArticleBody(person('x', role), c, plain), true, role);
+  }
+  assert.equal(mayReadArticleBody(person('other', 'CUSTOMER'), c, secret), false, 'another customer is not this customer');
+});
+
+test('canAuthorBuildOnAnyPhase: the contracts that own phases on a project — a discarded one\'s developer never holds the keys', () => {
   const dev = person('dev', 'DEVELOPER');
   const first = { developerId: 'dev', status: 'DISCARDED' as ContractStatus };
   const second = { developerId: 'other', status: 'IN_PROGRESS' as ContractStatus };
-  // The project moved on to a second contract with a different developer:
-  // the first developer's discarded contract no longer holds the keys.
-  assert.equal(canAuthorBuildOnProject(dev, [first, second]), false);
-  assert.equal(canAuthorBuildOnProject(person('other', 'DEVELOPER'), [first, second]), true);
-  // Two live contracts, two developers: both may work the shared demos.
+  // The project moved on to a second contract with a different developer: the
+  // first developer's discarded contract no longer holds the keys.
+  assert.equal(canAuthorBuildOnAnyPhase(dev, [first, second]), false);
+  assert.equal(canAuthorBuildOnAnyPhase(person('other', 'DEVELOPER'), [first, second]), true);
+  // Two live contracts, two developers, each owning phases: each is in.
   const live = { developerId: 'dev', status: 'WAITING_ON_CUSTOMER' as ContractStatus };
-  assert.equal(canAuthorBuildOnProject(dev, [live, second]), true);
-  assert.equal(canAuthorBuildOnProject(person('other', 'DEVELOPER'), [live, second]), true);
+  assert.equal(canAuthorBuildOnAnyPhase(dev, [live, second]), true);
+  assert.equal(canAuthorBuildOnAnyPhase(person('other', 'DEVELOPER'), [live, second]), true);
 });
 
 test('projectVisibleTo: the customer edge, or any active contract for readActive', () => {

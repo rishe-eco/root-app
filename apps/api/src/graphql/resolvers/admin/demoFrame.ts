@@ -6,12 +6,12 @@ import { deriveFrameLines } from '../../../lib/demoFrame.js';
 import { notify } from '../../../lib/notify.js';
 import { env } from '../../../lib/env.js';
 import { linkContractId, reloadOnProject } from './shared.js';
-import { requireBuildAuthorOnProject } from '../access.js';
+import { requireBuildAuthorOnPhase } from '../access.js';
 
 /**
  * Authoring the review frame, and the publish gate it exists to hold (build
  * plan L3; spec §6). Staff only — since journeys build plan S1,
- * `builds.author` plus the developer assignment (`requireBuildAuthorOnProject`),
+ * `builds.author` plus the developer assignment (`requireBuildAuthorOnPhase`),
  * the same guard as the demo mutations in `phases.ts`: the frame is the
  * developer's account of what a demo holds. `submitFeedback` and
  * `ratifyFeedback` live in `resolvers/feedback.ts` instead, because those two
@@ -65,7 +65,7 @@ export const demoFrameMutations = {
   generateDemoFrame: async (_p: unknown, args: { demoId: string; contractId?: string | null }, ctx: Context) => {
     const admin = requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
-    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
+    await requireBuildAuthorOnPhase(ctx, demo.phaseId);
     const frame = await ensureFrame(demo.id, admin.id);
 
     const items = await prisma.scopeItem.findMany({ where: { projectId: demo.phase.projectId } });
@@ -96,7 +96,7 @@ export const demoFrameMutations = {
       });
     }
 
-    return reloadOnProject(demo.phase.projectId, args.contractId);
+    return reloadOnProject(demo.phase.projectId, args.contractId ?? demo.phase.contractId);
   },
 
   updateDemoFrameSummary: async (
@@ -106,7 +106,7 @@ export const demoFrameMutations = {
   ) => {
     const admin = requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
-    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
+    await requireBuildAuthorOnPhase(ctx, demo.phaseId);
     const frame = await ensureFrame(demo.id, admin.id);
     await prisma.demoFrame.update({
       where: { id: frame.id },
@@ -115,7 +115,7 @@ export const demoFrameMutations = {
         summaryEn: args.summaryEn === undefined ? undefined : args.summaryEn,
       },
     });
-    return reloadOnProject(demo.phase.projectId, args.contractId);
+    return reloadOnProject(demo.phase.projectId, args.contractId ?? demo.phase.contractId);
   },
 
   /**
@@ -136,7 +136,7 @@ export const demoFrameMutations = {
   ) => {
     const admin = requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
-    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
+    await requireBuildAuthorOnPhase(ctx, demo.phaseId);
     const frame = await ensureFrame(demo.id, admin.id);
 
     if (args.buildChangeEntryId) {
@@ -163,7 +163,7 @@ export const demoFrameMutations = {
         position: (highest._max.position ?? -1) + 1,
       },
     });
-    return reloadOnProject(demo.phase.projectId, args.contractId);
+    return reloadOnProject(demo.phase.projectId, args.contractId ?? demo.phase.contractId);
   },
 
   updateDemoFrameLine: async (
@@ -173,21 +173,21 @@ export const demoFrameMutations = {
   ) => {
     requireCapability(ctx, 'builds.author');
     const line = await loadLine(args.lineId);
-    await requireBuildAuthorOnProject(ctx, line.frame.demo.phase.projectId);
+    await requireBuildAuthorOnPhase(ctx, line.frame.demo.phaseId);
     await prisma.demoFrameLine.update({
       where: { id: line.id },
       data: { textFa: args.textFa, textEn: args.textEn },
     });
-    return reloadOnProject(line.frame.demo.phase.projectId, args.contractId);
+    return reloadOnProject(line.frame.demo.phase.projectId, args.contractId ?? line.frame.demo.phase.contractId);
   },
 
   /** Cascades to its feedback item, if any (schema.prisma: onDelete: Cascade). */
   deleteDemoFrameLine: async (_p: unknown, args: { lineId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'builds.author');
     const line = await loadLine(args.lineId);
-    await requireBuildAuthorOnProject(ctx, line.frame.demo.phase.projectId);
+    await requireBuildAuthorOnPhase(ctx, line.frame.demo.phaseId);
     await prisma.demoFrameLine.delete({ where: { id: line.id } });
-    return reloadOnProject(line.frame.demo.phase.projectId, args.contractId);
+    return reloadOnProject(line.frame.demo.phase.projectId, args.contractId ?? line.frame.demo.phase.contractId);
   },
 
   /**
@@ -197,7 +197,7 @@ export const demoFrameMutations = {
   publishDemo: async (_p: unknown, args: { demoId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
-    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
+    await requireBuildAuthorOnPhase(ctx, demo.phaseId);
     if (demo.publishedAt) {
       throw new GraphQLError('This demo is already published.', { extensions: { code: 'ALREADY_PUBLISHED' } });
     }
@@ -211,9 +211,9 @@ export const demoFrameMutations = {
     await prisma.demo.update({ where: { id: demo.id }, data: { publishedAt: new Date() } });
 
     const project = demo.phase.project;
-    // The customer's link: the newest published contract on the project (a
-    // demo names no contract of its own until J4 — `linkContractId`).
-    const contractId = await linkContractId(project.id, 'customer');
+    // The customer's link: the demo's own contract, when the customer can open
+    // it (a phase names its contract since J4 — `linkContractId`).
+    const contractId = await linkContractId(project.id, 'customer', demo.phase.contractId);
     const customer = project.customer;
     await notify(customer, {
       kind: 'DEMO_PUBLISHED',

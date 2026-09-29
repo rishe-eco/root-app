@@ -8,6 +8,7 @@ import {
   requestSubmittedSms,
   requestMessageSms,
   requestArchivedSms,
+  briefSharedSms,
   type SmsContent,
 } from './smsTemplates.js';
 
@@ -27,6 +28,8 @@ const builders: Array<{ name: string; build: (locale: string) => SmsContent; mus
   { name: 'request-submitted', build: (l) => requestSubmittedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
   { name: 'request-message', build: (l) => requestMessageSms(l, { url: REQUEST_URL }), mustInclude: REQUEST_URL },
   { name: 'request-archived', build: (l) => requestArchivedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  // Journeys build plan J4 — one placeholder, the URL; no title.
+  { name: 'brief-shared', build: (l) => briefSharedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
 ];
 
 for (const { name, build, mustInclude } of builders) {
@@ -72,6 +75,7 @@ test('the request SMS bodies carry no free text — only fixed words and the URL
     (l: string) => requestSubmittedSms(l, { deskUrl: REQUEST_URL }),
     (l: string) => requestMessageSms(l, { url: REQUEST_URL }),
     (l: string) => requestArchivedSms(l, { portalUrl: REQUEST_URL }),
+    (l: string) => briefSharedSms(l, { portalUrl: REQUEST_URL }),
   ]) {
     for (const locale of LOCALES) {
       const words = build(locale).text.replace(REQUEST_URL, '');

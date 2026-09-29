@@ -11,6 +11,7 @@ import {
   requestSubmittedEmail,
   requestMessageEmail,
   requestArchivedEmail,
+  briefSharedEmail,
   feedbackSubmittedEmail,
   answerPendingEmail,
   answerPublishedEmail,
@@ -25,6 +26,7 @@ const STAFF_INVITE_URL = 'https://example.com/fa/portal/invite/tokstaff';
 const THREAD_URL = 'https://example.com/en/desk/review/round1/doc1#thread-abc';
 const DESK_REQUEST_URL = 'https://example.com/en/desk/requests/proj1';
 const PORTAL_REQUEST_URL = 'https://example.com/fa/app/contracts?request=proj1';
+const PORTAL_CONTRACT_URL = 'https://example.com/fa/app/contracts/c1';
 
 const builders: Array<{ name: string; build: (locale: string) => MailContent; link: string }> = [
   { name: 'invite', build: (l) => inviteEmail(l, { name: 'کاربر', inviteUrl: INVITE_URL }), link: INVITE_URL },
@@ -72,6 +74,18 @@ const builders: Array<{ name: string; build: (locale: string) => MailContent; li
         portalUrl: PORTAL_REQUEST_URL,
       }),
     link: PORTAL_REQUEST_URL,
+  },
+  // Journeys build plan J4 — step 1 handed to the customer.
+  {
+    name: 'brief-shared',
+    build: (l) =>
+      briefSharedEmail(l, {
+        customerName: 'نهال',
+        projectTitleFa: 'یک فروشگاه',
+        projectTitleEn: 'A shop',
+        portalUrl: PORTAL_CONTRACT_URL,
+      }),
+    link: PORTAL_CONTRACT_URL,
   },
 ];
 

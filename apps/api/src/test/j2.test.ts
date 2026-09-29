@@ -610,7 +610,7 @@ async function twoContracts() {
 
 test('every project-scoped mutation returns the contract it is told to; unnamed, the project\'s first; another project\'s contract is NOT_FOUND', async () => {
   const { first, second, item, projectId } = await twoContracts();
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'ف', titleEn: 'P1' } });
+  const phase = await prisma.phase.create({ data: { projectId, contractId: first.id, number: 1, titleFa: 'ف', titleEn: 'P1' } });
   const dep = await prisma.dependency.create({
     data: { projectId, side: 'ROOT', titleFa: 'د', titleEn: 'D', dueAt: new Date('2026-12-01T00:00:00Z'), createdById: f.admin.id },
   });
@@ -755,8 +755,12 @@ test('a developer of a discarded first contract loses the project\'s builds once
   const { first, second, projectId } = await twoContracts();
   await prisma.contract.update({ where: { id: first.id }, data: { developerId: staff.DEVELOPER.id } });
   await prisma.contract.update({ where: { id: second.id }, data: { developerId: f.admin.id } });
+  // Each contract delivers a phase of its own (J4) — the claim is on a phase,
+  // and a phase is its own contract's.
+  await prisma.phase.create({ data: { projectId, contractId: first.id, number: 1, titleFa: 'الف', titleEn: 'First' } });
+  await prisma.phase.create({ data: { projectId, contractId: second.id, number: 1, titleFa: 'ب', titleEn: 'Second' } });
   const Q = 'query($p: ID!){ openFeedbackQueue(projectId: $p) { id } }';
-  // Both live: either contract's developer may work the project's builds.
+  // Both live: a developer works the phases of the contract they develop.
   ok(await exec(Q, { as: staff.DEVELOPER, variables: { p: projectId } }));
 
   // The first is discarded and the project has moved on to a second contract
