@@ -81,6 +81,18 @@ export function fullDateTime(iso: string, locale: Locale): string {
   }).format(new Date(iso));
 }
 
+/**
+ * A calendar day, not an instant (journeys build plan PD-19): planned dates,
+ * deadlines and due dates are stored as `date` columns, which arrive at
+ * midnight UTC. **Rendered in UTC**, so 1 Aban stays 1 Aban on a machine in
+ * Tehran (UTC+3:30), where formatting the same instant in local time would
+ * still be the right day, and on one west of Greenwich, where it would be the
+ * day before. The one renderer for every such date.
+ */
+export function calendarDate(iso: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(intlTag(locale), { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(iso));
+}
+
 export const initialOf = (name: string) => name.trim().charAt(0) || '·';
 
 /**

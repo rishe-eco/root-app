@@ -9,6 +9,7 @@ import {
   APPROVE_CONTRACT,
   CHOOSE_CONCEPT,
   CONTRACT,
+  CONTRACT_AS_CUSTOMER,
   SET_PAGE_APPROVAL,
   SET_SCOPE_ITEM,
   SIGN_AMENDMENT,
@@ -25,20 +26,37 @@ import StatusBadge from '@/components/StatusBadge';
 import Lock from '@/components/Lock';
 import DemoViewport from '@/components/DemoViewport';
 import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
-import RequestThread from '@/components/RequestThread';
+import StatusArea from '@/components/StatusArea';
+import StepList from '@/components/StepList';
+import { CommitmentsCard, OriginRequestCard } from '@/components/RailCards';
+import ViewAsBanner, { ReadOnlyScope, viewAsErrorKey } from '@/components/ViewAsBanner';
 import Topbar from './Topbar';
+import Wizard from './Wizard';
 
 const MIN_SIGN_NAME = 2;
 
-export default function ContractDetail() {
+/**
+ * The customer's contract screen — and, with `asCustomer`, the same screen
+ * for a staff member looking as that customer (journeys build plan J3, "view
+ * as customer"). The query is the only difference: `contract(asCustomer:
+ * true)` makes the API answer through the customer's eyes, so this component
+ * renders what it is given and adds no rule of its own. Under it every control
+ * is disabled (`ReadOnlyScope`) and the portal chrome gives way to a banner.
+ *
+ * Two roads (PD-7). A `DESIGN_FIRST` contract renders the sections below,
+ * exactly as before J3, under the status area and the step strip; an
+ * `AGREEMENT_FIRST` one is the `Wizard`.
+ */
+export default function ContractDetail({ asCustomer = false }: { asCustomer?: boolean }) {
   const { t } = useTranslation();
   const locale = useLocale();
   const me = useOutletContext<User>();
   const { id = '' } = useParams();
 
-  const { data, loading, error, refetch } = useQuery<{ contract: Contract | null }>(CONTRACT, {
-    variables: { id },
-  });
+  const { data, loading, error, refetch } = useQuery<{ contract: Contract | null }>(
+    asCustomer ? CONTRACT_AS_CUSTOMER : CONTRACT,
+    { variables: { id } },
+  );
 
   const [chooseConcept] = useMutation(CHOOSE_CONCEPT);
   const [setPageApproval] = useMutation(SET_PAGE_APPROVAL);
@@ -58,7 +76,7 @@ export default function ContractDetail() {
   if (loading && !data) {
     return (
       <>
-        <Topbar user={me} start={<span className="crumb" />} />
+        {asCustomer ? null : <Topbar user={me} start={<span className="crumb" />} />}
         <div className="content">{t('portal.loading')}</div>
       </>
     );
@@ -68,10 +86,10 @@ export default function ContractDetail() {
   if (error || !contract) {
     return (
       <>
-        <Topbar user={me} start={<span className="crumb" />} />
+        {asCustomer ? null : <Topbar user={me} start={<span className="crumb" />} />}
         <div className="content">
           <div className="empty">
-            <p className="t-small">{t('portal.errorTitle')}</p>
+            <p className="t-small">{asCustomer ? t(viewAsErrorKey(error)) : t('portal.errorTitle')}</p>
             <button className="btn btn-secondary btn-sm" type="button" onClick={() => refetch()}>
               {t('portal.retry')}
             </button>
@@ -81,7 +99,15 @@ export default function ContractDetail() {
     );
   }
 
+  if (contract.sequence === 'AGREEMENT_FIRST') {
+    return <Wizard contract={contract} me={me} asCustomer={asCustomer} />;
+  }
+
   const { gate } = contract;
+  /* Who "you" is on this screen. Looking as the customer, it is the customer —
+     not the staff member at the keyboard, whose own comments and log entries
+     would otherwise read as «تو» in a view meant to be the customer's. */
+  const viewerId = asCustomer ? contract.customer.id : me.id;
   const chosen = contract.concepts.find((c) => c.chosen) ?? null;
 
   /* T1: when the design also moved, the gate refuses `approveContract` until
@@ -209,17 +235,22 @@ export default function ContractDetail() {
 
   return (
     <>
-      <Topbar
-        user={me}
-        start={
-          <div className="crumb">
-            <Link to={lp(locale, '/app/contracts')}>{t('portal.navContracts')}</Link>
-            <span>/</span>
-            <span className="crumb-now">{title}</span>
-          </div>
-        }
-      />
+      {asCustomer ? (
+        <ViewAsBanner contract={contract} />
+      ) : (
+        <Topbar
+          user={me}
+          start={
+            <div className="crumb">
+              <Link to={lp(locale, '/app/contracts')}>{t('portal.navContracts')}</Link>
+              <span>/</span>
+              <span className="crumb-now">{title}</span>
+            </div>
+          }
+        />
+      )}
 
+      <ReadOnlyScope on={asCustomer}>
       <div className="detail">
         <div className="detail-main">
           {pendingMode ? (
@@ -287,6 +318,12 @@ export default function ContractDetail() {
               <span className="num-latin">{contract.ref}</span>
             </p>
           </div>
+
+          {/* Journeys build plan J3: where things stand, and the road — the
+              contract's current step, whose move it is, what is waiting. The
+              sections below are this road's panels, unchanged. */}
+          <StatusArea contract={contract} audience="customer" />
+          {contract.wizard ? <StepList steps={contract.wizard} /> : null}
 
           {/* 0 · Coarse progress & the live demo (build plan L2) — derived,
               never a hand-typed percentage (F5's own slippage). Absent
@@ -643,7 +680,7 @@ export default function ContractDetail() {
 
             <div className="thread">
               {contract.comments.map((c) => {
-                const mine = c.author.id === me.id;
+                const mine = c.author.id === viewerId;
                 return (
                   <div className="comment" key={c.id}>
                     <span className={`avatar-sm ${mine ? 'av-you' : 'av-root'}`} aria-hidden="true">
@@ -712,46 +749,10 @@ export default function ContractDetail() {
             )}
           </div>
 
-          {/* Build plan L5, spec §7/§11: "own commitments with due dates
-              staring back." Customer-side only — Root's own commitments are
-              tracked on the same board (symmetry is the point of the
-              stage), but this card is the customer's, not a status report
-              on Root. */}
-          {contract.project.dependencies.some((d) => d.side === 'CUSTOMER') ? (
-            <div className="rail-card">
-              <p className="rail-cap">{t('detail.commitmentsCap')}</p>
-              <div className="log">
-                {contract.project.dependencies
-                  .filter((d) => d.side === 'CUSTOMER')
-                  .map((d) => (
-                    <div className={`logitem${d.overdue ? ' commitment-overdue' : ''}`} key={d.id}>
-                      <span className="lwhat">{pick(d, 'title', locale)}</span>
-                      <span className="lwhen">
-                        {d.verifiedAt
-                          ? t('detail.commitmentVerified')
-                          : d.overdue
-                            ? t('detail.commitmentOverdue')
-                            : relativeTime(d.dueAt, locale)}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          ) : null}
-
-          {/* Journeys build plan J2: how this contract began — the customer's
-              own request and the conversation around it, read-only from here
-              (the thread closed when the request became this contract). */}
-          {contract.request ? (
-            <div className="rail-card" id="origin-request">
-              <p className="rail-cap">{t('requests.originTitle')}</p>
-              <p className="t-small muted">{t('requests.originLede')}</p>
-              <p className="t-small" dir="auto">
-                <strong>{contract.request.title}</strong>
-              </p>
-              <RequestThread request={contract.request} meId={me.id} canPost={false} />
-            </div>
-          ) : null}
+          {/* L5's customer commitments and J2's origin request — shared with
+              the new-road wizard, so written once (components/RailCards). */}
+          <CommitmentsCard contract={contract} />
+          <OriginRequestCard contract={contract} meId={viewerId} />
 
           {/* Two lineages, two columns — never interleaved, so it stays clear
               which one moved (V3.md §4.2). */}
@@ -785,7 +786,7 @@ export default function ContractDetail() {
               {contract.changeLog.map((e) => (
                 <div className="logitem" key={e.id}>
                   <span className="lwho">
-                    {e.actor.id === me.id ? t('detail.you') : t('detail.root')}
+                    {e.actor.id === viewerId ? t('detail.you') : t('detail.root')}
                   </span>
                   <span className="lwhat">{logText(e)}</span>
                   <span className="lwhen">
@@ -797,6 +798,7 @@ export default function ContractDetail() {
           </div>
         </aside>
       </div>
+      </ReadOnlyScope>
     </>
   );
 }

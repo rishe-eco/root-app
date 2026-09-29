@@ -115,6 +115,34 @@ export function renameContractDraft(titleEn: string) {
   });
 }
 
+/** The seeded new-road contract (journeys build plan J3): `AGREEMENT_FIRST`, on
+ *  the same customer's project as `CONTRACT_REF`, older-stamped so the
+ *  customer's list still opens `CONTRACT_REF` first. */
+export const WIZARD_CONTRACT_REF = 'RC-2026-021';
+export const WIZARD_CONTRACT_TITLE = 'Nahal online shop';
+
+/**
+ * Puts a customer commitment three days past its due date on the seeded
+ * project, straight into the database — the one input the attention module
+ * needs that no screen this stage builds can create for a spec. (Sales can add
+ * one through the Dependencies tab; that flow is L5's and has its own spec.)
+ */
+export function insertOverdueCustomerCommitment() {
+  if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
+    cwd: API_DIR,
+    input: `
+      INSERT INTO "Dependency" ("id", "projectId", "side", "titleFa", "titleEn", "dueAt", "createdById", "createdAt")
+      SELECT 'e2e-overdue-commitment', p."id", 'CUSTOMER'::"DependencySide", 'ارسال دارایی‌های برند',
+             'Send the brand assets', now() - interval '3 days', u."id", now()
+      FROM "Project" p, "User" u
+      WHERE p."id" = 'seed-project-nahal' AND u."email" = 'admin@root.local';
+    `,
+    stdio: 'pipe',
+    timeout: 60_000,
+  });
+}
+
 /** The API port `playwright.config.ts`'s webServer runs on — duplicated here
  *  rather than imported, same reasoning as TEST_DATABASE_URL above. */
 const E2E_API_URL = `http://localhost:${process.env.E2E_API_PORT || 4101}`;

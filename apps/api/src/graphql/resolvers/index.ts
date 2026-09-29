@@ -1,6 +1,6 @@
 import { DateTimeResolver } from 'graphql-scalars';
 import {
-  Contract,
+  Contract as ContractFields,
   ContractRevision,
   DesignConcept,
   DesignDraft,
@@ -34,6 +34,7 @@ import { templateMutations, templateQueries } from './templates.js';
 import { Theme, themeMutations, themeQueries } from './themes.js';
 import { Request, requestMutations, requestQueries } from './requests.js';
 import { peopleMutations, peopleQueries } from './people.js';
+import { contractWizardFields, wizardMutations } from './wizard.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -49,7 +50,10 @@ import { peopleMutations, peopleQueries } from './people.js';
 export const resolvers = {
   DateTime: DateTimeResolver,
 
-  Contract,
+  // Journeys build plan J3: the wizard's derived views and the staff notes
+  // sit beside the fields they read (`Contract.pending`) — see wizard.ts for
+  // why they are a separate file spread in here.
+  Contract: { ...ContractFields, ...contractWizardFields },
   ContractRevision,
   DesignConcept,
   DesignDraft,
@@ -135,5 +139,7 @@ export const resolvers = {
     // journeys build plan S3: setUserState / grantTool / revokeTool / inviteStaff /
     // setUserRoles — two capabilities, see resolvers/people.ts.
     ...peopleMutations,
+    // journeys build plan J3: addInternalNote — staff readers, see wizard.ts.
+    ...wizardMutations,
   },
 };

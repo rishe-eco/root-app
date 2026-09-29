@@ -151,6 +151,53 @@ export function projectVisibleToStaff(
 }
 
 /**
+ * Root's private notes on a contract (journeys build plan J3): a staff reader
+ * of contracts who may see *this* contract. Two clauses, because the first
+ * alone would let a designer read the notes of a contract they cannot open.
+ * **Never a customer** — not the owner, and not staff viewing as one, which is
+ * why `viewAs` swaps the viewer rather than filtering afterwards: asked about
+ * the customer, this returns false by construction.
+ */
+export function mayReadInternalNotes(user: Viewer, c: ContractForVisibility): boolean {
+  return isContractReader(user) && contractVisibleTo(user, c);
+}
+
+/**
+ * Whether an attention item is shown to this viewer (journeys build plan J3,
+ * §6.3). The module computes every item that exists; what a viewer sees of
+ * them is decided here, in the one file that holds visibility rules:
+ *
+ * - **`internal`** items are Root's own housekeeping (Root's late commitments,
+ *   an inactive assignee, a demo not ready) — contract readers only. A
+ *   customer seeing "Root is late" is not what the board is for (L5's
+ *   `myOverdueDependencies` made the same choice).
+ * - **`money`** items follow PD-21: only those who may read the contract's
+ *   money (the customer, and staff holding `money.read`).
+ *
+ * Each later stage sets the two flags on the items it adds; this function
+ * does not change.
+ */
+export function attentionVisibleTo(
+  user: Viewer,
+  c: { customerId: string },
+  item: { internal: boolean; money: boolean },
+): boolean {
+  if (item.money && !mayReadMoney(user, c)) return false;
+  if (item.internal && !isContractReader(user)) return false;
+  return true;
+}
+
+/**
+ * The contract's planned start and end (journeys build plan J3, Q12) are
+ * proposed in the draft and frozen at approval (J7). A customer sees them once
+ * the agreement is approved — the moment they stop being a proposal — and not
+ * before; staff readers see them always, since the draft is theirs.
+ */
+export function mayReadPlannedDates(user: Viewer, agreementApproved: boolean): boolean {
+  return isContractReader(user) || agreementApproved;
+}
+
+/**
  * PD-14, the part S1 cannot leave for J4: the moment design and development
  * can read active contracts, the fee on those contracts is one field away.
  * The customer always reads their own; staff read it only with `money.read`.
@@ -159,4 +206,27 @@ export function projectVisibleToStaff(
  */
 export function mayReadMoney(user: Viewer, c: { customerId: string }): boolean {
   return c.customerId === user.id || can(user, 'money.read');
+}
+
+/**
+ * Whose email and phone a viewer may read (J3 review). `User` rows reach
+ * customers through several edges — a contract's designer and developer, a
+ * comment's author — and until this rule each carried the staff member's
+ * email and phone to the customer. Contact details are for the account
+ * itself and for the staff who work with accounts: contract readers, and
+ * whoever manages customers, staff or the Review Room's corpus. Customers,
+ * contributors and reviewers see no one's but their own.
+ *
+ * Checked on the `User` field itself, not per edge, so a later edge that
+ * returns a `User` cannot reopen it.
+ */
+export function mayReadContactOf(viewer: Viewer, target: { id: string }): boolean {
+  if (viewer.id === target.id) return true;
+  return (
+    isContractReader(viewer) ||
+    can(viewer, 'customers.manage') ||
+    can(viewer, 'staff.manage') ||
+    // The Review Room's corpus admin lists its reviewers' emails (ReviewAdmin).
+    can(viewer, 'review.admin')
+  );
 }

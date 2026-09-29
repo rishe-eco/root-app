@@ -13,7 +13,10 @@ export const apollo = new ApolloClient({
   link,
   cache: new InMemoryCache({
     typePolicies: {
-      Contract: { keyFields: ['id'] },
+      // `statusSummary` has no id of its own, and two screens ask for
+      // different parts of it (the desk list three fields, the detail all of
+      // them). Merging keeps the fuller one from being replaced by the thinner.
+      Contract: { keyFields: ['id'], fields: { statusSummary: { merge: true } } },
       DesignConcept: { keyFields: ['id'] },
       PageDesign: { keyFields: ['id'] },
       ScopeItem: { keyFields: ['id'] },

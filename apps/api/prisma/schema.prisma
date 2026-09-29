@@ -170,6 +170,12 @@ model User {
   toolGrantsGiven   ToolGrant[] @relation("ToolGrantGrantedBy")
   toolGrantsRevoked ToolGrant[] @relation("ToolGrantRevokedBy")
 
+  /// Journeys build plan J3 — the approvals this person gave (steps), and the
+  /// staff-only notes they wrote. Staff accounts are disabled, never deleted,
+  /// so neither relation cascades.
+  stepApprovals StepApproval[] @relation("StepApprovedBy")
+  internalNotes InternalNote[] @relation("InternalNoteAuthor")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -343,6 +349,33 @@ enum ContractStatus {
   DISCARDED
 }
 
+/// Journeys build plan J3, PD-7: which road a contract travels. Every
+/// contract that existed before the J3 migration is `DESIGN_FIRST` and keeps
+/// running on today's gate, screens and `Comment` thread, untouched;
+/// `AGREEMENT_FIRST` is the wizard J4–J11 fill in. **The column default is
+/// `AGREEMENT_FIRST`, the migration backfilled every existing row to
+/// `DESIGN_FIRST`, and `createContract` sets its own value explicitly**
+/// (`SEQUENCE_FOR_NEW_CONTRACTS`, lib/steps.ts) — see the note there for why
+/// that is not yet the default.
+enum ContractSequence {
+  DESIGN_FIRST
+  AGREEMENT_FIRST
+}
+
+/// The wizard's steps (journeys build plan J3). `lib/steps.ts` is the one file
+/// that knows which of these a contract has, which is current and which are
+/// locked; a `StepApproval` row is what locks one.
+enum StepKind {
+  REQUIREMENTS
+  SCOPE
+  DRAFT
+  AGREEMENT
+  DESIGN
+  MOCKUP
+  DEMO
+  SUMMARY
+}
+
 model Contract {
   id      String @id @default(cuid())
   /// Human reference shown to the customer, e.g. RC-2026-014.
@@ -375,6 +408,9 @@ model Contract {
   developerId String?
   developer   User?   @relation("ContractDeveloper", fields: [developerId], references: [id], onDelete: SetNull)
 
+  /// Journeys build plan J3, PD-7 — see `ContractSequence`.
+  sequence ContractSequence @default(AGREEMENT_FIRST)
+
   status          ContractStatus @default(DRAFT)
   /// When the contract entered its current status. Not `updatedAt`, which any
   /// write bumps — this is what the Needs-Root queue orders by, and a queue
@@ -388,6 +424,12 @@ model Contract {
 
   /// Set when Root hands it over; until then the customer cannot see it.
   publishedAt DateTime?
+
+  /// Journeys build plan J3 (Q12): proposed in the draft, frozen at approval
+  /// in J7. **Calendar days, not instants** (PD-19): `date` columns, rendered
+  /// with `timeZone: 'UTC'` so 1 Aban never becomes 30 Mehr at 20:30.
+  plannedStartAt DateTime? @db.Date
+  plannedEndAt   DateTime? @db.Date
 
   /// The live published pair. The two lineages advance on separate clocks —
   /// publishing a design revision never touches the contract's approval or
@@ -403,6 +445,11 @@ model Contract {
   /// The registry rows this contract agreed (T1, PD-5). The registry itself is
   /// still read through `project.scopeItems`.
   agreedItems ScopeItem[] @relation("ContractScopeItems")
+
+  /// Journeys build plan J3 — the locks (`StepApproval`) and Root's private
+  /// notes (`InternalNote`, never read by a customer).
+  stepApprovals StepApproval[]
+  internalNotes InternalNote[]
 
   // ScopeItem re-parented to Project at L1 (build plan D1) — reached here via
   // `project.scopeItems`, never a direct relation. See Project and ScopeItem
@@ -420,6 +467,62 @@ model Contract {
   @@index([status, statusChangedAt])
   @@index([designerId])
   @@index([developerId])
+}
+
+/// One step of the wizard, approved (journeys build plan J3). **This row is
+/// the lock**: REQUIREMENTS, SCOPE and DRAFT lock with AGREEMENT's approval,
+/// every other step with its own, and `assertStepOpen` (lib/steps.ts) reads
+/// them. Nothing writes one yet — J7 (AGREEMENT), J8 (DESIGN), J9 (MOCKUP)
+/// and J10 (DEMO, one per phase) do, in the same transaction as the act they
+/// seal.
+///
+/// **Two partial unique indexes**, hand-written in the migration because
+/// Prisma cannot express a `WHERE`, and not `NULLS NOT DISTINCT`, which needs
+/// Postgres 15 while development has run on 14:
+///
+/// - `StepApproval_one_per_step` — `(contractId, step) WHERE phaseId IS NULL`
+///   — a plain unique would let two NULL-phase rows through, because NULLs
+///   are distinct;
+/// - `StepApproval_one_per_step_phase` — `(contractId, step, phaseId) WHERE
+///   phaseId IS NOT NULL` — a demo is approved once per phase.
+///
+/// The phase FK restricts: a phase that has been approved cannot be deleted
+/// out from under its own lock (J10 must refuse `deletePhase` with a code
+/// before Postgres does).
+model StepApproval {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  step    StepKind
+  phaseId String?
+  phase   Phase?   @relation(fields: [phaseId], references: [id], onDelete: Restrict)
+
+  approvedAt   DateTime @default(now())
+  approvedById String
+  approvedBy   User     @relation("StepApprovedBy", fields: [approvedById], references: [id])
+
+  @@index([contractId])
+}
+
+/// Root's private notes on a contract (journeys build plan J3): staff talk
+/// to staff here, and **no customer, and no view-as-customer, ever reads
+/// one**. Its own table — never a flag on `Comment`, `TicketMessage` or
+/// `RequestMessage` — because two audiences in one table is one missed filter
+/// from a leak (the same reason J2's `RequestMessage` stands alone). Append-only:
+/// no edit, no delete.
+model InternalNote {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation("InternalNoteAuthor", fields: [authorId], references: [id])
+  body     String
+
+  createdAt DateTime @default(now())
+
+  @@index([contractId, createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -1041,6 +1144,8 @@ model Phase {
   /// phase's acceptance. See BillingEntry.phaseId's own comment for why this
   /// reuses the phase rather than a separate Milestone model.
   billingEntries BillingEntry[]
+  /// Journeys build plan J3 — the demo approvals (one per phase, J10).
+  stepApprovals  StepApproval[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

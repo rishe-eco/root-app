@@ -1026,6 +1026,175 @@ export const typeDefs = /* GraphQL */ `
     designRevisions: [DesignRevisionSummary!]!
     "What has moved since the customer last acted. Null when there is nothing to show."
     pending: PendingReview
+
+    "Journeys build plan J3, PD-7: which road this contract travels."
+    sequence: ContractSequence!
+    "The wizard, derived (lib/steps.ts) — in road order, one entry per step (per phase for demos)."
+    wizard: [WizardStep!]!
+    "The status area's fields, derived. Never reads ContractStatus."
+    statusSummary: StatusSummary!
+    "What is waiting on whom, as this viewer may see it — longest-waiting first."
+    attention: [AttentionItem!]!
+    "The history rail for new-road contracts (PD-17), newest first, derived from dated rows. Legacy contracts read changeLog."
+    timeline: [TimelineItem!]!
+    "Staff readers only; an empty list — never an error — for a customer, and under asCustomer."
+    internalNotes: [InternalNote!]!
+  }
+
+  "Journeys build plan J3, PD-7."
+  enum ContractSequence {
+    DESIGN_FIRST
+    AGREEMENT_FIRST
+  }
+
+  "The wizard's steps. lib/steps.ts is the one file that knows which a contract has."
+  enum StepKind {
+    REQUIREMENTS
+    SCOPE
+    DRAFT
+    AGREEMENT
+    DESIGN
+    MOCKUP
+    DEMO
+    SUMMARY
+  }
+
+  enum StepStatus {
+    DONE
+    CURRENT
+    UPCOMING
+  }
+
+  enum WaitingOn {
+    CUSTOMER
+    ROOT
+  }
+
+  "The staff job an attention item routes to. Not a Role: house rule 1."
+  enum AttentionRole {
+    SALES
+    DESIGNER
+    DEVELOPER
+  }
+
+  """
+  Journeys build plan §6.3, whole — every kind is in the enum already so a
+  later stage never edits the SDL to add one. lib/attention.ts says which are
+  emitted; the sentences live in the locale files.
+  """
+  enum AttentionKind {
+    STEP_WAITING
+    DRAFT_TO_REVIEW
+    ANSWER_PUBLISHED
+    ANSWER_PENDING_APPROVAL
+    PROPOSAL_DECIDED
+    PROPOSAL_TO_DECIDE
+    FEEDBACK_UNRESOLVED
+    ROUND_PUBLISHED
+    ITERATION_PUBLISHED
+    DEMO_READY_TO_APPROVE
+    COMMITMENT_OVERDUE
+    INVOICE_DUE
+    INVOICE_OVERDUE
+    INVOICE_ISSUABLE
+    REQUEST_MESSAGE
+    TICKET_REPLY
+    TRADE_TO_CONFIRM
+    ALLOWANCE_EXHAUSTED
+    DEMO_NOT_READY
+    ASSIGNEE_INACTIVE
+  }
+
+  enum TimelineKind {
+    REQUEST_SUBMITTED
+    CONTRACT_HANDED_OVER
+    STEP_APPROVED
+    REVISION_PUBLISHED
+    REVISION_APPROVED
+    CONTRACT_SIGNED
+    DESIGN_PUBLISHED
+    BUILD_PUBLISHED
+  }
+
+  "One step of the road. A demo is one entry per phase; a new-road contract with no phase yet has one with phaseId null."
+  type WizardStep {
+    step: StepKind!
+    phaseId: ID
+    phaseNumber: Int
+    status: StepStatus!
+    "Locked by the approval that seals it — its own, or AGREEMENT's for REQUIREMENTS, SCOPE and DRAFT. Never true on a DESIGN_FIRST contract."
+    locked: Boolean!
+    lockedAt: DateTime
+    "False only for SUMMARY."
+    takesInput: Boolean!
+    "J8–J10 fill these; null until a step has an allowance to count against."
+    iterationsUsed: Int
+    allowance: Int
+    finishedAt: DateTime
+  }
+
+  "A name and a value for a sentence to interpolate. Numbers are decimal strings; the client localizes them."
+  type AttentionParam {
+    key: String!
+    value: String!
+  }
+
+  type AttentionItem {
+    kind: AttentionKind!
+    "Which sentence of the kind: attention.<kind>.<variant>.<customer|staff> in the locale files."
+    variant: String!
+    contractId: ID!
+    phaseId: ID
+    waitingOn: WaitingOn!
+    role: AttentionRole
+    since: DateTime!
+    params: [AttentionParam!]!
+  }
+
+  "The status area. Derived on every read; never from ContractStatus."
+  type StatusSummary {
+    "Signed. J13 adds 'and the first invoice is paid'."
+    started: Boolean!
+    startedAt: DateTime
+    currentStep: StepKind
+    currentPhaseId: ID
+    currentPhaseNumber: Int
+    "Null once every step is done."
+    nextMoveOn: WaitingOn
+    waitingOnRoot: Int!
+    waitingOnCustomer: Int!
+    "Calendar days (PD-19) — render in UTC. A customer sees them once the agreement is approved."
+    plannedStartAt: DateTime
+    plannedEndAt: DateTime
+    overdueCount: Int!
+    lastProgressAt: DateTime
+    "Whole days since Root last showed progress; null if it never has."
+    daysSinceProgress: Int
+  }
+
+  type TimelineItem {
+    id: ID!
+    at: DateTime!
+    kind: TimelineKind!
+    "Which side acted; the customer sees 'Root' for any staff member."
+    by: WaitingOn!
+    step: StepKind
+    phaseNumber: Int
+    "A revision version or a build number, where the sentence names one."
+    number: Int
+  }
+
+  type NoteAuthor {
+    id: ID!
+    name: String!
+  }
+
+  "Root's private note on a contract. Staff only; append-only."
+  type InternalNote {
+    id: ID!
+    body: String!
+    createdAt: DateTime!
+    author: NoteAuthor!
   }
 
   "Journeys build plan S1 — the two jobs a contract assigns: its designer and its developer."
@@ -1666,7 +1835,18 @@ export const typeDefs = /* GraphQL */ `
     me: User
     myContracts(status: ContractStatus): [Contract!]!
     contractStatusCounts: [StatusCount!]!
-    contract(id: ID!): Contract
+    """
+    A contract the caller may see. asCustomer (journeys build plan J3, "view as
+    customer"): for any staff reader who may see the contract, the same query
+    answered as the contract's own customer would receive it — every field
+    resolver then reads through the customer's eyes (viewerOf), so it is the
+    portal's rules, not a copy of them. NOT_FOUND for a contract the caller
+    may not see at all; NOT_VISIBLE_TO_CUSTOMER for one they may but the
+    customer may not (not handed over yet) — a code of its own, because the
+    caller already knows the contract exists. A customer passing it gets
+    their own view, unchanged.
+    """
+    contract(id: ID!, asCustomer: Boolean = false): Contract
 
     "Admin only."
     allContracts: [Contract!]!
@@ -2221,6 +2401,14 @@ export const typeDefs = /* GraphQL */ `
     ASSIGNEE_INACTIVE (their account is not active).
     """
     assignContract(contractId: ID!, designerId: ID, developerId: ID): Contract!
+    """
+    Staff (contracts.readActive or contracts.readAll, and the contract visible
+    to them). Journeys build plan J3: a private note on a contract — never read
+    by a customer, and not by "view as customer". FORBIDDEN for anyone else
+    (checked first), NOT_FOUND for a contract this reader cannot see,
+    EMPTY_COMMENT / TOO_LONG for the text.
+    """
+    addInternalNote(contractId: ID!, body: String!): Contract!
 
     "The current contract revision must be signed."
     issueAmendment(contractId: ID!, titleFa: String!, titleEn: String!, bodyFa: String!, bodyEn: String!, relatesToArticle: Int): Contract!

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
+import { Link, Navigate, NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
 import type { DocumentNode } from 'graphql';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +14,8 @@ import {
 } from '@/lib/queries';
 import { pick } from '@/lib/format';
 import StatusBadge from '@/components/StatusBadge';
+import StatusArea from '@/components/StatusArea';
+import StepList from '@/components/StepList';
 
 /**
  * `refetch` is the one deliberate exception to "no tab calls refetch" (see
@@ -43,7 +45,22 @@ export function useWorkspaceMutation(document: DocumentNode) {
   return useMutation(document, { variables: { contractId: contract.id } });
 }
 
-const TABS = ['contract', 'design', 'scope', 'phases', 'dependencies', 'activity'] as const;
+/**
+ * The tabs a contract has (journeys build plan J3). A legacy (DESIGN_FIRST)
+ * contract keeps exactly the tabs it had — its steps *are* Design, Contract and
+ * Phases — and gains Notes; a new-road contract puts its Steps first, the same
+ * step list and panels the customer's wizard shows, and keeps the rest for the
+ * registry, dependencies and history that every contract has.
+ */
+const LEGACY_TABS = ['contract', 'design', 'scope', 'phases', 'dependencies', 'activity', 'notes'] as const;
+const NEW_ROAD_TABS = ['steps', ...LEGACY_TABS] as const;
+
+/** The workspace's index: a new-road contract opens on its steps, a legacy one
+ *  on the contract text it has always opened on. */
+export function WorkspaceIndex() {
+  const { contract } = useOutletContext<WorkspaceContext>();
+  return <Navigate to={contract.sequence === 'AGREEMENT_FIRST' ? 'steps' : 'contract'} replace />;
+}
 
 const ASSIGN_ERROR_CODES = new Set(['ASSIGNEE_LACKS_CAPABILITY', 'ASSIGNEE_INACTIVE']);
 
@@ -170,6 +187,7 @@ export default function ContractWorkspace() {
   }
 
   const contract = data.contract;
+  const tabs: readonly string[] = contract.sequence === 'AGREEMENT_FIRST' ? NEW_ROAD_TABS : LEGACY_TABS;
 
   return (
     <div className="desk-section">
@@ -186,11 +204,23 @@ export default function ContractWorkspace() {
             </p>
           ) : null}
         </div>
-        <StatusBadge status={contract.status} />
+        <div className="workspace-head-actions">
+          {/* J3: the portal renderer, read-only, answered by the API as the
+              customer would be — the way to check what they will see. */}
+          <Link className="btn btn-secondary btn-sm" to={lp(locale, `/desk/contracts/${id}/as-customer`)}>
+            {t('viewAs.cta')}
+          </Link>
+          <StatusBadge status={contract.status} />
+        </div>
       </div>
 
+      <StatusArea contract={contract} audience="staff" />
+      {/* A legacy contract's steps are the tabs below, so the road is shown as a
+          strip above them; a new-road contract's road is the Steps tab itself. */}
+      {contract.wizard && contract.sequence === 'DESIGN_FIRST' ? <StepList steps={contract.wizard} /> : null}
+
       <nav className="workspace-tabs">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <NavLink
             key={tab}
             end

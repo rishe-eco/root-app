@@ -1,8 +1,8 @@
 import type { Role as RoleName } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { requireUser, type Context } from '../../context.js';
+import { viewerOf, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
-import { isContractReader, mayReadMoney, requestVisibleTo } from '../../lib/visibility.js';
+import { isContractReader, mayReadContactOf, mayReadMoney, requestVisibleTo } from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../lib/scope.js';
@@ -21,6 +21,14 @@ import { feedbackItemInclude } from './feedback.js';
  * plain shape adjustments (a nullable date becomes a boolean, BigInt becomes a
  * string). A few are load-bearing rules — which text is the document, and which
  * amendments a given caller may read — and those carry their own reasoning.
+ *
+ * **Every "who is looking" question in this file is `viewerOf(ctx)`, not
+ * `requireUser(ctx)`** (journeys build plan J3). Under "view as customer" the
+ * viewer is the contract's customer and everything below — money, drafts,
+ * unpublished revisions, requests — answers as it would for them, through the
+ * same `lib/visibility.ts` rules, with no `asCustomer` branch anywhere. A new
+ * field resolver that decides what to show by *who is asking* must do the
+ * same; `j3.test.ts`'s field-by-field parity test fails on one that does not.
  */
 
 export const Contract = {
@@ -29,7 +37,7 @@ export const Contract = {
   // Null, not an error, for staff without `money.read` (journeys build plan
   // S1, PD-14): a designer's query for the contract still succeeds.
   amount: (c: FullContract, _a: unknown, ctx: Context) =>
-    c.amount === null || !mayReadMoney(requireUser(ctx), c) ? null : c.amount.toString(),
+    c.amount === null || !mayReadMoney(viewerOf(ctx), c) ? null : c.amount.toString(),
   gate: (c: FullContract) => computeGate(c),
   changeLog: (c: FullContract) => c.changeLogs,
 
@@ -54,7 +62,7 @@ export const Contract = {
    * that preceded it.
    */
   request: (c: FullContract, _a: unknown, ctx: Context) =>
-    requestVisibleTo(requireUser(ctx), c.project) ? c.project : null,
+    requestVisibleTo(viewerOf(ctx), c.project) ? c.project : null,
 
   /**
    * Appendix 1 as a *view of the registry's agreed set*, frozen at the
@@ -107,7 +115,7 @@ export const Contract = {
       // customer — who signs this — always reads it; `contentHash` still
       // attests to the full snapshot, so redacting one field of the *view*
       // changes nothing about what the hash covers.
-      amount: mayReadMoney(requireUser(ctx), c) ? snapshot.amount : null,
+      amount: mayReadMoney(viewerOf(ctx), c) ? snapshot.amount : null,
     };
   },
 
@@ -117,7 +125,7 @@ export const Contract = {
    * No query of its own: `articles` is already on `c` via `contractInclude`.
    */
   draft: (c: FullContract, _a: unknown, ctx: Context) => {
-    const user = requireUser(ctx);
+    const user = viewerOf(ctx);
     // The author's working copy — the fee included, which is why readers
     // without `contracts.author` (design, development) get null here.
     if (!can(user, 'contracts.author')) return null;
@@ -142,7 +150,7 @@ export const Contract = {
    * field resolver runs on every look, not just an intention to edit.
    */
   designDraft: async (c: FullContract, _a: unknown, ctx: Context) => {
-    const user = requireUser(ctx);
+    const user = viewerOf(ctx);
     if (!isContractReader(user)) return null;
     return prisma.designRevision.findFirst({
       where: { contractId: c.id, publishedAt: null },
@@ -152,7 +160,7 @@ export const Contract = {
 
   /** Newest first. Non-staff see published revisions only. */
   contractRevisions: async (c: FullContract, _a: unknown, ctx: Context) => {
-    const user = requireUser(ctx);
+    const user = viewerOf(ctx);
     const staff = isContractReader(user);
     const revisions = await prisma.contractRevision.findMany({
       where: { contractId: c.id, ...(staff ? {} : { publishedAt: { not: null } }) },
@@ -182,7 +190,7 @@ export const Contract = {
 
   /** Newest first. Non-staff see published revisions only. */
   designRevisions: async (c: FullContract, _a: unknown, ctx: Context) => {
-    const user = requireUser(ctx);
+    const user = viewerOf(ctx);
     const staff = isContractReader(user);
     const revisions = await prisma.designRevision.findMany({
       where: { contractId: c.id, ...(staff ? {} : { publishedAt: { not: null } }) },
@@ -349,7 +357,7 @@ export const ContractRevision = {
     _a: unknown,
     ctx: Context,
   ) => {
-    const user = requireUser(ctx);
+    const user = viewerOf(ctx);
     if (isContractReader(user)) return r.amendments;
     return r.amendments.filter((a) => a.publishedAt !== null);
   },
@@ -381,7 +389,7 @@ export const ScopeItem = {
  */
 export const DemoFrame = {
   unpromptedChanges: async (f: { demoId: string }, _a: unknown, ctx: Context) => {
-    const user = requireUser(ctx);
+    const user = viewerOf(ctx);
     if (!isContractReader(user)) return [];
     const demo = await prisma.demo.findUniqueOrThrow({ where: { id: f.demoId }, select: { phaseId: true } });
     return prisma.buildChangeEntry.findMany({
@@ -435,7 +443,7 @@ export const Project = {
    * do: one round trip, matching this resolver's own existing shape.
    */
   phases: (p: { id: string }, _a: unknown, ctx: Context) => {
-    const user = requireUser(ctx);
+    const user = viewerOf(ctx);
     const staff = isContractReader(user);
     return prisma.phase.findMany({
       where: { projectId: p.id },
@@ -593,4 +601,25 @@ export const User = {
    * union happens here, once, against the same table the server guards with.
    */
   capabilities: (u: { roles: RoleName[] }) => [...capabilitiesOf(u)],
+
+  /**
+   * J3 review: contact details only for the account itself and for staff
+   * who work with accounts — `mayReadContactOf`. The viewer is read straight
+   * off the context rather than through `requireUser`: the auth mutations
+   * return the user they just authenticated with no session yet on the
+   * context (and that user is, by construction, the caller), and an account
+   * in a forced password change must still read its own `me`. No anonymous
+   * query returns a `User` (the Library's public shapes have no author
+   * field — see r2.test.ts), so "no viewer" only ever means an auth payload.
+   * Under view-as, `viewAs` is the customer, so the customer's projection
+   * hides staff contacts exactly as the customer's own read does.
+   */
+  email: (u: { id: string; email: string | null }, _a: unknown, ctx: Context) => {
+    const viewer = ctx.viewAs ?? ctx.user;
+    return !viewer || mayReadContactOf(viewer, u) ? u.email : null;
+  },
+  phone: (u: { id: string; phone: string | null }, _a: unknown, ctx: Context) => {
+    const viewer = ctx.viewAs ?? ctx.user;
+    return !viewer || mayReadContactOf(viewer, u) ? u.phone : null;
+  },
 };
