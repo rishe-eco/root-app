@@ -9,8 +9,11 @@ import { firstContractId } from './shared.js';
 /**
  * The dependency board (build plan L5; spec §7) — symmetric commitments,
  * customer-side and Root-side, one board under one rule. Part of the admin
- * barrel: every mutation here is `contracts.manage`, matching every other
- * registry-adjacent surface added since L1 (phases, demo frames), and
+ * barrel. Since journeys build plan S1, writing the board is
+ * `contracts.author` (what is owed, by whom, by when is part of the
+ * agreement), and marking a row met is `dependencies.verifyGeneral` — J4
+ * adds the `technical` flag that routes technical rows to
+ * `dependencies.verifyTechnical` instead; until then every row is general. It
  * returns `Contract!` via `firstContractId` (T9 in V2.md), reached through
  * `project.dependencies`.
  */
@@ -27,7 +30,7 @@ export const dependencyMutations = {
     args: { projectId: string; side: DependencySide; titleFa: string; titleEn: string; dueAt: string },
     ctx: Context,
   ) => {
-    const user = requireCapability(ctx, 'contracts.manage');
+    const user = requireCapability(ctx, 'contracts.author');
     const project = await prisma.project.findUnique({ where: { id: args.projectId } });
     if (!project) throw notFound('project');
 
@@ -49,7 +52,7 @@ export const dependencyMutations = {
     args: { dependencyId: string; titleFa: string; titleEn: string; dueAt: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const dep = await prisma.dependency.findUnique({ where: { id: args.dependencyId } });
     if (!dep) throw notFound('dependency');
 
@@ -69,7 +72,7 @@ export const dependencyMutations = {
    * is refused exactly like an absent one.
    */
   verifyDependency: async (_p: unknown, args: { dependencyId: string; note: string }, ctx: Context) => {
-    const user = requireCapability(ctx, 'contracts.manage');
+    const user = requireCapability(ctx, 'dependencies.verifyGeneral');
     const dep = await prisma.dependency.findUnique({ where: { id: args.dependencyId } });
     if (!dep) throw notFound('dependency');
     if (!verificationRequiresNote({ note: args.note })) {
@@ -89,7 +92,7 @@ export const dependencyMutations = {
    *  `ScopeItem` already uses (build plan L1), so a wrongly-verified row is
    *  reopened rather than left to lie. */
   unverifyDependency: async (_p: unknown, args: { dependencyId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'dependencies.verifyGeneral');
     const dep = await prisma.dependency.findUnique({ where: { id: args.dependencyId } });
     if (!dep) throw notFound('dependency');
 
@@ -101,7 +104,7 @@ export const dependencyMutations = {
   },
 
   deleteDependency: async (_p: unknown, args: { dependencyId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const dep = await prisma.dependency.findUnique({ where: { id: args.dependencyId } });
     if (!dep) throw notFound('dependency');
 

@@ -8,11 +8,14 @@ import { demoPublishedEmail } from '../../../lib/mailTemplates.js';
 import { env } from '../../../lib/env.js';
 import { reload } from '../contracts.js';
 import { firstContractId } from './shared.js';
+import { requireBuildAuthorOnProject } from '../access.js';
 
 /**
  * Authoring the review frame, and the publish gate it exists to hold (build
- * plan L3; spec §6). Staff only (`contracts.manage`), the same guard every
- * other authoring mutation in `resolvers/admin/` uses — `submitFeedback` and
+ * plan L3; spec §6). Staff only — since journeys build plan S1,
+ * `builds.author` plus the developer assignment (`requireBuildAuthorOnProject`),
+ * the same guard as the demo mutations in `phases.ts`: the frame is the
+ * developer's account of what a demo holds. `submitFeedback` and
  * `ratifyFeedback` live in `resolvers/feedback.ts` instead, because those two
  * are ownership-gated (a customer calls them too), not capability-gated.
  *
@@ -62,8 +65,9 @@ export const demoFrameMutations = {
    * anchored to it) out from under a reviewer who already commented.
    */
   generateDemoFrame: async (_p: unknown, args: { demoId: string }, ctx: Context) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    const admin = requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
+    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
     const frame = await ensureFrame(demo.id, admin.id);
 
     const items = await prisma.scopeItem.findMany({ where: { projectId: demo.phase.projectId } });
@@ -102,8 +106,9 @@ export const demoFrameMutations = {
     args: { demoId: string; summaryFa?: string | null; summaryEn?: string | null },
     ctx: Context,
   ) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    const admin = requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
+    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
     const frame = await ensureFrame(demo.id, admin.id);
     await prisma.demoFrame.update({
       where: { id: frame.id },
@@ -131,8 +136,9 @@ export const demoFrameMutations = {
     args: { demoId: string; kind: DemoFrameLineKind; textFa: string; textEn: string; buildChangeEntryId?: string | null },
     ctx: Context,
   ) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    const admin = requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
+    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
     const frame = await ensureFrame(demo.id, admin.id);
 
     if (args.buildChangeEntryId) {
@@ -167,8 +173,9 @@ export const demoFrameMutations = {
     args: { lineId: string; textFa: string; textEn: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'builds.author');
     const line = await loadLine(args.lineId);
+    await requireBuildAuthorOnProject(ctx, line.frame.demo.phase.projectId);
     await prisma.demoFrameLine.update({
       where: { id: line.id },
       data: { textFa: args.textFa, textEn: args.textEn },
@@ -178,8 +185,9 @@ export const demoFrameMutations = {
 
   /** Cascades to its feedback item, if any (schema.prisma: onDelete: Cascade). */
   deleteDemoFrameLine: async (_p: unknown, args: { lineId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'builds.author');
     const line = await loadLine(args.lineId);
+    await requireBuildAuthorOnProject(ctx, line.frame.demo.phase.projectId);
     await prisma.demoFrameLine.delete({ where: { id: line.id } });
     return reload(await firstContractId(line.frame.demo.phase.projectId));
   },
@@ -189,8 +197,9 @@ export const demoFrameMutations = {
    * authored first (NO_FRAME). The one writer of `Demo.publishedAt`.
    */
   publishDemo: async (_p: unknown, args: { demoId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
+    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
     if (demo.publishedAt) {
       throw new GraphQLError('This demo is already published.', { extensions: { code: 'ALREADY_PUBLISHED' } });
     }

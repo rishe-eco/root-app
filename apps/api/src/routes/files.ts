@@ -24,6 +24,7 @@ import { buildContext } from '../context.js';
 import { storage } from '../lib/storage.js';
 import { UploadError, checkSize, policyFor, safeDownloadName, sniff } from '../lib/files.js';
 import { can } from '../lib/capabilities.js';
+import { canAuthorDesign, contractVisibleTo } from '../lib/visibility.js';
 import type { LibraryEntry } from '@prisma/client';
 
 export const filesRouter: Router = Router();
@@ -124,9 +125,19 @@ filesRouter.post(
           'This kind of file belongs to a contract; name which one.',
         );
       }
-      const contract = await prisma.contract.findUnique({ where: { id: contractId } });
-      if (!contract) {
+      const contract = await prisma.contract.findUnique({
+        where: { id: contractId },
+        include: { project: { select: { status: true } } },
+      });
+      // Journeys build plan S1: the capability above says "may upload design
+      // images at all"; this says "to *this* contract" — visible to the
+      // uploader, and theirs to design. Same two answers, same two codes,
+      // as `requireDesignAuthorOn` gives the resolvers.
+      if (!contract || !contractVisibleTo(user, contract)) {
         throw new UploadError(404, 'NOT_FOUND', 'No such contract.');
+      }
+      if (policy.uploader === 'design.author' && !canAuthorDesign(user, contract)) {
+        throw new UploadError(403, 'NOT_ASSIGNED', 'You are not the designer of this contract.');
       }
     } else if (policy.owner === 'project') {
       // Build plan L7 — the first upload a customer performs themself
@@ -139,7 +150,9 @@ filesRouter.post(
       if (!project) {
         throw new UploadError(404, 'NOT_FOUND', 'No such project.');
       }
-      if (!can(user, 'contracts.manage') && project.customerId !== user.id) {
+      // Staff bypass is `customers.manage` — the desk's services surface
+      // (journeys build plan S1; before it, `contracts.manage`).
+      if (!can(user, 'customers.manage') && project.customerId !== user.id) {
         throw new UploadError(403, 'FORBIDDEN', 'You do not have access to that.');
       }
     } else {
@@ -266,7 +279,9 @@ filesRouter.get(
     const file = await prisma.storedFile.findUnique({
       where: { id: req.params.id },
       include: {
-        contract: { select: { customerId: true, publishedAt: true } },
+        contract: {
+          select: { customerId: true, publishedAt: true, status: true, project: { select: { status: true } } },
+        },
         // Build plan L7 — a SERVICE_IMPORT file has no contract at all;
         // ownership runs through the project instead.
         project: { select: { customerId: true } },
@@ -287,18 +302,17 @@ filesRouter.get(
         res.status(401).json({ error: 'UNAUTHENTICATED', message: 'You need to sign in.' });
         return;
       }
-      if (!can(ctx.user, 'contracts.manage')) {
-        // Exactly the rule `loadForActor` applies to the contract itself: your
-        // own, and published. A design image is part of a contract, so it
-        // cannot be more visible than the contract that owns it. A
-        // SERVICE_IMPORT file (build plan L7) has no publishedAt-shaped gate
-        // to inherit — a project is never "unpublished" the way a contract
-        // draft is — so its half of this check is ownership alone.
-        const owned =
-          (file.contract !== null && file.contract.customerId === ctx.user.id && file.contract.publishedAt !== null) ||
-          (file.project !== null && file.project.customerId === ctx.user.id);
-        if (!owned) return deny();
-      }
+      // Exactly the rule `loadForActor` applies to the contract itself —
+      // `contractVisibleTo`, imported rather than restated (journeys build
+      // plan S1). A design image is part of a contract, so it cannot be more
+      // visible than the contract that owns it. A SERVICE_IMPORT file (build
+      // plan L7) has no publishedAt-shaped gate to inherit — a project is
+      // never "unpublished" the way a contract draft is — so its half is
+      // ownership, or the services desk's `customers.manage`.
+      const visible =
+        (file.contract !== null && contractVisibleTo(ctx.user, file.contract)) ||
+        (file.project !== null && (file.project.customerId === ctx.user.id || can(ctx.user, 'customers.manage')));
+      if (!visible) return deny();
     }
 
     if (!(await storage.exists(file.key))) {

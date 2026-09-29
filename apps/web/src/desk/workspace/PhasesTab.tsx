@@ -3,6 +3,7 @@ import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
+import { can, canAuthorBuild } from '@/lib/access';
 import { pick, formatCount, relativeTime } from '@/lib/format';
 import {
   CREATE_PHASE,
@@ -54,11 +55,14 @@ type PageDesignOption = { id: string; label: string };
 function DemoPageRow({
   page,
   designOptions,
+  editable,
 }: {
   page: DemoPage;
   designOptions: PageDesignOption[];
+  editable: boolean;
 }) {
   const { t } = useTranslation();
+  const locale = useLocale();
   const [labelFa, setLabelFa] = useState(page.labelFa);
   const [labelEn, setLabelEn] = useState(page.labelEn);
   const [canonicalPath, setCanonicalPath] = useState(page.canonicalPath);
@@ -88,6 +92,20 @@ function DemoPageRow({
   async function onDelete() {
     if (!confirm(t('workspace.confirmDeleteDemoPage'))) return;
     await remove({ variables: { demoPageId: page.id } });
+  }
+
+  // Journeys build plan S1: declaring/editing a demo page is builds.author
+  // plus being this contract's developer (canAuthorBuild) — a viewer without
+  // either sees the same row as plain text, matching DesignTab's own
+  // read-only PageRow.
+  if (!editable) {
+    return (
+      <div className="demo-page-row">
+        <span className="t-eyebrow num-latin">{page.key}</span>
+        <span className="t-small">{pick(page, 'label', locale)}</span>
+        <span className="t-small num-latin">{page.canonicalPath}</span>
+      </div>
+    );
   }
 
   return (
@@ -123,10 +141,15 @@ function DemoPageRow({
 function DemoCard({
   demo,
   designOptions,
+  editable,
+  canConvertToTicket,
   onChanged,
 }: {
   demo: Demo;
   designOptions: PageDesignOption[];
+  /** builds.author plus being this contract's developer (canAuthorBuild). */
+  editable: boolean;
+  canConvertToTicket: boolean;
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
@@ -189,62 +212,81 @@ function DemoCard({
 
   return (
     <div className="demo-card">
-      <form className="editor-grid-2" onSubmit={onSaveDemo}>
-        <div className="field">
-          <label className="label">{t('workspace.demoStagingUrl')}</label>
-          <input
-            className="input num-latin"
-            dir="ltr"
-            required
-            value={stagingUrl}
-            onChange={(e) => setStagingUrl(e.target.value)}
-          />
+      {editable ? (
+        <form className="editor-grid-2" onSubmit={onSaveDemo}>
+          <div className="field">
+            <label className="label">{t('workspace.demoStagingUrl')}</label>
+            <input
+              className="input num-latin"
+              dir="ltr"
+              required
+              value={stagingUrl}
+              onChange={(e) => setStagingUrl(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label className="label">{t('workspace.demoBuildRef')}</label>
+            <input className="input num-latin" dir="ltr" value={buildRef} onChange={(e) => setBuildRef(e.target.value)} />
+          </div>
+          <div className="field">
+            <label className="label">{t('workspace.demoReviewStart')}</label>
+            <input
+              className="input num-latin"
+              type="date"
+              value={reviewWindowStart}
+              onChange={(e) => setReviewWindowStart(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label className="label">{t('workspace.demoReviewEnd')}</label>
+            <input
+              className="input num-latin"
+              type="date"
+              value={reviewWindowEnd}
+              onChange={(e) => setReviewWindowEnd(e.target.value)}
+            />
+          </div>
+          <div className="editor-card-actions">
+            <button className="btn btn-secondary btn-sm" type="submit" disabled={loading}>
+              {t('workspace.save')}
+            </button>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={onDeleteDemo}>
+              {t('workspace.delete')}
+            </button>
+          </div>
+          {error ? <p className="error">{error}</p> : null}
+        </form>
+      ) : (
+        // Journeys build plan S1: a viewer who is not this contract's
+        // developer (or lacks builds.author entirely) reads the demo's own
+        // facts rather than a form every field of which would be refused.
+        <div className="editor-grid-2">
+          <p className="t-small">
+            <span className="t-eyebrow">{t('workspace.demoStagingUrl')}</span>{' '}
+            <span className="num-latin">{demo.stagingUrl}</span>
+          </p>
+          {demo.buildRef ? (
+            <p className="t-small">
+              <span className="t-eyebrow">{t('workspace.demoBuildRef')}</span> <span className="num-latin">{demo.buildRef}</span>
+            </p>
+          ) : null}
         </div>
-        <div className="field">
-          <label className="label">{t('workspace.demoBuildRef')}</label>
-          <input className="input num-latin" dir="ltr" value={buildRef} onChange={(e) => setBuildRef(e.target.value)} />
-        </div>
-        <div className="field">
-          <label className="label">{t('workspace.demoReviewStart')}</label>
-          <input
-            className="input num-latin"
-            type="date"
-            value={reviewWindowStart}
-            onChange={(e) => setReviewWindowStart(e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label className="label">{t('workspace.demoReviewEnd')}</label>
-          <input
-            className="input num-latin"
-            type="date"
-            value={reviewWindowEnd}
-            onChange={(e) => setReviewWindowEnd(e.target.value)}
-          />
-        </div>
-        <div className="editor-card-actions">
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={loading}>
-            {t('workspace.save')}
-          </button>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={onDeleteDemo}>
-            {t('workspace.delete')}
-          </button>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-      </form>
+      )}
 
       <DemoViewport demo={demo} />
 
-      <DemoFeedbackPanel demo={demo} canAuthor onChanged={onChanged} />
+      <DemoFeedbackPanel demo={demo} canAuthor={editable} canConvertToTicket={canConvertToTicket} onChanged={onChanged} />
 
       <div className="workspace-row">
         <h4 className="t-h3">{t('workspace.demoPagesTitle')}</h4>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingPage((v) => !v)}>
-          {t('workspace.addDemoPage')}
-        </button>
+        {editable ? (
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingPage((v) => !v)}>
+            {t('workspace.addDemoPage')}
+          </button>
+        ) : null}
       </div>
 
-      {addingPage ? (
+      {addingPage && editable ? (
         <form className="card editor-card auth-form" onSubmit={onDeclarePage}>
           <div className="field">
             <label className="label">{t('workspace.scopeKey')}</label>
@@ -275,7 +317,7 @@ function DemoCard({
 
       <div className="editor-list">
         {demo.pages.map((p) => (
-          <DemoPageRow key={p.id} page={p} designOptions={designOptions} />
+          <DemoPageRow key={p.id} page={p} designOptions={designOptions} editable={editable} />
         ))}
       </div>
 
@@ -302,11 +344,20 @@ function PhaseCard({
   phase,
   unassignedItems,
   designOptions,
+  canManagePhases,
+  canBuild,
+  canConvertToTicket,
   onChanged,
 }: {
   phase: Phase;
   unassignedItems: ScopeItem[];
   designOptions: PageDesignOption[];
+  /** contracts.author — the phase itself and which scope items sit in it. */
+  canManagePhases: boolean;
+  /** builds.author plus being this contract's developer (canAuthorBuild) —
+   *  the demos and declared pages underneath the phase. */
+  canBuild: boolean;
+  canConvertToTicket: boolean;
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
@@ -366,19 +417,21 @@ function PhaseCard({
           <span className="num-latin">{formatCount(phase.number, locale)}</span> ·{' '}
           {pick(phase, 'title', locale)}
         </span>
-        <div className="workspace-row" style={{ gap: '0.5rem' }}>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing((v) => !v)}>
-            {t('workspace.edit')}
-          </button>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete}>
-            {t('workspace.delete')}
-          </button>
-        </div>
+        {canManagePhases ? (
+          <div className="workspace-row" style={{ gap: '0.5rem' }}>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing((v) => !v)}>
+              {t('workspace.edit')}
+            </button>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete}>
+              {t('workspace.delete')}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {phase.milestoneLabel ? <p className="t-caption">{phase.milestoneLabel}</p> : null}
 
-      {editing ? (
+      {editing && canManagePhases ? (
         <form className="card editor-card auth-form" onSubmit={onSave}>
           <div className="editor-grid-2">
             <div className="field">
@@ -411,19 +464,21 @@ function PhaseCard({
             phase.scopeItems.map((i) => (
               <span key={i.id} className="badge">
                 {pick(i, 'label', locale)}
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  aria-label={t('workspace.phaseUnassign')}
-                  onClick={() => onUnassign(i.id)}
-                >
-                  ×
-                </button>
+                {canManagePhases ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    aria-label={t('workspace.phaseUnassign')}
+                    onClick={() => onUnassign(i.id)}
+                  >
+                    ×
+                  </button>
+                ) : null}
               </span>
             ))
           )}
         </div>
-        {unassignedItems.length > 0 ? (
+        {unassignedItems.length > 0 && canManagePhases ? (
           <div className="workspace-row">
             <select className="input" value={pickedItem} onChange={(e) => setPickedItem(e.target.value)}>
               <option value="">{t('workspace.phasePickItem')}</option>
@@ -443,12 +498,14 @@ function PhaseCard({
       <div>
         <div className="workspace-row">
           <p className="t-eyebrow">{t('workspace.demosTitle')}</p>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingDemo((v) => !v)}>
-            {t('workspace.addDemo')}
-          </button>
+          {canBuild ? (
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingDemo((v) => !v)}>
+              {t('workspace.addDemo')}
+            </button>
+          ) : null}
         </div>
 
-        {addingDemo ? (
+        {addingDemo && canBuild ? (
           <form className="card editor-card auth-form" onSubmit={onCreateDemo}>
             <div className="field">
               <label className="label">{t('workspace.demoStagingUrl')}</label>
@@ -473,7 +530,16 @@ function PhaseCard({
         {phase.demos.length === 0 ? (
           <p className="t-small muted">{t('workspace.phaseNoDemo')}</p>
         ) : (
-          phase.demos.map((d) => <DemoCard key={d.id} demo={d} designOptions={designOptions} onChanged={onChanged} />)
+          phase.demos.map((d) => (
+            <DemoCard
+              key={d.id}
+              demo={d}
+              designOptions={designOptions}
+              editable={canBuild}
+              canConvertToTicket={canConvertToTicket}
+              onChanged={onChanged}
+            />
+          ))
         )}
       </div>
     </div>
@@ -483,8 +549,15 @@ function PhaseCard({
 export default function PhasesTab() {
   const { t } = useTranslation();
   const locale = useLocale();
-  const { contract, refetch } = useOutletContext<WorkspaceContext>();
+  const { contract, refetch, me } = useOutletContext<WorkspaceContext>();
   const project = contract.project;
+  // Journeys build plan S1: the phase itself is contracts.author (part of
+  // the agreement); the demos and declared pages under it are builds.author
+  // plus being this contract's own developer (canAuthorBuild) — the plan's
+  // guard-mapping table splits `admin/phases.ts` exactly this way.
+  const canManagePhases = can(me, 'contracts.author');
+  const canBuild = canAuthorBuild(me, contract);
+  const canConvertToTicket = can(me, 'tickets.answer');
 
   const [adding, setAdding] = useState(false);
   const [titleFa, setTitleFa] = useState('');
@@ -540,12 +613,14 @@ export default function PhasesTab() {
 
       <div className="workspace-row">
         <h3 className="t-h3">{t('workspace.phasesTitle')}</h3>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding((v) => !v)}>
-          {t('workspace.addPhase')}
-        </button>
+        {canManagePhases ? (
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding((v) => !v)}>
+            {t('workspace.addPhase')}
+          </button>
+        ) : null}
       </div>
 
-      {adding ? (
+      {adding && canManagePhases ? (
         <form className="card editor-card auth-form" onSubmit={onAdd}>
           <div className="editor-grid-2">
             <div className="field">
@@ -575,6 +650,9 @@ export default function PhasesTab() {
             phase={phase}
             unassignedItems={unassignedItems}
             designOptions={designOptions}
+            canManagePhases={canManagePhases}
+            canBuild={canBuild}
+            canConvertToTicket={canConvertToTicket}
             onChanged={refetch}
           />
         ))

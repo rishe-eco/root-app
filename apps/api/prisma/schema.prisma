@@ -59,6 +59,14 @@ enum Role {
   /// feedback off a queue never sees the contract text, the fee, the customer
   /// list or the billing surface. See lib/capabilities.ts.
   DEVELOPER
+  /// Journeys build plan S1, 2026-09-28: the person who sells and runs a
+  /// contract — authors it, reads money, answers tickets, approves design and
+  /// development answers before the customer sees them. See lib/capabilities.ts.
+  SALES
+  /// Journeys build plan S1: authors the design of the contracts they are
+  /// assigned to (`Contract.designerId`), and reads — never authors — the rest
+  /// of an active contract. No money. See lib/capabilities.ts.
+  DESIGNER
 }
 
 enum UserState {
@@ -86,6 +94,10 @@ model User {
   locale String @default("fa")
 
   contracts             Contract[]      @relation("CustomerContracts")
+  /// Journeys build plan S1 — the assignment edges (house rule 2: an
+  /// ownership edge, checked separately from `design.author`/`builds.author`).
+  designedContracts     Contract[]      @relation("ContractDesigner")
+  developedContracts    Contract[]      @relation("ContractDeveloper")
   projects              Project[]       @relation("CustomerProjects")
   scopeTrades           ScopeTrade[]
   comments              Comment[]
@@ -254,6 +266,18 @@ model Contract {
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
+  /// Journeys build plan S1: who designs and who develops this contract —
+  /// chosen by sales at creation and changeable by them (journeys Q-S4). An
+  /// ownership edge, not a capability: holding `design.author` lets a
+  /// designer author a design; this column says *which* contracts. SetNull,
+  /// so deleting an account never deletes a contract — but accounts are
+  /// disabled, not deleted, and a disabled assignee stays on the row as
+  /// history until sales reassigns (plan S1, `ASSIGNEE_INACTIVE`).
+  designerId  String?
+  designer    User?   @relation("ContractDesigner", fields: [designerId], references: [id], onDelete: SetNull)
+  developerId String?
+  developer   User?   @relation("ContractDeveloper", fields: [developerId], references: [id], onDelete: SetNull)
+
   status          ContractStatus @default(DRAFT)
   /// When the contract entered its current status. Not `updatedAt`, which any
   /// write bumps — this is what the Needs-Root queue orders by, and a queue
@@ -293,6 +317,8 @@ model Contract {
 
   @@index([customerId, status])
   @@index([status, statusChangedAt])
+  @@index([designerId])
+  @@index([developerId])
 }
 
 // ---------------------------------------------------------------------------

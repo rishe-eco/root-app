@@ -3,6 +3,7 @@ import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
+import { can } from '@/lib/access';
 import { pick, fullDateTime } from '@/lib/format';
 import {
   CREATE_DEPENDENCY,
@@ -25,7 +26,17 @@ import type { WorkspaceContext } from './ContractWorkspace';
 
 type T = (key: string, opts?: Record<string, unknown>) => string;
 
-function VerifyForm({ dep, t, locale }: { dep: Dependency; t: T; locale: 'fa' | 'en' }) {
+function VerifyForm({
+  dep,
+  t,
+  locale,
+  canVerify,
+}: {
+  dep: Dependency;
+  t: T;
+  locale: 'fa' | 'en';
+  canVerify: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
   const [verify, { loading }] = useMutation(VERIFY_DEPENDENCY);
@@ -38,12 +49,16 @@ function VerifyForm({ dep, t, locale }: { dep: Dependency; t: T; locale: 'fa' | 
           {t('workspace.dependencyVerifiedLine', { name: dep.verifiedBy?.name ?? '', date: fullDateTime(dep.verifiedAt, locale) })}
         </p>
         <p className="t-small">{dep.verifiedNote}</p>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => unverify({ variables: { dependencyId: dep.id } })}>
-          {t('workspace.dependencyUnverify')}
-        </button>
+        {canVerify ? (
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => unverify({ variables: { dependencyId: dep.id } })}>
+            {t('workspace.dependencyUnverify')}
+          </button>
+        ) : null}
       </div>
     );
   }
+
+  if (!canVerify) return null;
 
   if (!open) {
     return (
@@ -79,7 +94,7 @@ function VerifyForm({ dep, t, locale }: { dep: Dependency; t: T; locale: 'fa' | 
   );
 }
 
-function DependencyRow({ dep }: { dep: Dependency }) {
+function DependencyRow({ dep, canManage, canVerify }: { dep: Dependency; canManage: boolean; canVerify: boolean }) {
   const { t } = useTranslation();
   const locale = useLocale();
   const [editing, setEditing] = useState(false);
@@ -109,15 +124,19 @@ function DependencyRow({ dep }: { dep: Dependency }) {
           {pick(dep, 'title', locale)}
         </span>
         <span className="t-caption">{fullDateTime(dep.dueAt, locale)}</span>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing((v) => !v)}>
-          {t('workspace.edit')}
-        </button>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete}>
-          {t('workspace.delete')}
-        </button>
+        {canManage ? (
+          <>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing((v) => !v)}>
+              {t('workspace.edit')}
+            </button>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete}>
+              {t('workspace.delete')}
+            </button>
+          </>
+        ) : null}
       </div>
 
-      {editing ? (
+      {editing && canManage ? (
         <form className="card editor-card auth-form" onSubmit={onSave}>
           <div className="editor-grid-2">
             <div className="field">
@@ -139,15 +158,21 @@ function DependencyRow({ dep }: { dep: Dependency }) {
         </form>
       ) : null}
 
-      <VerifyForm dep={dep} t={t} locale={locale} />
+      <VerifyForm dep={dep} t={t} locale={locale} canVerify={canVerify} />
     </div>
   );
 }
 
 export default function DependenciesTab() {
   const { t } = useTranslation();
-  const { contract } = useOutletContext<WorkspaceContext>();
+  const { contract, me } = useOutletContext<WorkspaceContext>();
   const project = contract.project;
+  // Journeys build plan S1: what is owed and by when is contracts.author
+  // (the agreement); marking a row met is dependencies.verifyGeneral — a
+  // developer holds neither today (verifyTechnical is unused until J4's
+  // technical flag), which is why the board can be all-read-only for them.
+  const canManage = can(me, 'contracts.author');
+  const canVerify = can(me, 'dependencies.verifyGeneral');
 
   const [adding, setAdding] = useState(false);
   const [side, setSide] = useState<DependencySide>('CUSTOMER');
@@ -184,13 +209,15 @@ export default function DependenciesTab() {
     <div className="dependency-board">
       <div className="workspace-row">
         <h3 className="t-h3">{t('workspace.dependenciesTitle')}</h3>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding((v) => !v)}>
-          {t('workspace.addDependency')}
-        </button>
+        {canManage ? (
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding((v) => !v)}>
+            {t('workspace.addDependency')}
+          </button>
+        ) : null}
       </div>
       <p className="sec-help">{t('workspace.dependenciesHelp')}</p>
 
-      {adding ? (
+      {adding && canManage ? (
         <form className="card editor-card auth-form" onSubmit={onAdd}>
           <div className="field">
             <label className="label">{t('workspace.dependencySideLabel')}</label>
@@ -227,7 +254,7 @@ export default function DependenciesTab() {
       ) : (
         <div className="editor-list">
           {rows.map((dep) => (
-            <DependencyRow key={dep.id} dep={dep} />
+            <DependencyRow key={dep.id} dep={dep} canManage={canManage} canVerify={canVerify} />
           ))}
         </div>
       )}

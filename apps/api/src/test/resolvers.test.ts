@@ -113,7 +113,7 @@ test('a reviewer reaches neither the contract workspace nor the customer list', 
 test('capabilities reach the client derived, and a customer gets an empty list', async () => {
   const asAdmin = ok(await exec('{ me { roles capabilities } }', { as: f.admin }));
   assert.deepEqual((asAdmin.me as { roles: string[] }).roles, ['ADMIN']);
-  assert.ok((asAdmin.me as { capabilities: string[] }).capabilities.includes('contracts.manage'));
+  assert.ok((asAdmin.me as { capabilities: string[] }).capabilities.includes('contracts.author'));
 
   const asCustomer = ok(await exec('{ me { roles capabilities } }', { as: f.customer }));
   assert.deepEqual((asCustomer.me as { capabilities: string[] }).capabilities, []);

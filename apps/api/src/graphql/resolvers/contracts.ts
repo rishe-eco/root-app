@@ -1,7 +1,7 @@
 import { GraphQLError } from 'graphql';
 import type { ChangeAction, ContractStatus, Prisma, User } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { can } from '../../lib/capabilities.js';
+import { contractVisibleTo } from '../../lib/visibility.js';
 
 /**
  * The contract-loading layer every resolver module builds on.
@@ -28,6 +28,9 @@ export const conceptsInclude = {
  */
 export const contractInclude = {
   customer: true,
+  // Journeys build plan S1 — the assignment edges, resolved by name.
+  designer: true,
+  developer: true,
   currentDesignRevision: { include: conceptsInclude },
   currentContractRevision: {
     include: {
@@ -57,19 +60,21 @@ export const loadContract = (id: string) =>
 
 /**
  * A customer may only ever touch their own contract, and only after Root has
- * published it. Staff who work contracts see everything.
+ * published it. Staff see what `contractVisibleTo` says they see — every
+ * contract for `contracts.readAll`, the ones still being worked for
+ * `contracts.readActive` (journeys build plan S1; before it, one
+ * `contracts.manage` bypass meant every staff role saw everything or nothing).
  *
  * This function is the *ownership* half of the permission model and stays that
- * way: the one capability test here is the bypass for staff, and everything
- * below it is an edge between this user and this row. See lib/capabilities.ts.
+ * way: the rule lives in lib/visibility.ts, and this is only the loader that
+ * turns its "no" into `NOT_FOUND` (house rule 13).
  */
 export async function loadForActor(id: string, user: User): Promise<FullContract> {
   const contract = await loadContract(id);
   if (!contract) {
     throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
   }
-  if (can(user, 'contracts.manage')) return contract;
-  if (contract.customerId !== user.id || contract.publishedAt === null) {
+  if (!contractVisibleTo(user, contract)) {
     throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
   }
   return contract;

@@ -9,8 +9,9 @@ import { serviceRunInclude } from '../services.js';
 /**
  * Billing (build plan L6; spec §8) — authoring one-off entries, marking them
  * paid, the billable-ticket edge (build plan L4's second banked trap), and
- * subscriptions. Every mutation here is `contracts.manage`, matching every
- * other registry-adjacent surface added since L1: the desk authors entries
+ * subscriptions. Every mutation here is `billing.manage` (journeys build
+ * plan S1; before it, `contracts.manage`): money is its own verb, held by
+ * sales and never by design or development (PD-14). The desk authors entries
  * and marks them paid; a customer never writes one (spec §8: "created and
  * marked paid by Root" — the schema comment this stage surfaces).
  *
@@ -51,7 +52,7 @@ export const billingMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     if (args.source === 'SUBSCRIPTION') {
       throw new GraphQLError('Subscription charges are generated automatically, never authored by hand.', {
         extensions: { code: 'INVALID_SOURCE' },
@@ -84,7 +85,7 @@ export const billingMutations = {
   },
 
   markBillingEntryPaid: async (_p: unknown, args: { entryId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     const entry = await prisma.billingEntry.findUnique({ where: { id: args.entryId } });
     if (!entry) throw notFound('billing entry');
     return prisma.billingEntry.update({ where: { id: entry.id }, data: { paidAt: new Date() }, include: billingEntryInclude });
@@ -93,7 +94,7 @@ export const billingMutations = {
   /** Clears a mark-paid made in error — the same decide/undecide shape
    *  `unverifyDependency` already uses. */
   unmarkBillingEntryPaid: async (_p: unknown, args: { entryId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     const entry = await prisma.billingEntry.findUnique({ where: { id: args.entryId } });
     if (!entry) throw notFound('billing entry');
     return prisma.billingEntry.update({ where: { id: entry.id }, data: { paidAt: null }, include: billingEntryInclude });
@@ -112,7 +113,7 @@ export const billingMutations = {
     args: { ticketId: string; amount: string; descriptionFa: string; descriptionEn: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     const ticket = await prisma.ticket.findUnique({
       where: { id: args.ticketId },
       include: { billingEntry: true },
@@ -154,7 +155,7 @@ export const billingMutations = {
     args: { runId: string; amount: string; descriptionFa: string; descriptionEn: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     const run = await prisma.serviceRun.findUnique({
       where: { id: args.runId },
       include: { project: true, billingEntry: true },
@@ -197,7 +198,7 @@ export const billingMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     const customer = await prisma.user.findUnique({ where: { id: args.customerId } });
     if (!customer) throw notFound('customer');
     if (args.projectId) {
@@ -225,7 +226,7 @@ export const billingMutations = {
     args: { subscriptionId: string; labelFa: string; labelEn: string; amount: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     const sub = await prisma.subscription.findUnique({ where: { id: args.subscriptionId } });
     if (!sub) throw notFound('subscription');
     const amount = parseAmountOrThrow(args.amount);
@@ -240,7 +241,7 @@ export const billingMutations = {
   /** Sets activeUntil rather than deleting — see schema.prisma's own
    *  comment on why a subscription's billing history is never erased. */
   endSubscription: async (_p: unknown, args: { subscriptionId: string; activeUntil: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     const sub = await prisma.subscription.findUnique({ where: { id: args.subscriptionId } });
     if (!sub) throw notFound('subscription');
     if (sub.activeUntil) {

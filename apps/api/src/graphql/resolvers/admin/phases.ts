@@ -3,6 +3,7 @@ import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { reload } from '../contracts.js';
 import { firstContractId } from './shared.js';
+import { requireBuildAuthorOnProject } from '../access.js';
 
 /**
  * Phases and the live demo surface (build plan L2; spec §4 stage 6, §6).
@@ -18,6 +19,12 @@ import { firstContractId } from './shared.js';
  * review window on `Demo` is two plain dates the review frame (L3) will read
  * into a sentence, not machinery that refuses a deploy. And it never creates
  * a screenshot: no code path here calls out to a headless browser.
+ *
+ * **Two guards, since journeys build plan S1.** Phases are part of the
+ * agreement — what gets delivered when — so their CRUD is `contracts.author`.
+ * Demos and their page declarations are the developer's own surface (defect
+ * D-2: before S1 a developer could not even load one), so they are
+ * `builds.author` plus `requireBuildAuthorOnProject`, the assignment edge.
  */
 
 function assertHttps(url: string): void {
@@ -87,7 +94,7 @@ export const phaseMutations = {
     args: { contractId: string; number: number; titleFa: string; titleEn: string; milestoneLabel?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -112,7 +119,7 @@ export const phaseMutations = {
     args: { phaseId: string; titleFa: string; titleEn: string; milestoneLabel?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const phase = await loadPhase(args.phaseId);
     await prisma.phase.update({
       where: { id: phase.id },
@@ -124,7 +131,7 @@ export const phaseMutations = {
   /** Scope items on this phase are not deleted — `phaseId` just goes back to
    *  null on them (schema.prisma: onDelete: SetNull). Demos cascade. */
   deletePhase: async (_p: unknown, args: { phaseId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const phase = await loadPhase(args.phaseId);
     await prisma.phase.delete({ where: { id: phase.id } });
     return reload(await firstContractId(phase.projectId));
@@ -135,7 +142,7 @@ export const phaseMutations = {
     args: { scopeItemId: string; phaseId?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const item = await prisma.scopeItem.findUnique({ where: { id: args.scopeItemId } });
     if (!item) {
       throw new GraphQLError('No such scope item.', { extensions: { code: 'NOT_FOUND' } });
@@ -157,9 +164,10 @@ export const phaseMutations = {
     args: { phaseId: string; stagingUrl: string; buildRef?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'builds.author');
     assertHttps(args.stagingUrl);
     const phase = await loadPhase(args.phaseId);
+    await requireBuildAuthorOnProject(ctx, phase.projectId);
     await prisma.demo.create({
       data: { phaseId: phase.id, stagingUrl: args.stagingUrl, buildRef: args.buildRef ?? null },
     });
@@ -180,8 +188,9 @@ export const phaseMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
+    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
     if (args.stagingUrl) assertHttps(args.stagingUrl);
     await prisma.demo.update({
       where: { id: demo.id },
@@ -197,8 +206,9 @@ export const phaseMutations = {
 
   /** Pages and unmatched-path records cascade (schema.prisma onDelete: Cascade). */
   deleteDemo: async (_p: unknown, args: { demoId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
+    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
     await prisma.demo.delete({ where: { id: demo.id } });
     return reload(await firstContractId(demo.phase.projectId));
   },
@@ -215,8 +225,9 @@ export const phaseMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
+    await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
     if (args.pageDesignId) {
       await assertPageDesignInProject(args.pageDesignId, demo.phase.projectId);
     }
@@ -244,8 +255,9 @@ export const phaseMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'builds.author');
     const page = await loadDemoPage(args.demoPageId);
+    await requireBuildAuthorOnProject(ctx, page.demo.phase.projectId);
     if (args.pageDesignId) {
       await assertPageDesignInProject(args.pageDesignId, page.demo.phase.projectId);
     }
@@ -262,8 +274,9 @@ export const phaseMutations = {
   },
 
   deleteDemoPage: async (_p: unknown, args: { demoPageId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'builds.author');
     const page = await loadDemoPage(args.demoPageId);
+    await requireBuildAuthorOnProject(ctx, page.demo.phase.projectId);
     await prisma.demoPage.delete({ where: { id: page.id } });
     return reload(await firstContractId(page.demo.phase.projectId));
   },

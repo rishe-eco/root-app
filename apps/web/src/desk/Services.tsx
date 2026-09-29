@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client';
+import { Navigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useLocale } from '@/lib/locale';
+import { useLocale, lp } from '@/lib/locale';
+import { can } from '@/lib/access';
 import {
   ALL_SERVICE_RUNS,
   CREATE_SERVICE_RUN_BILLING_ENTRY,
   type ServiceRun,
+  type User,
 } from '@/lib/queries';
 import { formatAmount, formatCount, fullDateTime, pick } from '@/lib/format';
 
 /**
  * The desk's own service-runs surface (build plan L7; spec §9, §11) — every
  * run across every project, and the billing edge (build plan L6) for one
- * that has been applied. `contracts.manage`, matching every other
- * registry-adjacent surface.
+ * that has been applied. `customers.manage` (journeys build plan S1 —
+ * before it, `contracts.manage`) — the API's `allServiceRuns` guard: running
+ * a customer's import is account administration, not contract authoring.
  */
 
 function BillForm({ run }: { run: ServiceRun }) {
@@ -111,9 +115,16 @@ function RunRow({ run }: { run: ServiceRun }) {
 
 export default function Services() {
   const { t } = useTranslation();
+  const locale = useLocale();
+  const me = useOutletContext<User>();
+  const allowed = can(me, 'customers.manage');
 
-  const { data, loading, error, refetch } = useQuery<{ allServiceRuns: ServiceRun[] }>(ALL_SERVICE_RUNS);
+  const { data, loading, error, refetch } = useQuery<{ allServiceRuns: ServiceRun[] }>(ALL_SERVICE_RUNS, {
+    skip: !allowed,
+  });
   const runs = data?.allServiceRuns ?? [];
+
+  if (!allowed) return <Navigate to={lp(locale, '/desk')} replace />;
 
   return (
     <div className="desk-section">

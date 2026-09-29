@@ -47,7 +47,7 @@ export const registryMutations = {
     args: { contractId: string; key: string; labelFa: string; labelEn: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -81,7 +81,7 @@ export const registryMutations = {
     args: { scopeItemId: string; labelFa: string; labelEn: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     await prisma.scopeItem.update({
       where: { id: item.id },
@@ -91,7 +91,7 @@ export const registryMutations = {
   },
 
   deleteScopeItem: async (_p: unknown, args: { scopeItemId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     await prisma.scopeItem.delete({ where: { id: item.id } });
     return reload(await firstContractId(item.projectId));
@@ -103,7 +103,7 @@ export const registryMutations = {
     args: { scopeItemId: string; status: ScopeStatus; reason?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     await prisma.scopeItem.update({
       where: { id: item.id },
@@ -120,7 +120,7 @@ export const registryMutations = {
     args: { scopeItemId: string; temporary: boolean; outOfScope: boolean; adminWork: boolean },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     await prisma.scopeItem.update({
       where: { id: item.id },
@@ -135,7 +135,7 @@ export const registryMutations = {
    * agrees with it.
    */
   decideScopeItem: async (_p: unknown, args: { scopeItemId: string; note: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     if (item.decidedAt) {
       throw new GraphQLError('This item is already decided — undecide it first.', {
@@ -154,7 +154,7 @@ export const registryMutations = {
   },
 
   undecideScopeItem: async (_p: unknown, args: { scopeItemId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     await prisma.scopeItem.update({
       where: { id: item.id },
@@ -168,7 +168,7 @@ export const registryMutations = {
     args: { scopeItemId: string; note?: string | null; round?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     await prisma.scopeItem.update({
       where: { id: item.id },
@@ -187,7 +187,7 @@ export const registryMutations = {
     args: { scopeItemId: string; direction: 'UP' | 'DOWN' },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     const siblings = await prisma.scopeItem.findMany({
       where: { projectId: item.projectId },
@@ -218,7 +218,7 @@ export const registryMutations = {
     args: { projectId: string; outItemId: string; inKey: string; inLabelFa: string; inLabelEn: string },
     ctx: Context,
   ) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    const admin = requireCapability(ctx, 'contracts.author');
     const outItem = await prisma.scopeItem.findUnique({ where: { id: args.outItemId } });
     if (!outItem || outItem.projectId !== args.projectId) {
       throw new GraphQLError('No such scope item on this project.', { extensions: { code: 'NOT_FOUND' } });
@@ -260,7 +260,7 @@ export const registryMutations = {
    * than blocking L1 on the portal half; see docs/development/L1.md.
    */
   confirmScopeTradeRoot: async (_p: unknown, args: { tradeId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const trade = await prisma.scopeTrade.findUnique({ where: { id: args.tradeId } });
     if (!trade) {
       throw new GraphQLError('No such trade.', { extensions: { code: 'NOT_FOUND' } });
@@ -277,7 +277,7 @@ export const registryMutations = {
    * mutation lands, this does not need to change to honour it.
    */
   executeScopeTrade: async (_p: unknown, args: { tradeId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const trade = await prisma.scopeTrade.findUnique({
       where: { id: args.tradeId },
       include: { outItem: true, inItem: true },

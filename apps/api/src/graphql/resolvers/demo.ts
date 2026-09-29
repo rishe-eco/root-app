@@ -1,20 +1,22 @@
 import { GraphQLError } from 'graphql';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
-import { can } from '../../lib/capabilities.js';
+import { projectVisibleTo } from '../../lib/visibility.js';
 import { matchDemoPath } from '../../lib/demoPages.js';
 
 /**
  * `reportDemoPath` — the reporter snippet's own call (build plan L2; D2).
  * Lives outside `resolvers/admin/` on purpose: it is the one demo-surface
- * mutation a customer calls too, so it does not belong beside the
- * `contracts.manage`-only phase and demo authoring mutations.
+ * mutation a customer calls too, so it does not belong beside the staff-only
+ * phase and demo authoring mutations.
  *
  * **Ownership, not capability (house rule 2).** The question here is "may
  * this person be looking at this demo," which is an edge between a user and
  * a project — `project.customerId === user.id` — never a role test, per D3's
- * own escape-hatch note (build plan §2 D3). Staff bypass via
- * `contracts.manage`, exactly like `loadForActor`.
+ * own escape-hatch note (build plan §2 D3). Staff see a demo when they see
+ * its project (`projectVisibleTo`, journeys build plan S1) — which is what
+ * closes defect D-2: a developer holding `contracts.readActive` can now load
+ * the demos of active projects, where `contracts.manage` shut them out.
  *
  * Exported for `resolvers/feedback.ts` (build plan L3) — `submitFeedback`
  * and `ratifyFeedback` are the same shape of mutation (customer-or-staff,
@@ -26,14 +28,17 @@ export async function loadDemoForActor(demoId: string, user: { id: string; roles
     where: { id: demoId },
     include: {
       pages: true,
-      phase: { include: { project: { include: { customer: true } } } },
+      phase: {
+        include: {
+          project: { include: { customer: true, contracts: { select: { status: true } } } },
+        },
+      },
     },
   });
   if (!demo) {
     throw new GraphQLError('No such demo.', { extensions: { code: 'NOT_FOUND' } });
   }
-  const isStaff = can(user as Parameters<typeof can>[0], 'contracts.manage');
-  if (!isStaff && demo.phase.project.customerId !== user.id) {
+  if (!projectVisibleTo(user as Parameters<typeof projectVisibleTo>[0], demo.phase.project)) {
     // House rule 13: "no such thing," not "not allowed" — a demo belonging
     // to someone else is indistinguishable from one that does not exist.
     throw new GraphQLError('No such demo.', { extensions: { code: 'NOT_FOUND' } });

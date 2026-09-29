@@ -3,6 +3,8 @@ import { prisma } from '../../lib/prisma.js';
 import { clampLimit } from '../../lib/pagination.js';
 import { requireUser, requireCapability, type Context } from '../../context.js';
 import { contractInclude, loadForActor } from './contracts.js';
+import { can } from '../../lib/capabilities.js';
+import { isActiveContract, projectVisibleToStaff } from '../../lib/visibility.js';
 import { ensureDueEntriesFor, computeBillingReport } from '../../lib/billing.js';
 
 /** Shared with resolvers/admin/billing.ts, whose mutations return the same
@@ -110,9 +112,18 @@ export const Query = {
   contract: async (_p: unknown, args: { id: string }, ctx: Context) =>
     loadForActor(args.id, requireUser(ctx)),
 
+  /**
+   * Journeys build plan S1: the whole book for `contracts.readAll`, and only
+   * the contracts still being worked for `contracts.readActive` — the same
+   * rule `contractVisibleTo` applies to a single contract, applied here as a
+   * filter so a designer's list and a designer's direct link cannot disagree.
+   */
   allContracts: async (_p: unknown, _a: unknown, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
-    return prisma.contract.findMany({ include: contractInclude, orderBy: { updatedAt: 'desc' } });
+    const user = requireUser(ctx);
+    const readAll = can(user, 'contracts.readAll');
+    if (!readAll) requireCapability(ctx, 'contracts.readActive');
+    const rows = await prisma.contract.findMany({ include: contractInclude, orderBy: { updatedAt: 'desc' } });
+    return readAll ? rows : rows.filter((c) => isActiveContract(c));
   },
 
   allCustomers: async (_p: unknown, _a: unknown, ctx: Context) => {
@@ -142,8 +153,23 @@ export const Query = {
    * than a bug (V4.md §1.1). This is a different query for that reason, and
    * the customer-scoped one is left exactly as it was.
    */
+  /**
+   * Journeys build plan S1: who sales can assign as a contract's designer
+   * or developer — the active accounts holding the job's capability, which
+   * is exactly what `assignContract` will accept (a list and a refusal that
+   * could disagree would be a form that offers what it then refuses). Only
+   * the two assignment capabilities are answerable: this is not a general
+   * "who holds X" oracle for an author to probe the staff table with.
+   */
+  assignableUsers: async (_p: unknown, args: { job: 'DESIGN' | 'BUILD' }, ctx: Context) => {
+    requireCapability(ctx, 'contracts.author');
+    const capability = args.job === 'DESIGN' ? 'design.author' : 'builds.author';
+    const active = await prisma.user.findMany({ where: { state: 'ACTIVE' }, orderBy: { name: 'asc' } });
+    return active.filter((u) => can(u, capability));
+  },
+
   allContractStatusCounts: async (_p: unknown, _a: unknown, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.readAll');
     const grouped = await prisma.contract.groupBy({
       by: ['status'],
       _count: { _all: true },
@@ -152,7 +178,7 @@ export const Query = {
   },
 
   needsRootQueue: async (_p: unknown, args: { limit?: number }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.readAll');
     const rows = await prisma.contract.findMany({
       where: { status: 'WAITING_ON_ROOT' },
       orderBy: { statusChangedAt: 'asc' },
@@ -167,7 +193,7 @@ export const Query = {
     args: { limit?: number; reviewOnly?: boolean },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.readAll');
     const limit = clampLimit(args.limit, 40, 100);
 
     const rows = await prisma.changeLog.findMany({
@@ -199,11 +225,15 @@ export const Query = {
 
   /** Staff. One project with its live registry — build plan L1. */
   project: async (_p: unknown, args: { id: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
-    return prisma.project.findUnique({
+    const user = requireUser(ctx);
+    if (!can(user, 'contracts.readAll')) requireCapability(ctx, 'contracts.readActive');
+    const project = await prisma.project.findUnique({
       where: { id: args.id },
-      include: { scopeItems: { orderBy: { position: 'asc' } } },
+      include: { scopeItems: { orderBy: { position: 'asc' } }, contracts: { select: { status: true } } },
     });
+    // Null for a project this reader cannot see — the field is nullable and
+    // already answers null for an id that does not exist (house rule 13).
+    return project && projectVisibleToStaff(user, project) ? project : null;
   },
 
   /**
@@ -218,7 +248,7 @@ export const Query = {
    * shared query file, writes sit in the admin barrel.
    */
   overdueDependencies: async (_p: unknown, _a: unknown, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.readAll');
     return prisma.dependency.findMany({
       where: { verifiedAt: null, dueAt: { lt: new Date() } },
       include: { project: true, createdBy: true, verifiedBy: true },
@@ -275,14 +305,14 @@ export const Query = {
     });
   },
 
-  /** Staff (contracts.manage). Every billing entry, optionally narrowed —
+  /** Staff (billing.manage). Every billing entry, optionally narrowed —
    *  the desk's own report and ledger screen. */
   allBillingEntries: async (
     _p: unknown,
     args: { customerId?: string | null; projectId?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     // An entry names a project only indirectly, through whichever origin it
     // came from — so "this project's billing" is an OR across all four
     // possible origins rather than one column, none of which is projectId
@@ -305,11 +335,11 @@ export const Query = {
     return prisma.billingEntry.findMany({ where, include: billingEntryInclude, orderBy: { issuedAt: 'desc' } });
   },
 
-  /** Staff (contracts.manage). One customer's report, or the whole book
+  /** Staff (billing.manage). One customer's report, or the whole book
    *  when customerId is omitted (spec §8: "for the desk, the same query
    *  across customers"). */
   billingReport: async (_p: unknown, args: { customerId?: string | null }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     await ensureDueEntriesFor(prisma, args.customerId ? { customerId: args.customerId } : {});
     const entries = await prisma.billingEntry.findMany({
       where: args.customerId ? { customerId: args.customerId } : {},
@@ -317,9 +347,9 @@ export const Query = {
     return computeBillingReport(entries);
   },
 
-  /** Staff (contracts.manage). */
+  /** Staff (billing.manage). */
   allSubscriptions: async (_p: unknown, args: { customerId?: string | null }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'billing.manage');
     return prisma.subscription.findMany({
       where: args.customerId ? { customerId: args.customerId } : {},
       include: { customer: true, project: true },

@@ -1,12 +1,17 @@
 import { GraphQLError } from 'graphql';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
+import { requireDesignAuthorOn } from '../access.js';
 import { carryForward, diffDesign } from '../../../lib/design.js';
 import { conceptsInclude, draftDesignRevision, loadContract, log, nudgeStatus, reload } from '../contracts.js';
 import { requireDraft, resolveDesignImage } from './shared.js';
 
 /** The design draft: concepts, pages, images, and publishing the lineage.
- *  Part of the L1 split of the former `admin.ts`; see `index.ts`. */
+ *  Part of the L1 split of the former `admin.ts`; see `index.ts`.
+ *
+ *  Journeys build plan S1: `design.author`, then `requireDesignAuthorOn`
+ *  once the contract is known — the capability first, so a caller without it
+ *  gets FORBIDDEN before any lookup can tell them which ids exist. */
 export const designMutations = {
   addConcept: async (
     _p: unknown,
@@ -19,7 +24,8 @@ export const designMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
+    await requireDesignAuthorOn(ctx, args.contractId);
     // Writes land in the draft revision, never in the published one the
     // customer is looking at. Publishing is what makes them visible.
     const draft = await draftDesignRevision(args.contractId);
@@ -50,7 +56,7 @@ export const designMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
     const concept = await prisma.designConcept.findUnique({
       where: { id: args.conceptId },
       include: { designRevision: true },
@@ -58,6 +64,7 @@ export const designMutations = {
     if (!concept) {
       throw new GraphQLError('No such concept.', { extensions: { code: 'NOT_FOUND' } });
     }
+    await requireDesignAuthorOn(ctx, concept.designRevision.contractId);
     requireDraft(concept.designRevision.publishedAt);
     const count = await prisma.pageDesign.count({ where: { conceptId: concept.id } });
     await prisma.pageDesign.create({
@@ -78,7 +85,7 @@ export const designMutations = {
     args: { conceptId: string; fileId: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
     const concept = await prisma.designConcept.findUnique({
       where: { id: args.conceptId },
       include: { designRevision: true },
@@ -86,6 +93,7 @@ export const designMutations = {
     if (!concept) {
       throw new GraphQLError('No such concept.', { extensions: { code: 'NOT_FOUND' } });
     }
+    await requireDesignAuthorOn(ctx, concept.designRevision.contractId);
     requireDraft(concept.designRevision.publishedAt);
     const image = await resolveDesignImage(args.fileId, concept.designRevision.contractId);
     await prisma.designConcept.update({ where: { id: concept.id }, data: image });
@@ -97,7 +105,7 @@ export const designMutations = {
     args: { pageId: string; fileId: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
     const page = await prisma.pageDesign.findUnique({
       where: { id: args.pageId },
       include: { concept: { include: { designRevision: true } } },
@@ -106,6 +114,7 @@ export const designMutations = {
       throw new GraphQLError('No such page.', { extensions: { code: 'NOT_FOUND' } });
     }
     const revision = page.concept.designRevision;
+    await requireDesignAuthorOn(ctx, revision.contractId);
     requireDraft(revision.publishedAt);
     const image = await resolveDesignImage(args.fileId, revision.contractId);
     await prisma.pageDesign.update({ where: { id: page.id }, data: image });
@@ -122,7 +131,7 @@ export const designMutations = {
     args: { conceptId: string; labelFa: string; labelEn: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
     const concept = await prisma.designConcept.findUnique({
       where: { id: args.conceptId },
       include: { designRevision: true },
@@ -130,6 +139,7 @@ export const designMutations = {
     if (!concept) {
       throw new GraphQLError('No such concept.', { extensions: { code: 'NOT_FOUND' } });
     }
+    await requireDesignAuthorOn(ctx, concept.designRevision.contractId);
     requireDraft(concept.designRevision.publishedAt);
     await prisma.designConcept.update({
       where: { id: concept.id },
@@ -140,7 +150,7 @@ export const designMutations = {
 
   /** Pages cascade (schema.prisma: PageDesign.concept onDelete: Cascade). */
   deleteConcept: async (_p: unknown, args: { conceptId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
     const concept = await prisma.designConcept.findUnique({
       where: { id: args.conceptId },
       include: { designRevision: true },
@@ -148,6 +158,7 @@ export const designMutations = {
     if (!concept) {
       throw new GraphQLError('No such concept.', { extensions: { code: 'NOT_FOUND' } });
     }
+    await requireDesignAuthorOn(ctx, concept.designRevision.contractId);
     requireDraft(concept.designRevision.publishedAt);
     await prisma.designConcept.delete({ where: { id: concept.id } });
     return reload(concept.designRevision.contractId);
@@ -158,7 +169,7 @@ export const designMutations = {
     args: { pageId: string; labelFa: string; labelEn: string },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
     const page = await prisma.pageDesign.findUnique({
       where: { id: args.pageId },
       include: { concept: { include: { designRevision: true } } },
@@ -166,6 +177,7 @@ export const designMutations = {
     if (!page) {
       throw new GraphQLError('No such page.', { extensions: { code: 'NOT_FOUND' } });
     }
+    await requireDesignAuthorOn(ctx, page.concept.designRevision.contractId);
     requireDraft(page.concept.designRevision.publishedAt);
     await prisma.pageDesign.update({
       where: { id: page.id },
@@ -175,7 +187,7 @@ export const designMutations = {
   },
 
   deletePageDesign: async (_p: unknown, args: { pageId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
     const page = await prisma.pageDesign.findUnique({
       where: { id: args.pageId },
       include: { concept: { include: { designRevision: true } } },
@@ -183,6 +195,7 @@ export const designMutations = {
     if (!page) {
       throw new GraphQLError('No such page.', { extensions: { code: 'NOT_FOUND' } });
     }
+    await requireDesignAuthorOn(ctx, page.concept.designRevision.contractId);
     requireDraft(page.concept.designRevision.publishedAt);
     await prisma.pageDesign.delete({ where: { id: page.id } });
     return reload(page.concept.designRevision.contractId);
@@ -196,7 +209,8 @@ export const designMutations = {
    * mind would be stuck with a draft they can neither publish nor remove.
    */
   discardDesignDraft: async (_p: unknown, args: { contractId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
+    await requireDesignAuthorOn(ctx, args.contractId);
     const draft = await prisma.designRevision.findFirst({
       where: { contractId: args.contractId, publishedAt: null },
     });
@@ -217,7 +231,8 @@ export const designMutations = {
    * that independence is the point of two lineages.
    */
   publishDesignRevision: async (_p: unknown, args: { contractId: string }, ctx: Context) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'design.author');
+    const author = await requireDesignAuthorOn(ctx, args.contractId);
     const contract = await loadContract(args.contractId);
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -280,7 +295,7 @@ export const designMutations = {
         where: { id: contract.id },
         data: { currentDesignRevisionId: draft.id },
       });
-      await log(contract.id, admin.id, 'DESIGN_REVISED', `v${draft.version}`, tx);
+      await log(contract.id, author.id, 'DESIGN_REVISED', `v${draft.version}`, tx);
       await nudgeStatus(contract, 'WAITING_ON_CUSTOMER', tx);
     });
 

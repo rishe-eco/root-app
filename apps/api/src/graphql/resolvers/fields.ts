@@ -2,6 +2,7 @@ import type { Role as RoleName } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
+import { isContractReader, mayReadMoney } from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../lib/scope.js';
@@ -25,7 +26,10 @@ import { feedbackItemInclude } from './feedback.js';
 export const Contract = {
   // BigInt does not survive JSON; Toman amounts cross the wire as strings.
   // This is the draft fee — a published revision carries its own frozen copy.
-  amount: (c: FullContract) => (c.amount === null ? null : c.amount.toString()),
+  // Null, not an error, for staff without `money.read` (journeys build plan
+  // S1, PD-14): a designer's query for the contract still succeeds.
+  amount: (c: FullContract, _a: unknown, ctx: Context) =>
+    c.amount === null || !mayReadMoney(requireUser(ctx), c) ? null : c.amount.toString(),
   gate: (c: FullContract) => computeGate(c),
   changeLog: (c: FullContract) => c.changeLogs,
 
@@ -81,7 +85,7 @@ export const Contract = {
    * a backfilled v1 has no snapshot to read a title out of, and inventing one
    * from the draft would be exactly the drift this field exists to prevent.
    */
-  revision: (c: FullContract) => {
+  revision: (c: FullContract, _a: unknown, ctx: Context) => {
     const revision = c.currentContractRevision;
     const snapshot = readContractSnapshot(revision?.snapshot ?? null);
     if (!revision || !snapshot) return null;
@@ -89,7 +93,11 @@ export const Contract = {
       ...revision,
       titleFa: snapshot.titleFa,
       titleEn: snapshot.titleEn,
-      amount: snapshot.amount,
+      // The frozen fee, withheld the same way as the draft's (PD-14). The
+      // customer — who signs this — always reads it; `contentHash` still
+      // attests to the full snapshot, so redacting one field of the *view*
+      // changes nothing about what the hash covers.
+      amount: mayReadMoney(requireUser(ctx), c) ? snapshot.amount : null,
     };
   },
 
@@ -100,7 +108,9 @@ export const Contract = {
    */
   draft: (c: FullContract, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
-    if (!can(user, 'contracts.manage')) return null;
+    // The author's working copy — the fee included, which is why readers
+    // without `contracts.author` (design, development) get null here.
+    if (!can(user, 'contracts.author')) return null;
     // The registry's agreed set is part of what publishing would produce
     // (L1) — without it here, marking one more item agreed would never
     // register as "dirty" until some unrelated field also changed.
@@ -109,7 +119,7 @@ export const Contract = {
     return {
       titleFa: c.titleFa,
       titleEn: c.titleEn,
-      amount: c.amount === null ? null : c.amount.toString(),
+      amount: c.amount === null || !mayReadMoney(user, c) ? null : c.amount.toString(),
       articles: c.articles,
       contentHash: hash,
       dirty,
@@ -123,7 +133,7 @@ export const Contract = {
    */
   designDraft: async (c: FullContract, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
-    if (!can(user, 'contracts.manage')) return null;
+    if (!isContractReader(user)) return null;
     return prisma.designRevision.findFirst({
       where: { contractId: c.id, publishedAt: null },
       include: conceptsInclude,
@@ -133,7 +143,7 @@ export const Contract = {
   /** Newest first. Non-staff see published revisions only. */
   contractRevisions: async (c: FullContract, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
-    const staff = can(user, 'contracts.manage');
+    const staff = isContractReader(user);
     const revisions = await prisma.contractRevision.findMany({
       where: { contractId: c.id, ...(staff ? {} : { publishedAt: { not: null } }) },
       orderBy: { version: 'desc' },
@@ -163,7 +173,7 @@ export const Contract = {
   /** Newest first. Non-staff see published revisions only. */
   designRevisions: async (c: FullContract, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
-    const staff = can(user, 'contracts.manage');
+    const staff = isContractReader(user);
     const revisions = await prisma.designRevision.findMany({
       where: { contractId: c.id, ...(staff ? {} : { publishedAt: { not: null } }) },
       orderBy: { version: 'desc' },
@@ -330,7 +340,7 @@ export const ContractRevision = {
     ctx: Context,
   ) => {
     const user = requireUser(ctx);
-    if (can(user, 'contracts.manage')) return r.amendments;
+    if (isContractReader(user)) return r.amendments;
     return r.amendments.filter((a) => a.publishedAt !== null);
   },
 };
@@ -354,14 +364,15 @@ export const ScopeItem = {
  * it" (L3b's acceptance criterion) means *listed here automatically*, not
  * auto-written as a line: a raw note authored in one language is not
  * something this stage may silently promote into both textFa and textEn
- * (build plan L3b.3's Persian-authorship decision). Staff (contracts.manage)
- * only — a `DEVELOPER` holding only `builds.author` never opens this panel,
- * and an empty list for anyone else is not a signal that nothing changed.
+ * (build plan L3b.3's Persian-authorship decision). Staff contract readers
+ * only (`isContractReader`, journeys build plan S1 — which now includes the
+ * developer who wrote these entries), and an empty list for a customer is
+ * not a signal that nothing changed.
  */
 export const DemoFrame = {
   unpromptedChanges: async (f: { demoId: string }, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
-    if (!can(user, 'contracts.manage')) return [];
+    if (!isContractReader(user)) return [];
     const demo = await prisma.demo.findUniqueOrThrow({ where: { id: f.demoId }, select: { phaseId: true } });
     return prisma.buildChangeEntry.findMany({
       where: {
@@ -415,7 +426,7 @@ export const Project = {
    */
   phases: (p: { id: string }, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
-    const staff = can(user, 'contracts.manage');
+    const staff = isContractReader(user);
     return prisma.phase.findMany({
       where: { projectId: p.id },
       orderBy: { number: 'asc' },

@@ -3,6 +3,7 @@ import type { Prisma, User } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
 import { can } from '../../lib/capabilities.js';
+import { isContractReader } from '../../lib/visibility.js';
 import { checkInterception, reopensOnComment } from '../../lib/feedback.js';
 import { sendMail } from '../../lib/mail.js';
 import { feedbackSubmittedEmail, feedbackRatifiedEmail } from '../../lib/mailTemplates.js';
@@ -43,13 +44,14 @@ export const feedbackItemInclude = {
 
 const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extensions: { code: 'NOT_FOUND' } });
 
-/** Every account holding contracts.manage — "Root," for feedback
- *  notifications. Same pattern reviewThreads.ts's own `reviewAdmins()` uses
+/** Every account holding `contracts.readAll` — "Root," for feedback
+ *  notifications (journeys build plan S1 kept this working through the
+ *  capability split; J1's notification router replaces it). Same pattern reviewThreads.ts's own `reviewAdmins()` uses
  *  for a different capability; filtered in application code, never by
  *  testing a role directly (lib/capabilities.ts's own rule). */
 async function contractManagers(): Promise<User[]> {
   const active = await prisma.user.findMany({ where: { state: 'ACTIVE' } });
-  return active.filter((u) => can(u, 'contracts.manage'));
+  return active.filter((u) => can(u, 'contracts.readAll'));
 }
 
 function deskDemoUrl(locale: string, contractId: string): string {
@@ -168,8 +170,9 @@ export const feedbackMutations = {
     });
 
     // "The team has been notified" (spec §6) — the mechanism, not polish.
-    // Never sent when Root itself is the one submitting.
-    if (!can(user, 'contracts.manage')) {
+    // Never sent when Root itself is the one submitting — any staff reader
+    // of contracts, not only the ones who receive it.
+    if (!isContractReader(user)) {
       const project = demo.phase.project;
       const contractId = await firstContractId(project.id);
       const recipients = await contractManagers();

@@ -2,6 +2,7 @@ import { GraphQLError } from 'graphql';
 import type { ContractStatus } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
+import { can, type Capability } from '../../../lib/capabilities.js';
 import { draftState } from '../../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../../lib/scope.js';
 import { ARTICLES, SCOPE, CHECKLIST } from '../../../lib/templates.js';
@@ -11,8 +12,35 @@ import { asConcurrentPublish } from './shared.js';
 /**
  * The contract draft (title, fee, articles) and its publish path, plus
  * project/contract creation. Part of the L1 split of the former `admin.ts`;
- * see `index.ts`.
+ * see `index.ts`. Every mutation is `contracts.author` (journeys build plan
+ * S1; before it, `contracts.manage`).
  */
+
+/**
+ * An assignee must be able to do the job they are assigned to, and be able
+ * to sign in to do it — checked when sales assigns, never after: a designer
+ * disabled later stays on the row as history, and J3 surfaces that to sales
+ * as an attention item instead of silently routing work to nobody (plan S1).
+ *
+ * `undefined` means "leave as is", `null` means "unassign". The capability
+ * is the one the assignment edge guards (`canAuthorDesign`,
+ * `canAuthorBuild`), not a role — house rule 1.
+ */
+async function assertAssignable(userId: string | null | undefined, capability: Capability): Promise<void> {
+  if (userId == null) return;
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new GraphQLError('No such user.', { extensions: { code: 'NOT_FOUND' } });
+  }
+  if (!can(user, capability)) {
+    throw new GraphQLError('That person cannot do this job.', {
+      extensions: { code: 'ASSIGNEE_LACKS_CAPABILITY' },
+    });
+  }
+  if (user.state !== 'ACTIVE') {
+    throw new GraphQLError('That account is not active.', { extensions: { code: 'ASSIGNEE_INACTIVE' } });
+  }
+}
 export const contractAdminMutations = {
   /**
    * Creates the project alongside the contract (build plan D1 / L1): L1 does
@@ -36,12 +64,19 @@ export const contractAdminMutations = {
         titleFa: string;
         titleEn: string;
         amount?: string;
+        /** Journeys build plan S1 — sales picks both at creation (Q-S4). */
+        designerId?: string | null;
+        developerId?: string | null;
       };
     },
     ctx: Context,
   ) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    const admin = requireCapability(ctx, 'contracts.author');
     const { input } = args;
+    // Before anything is written: a refused assignee must not leave a
+    // project behind with no contract on it.
+    await assertAssignable(input.designerId, 'design.author');
+    await assertAssignable(input.developerId, 'builds.author');
 
     const project = await prisma.project.create({
       data: {
@@ -70,6 +105,8 @@ export const contractAdminMutations = {
         titleFa: input.titleFa,
         titleEn: input.titleEn,
         amount: input.amount ? BigInt(input.amount) : null,
+        designerId: input.designerId ?? null,
+        developerId: input.developerId ?? null,
       },
     });
     await log(contract.id, admin.id, 'CREATED');
@@ -91,7 +128,7 @@ export const contractAdminMutations = {
    * this refuse on every contract, always (L1).
    */
   applyContractTemplate: async (_p: unknown, args: { contractId: string }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -161,7 +198,7 @@ export const contractAdminMutations = {
     },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     const { contractId, number, ...rest } = args;
     await prisma.article.upsert({
       where: { contractId_number: { contractId, number } },
@@ -182,7 +219,7 @@ export const contractAdminMutations = {
     args: { contractId: string; titleFa: string; titleEn: string; amount?: string | null },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     await prisma.contract.update({
       where: { id: args.contractId },
       data: {
@@ -205,7 +242,7 @@ export const contractAdminMutations = {
     args: { contractId: string; number: number },
     ctx: Context,
   ) => {
-    requireCapability(ctx, 'contracts.manage');
+    requireCapability(ctx, 'contracts.author');
     await prisma.article.deleteMany({
       where: { contractId: args.contractId, number: args.number },
     });
@@ -228,7 +265,7 @@ export const contractAdminMutations = {
     args: { contractId: string },
     ctx: Context,
   ) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    const admin = requireCapability(ctx, 'contracts.author');
     const contract = await loadContract(args.contractId);
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -293,7 +330,7 @@ export const contractAdminMutations = {
   },
 
   publishContract: async (_p: unknown, args: { contractId: string }, ctx: Context) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    const admin = requireCapability(ctx, 'contracts.author');
     const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -313,7 +350,7 @@ export const contractAdminMutations = {
     args: { contractId: string; status: ContractStatus },
     ctx: Context,
   ) => {
-    const admin = requireCapability(ctx, 'contracts.manage');
+    const admin = requireCapability(ctx, 'contracts.author');
     const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -332,5 +369,31 @@ export const contractAdminMutations = {
     });
     await log(args.contractId, admin.id, 'STATUS_CHANGED', args.status);
     return reload(args.contractId);
+  },
+
+  /**
+   * Journeys build plan S1: sales changes who designs and who develops a
+   * contract (Q-S4). Either argument may be omitted (left as is) or null
+   * (unassigned). Not logged: a `ChangeAction` costs five files (house rule
+   * 10) and the journeys plan derives history from dated rows instead
+   * (PD-17) — J3's timeline is where a reassignment will show, if it needs to.
+   */
+  assignContract: async (
+    _p: unknown,
+    args: { contractId: string; designerId?: string | null; developerId?: string | null },
+    ctx: Context,
+  ) => {
+    requireCapability(ctx, 'contracts.author');
+    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    if (!contract) {
+      throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
+    }
+    await assertAssignable(args.designerId, 'design.author');
+    await assertAssignable(args.developerId, 'builds.author');
+    await prisma.contract.update({
+      where: { id: contract.id },
+      data: { designerId: args.designerId, developerId: args.developerId },
+    });
+    return reload(contract.id);
   },
 };

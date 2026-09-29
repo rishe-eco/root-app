@@ -7,6 +7,7 @@ import { can } from '@/lib/access';
 import {
   ALL_CONTRACTS,
   ALL_CUSTOMERS,
+  ASSIGNABLE_USERS,
   CREATE_CONTRACT,
   PUBLISH_CONTRACT,
   SET_CONTRACT_STATUS,
@@ -15,18 +16,36 @@ import {
   type User,
 } from '@/lib/queries';
 import { ALL_STATUSES, fullDateTime, pick } from '@/lib/format';
+import StatusBadge from '@/components/StatusBadge';
 
+/**
+ * Journeys build plan S1: the list itself answers both `contracts.readAll`
+ * (sales, the whole book) and `contracts.readActive` (design, development —
+ * only the contracts still being worked, filtered server-side). Authoring —
+ * the new-contract form, the status control, publishing — stays
+ * `contracts.author`, which today only SALES and ADMIN hold.
+ */
 export default function DeskContracts() {
   const { t } = useTranslation();
   const locale = useLocale();
   const navigate = useNavigate();
   const me = useOutletContext<User>();
+  const canRead = can(me, 'contracts.readAll') || can(me, 'contracts.readActive');
+  const canAuthor = can(me, 'contracts.author');
 
   const { data } = useQuery<{ allContracts: Contract[] }>(ALL_CONTRACTS, {
-    skip: !can(me, 'contracts.manage'),
+    skip: !canRead,
   });
   const { data: customers } = useQuery<{ allCustomers: User[] }>(ALL_CUSTOMERS, {
     skip: !can(me, 'customers.manage'),
+  });
+  const { data: designers } = useQuery<{ assignableUsers: User[] }>(ASSIGNABLE_USERS, {
+    variables: { job: 'DESIGN' },
+    skip: !canAuthor,
+  });
+  const { data: developers } = useQuery<{ assignableUsers: User[] }>(ASSIGNABLE_USERS, {
+    variables: { job: 'BUILD' },
+    skip: !canAuthor,
   });
   const [publish] = useMutation(PUBLISH_CONTRACT);
   const [setStatus] = useMutation(SET_CONTRACT_STATUS);
@@ -39,16 +58,27 @@ export default function DeskContracts() {
   const [ref, setRef] = useState('');
   const [titleFa, setTitleFa] = useState('');
   const [titleEn, setTitleEn] = useState('');
+  const [designerId, setDesignerId] = useState('');
+  const [developerId, setDeveloperId] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  if (!can(me, 'contracts.manage')) return <Navigate to={lp(locale, '/desk')} replace />;
+  if (!canRead) return <Navigate to={lp(locale, '/desk')} replace />;
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setError(null);
     try {
       const res = await createContract({
-        variables: { input: { customerId, ref, titleFa, titleEn } },
+        variables: {
+          input: {
+            customerId,
+            ref,
+            titleFa,
+            titleEn,
+            designerId: designerId || null,
+            developerId: developerId || null,
+          },
+        },
       });
       const id = res.data?.createContract.id;
       if (id) navigate(lp(locale, `/desk/contracts/${id}`));
@@ -61,12 +91,14 @@ export default function DeskContracts() {
     <div className="desk-section">
       <div className="workspace-row">
         <h2 className="t-h2">{t('desk.navContracts')}</h2>
-        <button className="btn btn-primary btn-sm" type="button" onClick={() => setShowNew((v) => !v)}>
-          {t('desk.newContract')}
-        </button>
+        {canAuthor ? (
+          <button className="btn btn-primary btn-sm" type="button" onClick={() => setShowNew((v) => !v)}>
+            {t('desk.newContract')}
+          </button>
+        ) : null}
       </div>
 
-      {showNew ? (
+      {showNew && canAuthor ? (
         <section className="card">
           <form className="auth-form" onSubmit={onCreate}>
             <div className="editor-grid-2">
@@ -134,6 +166,48 @@ export default function DeskContracts() {
                 />
               </div>
             </div>
+            {/* Journeys build plan S1 (Q-S4): sales may pick a designer and a
+                developer at creation — both optional, both fed by
+                assignableUsers so this list and assignContract's own refusal
+                can never disagree. */}
+            <div className="editor-grid-2">
+              <div className="field">
+                <label className="label" htmlFor="nc-designer">
+                  {t('desk.newContractDesigner')}
+                </label>
+                <select
+                  id="nc-designer"
+                  className="select"
+                  value={designerId}
+                  onChange={(e) => setDesignerId(e.target.value)}
+                >
+                  <option value="">{t('desk.newContractUnassigned')}</option>
+                  {(designers?.assignableUsers ?? []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label className="label" htmlFor="nc-developer">
+                  {t('desk.newContractDeveloper')}
+                </label>
+                <select
+                  id="nc-developer"
+                  className="select"
+                  value={developerId}
+                  onChange={(e) => setDeveloperId(e.target.value)}
+                >
+                  <option value="">{t('desk.newContractUnassigned')}</option>
+                  {(developers?.assignableUsers ?? []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             {error ? <p className="error">{error}</p> : null}
             <div>
               <button className="btn btn-primary btn-sm" type="submit" disabled={creating}>
@@ -170,38 +244,50 @@ export default function DeskContracts() {
                 <td dir="ltr">{c.ref}</td>
                 <td>{pick(c, 'title', locale)}</td>
                 <td>{c.customer.clientName ?? c.customer.name}</td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  {/* Permissive by design: any status to any status, with a
-                      manual override always available. */}
-                  <select
-                    className="select"
-                    value={c.status}
-                    onChange={(e) =>
-                      setStatus({
-                        variables: {
-                          contractId: c.id,
-                          status: e.target.value as ContractStatus,
-                        },
-                      })
-                    }
-                  >
-                    {ALL_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {t(`status.${s}`)}
-                      </option>
-                    ))}
-                  </select>
+                {/* The two control cells stop the row's click only when they
+                    hold a control: for a reader (design, development) they
+                    hold a badge or nothing, and swallowing the click there
+                    made half the row dead — found by the S1 e2e. */}
+                <td onClick={canAuthor ? (e) => e.stopPropagation() : undefined}>
+                  {canAuthor ? (
+                    // Permissive by design: any status to any status, with a
+                    // manual override always available.
+                    <select
+                      className="select"
+                      value={c.status}
+                      onChange={(e) =>
+                        setStatus({
+                          variables: {
+                            contractId: c.id,
+                            status: e.target.value as ContractStatus,
+                          },
+                        })
+                      }
+                    >
+                      {ALL_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {t(`status.${s}`)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    // Design and development read the status; changing it is
+                    // sales's job (setContractStatus needs contracts.author).
+                    <StatusBadge status={c.status} />
+                  )}
                 </td>
                 <td>{fullDateTime(c.updatedAt, locale)}</td>
                 <td>{c.publishedAt ? fullDateTime(c.publishedAt, locale) : '—'}</td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    type="button"
-                    onClick={() => publish({ variables: { contractId: c.id } })}
-                  >
-                    {t('desk.publish')}
-                  </button>
+                <td onClick={canAuthor ? (e) => e.stopPropagation() : undefined}>
+                  {canAuthor ? (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      type="button"
+                      onClick={() => publish({ variables: { contractId: c.id } })}
+                    >
+                      {t('desk.publish')}
+                    </button>
+                  ) : null}
                 </td>
               </tr>
             ))}

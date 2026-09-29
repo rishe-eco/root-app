@@ -24,12 +24,96 @@ import type { Role, User } from '@prisma/client';
  * read everyone's.
  */
 export const CAPABILITIES = [
-  /** The staff contract workspace: create, edit, publish, set status, and the
-   *  design images that hang off a contract. Tracks V2–V4. */
-  'contracts.manage',
+  // ---- The project lifecycle (journeys build plan S1) -------------------
+  //
+  // These replace `contracts.manage`, the one verb that used to guard the
+  // whole lifecycle desk. One verb meant every staff role got the whole desk
+  // or none of it (defect D-3), so a developer could not even open a demo
+  // (D-2). It is removed, not aliased: an alias no role is meant to hold is a
+  // guard that silently admits ADMIN only, and reads as if it meant more.
+  //
+  // Reading is split from authoring, and reading is split in two. A
+  // capability here still only says *may you use the surface*; which
+  // contracts a reader sees is `lib/visibility.ts`, and whether a designer may
+  // author *this* contract's design is the assignment edge there too.
+
+  /** Every contract, whatever its state — the sales view of the book. */
+  'contracts.readAll',
+  /** Contracts that are still being worked: not discarded, not delivered,
+   *  on an active project (`isActiveContract`). What design and development
+   *  need to do their jobs, and no more. */
+  'contracts.readActive',
+  /** Create a contract, write its draft, articles and registry, publish it,
+   *  set its status, hand it over, assign its designer and developer. */
+  'contracts.author',
+  /**
+   * The budget, the fee, the payment plan, invoices (PD-14). One verb rather
+   * than every field resolver asking "author or billing?", so the answer to
+   * "who can see what this costs" is one row of this table. Design and
+   * development never hold it (journeys Q-S3).
+   */
+  'money.read',
   /** Invite, revoke, and list customers. Separate from the above so that an
    *  outside reviewer working a corpus is never also an account administrator. */
   'customers.manage',
+  /** The staff side of change tickets (L4): list, answer, convert, close. */
+  'tickets.answer',
+  /** Billing entries and subscriptions (L6) — writing them, and the desk's
+   *  ledger and report. */
+  'billing.manage',
+  /** Answer a customer's feedback in any step (S2). Held by every lifecycle
+   *  role, because design and development are asked things from step 1 on
+   *  (journeys Q-S1) — whether the answer reaches the customer directly is
+   *  the `answers.direct.*` rows below, not this one. */
+  'feedback.answer',
+  /** Approve or decline, with a reason, an answer that needs approval (S2). */
+  'feedback.approveAnswers',
+  /**
+   * The answer matrix (PD-3), one row per step: holding it means your answer
+   * in that step reaches the customer without waiting for a sales approval.
+   * Capabilities rather than a role lookup because house rule 1 forbids the
+   * lookup — and a person holding two roles then gets the union for free.
+   */
+  'answers.direct.agreement',
+  'answers.direct.design',
+  'answers.direct.mockup',
+  'answers.direct.demo',
+  /** Author a design — concepts, pages, images, palette, mockups — on the
+   *  contracts one is assigned to (`canAuthorDesign`). Also the upload
+   *  policy for design images (`lib/files.ts`). */
+  'design.author',
+  /** Template types and the theme catalogue (T1, T2). */
+  'templates.types',
+  /** Scope templates (T1). */
+  'templates.scope',
+  /**
+   * Build plan D6, 2026-09-20: declare a build, disposition open feedback
+   * items, write change entries, move scope items to `in-demo` — and, since
+   * S1, author the demos and review frames of the contracts one is assigned
+   * to develop (`canAuthorBuild`).
+   *
+   * Its own row rather than a widening of a contract verb, on purpose: the
+   * person who authors a build is not thereby a contract author. They never
+   * need the fee, the customer list, or `apiTokens.manage` — the one
+   * capability whose blast radius is everything else a role holds — to do
+   * this job, so none of those are reachable from here. Same reasoning
+   * `REVIEWER` was narrowed to `review.participate` and nothing else.
+   */
+  'builds.author',
+  /** Mark a non-technical dependency met (L5; the split arrives with J4's
+   *  `technical` flag — until then every dependency is general). */
+  'dependencies.verifyGeneral',
+  /** Mark a technical dependency met — hosting, DNS, credentials (J4). */
+  'dependencies.verifyTechnical',
+  /** Author a contract's design or build without being its assignee — the
+   *  escape hatch for cover and emergencies. No staff role holds it; ADMIN
+   *  does, by construction. */
+  'assignments.override',
+  /** Staff accounts and their roles (S3's Users slice). ADMIN only. */
+  'staff.manage',
+
+  // ---- Everything else, unchanged by S1 ---------------------------------
+
   /** Write Library entries. The contributor's whole remit (track R1). */
   'library.write',
   /** Publish a Library entry to the public reader. Withheld from CONTRIBUTOR —
@@ -53,21 +137,6 @@ export const CAPABILITIES = [
    * side effect of some other grant.
    */
   'apiTokens.manage',
-  /**
-   * Build plan D6, 2026-09-20: declare a build, disposition open feedback
-   * items, write change entries, move scope items to `in-demo` (L3b fills in
-   * the surface this guards; L1 only adds the role and the section it needs
-   * to not be blank).
-   *
-   * Its own row rather than a widening of `contracts.manage`, on purpose: the
-   * person who authors a build is not thereby an account administrator or a
-   * contract author. They never need the contract text, the fee, the
-   * customer list, or `apiTokens.manage` — the one capability whose blast
-   * radius is everything else a role holds — to do this job, so none of those
-   * are reachable from here. Same reasoning `REVIEWER` was narrowed to
-   * `review.participate` and nothing else.
-   */
-  'builds.author',
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -103,15 +172,64 @@ const GRANTS: Record<Role, readonly Capability[]> = {
   REVIEWER: ['review.participate'],
 
   /**
-   * Build plan D6. One verb, and pointedly not `contracts.manage`,
-   * `customers.manage`, or `apiTokens.manage` — a developer pulls tickets
-   * from their own section (`DESK_SECTIONS`'s `builds` row) and never needs
-   * to see the contract, the fee, the customer list, or the token screen to
-   * do that. If Root wants one person holding both remits, `ADMIN` is added
-   * alongside — visibly, as a second role, exactly as `CONTRIBUTOR` is added
-   * beside `REVIEWER` rather than implied by it.
+   * Build plan D6, widened by S1 to the rest of a developer's job: reading
+   * the active contracts (to see what they are building against), answering
+   * feedback, answering directly in the demo step, and verifying technical
+   * dependencies. Still pointedly not `contracts.author`, `money.read`,
+   * `customers.manage` or `apiTokens.manage` — a developer never needs the
+   * fee, the customer list or the token screen to do this job. If Root wants
+   * one person holding both remits, `SALES` or `ADMIN` is added alongside —
+   * visibly, as a second role, exactly as `CONTRIBUTOR` is added beside
+   * `REVIEWER` rather than implied by it.
    */
-  DEVELOPER: ['builds.author'],
+  DEVELOPER: [
+    'contracts.readActive',
+    'feedback.answer',
+    'answers.direct.demo',
+    'builds.author',
+    'dependencies.verifyTechnical',
+  ],
+
+  /**
+   * Journeys build plan S1 (journeys §7.3). Everything about running a
+   * contract except authoring its design or build: the whole book, the
+   * money, the customers, tickets, billing, and the last word on any answer
+   * design or development give outside their own step. Not `staff.manage`,
+   * `assignments.override` or `apiTokens.manage` — those stay ADMIN's.
+   */
+  SALES: [
+    'contracts.readAll',
+    'contracts.readActive',
+    'contracts.author',
+    'money.read',
+    'customers.manage',
+    'tickets.answer',
+    'billing.manage',
+    'feedback.answer',
+    'feedback.approveAnswers',
+    'answers.direct.agreement',
+    'answers.direct.design',
+    'answers.direct.mockup',
+    'answers.direct.demo',
+    'templates.scope',
+    'dependencies.verifyGeneral',
+  ],
+
+  /**
+   * Journeys build plan S1. Authors the design of the contracts they are
+   * assigned to, keeps the template types and the theme catalogue, and
+   * answers directly in the two steps that are theirs (design, mockup). Reads
+   * active contracts, never money — so the fee field and the billing surface
+   * are unreachable from this row, not merely hidden in the UI.
+   */
+  DESIGNER: [
+    'contracts.readActive',
+    'feedback.answer',
+    'answers.direct.design',
+    'answers.direct.mockup',
+    'design.author',
+    'templates.types',
+  ],
 };
 
 /** Every capability held across a user's role set. */
