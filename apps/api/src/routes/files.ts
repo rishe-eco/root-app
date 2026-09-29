@@ -26,6 +26,7 @@ import { UploadError, checkSize, policyFor, safeDownloadName, sniff } from '../l
 import { can } from '../lib/capabilities.js';
 import { canAuthorDesign, contractVisibleTo } from '../lib/visibility.js';
 import { hasToolGrant } from '../lib/toolGrants.js';
+import { canSeeThemePreview } from '../lib/themes.js';
 import type { LibraryEntry } from '@prisma/client';
 
 export const filesRouter: Router = Router();
@@ -72,6 +73,7 @@ const ENVELOPE_SLACK = 64 * 1024;
 
 /**
  * POST /upload?class=DESIGN_IMAGE&contractId=… or ?class=RESEARCH_TEXT&entryId=…
+ * (or …&projectId=… for SERVICE_IMPORT, …&themeId=… for THEME_PREVIEW)
  *
  * The class is in the query string rather than the body on purpose: it decides
  * the size limit, and a limit that can only be known after reading the whole
@@ -116,8 +118,10 @@ filesRouter.post(
     const contractId = typeof req.query.contractId === 'string' ? req.query.contractId : null;
     const entryId = typeof req.query.entryId === 'string' ? req.query.entryId : null;
     const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : null;
+    const themeId = typeof req.query.themeId === 'string' ? req.query.themeId : null;
 
     let entry: LibraryEntry | null = null;
+    let theme: { id: string } | null = null;
     if (policy.owner === 'contract') {
       if (!contractId) {
         throw new UploadError(
@@ -162,6 +166,18 @@ filesRouter.post(
       // without the tool there is no place to upload to. Staff are unaffected.
       if (!can(user, 'customers.manage') && !(await hasToolGrant(user.id, 'PRODUCT_IMPORT'))) {
         throw new UploadError(404, 'NOT_FOUND', 'No such project.');
+      }
+    } else if (policy.owner === 'theme') {
+      // Journeys build plan T2 — a catalogue preview. The capability above
+      // (`templates.types`) is the whole authority; what remains is that the
+      // theme exists. A theme belongs to no contract, so there is no
+      // visibility or assignment edge to consult.
+      if (!themeId) {
+        throw new UploadError(400, 'THEME_REQUIRED', 'This kind of file belongs to a theme; name which one.');
+      }
+      theme = await prisma.theme.findUnique({ where: { id: themeId }, select: { id: true } });
+      if (!theme) {
+        throw new UploadError(404, 'NOT_FOUND', 'No such theme.');
       }
     } else {
       // owner === 'entry' (R1.md §6). "No such thing", not "not allowed" —
@@ -228,6 +244,11 @@ filesRouter.post(
 
     const key = await storage.put(policy.visibility, data, type.ext);
 
+    // The bytes of the preview this upload replaces, removed once the swap has
+    // committed — never before, or a failed swap would leave a theme pointing
+    // at nothing.
+    let replacedKey: string | null = null;
+
     let stored;
     try {
       stored = await prisma.$transaction(async (tx) => {
@@ -239,8 +260,13 @@ filesRouter.post(
             mime: type.mime,
             bytes: data.length,
             originalName: safeDownloadName(field.name, type.ext),
-            contractId,
+            // Only the owner edge the class names is written. A stray
+            // `contractId` on a theme upload would otherwise make the file
+            // readable by that contract's customer (`contractVisibleTo`), and
+            // the private-file CHECK would not notice: one owner is enough.
+            contractId: policy.owner === 'contract' ? contractId : null,
             projectId: policy.owner === 'project' ? projectId : null,
+            themeId: theme?.id ?? null,
             uploadedById: user.id,
           },
         });
@@ -255,6 +281,23 @@ filesRouter.post(
             data: { fullTextFileId: file.id },
           });
         }
+        if (theme) {
+          // One preview per theme: the new file replaces the old, in the same
+          // transaction that points the theme at it. The theme row is locked
+          // so two uploads racing cannot both find the same "old" file and
+          // both delete it (the loser would otherwise roll back on a row that
+          // is already gone).
+          const [locked] = await tx.$queryRaw<Array<{ previewFileId: string | null }>>`
+            SELECT "previewFileId" FROM "Theme" WHERE "id" = ${theme.id} FOR UPDATE`;
+          await tx.theme.update({ where: { id: theme.id }, data: { previewFileId: file.id } });
+          if (locked?.previewFileId) {
+            const old = await tx.storedFile.findUnique({ where: { id: locked.previewFileId } });
+            if (old) {
+              await tx.storedFile.delete({ where: { id: old.id } });
+              replacedKey = old.key;
+            }
+          }
+        }
         return file;
       });
     } catch (err) {
@@ -263,6 +306,8 @@ filesRouter.post(
       await storage.remove(key).catch(() => undefined);
       throw err;
     }
+
+    if (replacedKey) await storage.remove(replacedKey).catch(() => undefined);
 
     res.status(201).json({
       id: stored.id,
@@ -293,6 +338,9 @@ filesRouter.get(
         // Build plan L7 — a SERVICE_IMPORT file has no contract at all;
         // ownership runs through the project instead.
         project: { select: { customerId: true } },
+        // Journeys build plan T2 — a THEME_PREVIEW file has neither; the
+        // catalogue is staff-only, so the edge is a capability, not a row.
+        theme: { select: { id: true } },
       },
     });
 
@@ -319,7 +367,11 @@ filesRouter.get(
       // ownership, or the services desk's `customers.manage`.
       const visible =
         (file.contract !== null && contractVisibleTo(ctx.user, file.contract)) ||
-        (file.project !== null && (file.project.customerId === ctx.user.id || can(ctx.user, 'customers.manage')));
+        (file.project !== null && (file.project.customerId === ctx.user.id || can(ctx.user, 'customers.manage'))) ||
+        // A theme preview is the catalogue's, and the catalogue is staff-only
+        // (`canSeeThemePreview`): a customer holds none of those capabilities,
+        // so they get the same 404 as for a file that does not exist.
+        (file.theme !== null && canSeeThemePreview(ctx.user));
       if (!visible) return deny();
     }
 
