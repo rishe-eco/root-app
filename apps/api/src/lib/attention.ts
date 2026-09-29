@@ -1,4 +1,4 @@
-import type { User } from '@prisma/client';
+import type { StepKind, User } from '@prisma/client';
 import { isOverdue } from './dependency.js';
 import { attentionVisibleTo } from './visibility.js';
 
@@ -35,6 +35,10 @@ import { attentionVisibleTo } from './visibility.js';
  * Shipped in J3, the ones whose data exists already: the pending banner
  * (`DRAFT_TO_REVIEW`, `ROUND_PUBLISHED`), overdue dependencies
  * (`COMMITMENT_OVERDUE`) and demo items addressed (`ANSWER_PUBLISHED`).
+ * S2 makes the three feedback kinds real for every step: Root owes an answer
+ * (`FEEDBACK_UNRESOLVED`), an answer waits for sales (`ANSWER_PENDING_APPROVAL`,
+ * Root's housekeeping — staff only), Root has answered and the customer's
+ * move is to reopen or approve (`ANSWER_PUBLISHED`).
  * Not shipped though the data exists: `TICKET_REPLY` and `REQUEST_MESSAGE`
  * (J3 names the three above), `ASSIGNEE_INACTIVE` (J4 decides who sees it).
  */
@@ -102,6 +106,8 @@ export const ATTENTION_SENTENCES: Partial<Record<AttentionKind, Record<string, r
   DRAFT_TO_REVIEW: { contract: BOTH, amendmentApprove: BOTH, amendmentSign: BOTH },
   ROUND_PUBLISHED: { default: BOTH },
   ANSWER_PUBLISHED: { default: BOTH },
+  FEEDBACK_UNRESOLVED: { default: BOTH },
+  ANSWER_PENDING_APPROVAL: { default: ['staff'] },
   COMMITMENT_OVERDUE: { customer: BOTH, root: ['staff'] },
 };
 
@@ -128,11 +134,45 @@ export type AttentionInput = {
     dueAt: Date;
     verifiedAt: Date | null;
   }>;
-  /** Feedback items ADDRESSED in a *published* build of a published demo —
-   *  Root's answer, the customer's to accept or reopen. `since` is the build's
-   *  publish time: the customer was not told before it. */
-  addressed: Array<{ id: string; phaseId: string; since: Date }>;
+  /** Feedback on every step (S2), reduced to three lists of facts — the loader
+   *  decides membership, this file only groups and words them. */
+  feedback: FeedbackFacts;
 };
+
+/** One item's worth of a feedback fact. `money` is PD-21's flag (the item is
+ *  about the budget, the payment plan or a sensitive article) and travels onto
+ *  the attention item, so `attentionVisibleTo` does the hiding. */
+export type FeedbackFact = { step: StepKind; phaseId: string | null; money: boolean; since: Date };
+
+export type FeedbackFacts = {
+  /** Items still `OPEN`: Root owes an answer. `since` is the customer's last
+   *  word on it. */
+  unresolved: FeedbackFact[];
+  /** Answers written but not yet approved (`PENDING`): sales' queue. */
+  pendingApproval: FeedbackFact[];
+  /** Items Root has resolved (addressed, declined or moved) that the customer
+   *  has not yet accepted — an approval will. `since` is when the answer
+   *  reached them: for an item addressed in a build, the build's publish time
+   *  (the customer was not told before it). */
+  answered: FeedbackFact[];
+};
+
+const stepRole = (step: StepKind): WorkRole =>
+  step === 'DESIGN' || step === 'MOCKUP' ? 'DESIGNER' : step === 'DEMO' ? 'DEVELOPER' : 'SALES';
+
+/** One line per (step, phase, money), not per item: "three comments are
+ *  waiting" is the fact; three lines are noise. Money is a key so the money
+ *  items' line can be hidden alone. */
+function groupFacts(facts: readonly FeedbackFact[]): Array<{ step: StepKind; phaseId: string | null; money: boolean; count: number; since: Date }> {
+  const groups = new Map<string, { step: StepKind; phaseId: string | null; money: boolean; count: number; since: Date }>();
+  for (const f of facts) {
+    const key = `${f.step}|${f.phaseId ?? ''}|${f.money}`;
+    const seen = groups.get(key);
+    if (!seen) groups.set(key, { step: f.step, phaseId: f.phaseId, money: f.money, count: 1, since: f.since });
+    else groups.set(key, { ...seen, count: seen.count + 1, since: seen.since < f.since ? seen.since : f.since });
+  }
+  return [...groups.values()];
+}
 
 function allItems(input: AttentionInput): AttentionItem[] {
   const base = { contractId: input.contractId, phaseId: null, role: null, internal: false, money: false } as const;
@@ -189,21 +229,48 @@ function allItems(input: AttentionInput): AttentionItem[] {
 
   // One line per phase, not per item: "three things you raised were
   // addressed" is the customer's next move; three lines are noise.
-  const byPhase = new Map<string, { count: number; since: Date }>();
-  for (const a of input.addressed) {
-    const seen = byPhase.get(a.phaseId);
-    if (!seen) byPhase.set(a.phaseId, { count: 1, since: a.since });
-    else byPhase.set(a.phaseId, { count: seen.count + 1, since: seen.since < a.since ? seen.since : a.since });
-  }
-  for (const [phaseId, { count, since }] of byPhase) {
+  for (const g of groupFacts(input.feedback.answered)) {
     items.push({
       ...base,
       kind: 'ANSWER_PUBLISHED',
       variant: 'default',
-      phaseId,
+      phaseId: g.phaseId,
       waitingOn: 'CUSTOMER',
-      since,
-      params: { count },
+      since: g.since,
+      money: g.money,
+      params: { count: g.count, step: g.step },
+    });
+  }
+
+  // Root owes the customer an answer: the step's owner's move.
+  for (const g of groupFacts(input.feedback.unresolved)) {
+    items.push({
+      ...base,
+      kind: 'FEEDBACK_UNRESOLVED',
+      variant: 'default',
+      phaseId: g.phaseId,
+      waitingOn: 'ROOT',
+      role: stepRole(g.step),
+      since: g.since,
+      money: g.money,
+      params: { count: g.count, step: g.step },
+    });
+  }
+
+  // An answer written and not yet published is sales' to decide, and nobody
+  // else's business — the customer never sees that it exists (`internal`).
+  for (const g of groupFacts(input.feedback.pendingApproval)) {
+    items.push({
+      ...base,
+      kind: 'ANSWER_PENDING_APPROVAL',
+      variant: 'default',
+      phaseId: g.phaseId,
+      waitingOn: 'ROOT',
+      role: 'SALES',
+      internal: true,
+      since: g.since,
+      money: g.money,
+      params: { count: g.count, step: g.step },
     });
   }
 

@@ -53,6 +53,18 @@ const buildInclude = {
 
 const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extensions: { code: 'NOT_FOUND' } });
 
+/**
+ * The one definition of "open feedback the build queue owes an answer": the
+ * demo step's, on this project, still `OPEN` — optionally on one phase. The
+ * queue and `declareBuild` both use it (see `openFeedbackQueue`).
+ */
+const openDemoItems = (projectId: string, phaseId: string | null): Prisma.FeedbackItemWhereInput => ({
+  step: 'DEMO',
+  status: 'OPEN',
+  projectId,
+  ...(phaseId ? { phaseId } : {}),
+});
+
 type BuildChangeInputArg = {
   feedbackItemId?: string | null;
   scopeItemId?: string | null;
@@ -84,20 +96,27 @@ export const buildQueries = {
     }));
   },
 
-  /** Staff (builds.author). Every OPEN/RATIFIED feedback item on this
-   *  project, oldest first — the queue declareBuild's disposition list must
-   *  exhaust. "An empty queue means done" (build plan D6).
+  /** Staff (builds.author). Every OPEN item of the **demo step** on this
+   *  project (narrowed to one phase when given), oldest first — the queue
+   *  declareBuild's disposition list must exhaust. "An empty queue means
+   *  done" (build plan D6).
    *
-   *  Build plan L4: an item already converted to a ticket (`ticket` set) is
-   *  excluded — it has been moved to a different channel, and requiring a
-   *  build disposition for it forever would mean the queue could never
-   *  drain once a single item took that path. `declareBuild`'s own read
-   *  below applies the same exclusion, so the two can never disagree about
-   *  what "open" means. */
-  openFeedbackQueue: async (_p: unknown, args: { projectId: string }, ctx: Context) => {
+   *  **`step: 'DEMO'` is the point of S2's second trap.** The queue used to be
+   *  every open item on the project; with one feedback model for every step,
+   *  that would put a customer's note on the budget or the design in the
+   *  developer's queue, and a build that "dispositioned" it would drain another
+   *  step's feedback — silently, in exactly the direction that looks like the
+   *  queue working. Every `feedbackItem` read in this file names its step.
+   *
+   *  Build plan L4's exclusion of items moved to a ticket is now the status
+   *  itself (`MOVED` is not `OPEN`); an item the customer reopened after a move
+   *  is open again and belongs in the queue. `declareBuild`'s own read below
+   *  uses the same `where`, so the two can never disagree about what "open"
+   *  means. */
+  openFeedbackQueue: async (_p: unknown, args: { projectId: string; phaseId?: string | null }, ctx: Context) => {
     await requireBuildAuthorOnProject(ctx, args.projectId);
     return prisma.feedbackItem.findMany({
-      where: { status: { in: ['OPEN', 'RATIFIED'] }, ticket: null, demo: { phase: { projectId: args.projectId } } },
+      where: openDemoItems(args.projectId, args.phaseId ?? null),
       include: feedbackItemInclude,
       orderBy: { createdAt: 'asc' },
     });
@@ -144,14 +163,22 @@ export const buildMutations = {
     ctx: Context,
   ) => {
     const developer = requireCapability(ctx, 'builds.author');
+    // A disposition resolves the item directly, so the declarer must be one
+    // whose demo answers are direct (`answerRoute`). Both roles that hold
+    // `builds.author` hold this too; asked separately so a future grant that
+    // splits them fails here, loudly, instead of publishing an answer nobody
+    // approved.
+    requireCapability(ctx, 'answers.direct.demo');
     const phase = await prisma.phase.findUnique({ where: { id: args.phaseId } });
     if (!phase) throw notFound('phase');
     await requireBuildAuthorOnProject(ctx, phase.projectId);
 
-    // Build plan L4: excludes items already moved to the ticket channel —
-    // see openFeedbackQueue's own comment above, which this must agree with.
+    // Journeys build plan S2: the demo step's open items **on this phase** —
+    // `openFeedbackQueue`'s own `where`, which this must agree with, and which
+    // names the step so a build never dispositions (and so drains) the
+    // budget's, the design's or any other step's feedback.
     const openItems = await prisma.feedbackItem.findMany({
-      where: { status: { in: ['OPEN', 'RATIFIED'] }, ticket: null, demo: { phase: { projectId: phase.projectId } } },
+      where: openDemoItems(phase.projectId, phase.id),
       select: { id: true, status: true },
     });
     const openIds = openItems.map((i) => i.id);
@@ -202,9 +229,7 @@ export const buildMutations = {
           });
         }
         if (!outcomeAllowedForStatus(change.outcome, status)) {
-          throw new GraphQLError('An item nobody has ratified yet can only be carried forward.', {
-            extensions: { code: 'NOT_RATIFIED' },
-          });
+          throw new GraphQLError('That item is no longer open.', { extensions: { code: 'NOT_OPEN' } });
         }
       } else if (change.outcome) {
         throw new GraphQLError('Only a feedback-item change may carry an outcome.', {
@@ -254,6 +279,22 @@ export const buildMutations = {
           if (change.feedbackItemId && change.outcome) {
             const nextStatus = nextFeedbackStatus(change.outcome);
             if (nextStatus) {
+              // **A disposition is the developer's answer** (S2, PD-4): a
+              // staff comment carrying the resolution, direct because the
+              // caller holds `answers.direct.demo` (required above). The
+              // note is the answer's text; an ADDRESSED with none is an
+              // answer with no words — "addressed in build N" says it. Without
+              // the comment, a designer's older pending answer approved later
+              // would be judged against a ledger that is not in the thread.
+              await tx.feedbackComment.create({
+                data: {
+                  feedbackItemId: change.feedbackItemId,
+                  authorId: developer.id,
+                  body: note ?? '',
+                  resolution: nextStatus,
+                  approval: 'NOT_REQUIRED',
+                },
+              });
               await tx.feedbackItem.update({
                 where: { id: change.feedbackItemId },
                 data: { status: nextStatus, addressedInBuildId: nextStatus === 'ADDRESSED' ? created.id : null },

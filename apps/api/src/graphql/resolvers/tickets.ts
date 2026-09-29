@@ -4,6 +4,8 @@ import { prisma } from '../../lib/prisma.js';
 import { requireUser, requireCapability, type Context } from '../../context.js';
 import { can } from '../../lib/capabilities.js';
 import { canChooseTicketType, briefPageFromTarget, compileAnnotation } from '../../lib/ticket.js';
+import { lockContract } from '../../lib/stepApproval.js';
+import { stepNamesFor } from '../../lib/mailTemplates.js';
 import { feedbackItemInclude } from './feedback.js';
 
 /**
@@ -218,8 +220,9 @@ export const ticketMutations = {
       include: {
         demoPage: true,
         frameLine: true,
+        anchorScopeItem: true,
         ticket: true,
-        demo: { include: { phase: { include: { project: { include: { customer: true } } } } } },
+        project: { include: { customer: true } },
       },
     });
     if (!item) throw notFound('feedback item');
@@ -228,9 +231,13 @@ export const ticketMutations = {
         extensions: { code: 'ALREADY_CONVERTED' },
       });
     }
-    if (item.status !== 'RATIFIED') {
-      throw new GraphQLError('Only a ratified item can become a change ticket.', {
-        extensions: { code: 'NOT_RATIFIED' },
+    // S2: a submission is its own ratification (PD-2), so what makes an item
+    // convertible is that it is still open — Root's answer is what it turns
+    // into, and an item already answered, declined or accepted is not a
+    // request for change any more (the customer reopens it first).
+    if (item.status !== 'OPEN') {
+      throw new GraphQLError('Only an open item can become a change ticket.', {
+        extensions: { code: 'NOT_OPEN' },
       });
     }
 
@@ -251,26 +258,36 @@ export const ticketMutations = {
       orderBy: { createdAt: 'asc' },
       include: { author: true },
     });
-    const page = briefPageFromTarget(item);
-    const project = item.demo.phase.project;
+    const page = briefPageFromTarget({ ...item, generalStepName: item.general ? stepNamesFor(item.step) : null });
+    const project = item.project;
     const customer = project.customer;
 
-    const ticket = await prisma.ticket.create({
-      data: {
-        customerId: customer.id,
-        projectId: project.id,
-        sourceFeedbackItemId: item.id,
-        type: 'CHANGE_REQUEST',
-        subject: (customer.locale === 'en' ? page.en : page.fa) || page.fa || page.en,
-        briefPageFa: page.fa,
-        briefPageEn: page.en,
-        briefAnnotation: compileAnnotation(comments),
-        briefCurrentState: currentState,
-        briefDesiredState: desiredState,
-        briefLang: args.lang,
-      },
-      include: ticketInclude,
+    // The ticket and the item's new status are one act: an item that is
+    // MOVED without a ticket, or a ticket whose item is still open in the
+    // build queue, are both the silent half-states this stage exists to close.
+    return prisma.$transaction(async (tx) => {
+      await lockContract(tx, item.contractId);
+      const ticket = await tx.ticket.create({
+        data: {
+          customerId: customer.id,
+          projectId: project.id,
+          sourceFeedbackItemId: item.id,
+          type: 'CHANGE_REQUEST',
+          subject: (customer.locale === 'en' ? page.en : page.fa) || page.fa || page.en,
+          briefPageFa: page.fa,
+          briefPageEn: page.en,
+          briefAnnotation: compileAnnotation(comments),
+          briefCurrentState: currentState,
+          briefDesiredState: desiredState,
+          briefLang: args.lang,
+        },
+        include: ticketInclude,
+      });
+      // §3.1 / S2: a resolution the customer sees ("moved to change request
+      // #…"), which also takes the item out of the build queue by the one
+      // definition of open — and which the customer can still reopen.
+      await tx.feedbackItem.update({ where: { id: item.id }, data: { status: 'MOVED', addressedInBuildId: null } });
+      return ticket;
     });
-    return ticket;
   },
 };

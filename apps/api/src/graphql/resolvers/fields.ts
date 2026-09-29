@@ -1,8 +1,15 @@
-import type { Role as RoleName } from '@prisma/client';
+import type { Role as RoleName, StepKind } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { viewerOf, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
-import { isContractReader, mayReadContactOf, mayReadMoney, requestVisibleTo } from '../../lib/visibility.js';
+import {
+  isContractReader,
+  mayReadContactOf,
+  mayReadMoney,
+  requestVisibleTo,
+  visibleComment,
+  visibleItem,
+} from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../lib/scope.js';
@@ -51,6 +58,23 @@ export const Contract = {
    */
   scopeItems: (c: FullContract) => c.project.scopeItems,
   project: (c: FullContract) => c.project,
+
+  /**
+   * Journeys build plan S2: one list for every step. Filtered by who is
+   * looking — `viewerOf`, so sales viewing as the customer sees what the
+   * customer sees — through `visibleItem` (PD-21: feedback about money is for
+   * money readers). What each item's *comments* show is `FeedbackItem.comments`
+   * below, for the same viewer.
+   */
+  feedbackItems: async (c: FullContract, a: { step?: StepKind | null; phaseId?: string | null }, ctx: Context) => {
+    const viewer = viewerOf(ctx);
+    const items = await prisma.feedbackItem.findMany({
+      where: { contractId: c.id, ...(a.step ? { step: a.step } : {}), ...(a.phaseId ? { phaseId: a.phaseId } : {}) },
+      include: feedbackItemInclude,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+    return items.filter((i) => visibleItem(i, viewer, c));
+  },
 
   /**
    * The request this contract's project began as (journeys build plan J2),
@@ -401,6 +425,75 @@ export const DemoFrame = {
       },
       orderBy: { createdAt: 'asc' },
     });
+  },
+};
+
+/**
+ * Journeys build plan S2, PD-4: **the customer projection of a thread.** A
+ * pending or declined staff answer is not in the customer's list — nor in
+ * the list sales sees under "view as customer", because `viewerOf` swaps the
+ * viewer and `visibleComment` (lib/visibility.ts) is asked about *them*. Every
+ * path that returns a `FeedbackItem` reaches its comments through here, so no
+ * query can hand one out unfiltered.
+ */
+export const FeedbackItem = {
+  comments: async (item: { id: string; comments?: Array<{ approval: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'DECLINED' }> }, _a: unknown, ctx: Context) => {
+    const viewer = viewerOf(ctx);
+    const comments =
+      item.comments ??
+      (await prisma.feedbackComment.findMany({
+        where: { feedbackItemId: item.id },
+        orderBy: { createdAt: 'asc' },
+        include: { author: true, approvedBy: true },
+      }));
+    return comments.filter((c) => visibleComment(c, viewer));
+  },
+};
+
+/**
+ * The approval trail is Root's: who decided, when, why, and what the author
+ * first wrote. A customer sees the answer, not the machinery behind it (and a
+ * designer's declined draft, with its reason, is between them and sales).
+ */
+export const FeedbackComment = {
+  approvedBy: (c: { approvedBy?: unknown }, _a: unknown, ctx: Context) =>
+    isContractReader(viewerOf(ctx)) ? (c.approvedBy ?? null) : null,
+  approvedAt: (c: { approvedAt: Date | null }, _a: unknown, ctx: Context) =>
+    isContractReader(viewerOf(ctx)) ? c.approvedAt : null,
+  approvalNote: (c: { approvalNote: string | null }, _a: unknown, ctx: Context) =>
+    isContractReader(viewerOf(ctx)) ? c.approvalNote : null,
+  originalBody: (c: { originalBody: string | null }, _a: unknown, ctx: Context) =>
+    isContractReader(viewerOf(ctx)) ? c.originalBody : null,
+};
+
+/**
+ * `FeedbackItem.addressedInBuild` loads a bare `Build` (J3 review's owed item:
+ * selecting `declaredBy` or `changes` through it failed, because nothing had
+ * included them). They resolve here instead — from the row when the caller
+ * did include them (`builds.ts`), from the database when not — so no path to
+ * a `Build` can return a half-loaded one.
+ *
+ * **The customer may see who declared a build — the name — but neither their
+ * contacts nor the change list.** The name is what a customer already knows
+ * of the person (the contract names its designer and developer); contacts go
+ * through `mayReadContactOf` on the `User` fields, as everywhere. The list is
+ * staff's: a no-origin entry is a developer's raw note, which L3b §1.3 keeps
+ * off the customer's screen until the PM has written it up in both languages
+ * (`DemoFrame.unpromptedChanges` is staff-only for the same reason).
+ */
+export const Build = {
+  declaredBy: (b: { declaredBy?: unknown; declaredById: string }) =>
+    b.declaredBy ?? prisma.user.findUniqueOrThrow({ where: { id: b.declaredById } }),
+  changes: async (b: { id: string; changes?: unknown[] }, _a: unknown, ctx: Context) => {
+    if (!isContractReader(viewerOf(ctx))) return [];
+    return (
+      b.changes ??
+      prisma.buildChangeEntry.findMany({
+        where: { buildId: b.id },
+        include: { feedbackItem: { include: feedbackItemInclude }, scopeItem: true },
+        orderBy: { createdAt: 'asc' },
+      })
+    );
   },
 };
 

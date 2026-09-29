@@ -507,58 +507,104 @@ export const typeDefs = /* GraphQL */ `
 
   """
   Fates a feedback item can occupy (spec §6: "every item shows its fate —
-  accepted / done / declined-because"). L3 wrote and read only OPEN and
-  RATIFIED; build plan L3b is what actually writes ADDRESSED, ACCEPTED and
-  DECLINED — present in the enum since L3 on the same precedent L1 used for
-  ScopeStatus.ACCEPTED (built before anything could reach it).
+  accepted / done / declined-because"), on every step (journeys build plan S2,
+  PD-1). RATIFIED is gone (PD-2): a submission is its own ratification.
   """
   enum FeedbackStatus {
-    "Submitted, unratified — an opinion (F8), visible but inert."
+    "Raised by the customer (or reopened) and not yet resolved by Root. Blocks the step's approval."
     OPEN
-    "The decider (D3) ratified the batch this item was part of — actionable."
-    RATIFIED
-    "L3b: the developer's claim, not the customer's acceptance."
+    "Root's claim that this is resolved. Not the customer's acceptance — see acceptedAt."
     ADDRESSED
-    "The customer met it in the next review and did not reopen it."
+    "Declined, with its reason — spec §6's declined-because. The customer may reopen it until the step is approved."
+    DECLINED
+    "Converted to a change ticket (createTicketFromFeedback) — a resolution the customer sees."
+    MOVED
+    "The step was approved with this item resolved (approveStep, and nothing else)."
     ACCEPTED
-    "Declined, with its reason — spec §6's declined-because."
+  }
+
+  "What a staff answer resolves an item to (PD-4)."
+  enum FeedbackResolution {
+    ADDRESSED
     DECLINED
   }
 
-  "One voice on a feedback item (spec §6, F8)."
+  """
+  Whether a staff answer has reached the customer (PD-3, PD-4). The customer
+  — and sales viewing as the customer — is never shown a PENDING or DECLINED one.
+  """
+  enum AnswerApproval {
+    NOT_REQUIRED
+    PENDING
+    APPROVED
+    DECLINED
+  }
+
+  """
+  One voice on a feedback item (spec §6, F8) — and, when staff wrote it, an
+  answer (PD-4): a comment that may carry a resolution.
+  """
   type FeedbackComment {
     id: ID!
     author: User!
     body: String!
+    "Set on a staff answer that resolves the item; applied at once for a direct answer, at approval for a pending one."
+    resolution: FeedbackResolution
+    approval: AnswerApproval!
+    "Staff only (null for the customer): who approved or declined it."
+    approvedBy: User
+    approvedAt: DateTime
+    "Staff only: the reason a declined answer was declined — the author sees it."
+    approvalNote: String
+    "Staff only: the author's own words, kept when sales edited the answer before approving it."
+    originalBody: String
     createdAt: DateTime!
   }
 
   """
-  Per-item feedback intake (spec §6) — never a comment blob. Binds to a demo
-  page or a frame line, exactly one of the two. Two submissions against the
-  same target collapse into one row (D4) — see comments for the individual
-  voices that pile up on it.
+  Per-item feedback intake (spec §6) — never a comment blob — on any step.
+  An item binds to one anchor, whose kind depends on the step (the step's
+  brief field, a scope item, an article of a revision, a design page /
+  concept / palette item, a demo page or frame line), or to the step as a whole
+  (general). Two submissions against the same target collapse into one row
+  (D4); all general comments on one step are one thread.
   """
   type FeedbackItem {
     id: ID!
+    contractId: ID!
+    step: StepKind!
+    "Set for a DEMO item; null for every other step."
+    phaseId: ID
+    general: Boolean!
+    "REQUIREMENTS: the brief field the note is about."
+    briefField: String
+    "SCOPE: the registry item the note is about."
+    anchorScopeItem: ScopeItem
+    "DRAFT: the revision, and the article (Appendix 1 is article 15) if the note is about one."
+    contractRevisionId: ID
+    articleNumber: Int
+    "DESIGN: the revision, and at most one of the concept, page or palette item."
+    designRevisionId: ID
+    conceptId: ID
+    pageDesignId: ID
+    paletteItemId: ID
+    "MOCKUP and DEMO: the page or frame line."
     demoPage: DemoPage
     frameLine: DemoFrameLine
     status: FeedbackStatus!
     "Set when this item was filed against a decided/temporary scope item and the submitter chose to proceed (D4's interception)."
     reopenedScopeItem: ScopeItem
-    ratifiedAt: DateTime
-    ratifiedBy: User
     """
     Build plan L3b.2's first rule, as two fields rather than one: the
     developer's claim, and which build carried it. Not the customer's
-    acceptance — see acceptedAt. Cleared the moment a new comment reopens
-    the item (lib/feedback.ts's reopensOnComment).
+    acceptance — see acceptedAt. Cleared the moment a new comment reopens the
+    item (lib/feedbackRules.ts's reopensOnComment).
     """
     addressedInBuild: Build
-    "The second, separate write: the customer met this in the next review and did not reopen it. Set only by acceptFeedback, and only from ADDRESSED."
+    "The customer's acceptance: written by the step's approval (approveStep) and nothing else."
     acceptedAt: DateTime
     acceptedBy: User
-    "Oldest first — the opening voice, then whoever piled on."
+    "Oldest first — the opening voice, then whoever piled on. A customer never sees a pending or declined staff answer here."
     comments: [FeedbackComment!]!
     "Set once this item becomes a change ticket (build plan L4, createTicketFromFeedback) — never more than one, and never unset again."
     ticket: Ticket
@@ -585,6 +631,68 @@ export const typeDefs = /* GraphQL */ `
     interceptionReason: FeedbackInterceptionReason
     "The scope item interception is asking about."
     interceptionScopeItem: ScopeItem
+  }
+
+  """
+  What a piece of feedback is about (journeys build plan S2). Which fields may
+  be set depends on the step, and the API refuses a mismatch with
+  INVALID_TARGET: REQUIREMENTS — briefField; SCOPE — scopeItemId; DRAFT —
+  contractRevisionId (+ articleNumber); DESIGN — designRevisionId (+ at most
+  one of conceptId, pageDesignId, paletteItemId); MOCKUP and DEMO — demoId +
+  exactly one of demoPageId, frameLineId. Every step also takes general: the
+  step as a whole, where all such comments collapse into one thread.
+  """
+  input FeedbackTargetInput {
+    general: Boolean
+    briefField: String
+    scopeItemId: ID
+    contractRevisionId: ID
+    articleNumber: Int
+    designRevisionId: ID
+    conceptId: ID
+    pageDesignId: ID
+    paletteItemId: ID
+    demoId: ID
+    demoPageId: ID
+    frameLineId: ID
+  }
+
+  """
+  One answer waiting in sales' queue (feedback.approveAnswers) — the comment,
+  the item it is on, and enough of the contract to say where. Thin on purpose:
+  never a Contract, which carries the fee.
+  """
+  type PendingAnswer {
+    "The comment's id."
+    id: ID!
+    comment: FeedbackComment!
+    item: FeedbackItem!
+    contractId: ID!
+    contractRef: String!
+    contractTitleFa: String!
+    contractTitleEn: String!
+    step: StepKind!
+    phaseNumber: Int
+  }
+
+  """
+  One open item a staff member may answer (myFeedbackQueue): whether their
+  answer would go straight to the customer (route), and whether it is theirs
+  by assignment (mine) — the queue puts those first.
+  """
+  type FeedbackQueueEntry {
+    item: FeedbackItem!
+    contractId: ID!
+    contractRef: String!
+    contractTitleFa: String!
+    contractTitleEn: String!
+    route: AnswerRoute!
+    mine: Boolean!
+  }
+
+  enum AnswerRoute {
+    DIRECT
+    NEEDS_APPROVAL
   }
 
   "What reporting one browser navigation actually did — not the whole contract, since this fires on every page change and both a customer and Root may call it."
@@ -619,13 +727,13 @@ export const typeDefs = /* GraphQL */ `
   (build plan L3b.2's first rule).
   """
   enum BuildChangeOutcome {
-    "The developer's claim. Requires the item to already be RATIFIED."
+    "The developer's claim — and, in the demo step, the developer's answer (S2): it resolves the item directly."
     ADDRESSED
-    "Requires note — declined-*because*, structurally (L3b.2's third rule)."
+    "Requires note — declined-*because*, structurally (L3b.2's third rule). The customer may reopen a declined item until the step is approved."
     DECLINED
     """
-    The explicit "still open, carried forward" — the only legal disposition
-    for a merely-OPEN (unratified) item.
+    The explicit "still open, carried forward" (a developer can say "not this
+    build"). The item stays OPEN, so it still blocks the step's approval.
     """
     CARRIED_FORWARD
   }
@@ -742,7 +850,7 @@ export const typeDefs = /* GraphQL */ `
     flag yet.
     """
     billable: Boolean!
-    "The ratified feedback item this ticket was converted from, if any (build plan L4)."
+    "The feedback item this ticket was converted from, if any (build plan L4) — which is then MOVED."
     sourceFeedbackItem: FeedbackItem
     "The page or frame line this concerns, snapshotted at conversion time — never a live view."
     briefPageFa: String
@@ -1039,6 +1147,13 @@ export const typeDefs = /* GraphQL */ `
     timeline: [TimelineItem!]!
     "Staff readers only; an empty list — never an error — for a customer, and under asCustomer."
     internalNotes: [InternalNote!]!
+    """
+    Journeys build plan S2: this contract's feedback, one model for every step
+    (newest first), as this viewer may see it — a customer never sees a pending
+    answer, and staff without money.read never see feedback about money
+    (PD-21). Narrow by step (and, for the demo, phase).
+    """
+    feedbackItems(step: StepKind, phaseId: ID): [FeedbackItem!]!
   }
 
   "Journeys build plan J3, PD-7."
@@ -1928,8 +2043,24 @@ export const typeDefs = /* GraphQL */ `
     # --- Builds and the resolution ledger (build plan L3b) ---
     "Staff (builds.author). Every phase across every active project, thin — the build-authoring form's phase picker."
     phasesForBuilds: [BuildPhase!]!
-    "Staff (builds.author). Every OPEN/RATIFIED feedback item on this project, oldest first — the queue declareBuild's disposition list must exhaust."
-    openFeedbackQueue(projectId: ID!): [FeedbackItem!]!
+    """
+    Staff (builds.author). Every OPEN item of the demo step on this project
+    (narrowed to one phase when given), oldest first — the queue declareBuild's
+    disposition list must exhaust. Other steps' feedback is never in it.
+    """
+    openFeedbackQueue(projectId: ID!, phaseId: ID): [FeedbackItem!]!
+
+    # --- Answers and the approval queue (journeys build plan S2) ---
+    "Staff (feedback.approveAnswers). Every answer waiting for approval, oldest first."
+    pendingAnswers: [PendingAnswer!]!
+    """
+    Staff (feedback.answer). Open items on contracts the caller can see that
+    they may answer — those they are assigned to, in a step their direct
+    answers cover, first; the rest each marked with the route their answer
+    would take. Feedback about money is filtered out for anyone without
+    money.read (PD-21).
+    """
+    myFeedbackQueue(limit: Int = 100): [FeedbackQueueEntry!]!
     "Staff (builds.author). Every scope item on this project currently IN_BUILD and assigned to a phase."
     scopeItemsAwaitingBuild(projectId: ID!): [ScopeItem!]!
     "Staff (builds.author). Every build declared for this project, newest first."
@@ -2224,51 +2355,78 @@ export const typeDefs = /* GraphQL */ `
     "Refused without a frame authored first (NO_FRAME) — spec §6: 'a demo cannot be published naked.'"
     publishDemo(demoId: ID!, contractId: ID): Contract!
 
+    # --- Feedback on every step, answers and the approval queue (journeys build plan S2) ---
     """
-    Callable by Root or the project's own customer (house rule 2 — an
-    ownership check against project.customerId, never a role test), like
-    reportDemoPath. Exactly one of targetDemoPageId/targetFrameLineId.
+    The contract's own customer only (NOT_FOUND for anyone else, staff
+    included — Root answers, it does not raise). Raises feedback on one step
+    of the contract: target names the anchor (see FeedbackTargetInput), phaseId
+    the phase of a DEMO. Refused STEP_LOCKED once the step is approved.
 
-    Intercepted (D4) when the target resolves to a decided or temporary
-    scope item and confirmReopen is not yet true: nothing is written, and
-    the result's interceptionReason/interceptionScopeItem are what the web
-    renders into the "this was settled on ⟨date⟩ — reopen it?" prompt
-    (house rule 6 — never sentence text from here). Resubmit identically
-    with confirmReopen: true to proceed.
+    Intercepted (D4) when the target resolves to a decided or temporary scope
+    item — a SCOPE anchor, or a frame line with one — and confirmReopen is not
+    yet true: nothing is written, and the result's interceptionReason /
+    interceptionScopeItem are what the web renders into the "this was settled
+    on ⟨date⟩ — reopen it?" prompt (house rule 6 — never sentence text from
+    here). Resubmit identically with confirmReopen: true to proceed.
 
     A second submission against a target that already has an item appends a
-    comment to it rather than creating a second one (D4's duplicate collapse).
+    comment to it rather than creating a second one (D4's duplicate collapse),
+    and reopens it if Root had resolved it (ADDRESSED, DECLINED or MOVED — the
+    journeys §3.1 rule).
     """
     submitFeedback(
-      demoId: ID!
-      targetDemoPageId: ID
-      targetFrameLineId: ID
+      contractId: ID!
+      step: StepKind!
+      phaseId: ID
+      target: FeedbackTargetInput!
       body: String!
       confirmReopen: Boolean = false
     ): FeedbackSubmitResult!
 
     """
-    The decider (D3: the project's own customer, or staff) ratifies a batch.
-    Only items in the list that are currently OPEN and belong to this demo
-    move to RATIFIED; anything else named is silently skipped, the same
-    idempotent shape resolveReviewThread already uses.
+    Staff (feedback.answer), on a contract they can see and a step still open
+    (STEP_LOCKED once approved — staff cannot answer on a locked step either).
+    Writes a staff comment; whether it reaches the customer now (approval
+    NOT_REQUIRED, and a resolution given is applied at once) or waits for sales
+    (PENDING, the item stays OPEN) is answerRoute(caller, step) — the
+    answers.direct.* capabilities. A declined resolution needs its reason in
+    the body.
     """
-    ratifyFeedback(demoId: ID!, itemIds: [ID!]!, contractId: ID): Contract!
+    answerFeedback(itemId: ID!, body: String!, resolution: FeedbackResolution): FeedbackItem!
 
     """
-    The customer (or staff) confirms an ADDRESSED item is actually resolved
-    (build plan L3b.2's second, separate write). Refused (NOT_ADDRESSED)
-    from any status other than ADDRESSED.
+    Staff (feedback.approveAnswers). Publishes a pending answer — as written,
+    or with body edited (the original is kept) — and applies its resolution
+    unless a later visible answer or customer comment has already spoken.
     """
-    acceptFeedback(itemId: ID!): FeedbackItem!
+    approveAnswer(commentId: ID!, body: String): FeedbackItem!
+
+    """
+    Staff (feedback.approveAnswers). Returns a pending answer to its author
+    with the reason (REASON_REQUIRED without one) — the customer never sees it.
+    """
+    declineAnswer(commentId: ID!, reason: String!): FeedbackItem!
+
+    """
+    The contract's own customer only. Approves a step (journeys §3.1): refused
+    while any comment on it is open (STEP_HAS_OPEN_FEEDBACK) or any answer is
+    waiting for sales (STEP_HAS_PENDING_ANSWERS); otherwise accepts every
+    resolved item at once and locks the step (STEP_LOCKED for anything after,
+    staff included). phaseId is required for a DEMO. Only DESIGN, MOCKUP and
+    DEMO are approved here (STEP_NOT_APPROVABLE for the rest): the agreement is
+    J7's gate, and the steps it seals are approved with it.
+    """
+    approveStep(contractId: ID!, step: StepKind!, phaseId: ID): Contract!
 
     # --- Builds and the resolution ledger (build plan L3b) ---
     """
     Staff (builds.author). Declares a build for a phase — number is
     project-wide and monotonic. Requires a disposition (ADDRESSED, DECLINED
     with its reason, or the explicit CARRIED_FORWARD) for every currently
-    open feedback item on the project first (MISSING_DISPOSITION otherwise)
-    — a fate must never be silent. Every FeedbackItem/ScopeItem transition a
+    open item of the demo step on that phase first (MISSING_DISPOSITION
+    otherwise) — a fate must never be silent. A disposition is the
+    developer's answer: it resolves the item directly, as a comment carrying
+    the resolution. Every FeedbackItem/ScopeItem transition a
     change entry implies happens now, not at publishBuild.
     """
     declareBuild(phaseId: ID!, ref: String, changes: [BuildChangeInput!]!): Build!
@@ -2298,10 +2456,10 @@ export const typeDefs = /* GraphQL */ `
     """
     moveTicketChannel(ticketId: ID!, type: TicketType!): Ticket!
     """
-    Staff (tickets.answer). A ratified feedback item becomes a change
-    ticket — the brief (spec §5, §6). Refused (NOT_RATIFIED) unless the item
-    is currently RATIFIED, and refused (ALREADY_CONVERTED) if one already
-    exists for it. currentState/desiredState are written by whoever performs
+    Staff (tickets.answer). An open feedback item becomes a change ticket —
+    the brief (spec §5, §6) — and is itself MOVED, a resolution the customer
+    sees. Refused (NOT_OPEN) unless the item is currently OPEN, and refused
+    (ALREADY_CONVERTED) if one already exists for it. currentState/desiredState are written by whoever performs
     the conversion — see docs/development/L4.md for why this stage does not
     auto-generate them. lang is "fa" or "en" (INVALID_LANG otherwise).
     """

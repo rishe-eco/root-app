@@ -1350,10 +1350,24 @@
     },
     "ANSWER_PUBLISHED": {
       "default": {
-        "customer_one": "Root addressed {{n}} item of your feedback. Look at it, then accept it or reopen it.",
-        "customer_other": "Root addressed {{n}} items of your feedback. Look at them, then accept them or reopen them.",
-        "staff_one": "{{n}} item of the customer’s feedback was addressed and awaits their acceptance.",
-        "staff_other": "{{n}} items of the customer’s feedback were addressed and await their acceptance."
+        "customer_one": "Root answered {{n}} of your comments. Read the answer — reopen it if you disagree, or approve the step.",
+        "customer_other": "Root answered {{n}} of your comments. Read the answers — reopen any you disagree with, or approve the step.",
+        "staff_one": "{{n}} answered comment awaits the customer’s reply or their approval of the step.",
+        "staff_other": "{{n}} answered comments await the customer’s reply or their approval of the step."
+      }
+    },
+    "FEEDBACK_UNRESOLVED": {
+      "default": {
+        "customer_one": "{{n}} of your comments is still waiting for Root’s answer.",
+        "customer_other": "{{n}} of your comments are still waiting for Root’s answer.",
+        "staff_one": "{{n}} customer comment needs an answer.",
+        "staff_other": "{{n}} customer comments need an answer."
+      }
+    },
+    "ANSWER_PENDING_APPROVAL": {
+      "default": {
+        "staff_one": "{{n}} answer is waiting for approval before the customer sees it.",
+        "staff_other": "{{n}} answers are waiting for approval before the customer sees them."
       }
     },
     "COMMITMENT_OVERDUE": {

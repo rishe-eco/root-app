@@ -166,24 +166,25 @@ test('generateDemoFrame derives NEW from an IN_DEMO item on this phase, and is a
 // --- duplicate collapse (D4) ---------------------------------------------
 
 test('two submissions against the same page collapse into one feedback item (D4)', async () => {
-  const { demo, page } = await seedDemo();
+  const { demo, page, phase } = await seedDemo();
   ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
   ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 
   const SUBMIT = `
-    mutation($d: ID!, $p: ID!, $b: String!) {
-      submitFeedback(demoId: $d, targetDemoPageId: $p, body: $b) {
+    mutation($c: ID!, $ph: ID!, $d: ID!, $p: ID!, $b: String!) {
+      submitFeedback(contractId: $c, step: DEMO, phaseId: $ph, target: { demoId: $d, demoPageId: $p }, body: $b) {
         item { id comments { body } }
         intercepted
       }
     }
   `;
+  const vars = (b: string) => ({ c: f.contract.id, ph: phase.id, d: demo.id, p: page.id, b });
 
-  const first = ok(await exec(SUBMIT, { as: f.customer, variables: { d: demo.id, p: page.id, b: 'رنگِ دکمه اشتباه است' } }));
+  const first = ok(await exec(SUBMIT, { as: f.customer, variables: vars('رنگِ دکمه اشتباه است') }));
   const firstItem = (first.submitFeedback as { item: { id: string; comments: Array<{ body: string }> } }).item;
   assert.equal(firstItem.comments.length, 1);
 
-  const second = ok(await exec(SUBMIT, { as: f.customer, variables: { d: demo.id, p: page.id, b: 'دکمه هنوز اشتباه است' } }));
+  const second = ok(await exec(SUBMIT, { as: f.customer, variables: vars('دکمه هنوز اشتباه است') }));
   const secondItem = (second.submitFeedback as { item: { id: string; comments: Array<{ body: string }> } }).item;
 
   assert.equal(secondItem.id, firstItem.id, 'a second submission against the same page must collapse onto the same item');
@@ -196,7 +197,7 @@ test('two submissions against the same page collapse into one feedback item (D4)
 // --- interception (D4) ---------------------------------------------------
 
 test('a comment on a decided scope item is intercepted, writes nothing, and proceeds only with confirmReopen', async () => {
-  const { demo } = await seedDemo({ decided: true });
+  const { demo, phase } = await seedDemo({ decided: true });
   ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
   ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 
@@ -205,8 +206,8 @@ test('a comment on a decided scope item is intercepted, writes nothing, and proc
   assert.ok(decidedLine, 'generateDemoFrame should have produced a DECIDED line for a decided item');
 
   const SUBMIT = `
-    mutation($d: ID!, $l: ID!, $b: String!, $confirm: Boolean) {
-      submitFeedback(demoId: $d, targetFrameLineId: $l, body: $b, confirmReopen: $confirm) {
+    mutation($c: ID!, $ph: ID!, $d: ID!, $l: ID!, $b: String!, $confirm: Boolean) {
+      submitFeedback(contractId: $c, step: DEMO, phaseId: $ph, target: { demoId: $d, frameLineId: $l }, body: $b, confirmReopen: $confirm) {
         item { id reopenedScopeItem { id } }
         intercepted
         interceptionReason
@@ -216,7 +217,10 @@ test('a comment on a decided scope item is intercepted, writes nothing, and proc
   `;
 
   const firstTry = ok(
-    await exec(SUBMIT, { as: f.customer, variables: { d: demo.id, l: decidedLine!.id, b: 'مگر این تصمیم گرفته نشده بود؟' } }),
+    await exec(SUBMIT, {
+      as: f.customer,
+      variables: { c: f.contract.id, ph: phase.id, d: demo.id, l: decidedLine!.id, b: 'مگر این تصمیم گرفته نشده بود؟' },
+    }),
   );
   const firstResult = firstTry.submitFeedback as {
     item: unknown;
@@ -235,7 +239,7 @@ test('a comment on a decided scope item is intercepted, writes nothing, and proc
   const confirmed = ok(
     await exec(SUBMIT, {
       as: f.customer,
-      variables: { d: demo.id, l: decidedLine!.id, b: 'می‌خواهم رسماً بازش کنم', confirm: true },
+      variables: { c: f.contract.id, ph: phase.id, d: demo.id, l: decidedLine!.id, b: 'می‌خواهم رسماً بازش کنم', confirm: true },
     }),
   );
   const confirmedResult = confirmed.submitFeedback as { item: { id: string; reopenedScopeItem: { id: string } } };
@@ -244,7 +248,7 @@ test('a comment on a decided scope item is intercepted, writes nothing, and proc
 });
 
 test('a comment on an ordinary (non-decided, non-temporary) line is never intercepted', async () => {
-  const { demo } = await seedDemo();
+  const { demo, phase } = await seedDemo();
   ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
   ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 
@@ -253,8 +257,8 @@ test('a comment on an ordinary (non-decided, non-temporary) line is never interc
 
   const result = ok(
     await exec(
-      'mutation($d: ID!, $l: ID!, $b: String!){ submitFeedback(demoId: $d, targetFrameLineId: $l, body: $b) { item { id } intercepted } }',
-      { as: f.customer, variables: { d: demo.id, l: newLine!.id, b: 'به نظرم خوب است' } },
+      'mutation($c: ID!, $ph: ID!, $d: ID!, $l: ID!, $b: String!){ submitFeedback(contractId: $c, step: DEMO, phaseId: $ph, target: { demoId: $d, frameLineId: $l }, body: $b) { item { id } intercepted } }',
+      { as: f.customer, variables: { c: f.contract.id, ph: phase.id, d: demo.id, l: newLine!.id, b: 'به نظرم خوب است' } },
     ),
   );
   const submitted = result.submitFeedback as { item: { id: string } | null; intercepted: boolean };
@@ -262,71 +266,53 @@ test('a comment on an ordinary (non-decided, non-temporary) line is never interc
   assert.ok(submitted.item, 'an unintercepted submission must create the item immediately');
 });
 
-// --- ratification (D3) ----------------------------------------------------
+// --- a submission is its own ratification (D3 → PD-2) ----------------------
 
-test('ratifyFeedback moves only the named OPEN items to RATIFIED, and is idempotent about the rest', async () => {
-  const { demo, page } = await seedDemo();
+test('a submission is its own ratification: the item is open and stamped at once, and ratifyFeedback is gone', async () => {
+  // L3 tested "ratifyFeedback moves only the named OPEN items to RATIFIED, and
+  // is idempotent about the rest". D3 made the customer the only account and
+  // the decider, so S2 (PD-2) folded the act into the submission and retired
+  // both the mutation and the status; what survives of the test is the record
+  // of who decided, and that the second door is really shut.
+  const { demo, page, phase } = await seedDemo();
   ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
   ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
-
-  const withFrame = await fetchDemo(f.admin, demo.id);
-  const newLine = withFrame.frame!.lines.find((l) => l.kind === 'NEW')!;
 
   const onPage = ok(
     await exec(
-      'mutation($d: ID!, $p: ID!, $b: String!){ submitFeedback(demoId: $d, targetDemoPageId: $p, body: $b) { item { id } } }',
-      { as: f.customer, variables: { d: demo.id, p: page.id, b: 'اول' } },
+      'mutation($c: ID!, $ph: ID!, $d: ID!, $p: ID!, $b: String!){ submitFeedback(contractId: $c, step: DEMO, phaseId: $ph, target: { demoId: $d, demoPageId: $p }, body: $b) { item { id status } } }',
+      { as: f.customer, variables: { c: f.contract.id, ph: phase.id, d: demo.id, p: page.id, b: 'اول' } },
     ),
   );
-  const onLine = ok(
-    await exec(
-      'mutation($d: ID!, $l: ID!, $b: String!){ submitFeedback(demoId: $d, targetFrameLineId: $l, body: $b) { item { id } } }',
-      { as: f.customer, variables: { d: demo.id, l: newLine.id, b: 'دوم' } },
-    ),
-  );
-  const pageItemId = (onPage.submitFeedback as { item: { id: string } }).item.id;
-  const lineItemId = (onLine.submitFeedback as { item: { id: string } }).item.id;
+  const submitted = (onPage.submitFeedback as { item: { id: string; status: string } }).item;
+  assert.equal(submitted.status, 'OPEN');
 
   // D3: the decider is the project's own customer — an ownership edge, not a role.
-  ok(
-    await exec('mutation($d: ID!, $ids: [ID!]!){ ratifyFeedback(demoId: $d, itemIds: $ids) { id } }', {
-      as: f.customer,
-      variables: { d: demo.id, ids: [pageItemId] },
-    }),
-  );
+  const row = await prisma.feedbackItem.findUniqueOrThrow({ where: { id: submitted.id } });
+  assert.equal(row.ratifiedById, f.customer.id);
+  assert.ok(row.ratifiedAt, 'ratifiedAt is written at submit');
 
-  const ratified = await prisma.feedbackItem.findUniqueOrThrow({ where: { id: pageItemId } });
-  assert.equal(ratified.status, 'RATIFIED');
-  assert.equal(ratified.ratifiedById, f.customer.id);
-  assert.ok(ratified.ratifiedAt);
-
-  const stillOpen = await prisma.feedbackItem.findUniqueOrThrow({ where: { id: lineItemId } });
-  assert.equal(stillOpen.status, 'OPEN', 'an item not named in the batch must stay untouched');
-
-  // Idempotent: naming an already-ratified item again alongside a bogus id
-  // must not error and must not double-write.
-  ok(
-    await exec('mutation($d: ID!, $ids: [ID!]!){ ratifyFeedback(demoId: $d, itemIds: $ids) { id } }', {
-      as: f.customer,
-      variables: { d: demo.id, ids: [pageItemId, 'no-such-id'] },
-    }),
-  );
+  for (const gone of [
+    'mutation($d: ID!){ ratifyFeedback(demoId: $d, itemIds: []) { id } }',
+    'mutation($i: ID!){ acceptFeedback(itemId: $i) { id } }',
+  ]) {
+    const result = await exec(gone, { as: f.customer, variables: gone.includes('$d') ? { d: demo.id } : { i: submitted.id } });
+    assert.equal(result.code, 'GRAPHQL_VALIDATION_FAILED', 'the mutation no longer exists in the schema');
+  }
 });
 
-test('a stranger cannot submit feedback or ratify on a project that is not theirs (NOT_FOUND)', async () => {
-  const { demo, page } = await seedDemo();
+test('a stranger cannot submit feedback on a project that is not theirs, and Root cannot submit as the customer (NOT_FOUND)', async () => {
+  const { demo, page, phase } = await seedDemo();
   ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
   ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 
-  const submitResult = await exec(
-    'mutation($d: ID!, $p: ID!, $b: String!){ submitFeedback(demoId: $d, targetDemoPageId: $p, body: $b) { intercepted } }',
-    { as: f.stranger, variables: { d: demo.id, p: page.id, b: 'نباید بتوانم' } },
-  );
-  assert.equal(submitResult.code, 'NOT_FOUND');
+  const SUBMIT =
+    'mutation($c: ID!, $ph: ID!, $d: ID!, $p: ID!, $b: String!){ submitFeedback(contractId: $c, step: DEMO, phaseId: $ph, target: { demoId: $d, demoPageId: $p }, body: $b) { intercepted } }';
+  const variables = { c: f.contract.id, ph: phase.id, d: demo.id, p: page.id, b: 'نباید بتوانم' };
 
-  const ratifyResult = await exec('mutation($d: ID!, $ids: [ID!]!){ ratifyFeedback(demoId: $d, itemIds: $ids) { id } }', {
-    as: f.stranger,
-    variables: { d: demo.id, ids: [] },
-  });
-  assert.equal(ratifyResult.code, 'NOT_FOUND');
+  assert.equal((await exec(SUBMIT, { as: f.stranger, variables })).code, 'NOT_FOUND');
+  // L3 let staff submit (and skipped their own notification). Root answers; it
+  // does not raise (S2) — a staff member who can see the contract gets the
+  // same answer as a stranger.
+  assert.equal((await exec(SUBMIT, { as: f.admin, variables })).code, 'NOT_FOUND');
 });
