@@ -25,6 +25,7 @@ import { storage } from '../lib/storage.js';
 import { UploadError, checkSize, policyFor, safeDownloadName, sniff } from '../lib/files.js';
 import { can } from '../lib/capabilities.js';
 import { canAuthorDesign, contractVisibleTo } from '../lib/visibility.js';
+import { hasToolGrant } from '../lib/toolGrants.js';
 import type { LibraryEntry } from '@prisma/client';
 
 export const filesRouter: Router = Router();
@@ -154,6 +155,13 @@ filesRouter.post(
       // (journeys build plan S1; before it, `contracts.manage`).
       if (!can(user, 'customers.manage') && project.customerId !== user.id) {
         throw new UploadError(403, 'FORBIDDEN', 'You do not have access to that.');
+      }
+      // Journeys build plan S3: the only class owned by a project is the
+      // product import, so its tool grant gates the customer's own upload the
+      // way it gates the resolvers — "no such project", because for a customer
+      // without the tool there is no place to upload to. Staff are unaffected.
+      if (!can(user, 'customers.manage') && !(await hasToolGrant(user.id, 'PRODUCT_IMPORT'))) {
+        throw new UploadError(404, 'NOT_FOUND', 'No such project.');
       }
     } else {
       // owner === 'entry' (R1.md §6). "No such thing", not "not allowed" —

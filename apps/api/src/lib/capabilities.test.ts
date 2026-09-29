@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Role } from '@prisma/client';
-import { CAPABILITIES, can, capabilitiesOf, requiresSecondFactor } from './capabilities.js';
+import {
+  CAPABILITIES,
+  SUPERUSER_ROLE,
+  can,
+  capabilitiesOf,
+  hasCustomerRole,
+  hasStaffRole,
+  isStaffRole,
+  isSuperuser,
+  requiresSecondFactor,
+} from './capabilities.js';
 
 const holding = (...roles: Role[]) => ({ roles });
 
@@ -188,4 +198,33 @@ test('contracts.manage is gone, not aliased', () => {
   // S1 removed it. A leftover alias would be a verb no role is meant to hold,
   // silently admitting ADMIN alone wherever it is still checked.
   assert.equal((CAPABILITIES as readonly string[]).includes('contracts.manage'), false);
+});
+
+// ---- Journeys build plan S3: the role facts resolvers may not read themselves ----
+
+test('a staff role is every role but CUSTOMER — and a mixed account is a staff account', () => {
+  const staffRoles: Role[] = ['ADMIN', 'SALES', 'DESIGNER', 'DEVELOPER', 'CONTRIBUTOR', 'REVIEWER'];
+  for (const role of staffRoles) {
+    assert.equal(isStaffRole(role), true, role);
+    assert.equal(hasStaffRole(holding(role)), true, role);
+  }
+  assert.equal(isStaffRole('CUSTOMER'), false);
+  assert.equal(hasStaffRole(holding('CUSTOMER')), false);
+  assert.equal(hasStaffRole(holding('CUSTOMER', 'REVIEWER')), true);
+});
+
+test('the customer and superuser facts', () => {
+  assert.equal(hasCustomerRole(holding('CUSTOMER')), true);
+  assert.equal(hasCustomerRole(holding('CUSTOMER', 'SALES')), true);
+  assert.equal(hasCustomerRole(holding('SALES')), false);
+  assert.equal(isSuperuser(holding('ADMIN')), true);
+  assert.equal(isSuperuser(holding('SALES', 'CUSTOMER')), false);
+  assert.equal(SUPERUSER_ROLE, 'ADMIN');
+});
+
+test('only the superuser role holds staff.manage: no other role can grant a role', () => {
+  for (const role of ['SALES', 'DESIGNER', 'DEVELOPER', 'CONTRIBUTOR', 'REVIEWER'] as Role[]) {
+    assert.equal(can(holding(role), 'staff.manage'), false, role);
+  }
+  assert.equal(can(holding(SUPERUSER_ROLE), 'staff.manage'), true);
 });

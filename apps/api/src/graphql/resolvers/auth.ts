@@ -317,7 +317,12 @@ export const authMutations = {
       record.purpose !== 'INVITE' ||
       record.usedAt ||
       record.revokedAt ||
-      record.expiresAt < new Date()
+      record.expiresAt < new Date() ||
+      // S3: `setUserState(DISABLED)` revokes the invite in the same
+      // transaction, so this cannot normally be reached — it is the second
+      // lock on a door whose first lock is a write in another file, and the
+      // state change here would otherwise be a way to re-activate oneself.
+      record.user.state === 'DISABLED'
     ) {
       throw new GraphQLError('This link is no longer valid.', {
         extensions: { code: 'TOKEN_INVALID' },
@@ -373,13 +378,18 @@ export const authMutations = {
     }
     const record = await prisma.authToken.findUnique({
       where: { tokenHash: hashToken(args.token) },
+      include: { user: true },
     });
     if (
       !record ||
       record.purpose !== 'PASSWORD_RESET' ||
       record.usedAt ||
       record.revokedAt ||
-      record.expiresAt < new Date()
+      record.expiresAt < new Date() ||
+      // S3: this mutation sets the account ACTIVE, so a reset link issued
+      // before a disable would otherwise be a way to undo it. Disabling
+      // revokes it too; this is the second lock (see acceptInvite).
+      record.user.state === 'DISABLED'
     ) {
       throw new GraphQLError('This link is no longer valid.', {
         extensions: { code: 'TOKEN_INVALID' },

@@ -31,6 +31,7 @@ import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
 import { apiTokenMutations, apiTokenQueries } from './apiTokens.js';
 import { templateMutations, templateQueries } from './templates.js';
+import { peopleMutations, peopleQueries } from './people.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -84,6 +85,9 @@ export const resolvers = {
     // journeys build plan T1: templates.types / templates.scope write, any staff
     // holding either (or contracts.author) reads — see resolvers/templates.ts.
     ...templateQueries,
+    // journeys build plan S3: customer (customers.manage) and allUsers
+    // (staff.manage) — see resolvers/people.ts.
+    ...peopleQueries,
   },
 
   Mutation: {
@@ -112,5 +116,8 @@ export const resolvers = {
     ...reviewThreadMutations,
     ...apiTokenMutations,
     ...templateMutations,
+    // journeys build plan S3: setUserState / grantTool / revokeTool / inviteStaff /
+    // setUserRoles — two capabilities, see resolvers/people.ts.
+    ...peopleMutations,
   },
 };
