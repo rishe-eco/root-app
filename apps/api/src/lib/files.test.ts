@@ -85,16 +85,18 @@ describe('policyFor', () => {
     assert.equal(policyFor('RESEARCH_TEXT').policy.visibility, 'PUBLIC');
   });
 
-  test('a private class must be contract- or project-owned — the private read gate (routes/files.ts) only knows how to check those two edges', () => {
+  test('a private class must be contract-, project- or theme-owned — the private read gate (routes/files.ts) only knows how to check those three edges', () => {
     // Build plan L7 widened this from "contract-owned" alone: SERVICE_IMPORT
     // is PRIVATE and owned by a Project, the first class this schema
     // attaches to a project rather than a contract. Widening the read gate
     // to a *third* owner kind without a matching test here is exactly the
-    // silent-gap this test exists to catch.
+    // silent-gap this test exists to catch. Journeys build plan T2 is that
+    // third owner: THEME_PREVIEW is PRIVATE and owned by a Theme, and the GET
+    // handler checks it (`canSeeThemePreview`) beside the other two.
     for (const policy of Object.values(POLICY)) {
       if (policy.visibility === 'PRIVATE') {
         assert.ok(
-          policy.owner === 'contract' || policy.owner === 'project',
+          policy.owner === 'contract' || policy.owner === 'project' || policy.owner === 'theme',
           `${policy.owner} is PRIVATE but has no ownership check in routes/files.ts's GET /files/:id`,
         );
       }

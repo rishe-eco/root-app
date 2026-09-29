@@ -118,6 +118,8 @@ export type UploadOpts = {
   entryId?: string | null;
   /** Build plan L7 — the SERVICE_IMPORT owner param. */
   projectId?: string | null;
+  /** Journeys build plan T2 — the THEME_PREVIEW owner param. */
+  themeId?: string | null;
   filename?: string;
   body?: Buffer;
   type?: string;
@@ -141,6 +143,7 @@ export async function upload(base: string, opts: UploadOpts = {}) {
   if (opts.contractId) params.set('contractId', opts.contractId);
   if (opts.entryId) params.set('entryId', opts.entryId);
   if (opts.projectId) params.set('projectId', opts.projectId);
+  if (opts.themeId) params.set('themeId', opts.themeId);
 
   const headers: Record<string, string> = {};
   if (opts.as) headers.cookie = cookieFor(opts.as);

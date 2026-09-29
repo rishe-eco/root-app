@@ -3622,6 +3622,118 @@ export const SET_TEMPLATE_SCOPE = gql`
   }
 `;
 
+// ---------------------------------------------------------------------
+// The theme catalogue (journeys build plan T2). Staff-only: nothing in the
+// portal reads a Theme. `licenseCost` is Root's cost in Toman, a decimal
+// string — it is not customer money, so it needs no `money.read`.
+// ---------------------------------------------------------------------
+
+export type RtlSupport = 'FULL' | 'PARTIAL' | 'NONE' | 'UNKNOWN';
+
+export type Theme = {
+  id: string;
+  name: string;
+  vendor: string | null;
+  /** https only, and never framed: render it as a link that opens in a new tab. */
+  demoUrl: string | null;
+  /** `/files/<id>`, a private staff-only route; null until a preview is uploaded. */
+  previewUrl: string | null;
+  rtlSupport: RtlSupport;
+  licenseCost: string | null;
+  notesFa: string | null;
+  notesEn: string | null;
+  active: boolean;
+  typeIds: string[];
+};
+
+const THEME_FIELDS = gql`
+  fragment ThemeFields on Theme {
+    id
+    name
+    vendor
+    demoUrl
+    previewUrl
+    rtlSupport
+    licenseCost
+    notesFa
+    notesEn
+    active
+    typeIds
+  }
+`;
+
+export const THEMES = gql`
+  ${THEME_FIELDS}
+  query Themes {
+    themes {
+      ...ThemeFields
+    }
+  }
+`;
+
+export const CREATE_THEME = gql`
+  ${THEME_FIELDS}
+  mutation CreateTheme(
+    $name: String!
+    $vendor: String
+    $demoUrl: String
+    $rtlSupport: RtlSupport
+    $licenseCost: String
+    $notesFa: String
+    $notesEn: String
+  ) {
+    createTheme(
+      name: $name
+      vendor: $vendor
+      demoUrl: $demoUrl
+      rtlSupport: $rtlSupport
+      licenseCost: $licenseCost
+      notesFa: $notesFa
+      notesEn: $notesEn
+    ) {
+      ...ThemeFields
+    }
+  }
+`;
+
+export const UPDATE_THEME = gql`
+  ${THEME_FIELDS}
+  mutation UpdateTheme(
+    $id: ID!
+    $name: String
+    $vendor: String
+    $demoUrl: String
+    $rtlSupport: RtlSupport
+    $licenseCost: String
+    $notesFa: String
+    $notesEn: String
+    $active: Boolean
+  ) {
+    updateTheme(
+      id: $id
+      name: $name
+      vendor: $vendor
+      demoUrl: $demoUrl
+      rtlSupport: $rtlSupport
+      licenseCost: $licenseCost
+      notesFa: $notesFa
+      notesEn: $notesEn
+      active: $active
+    ) {
+      ...ThemeFields
+    }
+  }
+`;
+
+export const SET_TEMPLATE_TYPE_THEMES = gql`
+  ${THEME_FIELDS}
+  mutation SetTemplateTypeThemes($typeId: ID!, $themeIds: [ID!]!) {
+    setTemplateTypeThemes(typeId: $typeId, themeIds: $themeIds) {
+      ...ThemeFields
+    }
+  }
+`;
+
 // ---------------------------------------------------------------------------
 // Requests (journeys build plan J2). Every mutation returns the whole Request
 // (thread included), so the drawer and the desk thread update from the

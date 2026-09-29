@@ -183,6 +183,13 @@
 @media (max-width: 720px) { .template-row { grid-template-columns: 1fr; } }
 .template-inactive { border-style: dashed; }
 
+/* Themes (T2). A catalogue preview is a screenshot, so it keeps the shared
+   .thumb frame at a bounded width rather than stretching across the card; the
+   assignment panel is a plain wrapped list of checkboxes. */
+.theme-preview { max-inline-size: 320px; }
+.theme-checks { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); }
+.theme-check { display: inline-flex; align-items: center; gap: var(--space-2); }
+
 .dirty-note { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); color: var(--color-text-muted); }
 .dirty-dot { inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--gold-600); flex: none; }
 .dirty-dot-clean { background: var(--color-border-strong); }
