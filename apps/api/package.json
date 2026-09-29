@@ -17,6 +17,7 @@
     "seed": "tsx prisma/seed.ts",
     "backfill": "tsx prisma/backfill-revisions.ts",
     "create-admin": "tsx prisma/create-admin.ts",
+    "set-phone": "tsx prisma/set-phone.ts",
     "publish-round": "tsx prisma/publish-round.ts",
     "start:e2e": "tsx src/index.ts"
   },
@@ -35,6 +36,7 @@
     "graphql": "^16.9.0",
     "graphql-scalars": "^1.23.0",
     "jsonwebtoken": "^9.0.2",
+    "libphonenumber-js": "^1.13.14",
     "yauzl": "^3.4.0",
     "zod": "^3.23.8"
   },

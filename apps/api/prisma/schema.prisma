@@ -76,15 +76,33 @@ enum UserState {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String
+  id    String  @id @default(cuid())
+  /// Journeys build plan J1 (PD-20 Q1): optional, because a customer may now
+  /// be identified by phone alone. Postgres allows any number of NULLs under
+  /// a unique index, so two phone-only accounts never collide with each
+  /// other over this column being unset.
+  email String? @unique
+  /// E.164, normalized by `lib/phone.ts` before it ever reaches a query —
+  /// this column never holds a second spelling of the same number. Optional
+  /// for the same reason `email` now is: some accounts have one identifier,
+  /// some the other, some both. The CHECK below is what refuses neither.
+  phone String? @unique
+  name  String
   /// Non-empty, enforced by a CHECK constraint in the migration — Prisma
   /// cannot express it, and a user with no roles is one no capability check
   /// can ever admit.
-  roles        Role[]    @default([CUSTOMER])
+  roles Role[] @default([CUSTOMER])
+  /// **CHECK `User_has_identifier`** (migration j1_phone_identity): `phone
+  /// IS NOT NULL OR email IS NOT NULL`. An account reachable by neither is
+  /// one nobody — not even the recovery CLI — can ever sign into.
   state        UserState @default(INVITED)
   passwordHash String?
+  /// Journeys build plan J1 (PD-10). Set the moment a phone-code sign-in
+  /// succeeds — the account holder proved control of the phone, not
+  /// knowledge of the password, so the password is no longer trusted to be
+  /// theirs alone. `requireUser` (context.ts) refuses every mutation but
+  /// `setNewPassword` while this is true; see that file's own comment.
+  passwordChangeRequired Boolean @default(false)
 
   // Company/brand this customer belongs to, shown as the sub-line in the
   // contracts table. Null for admins.
@@ -138,6 +156,10 @@ model User {
   createdDependencies  Dependency[] @relation("DependencyCreatedBy")
   verifiedDependencies Dependency[] @relation("DependencyVerifiedBy")
 
+  /// Journeys build plan J1 — every SMS this account was ever sent, the
+  /// count L6's deferred metered basis will want.
+  smsLog SmsLog[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -152,22 +174,87 @@ model User {
 enum TokenPurpose {
   INVITE
   PASSWORD_RESET
+  /// Journeys build plan J1 — the phone-recovery code `requestLoginCode`
+  /// sends and `verifyLoginCode` checks.
+  LOGIN_CODE
+  /// Journeys build plan J1 (PD-20) — the staff second factor `signIn`
+  /// sends and `verifySignInFactor` checks.
+  SIGNIN_FACTOR
 }
 
-/// Single-use, expiring links. Only the hash is stored — the raw token exists
-/// once, in the link handed to the customer.
+/// Single-use, expiring links — and, since J1, single-use expiring *codes*
+/// (LOGIN_CODE, SIGNIN_FACTOR) as well: same shape (one row, one hash, one
+/// expiry, one use), so it is the same model rather than a second one beside
+/// it. Only the hash is stored — the raw token or code exists once, in the
+/// link or SMS handed to its owner.
 model AuthToken {
   id        String       @id @default(cuid())
   userId    String
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   purpose   TokenPurpose
   tokenHash String       @unique
+  /// LOGIN_CODE/SIGNIN_FACTOR only: failed `verify*` calls against this row,
+  /// each one counted whether the code was merely wrong or already used —
+  /// `lib/loginCode.ts` revokes the row outright at
+  /// `LOGIN_CODE_MAX_ATTEMPTS` rather than let a code sent once be guessed
+  /// at forever. Dead weight on an INVITE/PASSWORD_RESET row, which is
+  /// guessed at nothing (its "code" is 128 bits in a URL, not six digits a
+  /// human types) — left at its default there rather than given a second
+  /// model only these two purposes need.
+  attempts  Int          @default(0)
   expiresAt DateTime
   usedAt    DateTime?
   revokedAt DateTime?
   createdAt DateTime     @default(now())
 
   @@index([userId, purpose])
+}
+
+/// `SmsLog.purpose` — deliberately its own enum rather than reusing
+/// `TokenPurpose`: `NOTIFY` (the notification router, `lib/notify.ts`) is
+/// never a code or a link an `AuthToken` row could hold, so it has no
+/// business in that enum, and adding it there would let a resolver
+/// construct an `AuthToken` no verify path is meant to check. `INVITE`,
+/// `LOGIN_CODE` and `SIGNIN_FACTOR` are named the same as their
+/// `TokenPurpose` counterparts on purpose — one send, one row, one name for
+/// both — but the two enums are not the same type and Prisma does not
+/// pretend otherwise.
+enum SmsPurpose {
+  INVITE
+  LOGIN_CODE
+  SIGNIN_FACTOR
+  /// Every other event `lib/notify.ts` routes — a demo published, a build
+  /// published, a comment, an invoice, and so on.
+  NOTIFY
+}
+
+/// Journeys build plan J1 — every SMS the product ever sent, whatever the
+/// reason. Not versioned, not an audit trail with a UI of its own: it exists
+/// so an unconfigured provider's silence is countable (§6.2's own words) and
+/// so L6's deferred metered basis has real counts to start from when it is
+/// built. `userId` is nullable because a send can legitimately have no
+/// account behind it yet — inviting a phone number that has never signed
+/// in creates the `User` row first in every path today, so in practice this
+/// is always set, but the column does not assume that will stay true.
+model SmsLog {
+  id          String      @id @default(cuid())
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  toPhone     String
+  purpose     SmsPurpose
+  /// Set on a real provider's success; null under `DevSmsTransport`, which
+  /// has nothing of the kind to report.
+  providerRef String?
+  /// Iranian SMS is ~70 characters a segment (GSM-7); `lib/smsTemplates.ts`
+  /// keeps every body under one, so this is 1 today — kept as a column
+  /// rather than assumed, because a provider is free to report otherwise
+  /// once one is wired (P0-4).
+  segments  Int      @default(1)
+  projectId String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([toPhone])
 }
 
 /// What a token may do. Deliberately two values and not a capability set:
