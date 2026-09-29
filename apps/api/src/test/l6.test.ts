@@ -249,7 +249,7 @@ test('markBillingEntryPaid / unmarkBillingEntryPaid toggle paidAt, and the repor
 // --- Milestone linkage ----------------------------------------------------
 
 test('createBillingEntry accepts phaseId — the portal can show what a payment is gated on', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({
     data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1', milestoneLabel: 'Payment 1 of 4' },
   });

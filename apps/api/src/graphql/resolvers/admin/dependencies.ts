@@ -3,8 +3,7 @@ import type { DependencySide } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { verificationRequiresNote } from '../../../lib/dependency.js';
-import { reload } from '../contracts.js';
-import { firstContractId } from './shared.js';
+import { assertProjectActive, reloadOnProject } from './shared.js';
 
 /**
  * The dependency board (build plan L5; spec §7) — symmetric commitments,
@@ -14,8 +13,9 @@ import { firstContractId } from './shared.js';
  * agreement), and marking a row met is `dependencies.verifyGeneral` — J4
  * adds the `technical` flag that routes technical rows to
  * `dependencies.verifyTechnical` instead; until then every row is general. It
- * returns `Contract!` via `firstContractId` (T9 in V2.md), reached through
- * `project.dependencies`.
+ * returns `Contract!` (T9 in V2.md) — the one the caller names with the
+ * optional `contractId`, else the project's first (`reloadOnProject`) —
+ * reached through `project.dependencies`.
  */
 
 const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extensions: { code: 'NOT_FOUND' } });
@@ -27,12 +27,14 @@ export const dependencyMutations = {
    *  something that can only nag the customer). */
   createDependency: async (
     _p: unknown,
-    args: { projectId: string; side: DependencySide; titleFa: string; titleEn: string; dueAt: string },
+    args: { projectId: string; side: DependencySide; titleFa: string; titleEn: string; dueAt: string; contractId?: string | null },
     ctx: Context,
   ) => {
     const user = requireCapability(ctx, 'contracts.author');
     const project = await prisma.project.findUnique({ where: { id: args.projectId } });
     if (!project) throw notFound('project');
+    // A request has no commitments to track (J2).
+    await assertProjectActive(project.id);
 
     await prisma.dependency.create({
       data: {
@@ -44,12 +46,12 @@ export const dependencyMutations = {
         createdById: user.id,
       },
     });
-    return reload(await firstContractId(project.id));
+    return reloadOnProject(project.id, args.contractId);
   },
 
   updateDependency: async (
     _p: unknown,
-    args: { dependencyId: string; titleFa: string; titleEn: string; dueAt: string },
+    args: { dependencyId: string; titleFa: string; titleEn: string; dueAt: string; contractId?: string | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -60,7 +62,7 @@ export const dependencyMutations = {
       where: { id: dep.id },
       data: { titleFa: args.titleFa, titleEn: args.titleEn, dueAt: new Date(args.dueAt) },
     });
-    return reload(await firstContractId(dep.projectId));
+    return reloadOnProject(dep.projectId, args.contractId);
   },
 
   /**
@@ -71,7 +73,7 @@ export const dependencyMutations = {
    * the host" is what `note` exists to hold. A blank or whitespace-only note
    * is refused exactly like an absent one.
    */
-  verifyDependency: async (_p: unknown, args: { dependencyId: string; note: string }, ctx: Context) => {
+  verifyDependency: async (_p: unknown, args: { dependencyId: string; note: string; contractId?: string | null }, ctx: Context) => {
     const user = requireCapability(ctx, 'dependencies.verifyGeneral');
     const dep = await prisma.dependency.findUnique({ where: { id: args.dependencyId } });
     if (!dep) throw notFound('dependency');
@@ -85,13 +87,13 @@ export const dependencyMutations = {
       where: { id: dep.id },
       data: { verifiedAt: new Date(), verifiedById: user.id, verifiedNote: args.note.trim() },
     });
-    return reload(await firstContractId(dep.projectId));
+    return reloadOnProject(dep.projectId, args.contractId);
   },
 
   /** Clears a verification made in error — the same decide/undecide shape
    *  `ScopeItem` already uses (build plan L1), so a wrongly-verified row is
    *  reopened rather than left to lie. */
-  unverifyDependency: async (_p: unknown, args: { dependencyId: string }, ctx: Context) => {
+  unverifyDependency: async (_p: unknown, args: { dependencyId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'dependencies.verifyGeneral');
     const dep = await prisma.dependency.findUnique({ where: { id: args.dependencyId } });
     if (!dep) throw notFound('dependency');
@@ -100,16 +102,16 @@ export const dependencyMutations = {
       where: { id: dep.id },
       data: { verifiedAt: null, verifiedById: null, verifiedNote: null },
     });
-    return reload(await firstContractId(dep.projectId));
+    return reloadOnProject(dep.projectId, args.contractId);
   },
 
-  deleteDependency: async (_p: unknown, args: { dependencyId: string }, ctx: Context) => {
+  deleteDependency: async (_p: unknown, args: { dependencyId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const dep = await prisma.dependency.findUnique({ where: { id: args.dependencyId } });
     if (!dep) throw notFound('dependency');
 
     const projectId = dep.projectId;
     await prisma.dependency.delete({ where: { id: dep.id } });
-    return reload(await firstContractId(projectId));
+    return reloadOnProject(projectId, args.contractId);
   },
 };

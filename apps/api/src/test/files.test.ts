@@ -317,12 +317,16 @@ test('passing null clears both', async () => {
  * on B's page — and B could not see it, which is the harmless half.
  */
 test("a file belonging to another contract cannot be attached", async () => {
+  const otherProject = await prisma.project.create({
+    data: { customerId: f.stranger.id, titleFa: 'دیگر', titleEn: 'Other' },
+  });
   const other = await prisma.contract.create({
     data: {
       ref: 'RC-TEST-002',
       titleFa: 'دیگر',
       titleEn: 'Other',
       customerId: f.stranger.id,
+      projectId: otherProject.id,
       publishedAt: new Date(),
     },
   });

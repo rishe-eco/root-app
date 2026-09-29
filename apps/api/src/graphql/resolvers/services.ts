@@ -54,6 +54,8 @@ async function loadProjectForActor(projectId: string, user: { id: string; roles:
   if (!staff && (project.customerId !== user.id || !(await hasToolGrant(user.id, 'PRODUCT_IMPORT')))) {
     throw notFound('project');
   }
+  // A request (J2) is not a project anyone is working: no product imports.
+  if (project.status !== 'ACTIVE') throw notFound('project');
   return project;
 }
 
@@ -71,7 +73,12 @@ export const serviceQueries = {
     if (!can(user, 'customers.manage') && !(await hasToolGrant(user.id, 'PRODUCT_IMPORT'))) {
       throw notFound('project');
     }
-    return prisma.project.findMany({ where: { customerId: user.id }, orderBy: { createdAt: 'asc' } });
+    // ACTIVE only (J2): a pending or archived request is not a project the
+    // services panel can run an import against.
+    return prisma.project.findMany({
+      where: { customerId: user.id, status: 'ACTIVE' },
+      orderBy: { createdAt: 'asc' },
+    });
   },
 
   /** Staff, or the project's own customer. */

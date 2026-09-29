@@ -2,16 +2,17 @@ import { GraphQLError } from 'graphql';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { reload } from '../contracts.js';
-import { firstContractId } from './shared.js';
+import { reloadOnProject } from './shared.js';
 import { requireBuildAuthorOnProject } from '../access.js';
 
 /**
  * Phases and the live demo surface (build plan L2; spec §4 stage 6, §6).
  *
  * Every mutation here returns `Contract!`, the same convention L1's registry
- * mutations settled on (T9 in V2.md, and `firstContractId`'s own comment in
- * `shared.ts`) — a phase or demo is reached through `project.phases`, never
- * a dedicated payload type.
+ * mutations settled on (T9 in V2.md) — a phase or demo is reached through
+ * `project.phases`, never a dedicated payload type. Each takes an optional
+ * `contractId`, the contract the caller has open, and returns that one
+ * (`reloadOnProject`, shared.ts — a project can hold two contracts since J2).
  *
  * **What this file does not do.** It never writes `PageDesign.approvedAt` or
  * `DesignConcept.chosenAt` — D5 stays decided, and the design-image toggle
@@ -99,9 +100,6 @@ export const phaseMutations = {
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
     }
-    if (!contract.projectId) {
-      throw new GraphQLError('This contract has no project to hold phases.', { extensions: { code: 'NO_PROJECT' } });
-    }
     await prisma.phase.create({
       data: {
         projectId: contract.projectId,
@@ -116,7 +114,7 @@ export const phaseMutations = {
 
   updatePhase: async (
     _p: unknown,
-    args: { phaseId: string; titleFa: string; titleEn: string; milestoneLabel?: string | null },
+    args: { phaseId: string; titleFa: string; titleEn: string; milestoneLabel?: string | null; contractId?: string | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -125,21 +123,21 @@ export const phaseMutations = {
       where: { id: phase.id },
       data: { titleFa: args.titleFa, titleEn: args.titleEn, milestoneLabel: args.milestoneLabel ?? null },
     });
-    return reload(await firstContractId(phase.projectId));
+    return reloadOnProject(phase.projectId, args.contractId);
   },
 
   /** Scope items on this phase are not deleted — `phaseId` just goes back to
    *  null on them (schema.prisma: onDelete: SetNull). Demos cascade. */
-  deletePhase: async (_p: unknown, args: { phaseId: string }, ctx: Context) => {
+  deletePhase: async (_p: unknown, args: { phaseId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const phase = await loadPhase(args.phaseId);
     await prisma.phase.delete({ where: { id: phase.id } });
-    return reload(await firstContractId(phase.projectId));
+    return reloadOnProject(phase.projectId, args.contractId);
   },
 
   assignScopeItemToPhase: async (
     _p: unknown,
-    args: { scopeItemId: string; phaseId?: string | null },
+    args: { scopeItemId: string; phaseId?: string | null; contractId?: string | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -156,12 +154,12 @@ export const phaseMutations = {
       }
     }
     await prisma.scopeItem.update({ where: { id: item.id }, data: { phaseId: args.phaseId ?? null } });
-    return reload(await firstContractId(item.projectId));
+    return reloadOnProject(item.projectId, args.contractId);
   },
 
   createDemo: async (
     _p: unknown,
-    args: { phaseId: string; stagingUrl: string; buildRef?: string | null },
+    args: { phaseId: string; stagingUrl: string; buildRef?: string | null; contractId?: string | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'builds.author');
@@ -171,7 +169,7 @@ export const phaseMutations = {
     await prisma.demo.create({
       data: { phaseId: phase.id, stagingUrl: args.stagingUrl, buildRef: args.buildRef ?? null },
     });
-    return reload(await firstContractId(phase.projectId));
+    return reloadOnProject(phase.projectId, args.contractId);
   },
 
   updateDemo: async (
@@ -185,6 +183,7 @@ export const phaseMutations = {
       // needed here, only the omitted/null/set three-way handling below.
       reviewWindowStart?: Date | null;
       reviewWindowEnd?: Date | null;
+      contractId?: string | null;
     },
     ctx: Context,
   ) => {
@@ -201,16 +200,16 @@ export const phaseMutations = {
         reviewWindowEnd: args.reviewWindowEnd === undefined ? undefined : args.reviewWindowEnd,
       },
     });
-    return reload(await firstContractId(demo.phase.projectId));
+    return reloadOnProject(demo.phase.projectId, args.contractId);
   },
 
   /** Pages and unmatched-path records cascade (schema.prisma onDelete: Cascade). */
-  deleteDemo: async (_p: unknown, args: { demoId: string }, ctx: Context) => {
+  deleteDemo: async (_p: unknown, args: { demoId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
     await requireBuildAuthorOnProject(ctx, demo.phase.projectId);
     await prisma.demo.delete({ where: { id: demo.id } });
-    return reload(await firstContractId(demo.phase.projectId));
+    return reloadOnProject(demo.phase.projectId, args.contractId);
   },
 
   declareDemoPage: async (
@@ -222,6 +221,7 @@ export const phaseMutations = {
       labelEn: string;
       canonicalPath: string;
       pageDesignId?: string | null;
+      contractId?: string | null;
     },
     ctx: Context,
   ) => {
@@ -241,7 +241,7 @@ export const phaseMutations = {
         pageDesignId: args.pageDesignId ?? null,
       },
     });
-    return reload(await firstContractId(demo.phase.projectId));
+    return reloadOnProject(demo.phase.projectId, args.contractId);
   },
 
   updateDemoPage: async (
@@ -252,6 +252,7 @@ export const phaseMutations = {
       labelEn: string;
       canonicalPath: string;
       pageDesignId?: string | null;
+      contractId?: string | null;
     },
     ctx: Context,
   ) => {
@@ -270,14 +271,14 @@ export const phaseMutations = {
         pageDesignId: args.pageDesignId ?? null,
       },
     });
-    return reload(await firstContractId(page.demo.phase.projectId));
+    return reloadOnProject(page.demo.phase.projectId, args.contractId);
   },
 
-  deleteDemoPage: async (_p: unknown, args: { demoPageId: string }, ctx: Context) => {
+  deleteDemoPage: async (_p: unknown, args: { demoPageId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'builds.author');
     const page = await loadDemoPage(args.demoPageId);
     await requireBuildAuthorOnProject(ctx, page.demo.phase.projectId);
     await prisma.demoPage.delete({ where: { id: page.id } });
-    return reload(await firstContractId(page.demo.phase.projectId));
+    return reloadOnProject(page.demo.phase.projectId, args.contractId);
   },
 };

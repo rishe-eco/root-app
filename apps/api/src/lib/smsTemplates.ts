@@ -24,6 +24,12 @@ export { LOCALES, resolveLocale };
  *     "verification code," and one fewer template is one fewer pattern to
  *     register): **one placeholder**, the six-digit code.
  *   - `inviteSms`: **one placeholder**, the invite URL.
+ *   - `requestSubmittedSms`, `requestMessageSms`, `requestArchivedSms`
+ *     (journeys build plan J2): **one placeholder** each, the URL. None of them
+ *     carries the request's title or the archive reason — both are free text
+ *     of unbounded length, which would make the segment count (and the price)
+ *     the customer's to set; the email carries them and the SMS points at the
+ *     page.
  *
  * Codes are printed in Latin digits in both languages, never through
  * `toPersianDigits` — house rule 14's own exception for an identifier
@@ -48,4 +54,28 @@ export function inviteSms(locale: string | null | undefined, params: { inviteUrl
     return { text: `You're invited to Root. Set your password: ${params.inviteUrl}` };
   }
   return { text: `به ریشه دعوت شدید. برای تعیین رمز عبور: ${params.inviteUrl}` };
+}
+
+/** J2 — to every account that can answer a request. */
+export function requestSubmittedSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `New request on Root: ${params.deskUrl}` };
+  }
+  return { text: `درخواست تازه‌ای در ریشه ثبت شد: ${params.deskUrl}` };
+}
+
+/** J2 — to whichever side did not write the message. */
+export function requestMessageSms(locale: string | null | undefined, params: { url: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `New message on a Root request: ${params.url}` };
+  }
+  return { text: `پیام تازه‌ای روی یک درخواست در ریشه ثبت شد: ${params.url}` };
+}
+
+/** J2 — to the customer; the reason is one tap away, not in the SMS. */
+export function requestArchivedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `Your Root request was archived. See why: ${params.portalUrl}` };
+  }
+  return { text: `درخواست شما در ریشه بایگانی شد. دلیل را ببینید: ${params.portalUrl}` };
 }

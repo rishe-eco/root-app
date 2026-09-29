@@ -303,11 +303,16 @@ function CommentForm({
 
 export default function DemoFeedbackPanel({
   demo,
+  contractId,
   canAuthor,
   canConvertToTicket = false,
   onChanged,
 }: {
   demo: Demo;
+  /** The contract this panel is shown on. The frame, publish and ratify
+   *  mutations return `Contract!`, and a project can hold two contracts
+   *  (J2), so each is told which one to hand back — the one on screen. */
+  contractId: string;
   canAuthor: boolean;
   /** tickets.answer — a ratified item may become a change ticket. A
    *  distinct capability from the frame's own `canAuthor`; see the module
@@ -322,14 +327,15 @@ export default function DemoFeedbackPanel({
   const { t } = useTranslation();
   const locale = useLocale();
 
-  const [generate, { loading: generating }] = useMutation(GENERATE_DEMO_FRAME);
-  const [updateSummary] = useMutation(UPDATE_DEMO_FRAME_SUMMARY);
-  const [addLine, { loading: addingLine }] = useMutation(ADD_DEMO_FRAME_LINE);
-  const [updateLine] = useMutation(UPDATE_DEMO_FRAME_LINE);
-  const [deleteLine] = useMutation(DELETE_DEMO_FRAME_LINE);
-  const [publish, { loading: publishing }] = useMutation(PUBLISH_DEMO);
+  const named = { variables: { contractId } };
+  const [generate, { loading: generating }] = useMutation(GENERATE_DEMO_FRAME, named);
+  const [updateSummary] = useMutation(UPDATE_DEMO_FRAME_SUMMARY, named);
+  const [addLine, { loading: addingLine }] = useMutation(ADD_DEMO_FRAME_LINE, named);
+  const [updateLine] = useMutation(UPDATE_DEMO_FRAME_LINE, named);
+  const [deleteLine] = useMutation(DELETE_DEMO_FRAME_LINE, named);
+  const [publish, { loading: publishing }] = useMutation(PUBLISH_DEMO, named);
   const [submitFeedback, { loading: submitting }] = useMutation(SUBMIT_FEEDBACK);
-  const [ratify, { loading: ratifying }] = useMutation(RATIFY_FEEDBACK);
+  const [ratify, { loading: ratifying }] = useMutation(RATIFY_FEEDBACK, named);
 
   const [publishError, setPublishError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());

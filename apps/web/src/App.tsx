@@ -26,6 +26,7 @@ import DeskLayout from '@/desk/DeskLayout';
 import DeskHome from '@/desk/DeskHome';
 import Overview from '@/desk/Overview';
 import DeskContracts from '@/desk/Contracts';
+import DeskRequests, { DeskRequestDetail } from '@/desk/Requests';
 import Customers from '@/desk/Customers';
 import CustomerDetail from '@/desk/CustomerDetail';
 import Users from '@/desk/Users';
@@ -136,6 +137,8 @@ export default function App() {
             <Route path="dependencies" element={<WorkspaceDependenciesTab />} />
             <Route path="activity" element={<WorkspaceActivityTab />} />
           </Route>
+          <Route path="requests" element={<DeskRequests />} />
+          <Route path="requests/:id" element={<DeskRequestDetail />} />
           <Route path="customers" element={<Customers />} />
           <Route path="customers/:id" element={<CustomerDetail />} />
           <Route path="users" element={<Users />} />

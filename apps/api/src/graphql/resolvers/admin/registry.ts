@@ -11,7 +11,7 @@ import {
 } from '../../../lib/scope.js';
 import { scopeKindForKey } from '../../../lib/templates.js';
 import { reload } from '../contracts.js';
-import { firstContractId } from './shared.js';
+import { assertProjectActive, primaryContractId, reloadOnProject } from './shared.js';
 
 /**
  * The scope registry (build plan L1; spec §3): create/edit/reorder items, set
@@ -21,11 +21,10 @@ import { firstContractId } from './shared.js';
  * Every mutation here that touches a `ScopeItem` returns `Contract!`, exactly
  * as the pre-L1 `addScopeItem`/`updateScopeItem`/`deleteScopeItem` did — the
  * registry moved from Contract to Project underneath, but the desk's Scope
- * tab still opens on a contract, so `firstContractId` (shared.ts) picks the
- * project's (for now, only ever) contract to reload. A project spanning more
- * than one contract will need a real answer here; neither L1 nor L2 builds
- * the screen that would create one, so this is a deliberate, documented
- * shortcut — see docs/development/L1.md.
+ * tab still opens on a contract. Since J2 a project can hold more than one
+ * contract, so each mutation takes an optional `contractId` — the contract
+ * the caller has open — and returns that one (`reloadOnProject`, shared.ts,
+ * which says why the old "the project's first contract" was retired).
  */
 async function loadScopeItem(scopeItemId: string) {
   const item = await prisma.scopeItem.findUnique({ where: { id: scopeItemId } });
@@ -53,11 +52,6 @@ export const registryMutations = {
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
     }
-    if (!contract.projectId) {
-      throw new GraphQLError('This contract has no project to hold scope items.', {
-        extensions: { code: 'NO_PROJECT' },
-      });
-    }
     const count = await prisma.scopeItem.count({ where: { projectId: contract.projectId } });
     await prisma.scopeItem.create({
       data: {
@@ -84,7 +78,7 @@ export const registryMutations = {
    */
   updateScopeItem: async (
     _p: unknown,
-    args: { scopeItemId: string; labelFa: string; labelEn: string },
+    args: { scopeItemId: string; labelFa: string; labelEn: string; contractId?: string | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -93,20 +87,20 @@ export const registryMutations = {
       where: { id: item.id },
       data: { labelFa: args.labelFa, labelEn: args.labelEn },
     });
-    return reload(await firstContractId(item.projectId));
+    return reloadOnProject(item.projectId, args.contractId);
   },
 
-  deleteScopeItem: async (_p: unknown, args: { scopeItemId: string }, ctx: Context) => {
+  deleteScopeItem: async (_p: unknown, args: { scopeItemId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     await prisma.scopeItem.delete({ where: { id: item.id } });
-    return reload(await firstContractId(item.projectId));
+    return reloadOnProject(item.projectId, args.contractId);
   },
 
   /** reason is stored only for DECLINED; switching away from DECLINED clears it. */
   setScopeItemStatus: async (
     _p: unknown,
-    args: { scopeItemId: string; status: ScopeStatus; reason?: string | null },
+    args: { scopeItemId: string; status: ScopeStatus; reason?: string | null; contractId?: string | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -118,12 +112,12 @@ export const registryMutations = {
         declinedReason: args.status === 'DECLINED' ? (args.reason ?? null) : null,
       },
     });
-    return reload(await firstContractId(item.projectId));
+    return reloadOnProject(item.projectId, args.contractId);
   },
 
   setScopeItemFlags: async (
     _p: unknown,
-    args: { scopeItemId: string; temporary: boolean; outOfScope: boolean; adminWork: boolean },
+    args: { scopeItemId: string; temporary: boolean; outOfScope: boolean; adminWork: boolean; contractId?: string | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -132,7 +126,7 @@ export const registryMutations = {
       where: { id: item.id },
       data: { temporary: args.temporary, outOfScope: args.outOfScope, adminWork: args.adminWork },
     });
-    return reload(await firstContractId(item.projectId));
+    return reloadOnProject(item.projectId, args.contractId);
   },
 
   /**
@@ -140,7 +134,7 @@ export const registryMutations = {
    * holds this at the database, this mutation is just the write path that
    * agrees with it.
    */
-  decideScopeItem: async (_p: unknown, args: { scopeItemId: string; note: string }, ctx: Context) => {
+  decideScopeItem: async (_p: unknown, args: { scopeItemId: string; note: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     if (item.decidedAt) {
@@ -156,22 +150,22 @@ export const registryMutations = {
       where: { id: item.id },
       data: { decidedAt: new Date(), decidedNote: note },
     });
-    return reload(await firstContractId(item.projectId));
+    return reloadOnProject(item.projectId, args.contractId);
   },
 
-  undecideScopeItem: async (_p: unknown, args: { scopeItemId: string }, ctx: Context) => {
+  undecideScopeItem: async (_p: unknown, args: { scopeItemId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
     await prisma.scopeItem.update({
       where: { id: item.id },
       data: { decidedAt: null, decidedNote: null },
     });
-    return reload(await firstContractId(item.projectId));
+    return reloadOnProject(item.projectId, args.contractId);
   },
 
   setScopeItemOrigin: async (
     _p: unknown,
-    args: { scopeItemId: string; note?: string | null; round?: string | null },
+    args: { scopeItemId: string; note?: string | null; round?: string | null; contractId?: string | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -180,7 +174,7 @@ export const registryMutations = {
       where: { id: item.id },
       data: { originNote: args.note ?? null, originRound: args.round ?? null },
     });
-    return reload(await firstContractId(item.projectId));
+    return reloadOnProject(item.projectId, args.contractId);
   },
 
   /**
@@ -190,7 +184,7 @@ export const registryMutations = {
    */
   reorderScopeItem: async (
     _p: unknown,
-    args: { scopeItemId: string; direction: 'UP' | 'DOWN' },
+    args: { scopeItemId: string; direction: 'UP' | 'DOWN'; contractId?: string | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -210,7 +204,7 @@ export const registryMutations = {
         prisma.scopeItem.update({ where: { id: target.id }, data: { position: self.position } }),
       ]);
     }
-    return reload(await firstContractId(item.projectId));
+    return reloadOnProject(item.projectId, args.contractId);
   },
 
   /**
@@ -221,10 +215,11 @@ export const registryMutations = {
    */
   proposeScopeTrade: async (
     _p: unknown,
-    args: { projectId: string; outItemId: string; inKey: string; inLabelFa: string; inLabelEn: string },
+    args: { projectId: string; outItemId: string; inKey: string; inLabelFa: string; inLabelEn: string; contractId?: string | null },
     ctx: Context,
   ) => {
     const admin = requireCapability(ctx, 'contracts.author');
+    await assertProjectActive(args.projectId);
     const outItem = await prisma.scopeItem.findUnique({ where: { id: args.outItemId } });
     if (!outItem || outItem.projectId !== args.projectId) {
       throw new GraphQLError('No such scope item on this project.', { extensions: { code: 'NOT_FOUND' } });
@@ -260,7 +255,7 @@ export const registryMutations = {
         },
       });
     });
-    return reload(await firstContractId(args.projectId));
+    return reloadOnProject(args.projectId, args.contractId);
   },
 
   /**
@@ -268,7 +263,7 @@ export const registryMutations = {
    * the "clearly-marked TODO" the build plan allows for scope trade rather
    * than blocking L1 on the portal half; see docs/development/L1.md.
    */
-  confirmScopeTradeRoot: async (_p: unknown, args: { tradeId: string }, ctx: Context) => {
+  confirmScopeTradeRoot: async (_p: unknown, args: { tradeId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const trade = await prisma.scopeTrade.findUnique({ where: { id: args.tradeId } });
     if (!trade) {
@@ -276,7 +271,7 @@ export const registryMutations = {
     }
     assertCanConfirmTradeAsRoot(trade);
     await prisma.scopeTrade.update({ where: { id: trade.id }, data: { rootConfirmedAt: new Date() } });
-    return reload(await firstContractId(trade.projectId));
+    return reloadOnProject(trade.projectId, args.contractId);
   },
 
   /**
@@ -285,7 +280,7 @@ export const registryMutations = {
    * the customer half yet. The gate is real regardless: the day the portal
    * mutation lands, this does not need to change to honour it.
    */
-  executeScopeTrade: async (_p: unknown, args: { tradeId: string }, ctx: Context) => {
+  executeScopeTrade: async (_p: unknown, args: { tradeId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const trade = await prisma.scopeTrade.findUnique({
       where: { id: args.tradeId },
@@ -297,26 +292,30 @@ export const registryMutations = {
     assertCanExecuteTrade(trade);
 
     // The paired amendment (spec §4: "the contract view updates via a paired
-    // amendment") — only when there is a signed contract to amend. A project
-    // with no signed contract yet trades registry items with no document to
-    // update; amendmentId stays null, exactly as schema.prisma documents.
-    const contract = await prisma.contract.findFirst({
-      where: { projectId: trade.projectId },
-      orderBy: { createdAt: 'asc' },
+    // amendment") — only when there is a signed contract to amend. A contract
+    // not yet signed trades registry items with no document to update;
+    // amendmentId stays null, exactly as schema.prisma documents.
+    //
+    // **Which contract's agreement is being amended** is the one that agreed
+    // the item going out (T1's `ScopeItem.contractId`): with a second contract
+    // on the project (J2) "the project's first contract" is the wrong
+    // document as often as the right one. A pre-T1 row that names none falls
+    // back to the project's first, which is what every trade did before.
+    const contract = await prisma.contract.findUniqueOrThrow({
+      where: { id: trade.outItem.contractId ?? (await primaryContractId(trade.projectId)) },
       include: { currentContractRevision: { include: { signature: true } } },
     });
-    const signedRevision = contract?.currentContractRevision?.signature
+    const signedRevision = contract.currentContractRevision?.signature
       ? contract.currentContractRevision
       : null;
 
     await prisma.$transaction(async (tx) => {
       await tx.scopeItem.update({ where: { id: trade.outItem.id }, data: { status: 'TRADED' } });
       // The trade is what agrees the incoming item, so the contract it
-      // amends is the one that agreed it (T1). A project with no contract has
-      // none to name, and the column stays as it was.
+      // amends is the one that agreed it (T1).
       await tx.scopeItem.update({
         where: { id: trade.inItem.id },
-        data: { status: 'AGREED', ...(contract ? { contractId: contract.id } : {}) },
+        data: { status: 'AGREED', contractId: contract.id },
       });
 
       let amendmentId: string | null = null;
@@ -352,6 +351,6 @@ export const registryMutations = {
       });
     });
 
-    return reload(await firstContractId(trade.projectId));
+    return reloadOnProject(trade.projectId, args.contractId);
   },
 };

@@ -25,6 +25,7 @@ import StatusBadge from '@/components/StatusBadge';
 import Lock from '@/components/Lock';
 import DemoViewport from '@/components/DemoViewport';
 import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
+import RequestThread from '@/components/RequestThread';
 import Topbar from './Topbar';
 
 const MIN_SIGN_NAME = 2;
@@ -291,7 +292,7 @@ export default function ContractDetail() {
               never a hand-typed percentage (F5's own slippage). Absent
               entirely for a project with no phases yet, which is an honest
               "nothing to show" rather than a zeroed-out progress bar. */}
-          {contract.project && contract.project.progress.totalPhases > 0 ? (
+          {contract.project.progress.totalPhases > 0 ? (
             <section className="sec" id="s0">
               <div className="sec-head">
                 <h2 className="t-h3">{t('detail.demoTitle')}</h2>
@@ -326,7 +327,7 @@ export default function ContractDetail() {
                 return demo ? (
                   <>
                     <DemoViewport demo={demo} />
-                    <DemoFeedbackPanel demo={demo} canAuthor={false} onChanged={() => void refetch()} />
+                    <DemoFeedbackPanel demo={demo} contractId={contract.id} canAuthor={false} onChanged={() => void refetch()} />
                   </>
                 ) : (
                   <p className="t-small muted">{t('detail.demoNone')}</p>
@@ -512,7 +513,7 @@ export default function ContractDetail() {
                   disabled={busy}
                   onClick={() =>
                     run(() =>
-                      setScopeItem({ variables: { scopeItemId: s.id, checked: !s.checked } }),
+                      setScopeItem({ variables: { scopeItemId: s.id, checked: !s.checked, contractId: contract.id } }),
                     )
                   }
                 >
@@ -716,7 +717,7 @@ export default function ContractDetail() {
               tracked on the same board (symmetry is the point of the
               stage), but this card is the customer's, not a status report
               on Root. */}
-          {contract.project && contract.project.dependencies.some((d) => d.side === 'CUSTOMER') ? (
+          {contract.project.dependencies.some((d) => d.side === 'CUSTOMER') ? (
             <div className="rail-card">
               <p className="rail-cap">{t('detail.commitmentsCap')}</p>
               <div className="log">
@@ -735,6 +736,20 @@ export default function ContractDetail() {
                     </div>
                   ))}
               </div>
+            </div>
+          ) : null}
+
+          {/* Journeys build plan J2: how this contract began — the customer's
+              own request and the conversation around it, read-only from here
+              (the thread closed when the request became this contract). */}
+          {contract.request ? (
+            <div className="rail-card" id="origin-request">
+              <p className="rail-cap">{t('requests.originTitle')}</p>
+              <p className="t-small muted">{t('requests.originLede')}</p>
+              <p className="t-small" dir="auto">
+                <strong>{contract.request.title}</strong>
+              </p>
+              <RequestThread request={contract.request} meId={me.id} canPost={false} />
             </div>
           ) : null}
 

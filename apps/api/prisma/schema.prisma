@@ -117,6 +117,10 @@ model User {
   designedContracts     Contract[]      @relation("ContractDesigner")
   developedContracts    Contract[]      @relation("ContractDeveloper")
   projects              Project[]       @relation("CustomerProjects")
+  /// Journeys build plan J2 — the requests this account archived (sales) and
+  /// the messages it wrote on any request's thread (customer or sales).
+  archivedProjects      Project[]       @relation("ProjectArchivedBy")
+  requestMessages       RequestMessage[]
   scopeTrades           ScopeTrade[]
   comments              Comment[]
   changeLogs            ChangeLog[]
@@ -351,13 +355,13 @@ model Contract {
 
   /// Build plan D1, 2026-09-20: the registry's owner is the project, not the
   /// contract — a contract attaches to a project rather than the other way
-  /// around. Nullable because L1 does not build the screens that create a
-  /// project before a contract exists (lifecycle spec §4 stages 1-2); every
-  /// contract migrated by L1 got one project of its own (see the L1
-  /// migration), and `createContract` creates one alongside every new
-  /// contract, but the column itself does not require it.
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  /// around. **Required as of J2** (lifecycle plan §0.3.4): L1 left it
+  /// nullable only so its own migration could run in the right order, and
+  /// `createContract` has made a project (or been handed a requested one) for
+  /// every contract since. Restrict, not SetNull: a project with contracts on
+  /// it is not deletable, and a contract cannot be orphaned by one.
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
   /// Journeys build plan S1: who designs and who develops this contract —
   /// chosen by sales at creation and changeable by them (journeys Q-S4). An
@@ -719,11 +723,16 @@ model StoredFile {
 // would destroy `origin`, the field that answers "where did this come from").
 
 enum ProjectStatus {
+  /// Journeys build plan J2: the customer has asked for something and no
+  /// contract exists yet — a project before a contract. It holds the request
+  /// (`Project.request*`) and its thread (`RequestMessage`), and nothing
+  /// else: no registry, no phases. Sales converts it (`createContract` with
+  /// this project's id flips it to ACTIVE) or archives it with a reason.
+  REQUESTED
   ACTIVE
-  /// Not currently set by anything — reserved for when a project can be
-  /// closed out. Later stages (L2's phases) are expected to read finer
-  /// lifecycle state off phases and the registry rather than growing this
-  /// enum, so it stays two values on purpose.
+  /// Since J2, set by exactly one thing: archiving a request
+  /// (CHECK `Project_archived_has_reason`). Finer lifecycle state is still
+  /// read off phases and the registry rather than growing this enum.
   ARCHIVED
 }
 
@@ -739,6 +748,27 @@ model Project {
   titleEn String
 
   status ProjectStatus @default(ACTIVE)
+
+  /// Journeys build plan J2 — the request that made this project, kept
+  /// forever: after conversion it is the `origin` of what sales types into
+  /// step 1, and its thread stays readable (never writable) from the
+  /// contract. Null on a project that `createContract` made directly, as
+  /// every project before J2 was.
+  requestTitle String?
+  requestBody  String?
+  /// The language the customer wrote it in — sales reads it in that language
+  /// even when the desk is in the other.
+  requestLang  String?
+  requestedAt  DateTime?
+  /// **CHECK `Project_archived_has_reason`**: `status <> 'ARCHIVED' OR
+  /// "archivedReason" IS NOT NULL` — an archived request always says why, to
+  /// the customer who is shown it.
+  archivedAt     DateTime?
+  archivedReason String?
+  archivedById   String?
+  archivedBy     User?     @relation("ProjectArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
+
+  requestMessages RequestMessage[]
 
   contracts     Contract[]
   scopeItems    ScopeItem[]
@@ -761,6 +791,27 @@ model Project {
   updatedAt DateTime @updatedAt
 
   @@index([customerId])
+  @@index([status])
+}
+
+/// One message in a request's thread (journeys build plan J2). **Its own
+/// table**, never a flag on `TicketMessage` or on the staff-only notes J3 adds:
+/// two audiences in one table is one missed filter from a leak. Every message
+/// here is read by both sides — the customer who asked and the sales staff
+/// answering — so there is no visibility column to get wrong. Append-only:
+/// no edit, no delete.
+model RequestMessage {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  body     String
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
 }
 
 /// Status lifecycle (spec §3; build plan L1): `proposed` at scoping, `agreed`

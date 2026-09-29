@@ -163,7 +163,10 @@ export const typeDefs = /* GraphQL */ `
   }
 
   enum ProjectStatus {
+    "Journeys build plan J2: a customer's request with no contract yet. Holds the request and its thread, nothing else."
+    REQUESTED
     ACTIVE
+    "Since J2, set only by archiving a request — always with a reason."
     ARCHIVED
   }
 
@@ -264,6 +267,59 @@ export const typeDefs = /* GraphQL */ `
     dependencies: [Dependency!]!
     "The product-import panel's run history (build plan L7) — newest first."
     serviceRuns: [ServiceRun!]!
+  }
+
+  # ---------------------------------------------------------------------
+  # Requests — a project before a contract (journeys build plan J2)
+  # ---------------------------------------------------------------------
+
+  """
+  Who wrote a message, or who a request is from — deliberately not User:
+  the customer reads the staff member's name and nothing else about them (no
+  email, no phone, no roles), and sales reads the customer's name and company.
+  """
+  type RequestParty {
+    id: ID!
+    name: String!
+    clientName: String
+  }
+
+  "One message in a request's thread. Append-only, and read by both sides — its own table, never shared with tickets or the staff-only notes (J3)."
+  type RequestMessage {
+    id: ID!
+    author: RequestParty!
+    body: String!
+    createdAt: DateTime!
+  }
+
+  """
+  What a customer asked for, before there is a contract — the request half of
+  a project (the id is the project's). Read by the customer who made it and by
+  contracts.readAll; anyone else gets NOT_FOUND, and design and development
+  never see one. The thread outlives the status: after conversion it stays,
+  read-only, linked from the contract.
+  """
+  type Request {
+    id: ID!
+    customer: RequestParty!
+    "What the customer called it. Sales replaces the project's placeholder titles at conversion; this stays as asked."
+    title: String!
+    body: String!
+    "The language it was written in — sales reads it in that language."
+    lang: String!
+    "REQUESTED (pending), ARCHIVED (with archivedReason), or ACTIVE (converted — the thread is now read-only)."
+    status: ProjectStatus!
+    requestedAt: DateTime!
+    archivedAt: DateTime
+    "Always present when status is ARCHIVED (Project_archived_has_reason)."
+    archivedReason: String
+    messages: [RequestMessage!]!
+    """
+    The contract this request became, once it has one this viewer may open —
+    the earliest on the project; a customer only sees a published one. Null
+    while pending or archived.
+    """
+    contractId: ID
   }
 
   # ---------------------------------------------------------------------
@@ -944,8 +1000,10 @@ export const typeDefs = /* GraphQL */ `
     concepts: [DesignConcept!]!
     "Live — this project's whole registry, not only what is agreed. See agreedScopeItems for the frozen view."
     scopeItems: [ScopeItem!]!
-    "Null until L1's migration runs, or for a contract with no project yet."
-    project: Project
+    "Every contract has a project (required since J2)."
+    project: Project!
+    "J2: the request this contract's project began as, with its thread (read-only from here). Null for a project that never was a request, and for anyone but the customer and contracts.readAll."
+    request: Request
     articles: [Article!]!
     """
     Appendix 1 as it was frozen into the current published revision — the
@@ -1629,6 +1687,14 @@ export const typeDefs = /* GraphQL */ `
     "Staff (contracts.readAll or contracts.readActive). One project, with its registry and any trades."
     project(id: ID!): Project
 
+    # --- Requests (journeys build plan J2) ---
+    "The caller's own requests that are not yet a contract they can open — pending, archived, and converted-but-not-yet-published — newest first."
+    myRequests: [Request!]!
+    "Staff (contracts.readAll). Every request, optionally narrowed by status, newest first."
+    allRequests(status: ProjectStatus, limit: Int = 100): [Request!]!
+    "The customer who made it, or contracts.readAll. NOT_FOUND for anyone else — and for a project that never was a request."
+    request(projectId: ID!): Request
+
     # --- Builds and the resolution ledger (build plan L3b) ---
     "Staff (builds.author). Every phase across every active project, thin — the build-authoring form's phase picker."
     phasesForBuilds: [BuildPhase!]!
@@ -1693,6 +1759,13 @@ export const typeDefs = /* GraphQL */ `
     "Journeys build plan S1 — sales picks both at creation. Refused: ASSIGNEE_LACKS_CAPABILITY, ASSIGNEE_INACTIVE."
     designerId: ID
     developerId: ID
+    """
+    Journeys build plan J2: attach to this project. A REQUESTED one is
+    converted (status → ACTIVE, the contract attaches, the checklist is
+    seeded); an ACTIVE one gets a second contract. Refused:
+    PROJECT_CUSTOMER_MISMATCH, PROJECT_ARCHIVED.
+    """
+    projectId: ID
   }
 
   type Mutation {
@@ -1708,6 +1781,20 @@ export const typeDefs = /* GraphQL */ `
     "Clears passwordChangeRequired. The one mutation an account may still call while it is set."
     setNewPassword(password: String!): AuthPayload!
     signOut: Boolean!
+
+    # --- Requests (journeys build plan J2) ---
+    """
+    A signed-in customer asks for something (a project before a contract). Creates a REQUESTED project and notifies every account holding contracts.author. Refused: EMPTY_TITLE, EMPTY_BODY, TOO_LONG, INVALID_LANG.
+    """
+    submitRequest(title: String!, body: String!, lang: String!): Request!
+    """
+    The customer who made it, or contracts.author, adds a message. Refused: NOT_FOUND (not yours to see), REQUEST_CLOSED (archived or converted — the thread is read-only), EMPTY_COMMENT, TOO_LONG. Notifies the other side.
+    """
+    postRequestMessage(projectId: ID!, body: String!): Request!
+    """
+    contracts.author. Archives a pending request; the reason is required and is sent to the customer. Refused: REASON_REQUIRED, TOO_LONG, REQUEST_CLOSED (already archived or converted).
+    """
+    archiveRequest(projectId: ID!, reason: String!): Request!
     acceptInvite(token: String!, name: String!, password: String!): AuthPayload!
     requestPasswordReset(email: String!): Boolean!
     resetPassword(token: String!, password: String!): AuthPayload!
@@ -1716,7 +1803,7 @@ export const typeDefs = /* GraphQL */ `
     chooseConcept(contractId: ID!, conceptId: ID!): Contract!
     setPageApproval(pageDesignId: ID!, approved: Boolean!): Contract!
     approveContract(contractId: ID!): Contract!
-    setScopeItem(scopeItemId: ID!, checked: Boolean!): Contract!
+    setScopeItem(scopeItemId: ID!, checked: Boolean!, contractId: ID): Contract!
     signContract(contractId: ID!, typedName: String!): Contract!
     addComment(contractId: ID!, body: String!, target: CommentTarget): Contract!
 
@@ -1794,20 +1881,20 @@ export const typeDefs = /* GraphQL */ `
     """
     addScopeItem(contractId: ID!, key: String!, labelFa: String!, labelEn: String!, kind: ScopeKind): Contract!
     "Live to the customer the instant it is saved — ScopeItem is not versioned."
-    updateScopeItem(scopeItemId: ID!, labelFa: String!, labelEn: String!): Contract!
-    deleteScopeItem(scopeItemId: ID!): Contract!
+    updateScopeItem(scopeItemId: ID!, labelFa: String!, labelEn: String!, contractId: ID): Contract!
+    deleteScopeItem(scopeItemId: ID!, contractId: ID): Contract!
 
     "reason is stored only when status is DECLINED; set otherwise, it is cleared."
-    setScopeItemStatus(scopeItemId: ID!, status: ScopeStatus!, reason: String): Contract!
+    setScopeItemStatus(scopeItemId: ID!, status: ScopeStatus!, reason: String, contractId: ID): Contract!
     "Full replace of all three flags in one call, since they are edited together on the registry screen."
-    setScopeItemFlags(scopeItemId: ID!, temporary: Boolean!, outOfScope: Boolean!, adminWork: Boolean!): Contract!
+    setScopeItemFlags(scopeItemId: ID!, temporary: Boolean!, outOfScope: Boolean!, adminWork: Boolean!, contractId: ID): Contract!
     "Sets decidedAt to now and records the pointer. Refused if already decided — undecideScopeItem first."
-    decideScopeItem(scopeItemId: ID!, note: String!): Contract!
+    decideScopeItem(scopeItemId: ID!, note: String!, contractId: ID): Contract!
     "Clears decidedAt and decidedNote together — see schema.prisma's CHECK."
-    undecideScopeItem(scopeItemId: ID!): Contract!
-    setScopeItemOrigin(scopeItemId: ID!, note: String, round: String): Contract!
+    undecideScopeItem(scopeItemId: ID!, contractId: ID): Contract!
+    setScopeItemOrigin(scopeItemId: ID!, note: String, round: String, contractId: ID): Contract!
     "Swaps position with the neighbour in that direction. A no-op at either end of the list."
-    reorderScopeItem(scopeItemId: ID!, direction: ScopeMoveDirection!): Contract!
+    reorderScopeItem(scopeItemId: ID!, direction: ScopeMoveDirection!, contractId: ID): Contract!
 
     """
     Proposes a paired movement: outItemId (must be AGREED or further along)
@@ -1816,11 +1903,11 @@ export const typeDefs = /* GraphQL */ `
     Returns the contract, like every other registry mutation (T9 in V2.md) —
     reach the new trade via project.scopeTrades.
     """
-    proposeScopeTrade(projectId: ID!, outItemId: ID!, inKey: String!, inLabelFa: String!, inLabelEn: String!): Contract!
+    proposeScopeTrade(projectId: ID!, outItemId: ID!, inKey: String!, inLabelFa: String!, inLabelEn: String!, contractId: ID): Contract!
     "Root's confirmation. The customer's has no mutation yet — see docs/development/L1.md."
-    confirmScopeTradeRoot(tradeId: ID!): Contract!
+    confirmScopeTradeRoot(tradeId: ID!, contractId: ID): Contract!
     "Refused until both rootConfirmedAt and customerConfirmedAt are set."
-    executeScopeTrade(tradeId: ID!): Contract!
+    executeScopeTrade(tradeId: ID!, contractId: ID): Contract!
 
     # --- Template types and scope templates (build plan T1) ---
     "templates.types. Refused: INVALID_SLUG, LABEL_REQUIRED, TEMPLATE_SLUG_TAKEN."
@@ -1840,20 +1927,20 @@ export const typeDefs = /* GraphQL */ `
     # --- Phases and the live demo surface (build plan L2) ---
     "number is the project-scoped ordinal — @@unique([projectId, number])."
     createPhase(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, milestoneLabel: String): Contract!
-    updatePhase(phaseId: ID!, titleFa: String!, titleEn: String!, milestoneLabel: String): Contract!
-    deletePhase(phaseId: ID!): Contract!
+    updatePhase(phaseId: ID!, titleFa: String!, titleEn: String!, milestoneLabel: String, contractId: ID): Contract!
+    deletePhase(phaseId: ID!, contractId: ID): Contract!
     "phaseId: null unassigns the item from whatever phase it was on."
-    assignScopeItemToPhase(scopeItemId: ID!, phaseId: ID): Contract!
+    assignScopeItemToPhase(scopeItemId: ID!, phaseId: ID, contractId: ID): Contract!
 
     "stagingUrl must be HTTPS (L2.2) — refused otherwise, with a code naming why."
-    createDemo(phaseId: ID!, stagingUrl: String!, buildRef: String): Contract!
-    updateDemo(demoId: ID!, stagingUrl: String, buildRef: String, reviewWindowStart: DateTime, reviewWindowEnd: DateTime): Contract!
-    deleteDemo(demoId: ID!): Contract!
+    createDemo(phaseId: ID!, stagingUrl: String!, buildRef: String, contractId: ID): Contract!
+    updateDemo(demoId: ID!, stagingUrl: String, buildRef: String, reviewWindowStart: DateTime, reviewWindowEnd: DateTime, contractId: ID): Contract!
+    deleteDemo(demoId: ID!, contractId: ID): Contract!
     "canonicalPath is compared through lib/demoPages.ts's normalizePath — declare it in whatever raw shape is natural, not pre-normalized."
-    declareDemoPage(demoId: ID!, key: String!, labelFa: String!, labelEn: String!, canonicalPath: String!, pageDesignId: ID): Contract!
+    declareDemoPage(demoId: ID!, key: String!, labelFa: String!, labelEn: String!, canonicalPath: String!, pageDesignId: ID, contractId: ID): Contract!
     "labelFa/labelEn/canonicalPath and the design-image toggle, all in one call — the desk edits a declared page as one row, not five separate ones."
-    updateDemoPage(demoPageId: ID!, labelFa: String!, labelEn: String!, canonicalPath: String!, pageDesignId: ID): Contract!
-    deleteDemoPage(demoPageId: ID!): Contract!
+    updateDemoPage(demoPageId: ID!, labelFa: String!, labelEn: String!, canonicalPath: String!, pageDesignId: ID, contractId: ID): Contract!
+    deleteDemoPage(demoPageId: ID!, contractId: ID): Contract!
 
     """
     The reporter snippet's own call, made on every page-change event —
@@ -1875,16 +1962,16 @@ export const typeDefs = /* GraphQL */ `
     pulled out from under that feedback. Creates the DemoFrame row itself if
     this is the first call for this demo.
     """
-    generateDemoFrame(demoId: ID!): Contract!
+    generateDemoFrame(demoId: ID!, contractId: ID): Contract!
     "Freehand context beside the generated lines. Either field omitted leaves it unchanged; pass an empty string to clear one."
-    updateDemoFrameSummary(demoId: ID!, summaryFa: String, summaryEn: String): Contract!
+    updateDemoFrameSummary(demoId: ID!, summaryFa: String, summaryEn: String, contractId: ID): Contract!
     "A line Root types by hand — no scope item behind it, so it can never trigger interception (D4). buildChangeEntryId, when given, writes up one of DemoFrame.unpromptedChanges (build plan L3b's third source)."
-    addDemoFrameLine(demoId: ID!, kind: DemoFrameLineKind!, textFa: String!, textEn: String!, buildChangeEntryId: ID): Contract!
-    updateDemoFrameLine(lineId: ID!, textFa: String!, textEn: String!): Contract!
+    addDemoFrameLine(demoId: ID!, kind: DemoFrameLineKind!, textFa: String!, textEn: String!, buildChangeEntryId: ID, contractId: ID): Contract!
+    updateDemoFrameLine(lineId: ID!, textFa: String!, textEn: String!, contractId: ID): Contract!
     "Cascades to its feedback item, if any."
-    deleteDemoFrameLine(lineId: ID!): Contract!
+    deleteDemoFrameLine(lineId: ID!, contractId: ID): Contract!
     "Refused without a frame authored first (NO_FRAME) — spec §6: 'a demo cannot be published naked.'"
-    publishDemo(demoId: ID!): Contract!
+    publishDemo(demoId: ID!, contractId: ID): Contract!
 
     """
     Callable by Root or the project's own customer (house rule 2 — an
@@ -1915,7 +2002,7 @@ export const typeDefs = /* GraphQL */ `
     move to RATIFIED; anything else named is silently skipped, the same
     idempotent shape resolveReviewThread already uses.
     """
-    ratifyFeedback(demoId: ID!, itemIds: [ID!]!): Contract!
+    ratifyFeedback(demoId: ID!, itemIds: [ID!]!, contractId: ID): Contract!
 
     """
     The customer (or staff) confirms an ADDRESSED item is actually resolved
@@ -1975,19 +2062,19 @@ export const typeDefs = /* GraphQL */ `
     same board, the same rule. Returns the whole contract (T9), reached via
     project.dependencies.
     """
-    createDependency(projectId: ID!, side: DependencySide!, titleFa: String!, titleEn: String!, dueAt: DateTime!): Contract!
+    createDependency(projectId: ID!, side: DependencySide!, titleFa: String!, titleEn: String!, dueAt: DateTime!, contractId: ID): Contract!
     "Staff (contracts.author)."
-    updateDependency(dependencyId: ID!, titleFa: String!, titleEn: String!, dueAt: DateTime!): Contract!
+    updateDependency(dependencyId: ID!, titleFa: String!, titleEn: String!, dueAt: DateTime!, contractId: ID): Contract!
     """
     Staff (dependencies.verifyGeneral). note is required (VERIFICATION_NOTE_REQUIRED
     otherwise) — "we deployed a test file to the host," never only a
     timestamp. This is the stage's own banked trap, held here structurally.
     """
-    verifyDependency(dependencyId: ID!, note: String!): Contract!
+    verifyDependency(dependencyId: ID!, note: String!, contractId: ID): Contract!
     "Staff (dependencies.verifyGeneral). Clears a verification made in error."
-    unverifyDependency(dependencyId: ID!): Contract!
+    unverifyDependency(dependencyId: ID!, contractId: ID): Contract!
     "Staff (contracts.author)."
-    deleteDependency(dependencyId: ID!): Contract!
+    deleteDependency(dependencyId: ID!, contractId: ID): Contract!
 
     # --- Billing (build plan L6) ---
     """

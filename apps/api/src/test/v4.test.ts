@@ -25,12 +25,16 @@ after(async () => {
 });
 
 test("allContractStatusCounts sees every contract; contractStatusCounts stays scoped to the caller's own", async () => {
+  const strangerProject = await prisma.project.create({
+    data: { customerId: f.stranger.id, titleFa: 'قرارداد دیگر', titleEn: 'Other contract' },
+  });
   await prisma.contract.create({
     data: {
       ref: 'RC-OTHER-1',
       titleFa: 'قرارداد دیگر',
       titleEn: 'Other contract',
       customerId: f.stranger.id,
+      projectId: strangerProject.id,
       status: 'DRAFT',
     },
   });
@@ -68,6 +72,9 @@ test('needsRootQueue orders by statusChangedAt ascending — the longest-waiting
       titleFa: 'قرارداد دوم',
       titleEn: 'Second contract',
       customerId: f.customer.id,
+      // A second contract on the fixture's own project (J2) — which is now
+      // also a contract the desk can hold.
+      projectId: f.contract.projectId,
       status: 'WAITING_ON_ROOT',
       statusChangedAt: newerWait,
       publishedAt: new Date(),

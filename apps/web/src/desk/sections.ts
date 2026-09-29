@@ -5,6 +5,7 @@ export type DeskSection = {
   key:
     | 'overview'
     | 'contracts'
+    | 'requests'
     | 'customers'
     | 'library'
     | 'review'
@@ -39,6 +40,11 @@ export const DESK_SECTIONS: DeskSection[] = [
   // (S1's grant table), and the list itself narrows further per viewer
   // (`allContracts`), so this row only ever decides whether the row exists.
   { key: 'contracts', capability: 'contracts.readActive' },
+  // Journeys build plan J2: the sales inbox for a customer's requests — a
+  // conversation before there is a contract, which design and development
+  // (`contracts.readActive` only) never see. `contracts.readAll`, the same
+  // capability the API's `allRequests` checks.
+  { key: 'requests', capability: 'contracts.readAll' },
   { key: 'customers', capability: 'customers.manage' },
   { key: 'library', capability: 'library.write' },
   { key: 'review', capability: 'review.participate' },

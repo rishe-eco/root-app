@@ -18,7 +18,7 @@ import {
   type ScopeStatus,
   type ScopeTrade,
 } from '@/lib/queries';
-import type { WorkspaceContext } from './ContractWorkspace';
+import { useWorkspaceMutation, type WorkspaceContext } from './ContractWorkspace';
 
 const STATUSES: ScopeStatus[] = ['PROPOSED', 'AGREED', 'IN_BUILD', 'IN_DEMO', 'ACCEPTED', 'DECLINED', 'TRADED'];
 
@@ -44,13 +44,13 @@ function ScopeItemCard({
   const [decideNote, setDecideNote] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const [update, { loading: saving }] = useMutation(UPDATE_SCOPE_ITEM);
-  const [remove, { loading: deleting }] = useMutation(DELETE_SCOPE_ITEM);
-  const [setStatus] = useMutation(SET_SCOPE_ITEM_STATUS);
-  const [setFlags] = useMutation(SET_SCOPE_ITEM_FLAGS);
-  const [decide] = useMutation(DECIDE_SCOPE_ITEM);
-  const [undecide] = useMutation(UNDECIDE_SCOPE_ITEM);
-  const [reorder] = useMutation(REORDER_SCOPE_ITEM);
+  const [update, { loading: saving }] = useWorkspaceMutation(UPDATE_SCOPE_ITEM);
+  const [remove, { loading: deleting }] = useWorkspaceMutation(DELETE_SCOPE_ITEM);
+  const [setStatus] = useWorkspaceMutation(SET_SCOPE_ITEM_STATUS);
+  const [setFlags] = useWorkspaceMutation(SET_SCOPE_ITEM_FLAGS);
+  const [decide] = useWorkspaceMutation(DECIDE_SCOPE_ITEM);
+  const [undecide] = useWorkspaceMutation(UNDECIDE_SCOPE_ITEM);
+  const [reorder] = useWorkspaceMutation(REORDER_SCOPE_ITEM);
 
   async function guarded(fn: () => Promise<unknown>) {
     setError(null);
@@ -262,7 +262,7 @@ function ScopeItemCard({
 
 function ScopeTradeCard({ trade, editable }: { trade: ScopeTrade; editable: boolean }) {
   const { t } = useTranslation();
-  const [confirmRoot, { loading }] = useMutation(CONFIRM_SCOPE_TRADE_ROOT);
+  const [confirmRoot, { loading }] = useWorkspaceMutation(CONFIRM_SCOPE_TRADE_ROOT);
   const [error, setError] = useState<string | null>(null);
 
   async function onConfirm() {
@@ -327,11 +327,11 @@ export default function ScopeTab() {
   const [inLabelFa, setInLabelFa] = useState('');
   const [inLabelEn, setInLabelEn] = useState('');
   const [tradeError, setTradeError] = useState<string | null>(null);
-  const [proposeTrade, { loading: proposeLoading }] = useMutation(PROPOSE_SCOPE_TRADE);
+  const [proposeTrade, { loading: proposeLoading }] = useWorkspaceMutation(PROPOSE_SCOPE_TRADE);
 
   const items = [...contract.scopeItems].sort((a, b) => a.position - b.position);
   const tradeableItems = items.filter((i) => ['AGREED', 'IN_BUILD', 'IN_DEMO', 'ACCEPTED'].includes(i.status));
-  const trades = contract.project?.scopeTrades ?? [];
+  const trades = contract.project.scopeTrades;
 
   async function onAdd(e: FormEvent) {
     e.preventDefault();
@@ -413,7 +413,7 @@ export default function ScopeTab() {
 
       <div className="workspace-row">
         <h3 className="t-h3">{t('workspace.scopeTradeTitle')}</h3>
-        {contract.project && editable ? (
+        {editable ? (
           <button className="btn btn-ghost btn-sm" type="button" onClick={() => setProposing((v) => !v)}>
             {t('workspace.scopeTradePropose')}
           </button>

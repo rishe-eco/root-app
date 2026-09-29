@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { Role, User } from '@prisma/client';
 import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
 import { exec, ok, stop } from './graphql.js';
-import { firstContractId } from '../graphql/resolvers/admin/shared.js';
+import { primaryContractId } from '../graphql/resolvers/admin/shared.js';
 
 /**
  * T1 — template types, scope templates, `ScopeItem.kind` (journeys build plan
@@ -119,7 +119,7 @@ async function runBackfillOverFixture() {
 }
 
 test('the kind backfill: checklist.* is EXTRA, the PAGES keys PAGE, everything else FEATURE', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const keys = ['checklist.auth', 'checklist.hosting', 'home', 'about', 'contracts', 'portal', 'bilingual', 'sms-auth', 'landing'];
   await prisma.scopeItem.createMany({
     data: keys.map((key, position) => ({ projectId, key, kind: 'FEATURE' as const, labelFa: key, labelEn: key, position })),
@@ -146,8 +146,8 @@ test('the kind backfill: checklist.* is EXTRA, the PAGES keys PAGE, everything e
   assert.ok(after.every((r) => r.kind === 'FEATURE'), 'the transaction rolled back');
 });
 
-test('the contract backfill: every row gets its project\'s first contract, matching firstContractId', async () => {
-  const projectId = f.contract.projectId!;
+test('the contract backfill: every row gets its project\'s first contract, matching primaryContractId', async () => {
+  const projectId = f.contract.projectId;
   // A second, *earlier* contract on the same project, created after the
   // fixture's — so "first" means createdAt, not insertion order or id.
   const earlier = await prisma.contract.create({
@@ -173,7 +173,7 @@ test('the contract backfill: every row gets its project\'s first contract, match
     ],
   });
 
-  assert.equal(await firstContractId(projectId), earlier.id, 'fixture sanity: firstContractId picks the earlier one');
+  assert.equal(await primaryContractId(projectId), earlier.id, 'fixture sanity: primaryContractId picks the earlier one');
   const rows = await runBackfillOverFixture();
   for (const row of rows.filter((r) => r.projectId === projectId)) {
     assert.equal(row.contractId, earlier.id, `${row.key} (EXTRA and PROPOSED rows too)`);
@@ -477,7 +477,7 @@ test('createContract: the checklist is EXTRA and names the contract that created
     }),
   ) as { createContract: { id: string } };
   const contract = await prisma.contract.findUniqueOrThrow({ where: { id: made.createContract.id } });
-  const rows = await prisma.scopeItem.findMany({ where: { projectId: contract.projectId! } });
+  const rows = await prisma.scopeItem.findMany({ where: { projectId: contract.projectId } });
   assert.equal(rows.length, 10);
   assert.ok(rows.every((r) => r.kind === 'EXTRA' && r.contractId === contract.id));
 });
@@ -486,10 +486,10 @@ test('applyContractTemplate: each row is classified by its key and agreed by thi
   // The fixture's three articles make the template refuse (v2.test.ts asserts
   // that); clear them, since this test is about what it writes.
   await prisma.article.deleteMany({ where: { contractId: f.contract.id } });
-  const before = await prisma.scopeItem.count({ where: { projectId: f.contract.projectId! } });
+  const before = await prisma.scopeItem.count({ where: { projectId: f.contract.projectId } });
   assert.equal(before, 0);
   ok(await exec(`mutation($id: ID!){ applyContractTemplate(contractId: $id) { id } }`, { as: staff.SALES, variables: { id: f.contract.id } }));
-  const rows = await prisma.scopeItem.findMany({ where: { projectId: f.contract.projectId! }, orderBy: { position: 'asc' } });
+  const rows = await prisma.scopeItem.findMany({ where: { projectId: f.contract.projectId }, orderBy: { position: 'asc' } });
   assert.deepEqual(
     rows.map((r) => [r.key, r.kind]),
     [
@@ -510,7 +510,7 @@ test('addScopeItem: an explicit kind wins, otherwise the key decides; either way
   ok(await exec(m, { as: staff.SALES, variables: { c: f.contract.id, k: 'cart' } }));
   ok(await exec(m, { as: staff.SALES, variables: { c: f.contract.id, k: 'handover-doc', kind: 'DELIVERABLE' } }));
   ok(await exec(m, { as: staff.SALES, variables: { c: f.contract.id, k: 'faq', kind: 'PAGE' } }));
-  const rows = await prisma.scopeItem.findMany({ where: { projectId: f.contract.projectId! }, orderBy: { position: 'asc' } });
+  const rows = await prisma.scopeItem.findMany({ where: { projectId: f.contract.projectId }, orderBy: { position: 'asc' } });
   assert.deepEqual(
     rows.map((r) => [r.key, r.kind]),
     [['home', 'PAGE'], ['cart', 'FEATURE'], ['handover-doc', 'DELIVERABLE'], ['faq', 'PAGE']],
@@ -519,7 +519,7 @@ test('addScopeItem: an explicit kind wins, otherwise the key decides; either way
 });
 
 test('a scope trade: the incoming item is classified when proposed and agreed by the contract when executed', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const out = await prisma.scopeItem.create({
     data: { projectId, key: 'old-feature', kind: 'FEATURE', labelFa: 'ا', labelEn: 'a', status: 'AGREED', contractId: f.contract.id },
   });
@@ -546,7 +546,7 @@ test('a scope trade: the incoming item is classified when proposed and agreed by
 });
 
 test('ScopeItem exposes kind and contractId', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   await prisma.scopeItem.create({
     data: { projectId, key: 'home', kind: 'PAGE', labelFa: 'ا', labelEn: 'a', status: 'AGREED', contractId: f.contract.id },
   });

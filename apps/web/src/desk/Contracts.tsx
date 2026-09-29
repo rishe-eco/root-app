@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate, useOutletContext } from 'react-router-dom';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Navigate, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
@@ -10,13 +10,16 @@ import {
   ASSIGNABLE_USERS,
   CREATE_CONTRACT,
   PUBLISH_CONTRACT,
+  REQUEST,
   SET_CONTRACT_STATUS,
   type Contract,
   type ContractStatus,
+  type Request,
   type User,
 } from '@/lib/queries';
 import { ALL_STATUSES, fullDateTime, pick } from '@/lib/format';
 import StatusBadge from '@/components/StatusBadge';
+import { requestErrorMessage } from '@/components/RequestThread';
 
 /**
  * Journeys build plan S1: the list itself answers both `contracts.readAll`
@@ -50,8 +53,25 @@ export default function DeskContracts() {
   const [publish] = useMutation(PUBLISH_CONTRACT);
   const [setStatus] = useMutation(SET_CONTRACT_STATUS);
   const [createContract, { loading: creating }] = useMutation(CREATE_CONTRACT, {
-    refetchQueries: [{ query: ALL_CONTRACTS }],
+    refetchQueries: [{ query: ALL_CONTRACTS }, 'AllRequests'],
   });
+
+  // Journeys build plan J2: "Convert" on a request lands here with
+  // `?request=<id>`. The form opens prefilled from the request — its customer,
+  // and its title in the language it was written in — and submits
+  // `createContract` with that request's project id, which is the whole
+  // conversion. The other language's title is left for sales to write: the
+  // project's placeholders are the customer's one title in both fields, and
+  // the point of converting is that a contract is titled properly in both.
+  const [params, setParams] = useSearchParams();
+  const requestId = params.get('request');
+  const { data: requestData, loading: requestLoading, error: requestError } = useQuery<{ request: Request | null }>(REQUEST, {
+    variables: { projectId: requestId },
+    skip: !requestId || !canAuthor,
+  });
+  const fromRequest = requestData?.request?.status === 'REQUESTED' ? requestData.request : null;
+  const requestUnusable =
+    Boolean(requestId) && canAuthor && !requestLoading && (Boolean(requestError) || (requestData !== undefined && !fromRequest));
 
   const [showNew, setShowNew] = useState(false);
   const [customerId, setCustomerId] = useState('');
@@ -61,6 +81,14 @@ export default function DeskContracts() {
   const [designerId, setDesignerId] = useState('');
   const [developerId, setDeveloperId] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!fromRequest) return;
+    setShowNew(true);
+    setCustomerId(fromRequest.customer.id);
+    if (fromRequest.lang === 'fa') setTitleFa((v) => v || fromRequest.title);
+    else setTitleEn((v) => v || fromRequest.title);
+  }, [fromRequest]);
 
   if (!canRead) return <Navigate to={lp(locale, '/desk')} replace />;
 
@@ -77,13 +105,14 @@ export default function DeskContracts() {
             titleEn,
             designerId: designerId || null,
             developerId: developerId || null,
+            ...(fromRequest ? { projectId: fromRequest.id } : {}),
           },
         },
       });
       const id = res.data?.createContract.id;
       if (id) navigate(lp(locale, `/desk/contracts/${id}`));
     } catch (err) {
-      setError((err as Error).message);
+      setError(requestErrorMessage(err, t));
     }
   }
 
@@ -98,9 +127,26 @@ export default function DeskContracts() {
         ) : null}
       </div>
 
+      {requestUnusable ? (
+        <p className="error">
+          {t('desk.newContractRequestGone')}{' '}
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setParams({}, { replace: true })}>
+            {t('requests.close')}
+          </button>
+        </p>
+      ) : null}
+
       {showNew && canAuthor ? (
         <section className="card">
           <form className="auth-form" onSubmit={onCreate}>
+            {fromRequest ? (
+              <p className="t-small" data-testid="converting-request">
+                {t('desk.newContractFromRequest', {
+                  title: fromRequest.title,
+                  customer: fromRequest.customer.clientName ?? fromRequest.customer.name,
+                })}
+              </p>
+            ) : null}
             <div className="editor-grid-2">
               <div className="field">
                 <label className="label" htmlFor="nc-customer">
@@ -110,6 +156,8 @@ export default function DeskContracts() {
                   id="nc-customer"
                   className="select"
                   required
+                  // A request already has its customer; the contract must be theirs.
+                  disabled={Boolean(fromRequest)}
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
                 >

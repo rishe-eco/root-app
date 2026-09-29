@@ -17,7 +17,7 @@ import {
 import { notify } from '../../lib/notify.js';
 import { env } from '../../lib/env.js';
 import { feedbackItemInclude } from './feedback.js';
-import { firstContractId } from './admin/shared.js';
+import { linkContractId } from './admin/shared.js';
 import { requireBuildAuthorOnProject } from './access.js';
 import { can } from '../../lib/capabilities.js';
 
@@ -301,7 +301,9 @@ export const buildMutations = {
     await prisma.build.update({ where: { id: build.id }, data: { publishedAt: new Date() } });
 
     const customer = build.project.customer;
-    const contractId = await firstContractId(build.projectId);
+    // A build names no contract of its own until J4: link the customer to the
+    // newest published one (`linkContractId`).
+    const contractId = await linkContractId(build.projectId, 'customer');
     await notify(customer, {
       kind: 'BUILD_PUBLISHED',
       params: {

@@ -31,6 +31,7 @@ import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
 import { apiTokenMutations, apiTokenQueries } from './apiTokens.js';
 import { templateMutations, templateQueries } from './templates.js';
+import { Request, requestMutations, requestQueries } from './requests.js';
 import { peopleMutations, peopleQueries } from './people.js';
 
 /**
@@ -63,6 +64,7 @@ export const resolvers = {
   ServiceRun,
   ServiceRunRow,
   User,
+  Request,
   CustomerProfile: { id: (p: { user: { id: string } }) => p.user.id },
   LibraryEntry,
   ReviewDocument: reviewThreadFields.ReviewDocument,
@@ -86,6 +88,9 @@ export const resolvers = {
     // journeys build plan T1: templates.types / templates.scope write, any staff
     // holding either (or contracts.author) reads — see resolvers/templates.ts.
     ...templateQueries,
+    // journeys build plan J2: myRequests is ownership-gated, allRequests is
+    // contracts.readAll, request is both — see resolvers/requests.ts.
+    ...requestQueries,
     // journeys build plan S3: customer (customers.manage) and allUsers
     // (staff.manage) — see resolvers/people.ts.
     ...peopleQueries,
@@ -117,6 +122,10 @@ export const resolvers = {
     ...reviewThreadMutations,
     ...apiTokenMutations,
     ...templateMutations,
+    // journeys build plan J2: submitRequest/postRequestMessage are
+    // ownership-gated, archiveRequest is contracts.author — the conversion
+    // itself is createContract's, in admin/contracts.ts.
+    ...requestMutations,
     // journeys build plan S3: setUserState / grantTool / revokeTool / inviteStaff /
     // setUserRoles — two capabilities, see resolvers/people.ts.
     ...peopleMutations,

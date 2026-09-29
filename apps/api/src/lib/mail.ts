@@ -46,9 +46,22 @@ export class ResendTransport implements MailTransport {
   }
 }
 
-const transport: MailTransport =
+const defaultTransport = (): MailTransport =>
   env.RESEND_API_KEY && env.MAIL_FROM
     ? new ResendTransport({ apiKey: env.RESEND_API_KEY, from: env.MAIL_FROM })
     : new DevTransport();
 
+let transport: MailTransport = defaultTransport();
+
 export const sendMail = (message: MailMessage): Promise<void> => transport.send(message);
+
+/** Test-only seam, the same shape as `sms.ts`'s: the dev transport only logs,
+ *  so a suite that has to assert what was sent (J2's notifications) swaps in
+ *  one that records it. */
+export function __setMailTransportForTests(fake: MailTransport): void {
+  transport = fake;
+}
+
+export function __resetMailTransportForTests(): void {
+  transport = defaultTransport();
+}

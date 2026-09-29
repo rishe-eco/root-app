@@ -47,6 +47,8 @@ test('an admin sees every section in the nav', async ({ page }) => {
   const nav = page.locator('.desk-nav');
   await expect(nav.getByText('Overview')).toBeVisible();
   await expect(nav.getByText('Contracts')).toBeVisible();
+  // Journeys build plan J2: ADMIN holds contracts.readAll, so it reads requests too.
+  await expect(nav.getByText('Requests', { exact: true })).toBeVisible();
   await expect(nav.getByText('Customers')).toBeVisible();
 });
 
@@ -110,6 +112,7 @@ const NAV_LABELS = {
   en: {
     overview: 'Overview',
     contracts: 'Contracts',
+    requests: 'Requests',
     customers: 'Customers',
     library: 'Library',
     review: 'Review',
@@ -125,6 +128,7 @@ const NAV_LABELS = {
   fa: {
     overview: 'نمای کلی',
     contracts: 'قراردادها',
+    requests: 'درخواست‌ها',
     customers: 'مشتریان',
     library: 'کتابخانه',
     review: 'بازبینی',
@@ -166,6 +170,7 @@ test('an admin sees every section, Users included — in both languages', async 
   const sections = [
     'overview',
     'contracts',
+    'requests',
     'customers',
     'library',
     'review',
@@ -184,10 +189,19 @@ test('an admin sees every section, Users included — in both languages', async 
   await assertNavShowsExactly(page, 'fa', sections);
 });
 
-test('a sales user sees Overview, Contracts, Customers, Tickets, Billing, Services and Templates — in both languages', async ({
+test('a sales user sees Overview, Contracts, Requests, Customers, Tickets, Billing, Services and Templates — in both languages', async ({
   page,
 }) => {
-  const sections = ['overview', 'contracts', 'customers', 'tickets', 'billing', 'services', 'templates'] as const;
+  const sections = [
+    'overview',
+    'contracts',
+    'requests',
+    'customers',
+    'tickets',
+    'billing',
+    'services',
+    'templates',
+  ] as const;
   await signIn(page, SALES, 'en');
   await assertNavShowsExactly(page, 'en', sections);
   await signIn(page, SALES, 'fa');

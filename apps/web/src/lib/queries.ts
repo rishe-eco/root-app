@@ -466,6 +466,36 @@ export type PendingReview = {
   amendment: Amendment | null;
 };
 
+/**
+ * Requests — a project before a contract (journeys build plan J2). The
+ * customer asks; sales answers in a thread, then archives (with a reason) or
+ * converts it into a contract. `id` is the project's.
+ */
+export type ProjectStatus = 'REQUESTED' | 'ACTIVE' | 'ARCHIVED';
+
+/** Deliberately thin — the API exposes name and company for a message's
+ *  author and a request's customer, never an email, phone or role. */
+export type RequestParty = { id: string; name: string; clientName: string | null };
+
+export type RequestMessage = { id: string; author: RequestParty; body: string; createdAt: string };
+
+export type Request = {
+  id: string;
+  customer: RequestParty;
+  title: string;
+  body: string;
+  lang: 'fa' | 'en';
+  /** REQUESTED = pending; ARCHIVED = closed with `archivedReason`; ACTIVE =
+   *  converted to a contract, the thread now read-only. */
+  status: ProjectStatus;
+  requestedAt: string;
+  archivedAt: string | null;
+  archivedReason: string | null;
+  messages: RequestMessage[];
+  /** The contract this request became, once this viewer may open it. */
+  contractId: string | null;
+};
+
 export type Contract = {
   id: string;
   ref: string;
@@ -479,9 +509,8 @@ export type Contract = {
   gate: Gate;
   concepts: DesignConcept[];
   scopeItems: ScopeItem[];
-  project:
-    | { id: string; scopeTrades: ScopeTrade[]; phases: Phase[]; progress: ProjectProgress; dependencies: Dependency[] }
-    | null;
+  /** Every contract has a project (required since J2). */
+  project: { id: string; scopeTrades: ScopeTrade[]; phases: Phase[]; progress: ProjectProgress; dependencies: Dependency[] };
   articles: Article[];
   /** Appendix 1 as frozen into the current published revision (build plan
    *  L1) — the registry's agreed set at publish time, not the live registry
@@ -495,6 +524,10 @@ export type Contract = {
   contractRevisions: ContractRevisionSummary[];
   designRevisions: DesignRevisionSummary[];
   pending: PendingReview | null;
+  /** J2: the request this contract's project began as — read-only from here.
+   *  Present only on the detail query; null for a project that never was a
+   *  request and for anyone but its customer and `contracts.readAll`. */
+  request?: Request | null;
   // Staff-only; present only on queries that select them (the workspace).
   draft?: ContractDraft | null;
   designDraft?: DesignDraft | null;
@@ -916,6 +949,10 @@ export const CONTRACT_WORKSPACE_FIELDS = gql`
   ${CONTRACT_FIELDS}
   fragment ContractWorkspaceFields on Contract {
     ...ContractFields
+    request {
+      id
+      status
+    }
     designer {
       id
       name
@@ -999,11 +1036,44 @@ export const MY_CONTRACTS = gql`
   }
 `;
 
+export const REQUEST_FIELDS = gql`
+  fragment RequestFields on Request {
+    id
+    title
+    body
+    lang
+    status
+    requestedAt
+    archivedAt
+    archivedReason
+    contractId
+    customer {
+      id
+      name
+      clientName
+    }
+    messages {
+      id
+      body
+      createdAt
+      author {
+        id
+        name
+        clientName
+      }
+    }
+  }
+`;
+
 export const CONTRACT = gql`
   ${CONTRACT_FIELDS}
+  ${REQUEST_FIELDS}
   query Contract($id: ID!) {
     contract(id: $id) {
       ...ContractFields
+      request {
+        ...RequestFields
+      }
     }
   }
 `;
@@ -1122,8 +1192,8 @@ export const APPROVE_CONTRACT = gql`
 
 export const SET_SCOPE_ITEM = gql`
   ${CONTRACT_FIELDS}
-  mutation SetScopeItem($scopeItemId: ID!, $checked: Boolean!) {
-    setScopeItem(scopeItemId: $scopeItemId, checked: $checked) {
+  mutation SetScopeItem($scopeItemId: ID!, $checked: Boolean!, $contractId: ID) {
+    setScopeItem(scopeItemId: $scopeItemId, checked: $checked, contractId: $contractId) {
       ...ContractFields
     }
   }
@@ -1612,8 +1682,8 @@ export const ADD_SCOPE_ITEM = gql`
 
 export const UPDATE_SCOPE_ITEM = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UpdateScopeItem($scopeItemId: ID!, $labelFa: String!, $labelEn: String!) {
-    updateScopeItem(scopeItemId: $scopeItemId, labelFa: $labelFa, labelEn: $labelEn) {
+  mutation UpdateScopeItem($scopeItemId: ID!, $labelFa: String!, $labelEn: String!, $contractId: ID) {
+    updateScopeItem(scopeItemId: $scopeItemId, labelFa: $labelFa, labelEn: $labelEn, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1621,8 +1691,8 @@ export const UPDATE_SCOPE_ITEM = gql`
 
 export const DELETE_SCOPE_ITEM = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation DeleteScopeItem($scopeItemId: ID!) {
-    deleteScopeItem(scopeItemId: $scopeItemId) {
+  mutation DeleteScopeItem($scopeItemId: ID!, $contractId: ID) {
+    deleteScopeItem(scopeItemId: $scopeItemId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1630,8 +1700,8 @@ export const DELETE_SCOPE_ITEM = gql`
 
 export const SET_SCOPE_ITEM_STATUS = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation SetScopeItemStatus($scopeItemId: ID!, $status: ScopeStatus!, $reason: String) {
-    setScopeItemStatus(scopeItemId: $scopeItemId, status: $status, reason: $reason) {
+  mutation SetScopeItemStatus($scopeItemId: ID!, $status: ScopeStatus!, $reason: String, $contractId: ID) {
+    setScopeItemStatus(scopeItemId: $scopeItemId, status: $status, reason: $reason, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1639,8 +1709,8 @@ export const SET_SCOPE_ITEM_STATUS = gql`
 
 export const SET_SCOPE_ITEM_FLAGS = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation SetScopeItemFlags($scopeItemId: ID!, $temporary: Boolean!, $outOfScope: Boolean!, $adminWork: Boolean!) {
-    setScopeItemFlags(scopeItemId: $scopeItemId, temporary: $temporary, outOfScope: $outOfScope, adminWork: $adminWork) {
+  mutation SetScopeItemFlags($scopeItemId: ID!, $temporary: Boolean!, $outOfScope: Boolean!, $adminWork: Boolean!, $contractId: ID) {
+    setScopeItemFlags(scopeItemId: $scopeItemId, temporary: $temporary, outOfScope: $outOfScope, adminWork: $adminWork, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1648,8 +1718,8 @@ export const SET_SCOPE_ITEM_FLAGS = gql`
 
 export const DECIDE_SCOPE_ITEM = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation DecideScopeItem($scopeItemId: ID!, $note: String!) {
-    decideScopeItem(scopeItemId: $scopeItemId, note: $note) {
+  mutation DecideScopeItem($scopeItemId: ID!, $note: String!, $contractId: ID) {
+    decideScopeItem(scopeItemId: $scopeItemId, note: $note, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1657,8 +1727,8 @@ export const DECIDE_SCOPE_ITEM = gql`
 
 export const UNDECIDE_SCOPE_ITEM = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UndecideScopeItem($scopeItemId: ID!) {
-    undecideScopeItem(scopeItemId: $scopeItemId) {
+  mutation UndecideScopeItem($scopeItemId: ID!, $contractId: ID) {
+    undecideScopeItem(scopeItemId: $scopeItemId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1666,8 +1736,8 @@ export const UNDECIDE_SCOPE_ITEM = gql`
 
 export const REORDER_SCOPE_ITEM = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation ReorderScopeItem($scopeItemId: ID!, $direction: ScopeMoveDirection!) {
-    reorderScopeItem(scopeItemId: $scopeItemId, direction: $direction) {
+  mutation ReorderScopeItem($scopeItemId: ID!, $direction: ScopeMoveDirection!, $contractId: ID) {
+    reorderScopeItem(scopeItemId: $scopeItemId, direction: $direction, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1675,8 +1745,8 @@ export const REORDER_SCOPE_ITEM = gql`
 
 export const PROPOSE_SCOPE_TRADE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation ProposeScopeTrade($projectId: ID!, $outItemId: ID!, $inKey: String!, $inLabelFa: String!, $inLabelEn: String!) {
-    proposeScopeTrade(projectId: $projectId, outItemId: $outItemId, inKey: $inKey, inLabelFa: $inLabelFa, inLabelEn: $inLabelEn) {
+  mutation ProposeScopeTrade($projectId: ID!, $outItemId: ID!, $inKey: String!, $inLabelFa: String!, $inLabelEn: String!, $contractId: ID) {
+    proposeScopeTrade(projectId: $projectId, outItemId: $outItemId, inKey: $inKey, inLabelFa: $inLabelFa, inLabelEn: $inLabelEn, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1684,8 +1754,8 @@ export const PROPOSE_SCOPE_TRADE = gql`
 
 export const CONFIRM_SCOPE_TRADE_ROOT = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation ConfirmScopeTradeRoot($tradeId: ID!) {
-    confirmScopeTradeRoot(tradeId: $tradeId) {
+  mutation ConfirmScopeTradeRoot($tradeId: ID!, $contractId: ID) {
+    confirmScopeTradeRoot(tradeId: $tradeId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1704,8 +1774,8 @@ export const CREATE_PHASE = gql`
 
 export const UPDATE_PHASE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UpdatePhase($phaseId: ID!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String) {
-    updatePhase(phaseId: $phaseId, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel) {
+  mutation UpdatePhase($phaseId: ID!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String, $contractId: ID) {
+    updatePhase(phaseId: $phaseId, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1713,8 +1783,8 @@ export const UPDATE_PHASE = gql`
 
 export const DELETE_PHASE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation DeletePhase($phaseId: ID!) {
-    deletePhase(phaseId: $phaseId) {
+  mutation DeletePhase($phaseId: ID!, $contractId: ID) {
+    deletePhase(phaseId: $phaseId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1722,8 +1792,8 @@ export const DELETE_PHASE = gql`
 
 export const ASSIGN_SCOPE_ITEM_TO_PHASE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation AssignScopeItemToPhase($scopeItemId: ID!, $phaseId: ID) {
-    assignScopeItemToPhase(scopeItemId: $scopeItemId, phaseId: $phaseId) {
+  mutation AssignScopeItemToPhase($scopeItemId: ID!, $phaseId: ID, $contractId: ID) {
+    assignScopeItemToPhase(scopeItemId: $scopeItemId, phaseId: $phaseId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1731,8 +1801,8 @@ export const ASSIGN_SCOPE_ITEM_TO_PHASE = gql`
 
 export const CREATE_DEMO = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation CreateDemo($phaseId: ID!, $stagingUrl: String!, $buildRef: String) {
-    createDemo(phaseId: $phaseId, stagingUrl: $stagingUrl, buildRef: $buildRef) {
+  mutation CreateDemo($phaseId: ID!, $stagingUrl: String!, $buildRef: String, $contractId: ID) {
+    createDemo(phaseId: $phaseId, stagingUrl: $stagingUrl, buildRef: $buildRef, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1740,8 +1810,8 @@ export const CREATE_DEMO = gql`
 
 export const UPDATE_DEMO = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UpdateDemo($demoId: ID!, $stagingUrl: String, $buildRef: String, $reviewWindowStart: DateTime, $reviewWindowEnd: DateTime) {
-    updateDemo(demoId: $demoId, stagingUrl: $stagingUrl, buildRef: $buildRef, reviewWindowStart: $reviewWindowStart, reviewWindowEnd: $reviewWindowEnd) {
+  mutation UpdateDemo($demoId: ID!, $stagingUrl: String, $buildRef: String, $reviewWindowStart: DateTime, $reviewWindowEnd: DateTime, $contractId: ID) {
+    updateDemo(demoId: $demoId, stagingUrl: $stagingUrl, buildRef: $buildRef, reviewWindowStart: $reviewWindowStart, reviewWindowEnd: $reviewWindowEnd, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1749,8 +1819,8 @@ export const UPDATE_DEMO = gql`
 
 export const DELETE_DEMO = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation DeleteDemo($demoId: ID!) {
-    deleteDemo(demoId: $demoId) {
+  mutation DeleteDemo($demoId: ID!, $contractId: ID) {
+    deleteDemo(demoId: $demoId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1758,8 +1828,8 @@ export const DELETE_DEMO = gql`
 
 export const DECLARE_DEMO_PAGE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation DeclareDemoPage($demoId: ID!, $key: String!, $labelFa: String!, $labelEn: String!, $canonicalPath: String!, $pageDesignId: ID) {
-    declareDemoPage(demoId: $demoId, key: $key, labelFa: $labelFa, labelEn: $labelEn, canonicalPath: $canonicalPath, pageDesignId: $pageDesignId) {
+  mutation DeclareDemoPage($demoId: ID!, $key: String!, $labelFa: String!, $labelEn: String!, $canonicalPath: String!, $pageDesignId: ID, $contractId: ID) {
+    declareDemoPage(demoId: $demoId, key: $key, labelFa: $labelFa, labelEn: $labelEn, canonicalPath: $canonicalPath, pageDesignId: $pageDesignId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1767,8 +1837,8 @@ export const DECLARE_DEMO_PAGE = gql`
 
 export const UPDATE_DEMO_PAGE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UpdateDemoPage($demoPageId: ID!, $labelFa: String!, $labelEn: String!, $canonicalPath: String!, $pageDesignId: ID) {
-    updateDemoPage(demoPageId: $demoPageId, labelFa: $labelFa, labelEn: $labelEn, canonicalPath: $canonicalPath, pageDesignId: $pageDesignId) {
+  mutation UpdateDemoPage($demoPageId: ID!, $labelFa: String!, $labelEn: String!, $canonicalPath: String!, $pageDesignId: ID, $contractId: ID) {
+    updateDemoPage(demoPageId: $demoPageId, labelFa: $labelFa, labelEn: $labelEn, canonicalPath: $canonicalPath, pageDesignId: $pageDesignId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1776,8 +1846,8 @@ export const UPDATE_DEMO_PAGE = gql`
 
 export const DELETE_DEMO_PAGE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation DeleteDemoPage($demoPageId: ID!) {
-    deleteDemoPage(demoPageId: $demoPageId) {
+  mutation DeleteDemoPage($demoPageId: ID!, $contractId: ID) {
+    deleteDemoPage(demoPageId: $demoPageId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1822,8 +1892,8 @@ export const REPORT_DEMO_PATH = gql`
 
 export const GENERATE_DEMO_FRAME = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation GenerateDemoFrame($demoId: ID!) {
-    generateDemoFrame(demoId: $demoId) {
+  mutation GenerateDemoFrame($demoId: ID!, $contractId: ID) {
+    generateDemoFrame(demoId: $demoId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1831,8 +1901,8 @@ export const GENERATE_DEMO_FRAME = gql`
 
 export const UPDATE_DEMO_FRAME_SUMMARY = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UpdateDemoFrameSummary($demoId: ID!, $summaryFa: String, $summaryEn: String) {
-    updateDemoFrameSummary(demoId: $demoId, summaryFa: $summaryFa, summaryEn: $summaryEn) {
+  mutation UpdateDemoFrameSummary($demoId: ID!, $summaryFa: String, $summaryEn: String, $contractId: ID) {
+    updateDemoFrameSummary(demoId: $demoId, summaryFa: $summaryFa, summaryEn: $summaryEn, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1840,8 +1910,8 @@ export const UPDATE_DEMO_FRAME_SUMMARY = gql`
 
 export const ADD_DEMO_FRAME_LINE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation AddDemoFrameLine($demoId: ID!, $kind: DemoFrameLineKind!, $textFa: String!, $textEn: String!, $buildChangeEntryId: ID) {
-    addDemoFrameLine(demoId: $demoId, kind: $kind, textFa: $textFa, textEn: $textEn, buildChangeEntryId: $buildChangeEntryId) {
+  mutation AddDemoFrameLine($demoId: ID!, $kind: DemoFrameLineKind!, $textFa: String!, $textEn: String!, $buildChangeEntryId: ID, $contractId: ID) {
+    addDemoFrameLine(demoId: $demoId, kind: $kind, textFa: $textFa, textEn: $textEn, buildChangeEntryId: $buildChangeEntryId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1849,8 +1919,8 @@ export const ADD_DEMO_FRAME_LINE = gql`
 
 export const UPDATE_DEMO_FRAME_LINE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UpdateDemoFrameLine($lineId: ID!, $textFa: String!, $textEn: String!) {
-    updateDemoFrameLine(lineId: $lineId, textFa: $textFa, textEn: $textEn) {
+  mutation UpdateDemoFrameLine($lineId: ID!, $textFa: String!, $textEn: String!, $contractId: ID) {
+    updateDemoFrameLine(lineId: $lineId, textFa: $textFa, textEn: $textEn, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1858,8 +1928,8 @@ export const UPDATE_DEMO_FRAME_LINE = gql`
 
 export const DELETE_DEMO_FRAME_LINE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation DeleteDemoFrameLine($lineId: ID!) {
-    deleteDemoFrameLine(lineId: $lineId) {
+  mutation DeleteDemoFrameLine($lineId: ID!, $contractId: ID) {
+    deleteDemoFrameLine(lineId: $lineId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1867,8 +1937,8 @@ export const DELETE_DEMO_FRAME_LINE = gql`
 
 export const PUBLISH_DEMO = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation PublishDemo($demoId: ID!) {
-    publishDemo(demoId: $demoId) {
+  mutation PublishDemo($demoId: ID!, $contractId: ID) {
+    publishDemo(demoId: $demoId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1903,8 +1973,8 @@ export const SUBMIT_FEEDBACK = gql`
 
 export const RATIFY_FEEDBACK = gql`
   ${CONTRACT_FIELDS}
-  mutation RatifyFeedback($demoId: ID!, $itemIds: [ID!]!) {
-    ratifyFeedback(demoId: $demoId, itemIds: $itemIds) {
+  mutation RatifyFeedback($demoId: ID!, $itemIds: [ID!]!, $contractId: ID) {
+    ratifyFeedback(demoId: $demoId, itemIds: $itemIds, contractId: $contractId) {
       ...ContractFields
     }
   }
@@ -2263,8 +2333,8 @@ export const CREATE_TICKET_FROM_FEEDBACK = gql`
 
 export const CREATE_DEPENDENCY = gql`
   ${CONTRACT_FIELDS}
-  mutation CreateDependency($projectId: ID!, $side: DependencySide!, $titleFa: String!, $titleEn: String!, $dueAt: DateTime!) {
-    createDependency(projectId: $projectId, side: $side, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt) {
+  mutation CreateDependency($projectId: ID!, $side: DependencySide!, $titleFa: String!, $titleEn: String!, $dueAt: DateTime!, $contractId: ID) {
+    createDependency(projectId: $projectId, side: $side, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt, contractId: $contractId) {
       ...ContractFields
     }
   }
@@ -2272,8 +2342,8 @@ export const CREATE_DEPENDENCY = gql`
 
 export const UPDATE_DEPENDENCY = gql`
   ${CONTRACT_FIELDS}
-  mutation UpdateDependency($dependencyId: ID!, $titleFa: String!, $titleEn: String!, $dueAt: DateTime!) {
-    updateDependency(dependencyId: $dependencyId, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt) {
+  mutation UpdateDependency($dependencyId: ID!, $titleFa: String!, $titleEn: String!, $dueAt: DateTime!, $contractId: ID) {
+    updateDependency(dependencyId: $dependencyId, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt, contractId: $contractId) {
       ...ContractFields
     }
   }
@@ -2281,8 +2351,8 @@ export const UPDATE_DEPENDENCY = gql`
 
 export const VERIFY_DEPENDENCY = gql`
   ${CONTRACT_FIELDS}
-  mutation VerifyDependency($dependencyId: ID!, $note: String!) {
-    verifyDependency(dependencyId: $dependencyId, note: $note) {
+  mutation VerifyDependency($dependencyId: ID!, $note: String!, $contractId: ID) {
+    verifyDependency(dependencyId: $dependencyId, note: $note, contractId: $contractId) {
       ...ContractFields
     }
   }
@@ -2290,8 +2360,8 @@ export const VERIFY_DEPENDENCY = gql`
 
 export const UNVERIFY_DEPENDENCY = gql`
   ${CONTRACT_FIELDS}
-  mutation UnverifyDependency($dependencyId: ID!) {
-    unverifyDependency(dependencyId: $dependencyId) {
+  mutation UnverifyDependency($dependencyId: ID!, $contractId: ID) {
+    unverifyDependency(dependencyId: $dependencyId, contractId: $contractId) {
       ...ContractFields
     }
   }
@@ -2299,8 +2369,8 @@ export const UNVERIFY_DEPENDENCY = gql`
 
 export const DELETE_DEPENDENCY = gql`
   ${CONTRACT_FIELDS}
-  mutation DeleteDependency($dependencyId: ID!) {
-    deleteDependency(dependencyId: $dependencyId) {
+  mutation DeleteDependency($dependencyId: ID!, $contractId: ID) {
+    deleteDependency(dependencyId: $dependencyId, contractId: $contractId) {
       ...ContractFields
     }
   }
@@ -3548,6 +3618,67 @@ export const SET_TEMPLATE_SCOPE = gql`
   mutation SetTemplateScope($typeId: ID!, $items: [TemplateScopeItemInput!]!) {
     setTemplateScope(typeId: $typeId, items: $items) {
       ...TemplateTypeFields
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Requests (journeys build plan J2). Every mutation returns the whole Request
+// (thread included), so the drawer and the desk thread update from the
+// mutation's own payload; the drawer additionally refetches on open and on
+// window focus — there is no websocket.
+// ---------------------------------------------------------------------------
+
+export const MY_REQUESTS = gql`
+  ${REQUEST_FIELDS}
+  query MyRequests {
+    myRequests {
+      ...RequestFields
+    }
+  }
+`;
+
+export const ALL_REQUESTS = gql`
+  ${REQUEST_FIELDS}
+  query AllRequests($status: ProjectStatus) {
+    allRequests(status: $status) {
+      ...RequestFields
+    }
+  }
+`;
+
+export const REQUEST = gql`
+  ${REQUEST_FIELDS}
+  query Request($projectId: ID!) {
+    request(projectId: $projectId) {
+      ...RequestFields
+    }
+  }
+`;
+
+export const SUBMIT_REQUEST = gql`
+  ${REQUEST_FIELDS}
+  mutation SubmitRequest($title: String!, $body: String!, $lang: String!) {
+    submitRequest(title: $title, body: $body, lang: $lang) {
+      ...RequestFields
+    }
+  }
+`;
+
+export const POST_REQUEST_MESSAGE = gql`
+  ${REQUEST_FIELDS}
+  mutation PostRequestMessage($projectId: ID!, $body: String!) {
+    postRequestMessage(projectId: $projectId, body: $body) {
+      ...RequestFields
+    }
+  }
+`;
+
+export const ARCHIVE_REQUEST = gql`
+  ${REQUEST_FIELDS}
+  mutation ArchiveRequest($projectId: ID!, $reason: String!) {
+    archiveRequest(projectId: $projectId, reason: $reason) {
+      ...RequestFields
     }
   }
 `;
