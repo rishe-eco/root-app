@@ -35,12 +35,16 @@ export type ChangeAction =
 
 export type User = {
   id: string;
-  email: string;
+  // Journeys build plan J1: optional — a customer or staff account may now
+  // be identified by phone alone.
+  email: string | null;
+  phone: string | null;
   name: string;
   roles: Role[];
   capabilities: Capability[];
   clientName: string | null;
   locale: string;
+  passwordChangeRequired: boolean;
 };
 
 export type PageDesign = {
@@ -496,11 +500,13 @@ const USER_FIELDS = gql`
   fragment UserFields on User {
     id
     email
+    phone
     name
     roles
     capabilities
     clientName
     locale
+    passwordChangeRequired
   }
 `;
 
@@ -986,8 +992,48 @@ export const CONTRACT = gql`
 
 export const SIGN_IN = gql`
   ${USER_FIELDS}
-  mutation SignIn($email: String!, $password: String!) {
-    signIn(email: $email, password: $password) {
+  mutation SignIn($identifier: String!, $password: String!) {
+    signIn(identifier: $identifier, password: $password) {
+      user {
+        ...UserFields
+      }
+      factorChallengeId
+    }
+  }
+`;
+
+export const VERIFY_SIGN_IN_FACTOR = gql`
+  ${USER_FIELDS}
+  mutation VerifySignInFactor($challengeId: String!, $code: String!) {
+    verifySignInFactor(challengeId: $challengeId, code: $code) {
+      user {
+        ...UserFields
+      }
+    }
+  }
+`;
+
+export const REQUEST_LOGIN_CODE = gql`
+  mutation RequestLoginCode($phone: String!) {
+    requestLoginCode(phone: $phone)
+  }
+`;
+
+export const VERIFY_LOGIN_CODE = gql`
+  ${USER_FIELDS}
+  mutation VerifyLoginCode($phone: String!, $code: String!) {
+    verifyLoginCode(phone: $phone, code: $code) {
+      user {
+        ...UserFields
+      }
+    }
+  }
+`;
+
+export const SET_NEW_PASSWORD = gql`
+  ${USER_FIELDS}
+  mutation SetNewPassword($password: String!) {
+    setNewPassword(password: $password) {
       user {
         ...UserFields
       }
@@ -1176,13 +1222,20 @@ export const ACTIVITY = gql`
 `;
 
 export const INVITE_CUSTOMER = gql`
-  mutation InviteCustomer($email: String!, $name: String!, $clientName: String) {
-    inviteCustomer(email: $email, name: $name, clientName: $clientName) {
+  mutation InviteCustomer($phone: String!, $name: String!, $clientName: String, $email: String) {
+    inviteCustomer(phone: $phone, name: $name, clientName: $clientName, email: $email) {
       userId
       email
       inviteUrl
       expiresAt
     }
+  }
+`;
+
+/** PD-18 — the desk shell's own banner. Staff (staff.manage — ADMIN only). */
+export const SMS_CONFIGURED = gql`
+  query SmsConfigured {
+    smsConfigured
   }
 `;
 
