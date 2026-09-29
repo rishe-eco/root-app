@@ -23,8 +23,9 @@ type OutboxEntry = { to: string; code?: string; text?: string; at: number };
 /**
  * The fallback in development and test, and the *only* transport this
  * stage's suites ever exercise a real send through. Logs to the console —
- * the one place a code is ever allowed to appear in a log (trap: "do not
- * log codes" applies to every other path) — and, only when
+ * the one place a code is ever allowed to appear in a log (the trap "do not
+ * log codes" applies to every other path).
+ *
  * Always keeps an in-memory outbox — cheap, and this transport only ever
  * runs outside production, so there is nothing to guard by keeping the
  * bookkeeping conditional. What *is* gated on `SMS_E2E_OUTBOX` is whether

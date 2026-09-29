@@ -10,10 +10,10 @@
  *
  * **What filling this in later takes — exactly this, and no more:**
  *
- *   1. Replace the body of `sendViaProvider` below with a real HTTP call
- *      to the chosen provider, in the same unauthenticated-`fetch` style
- *      `lib/mail.ts`'s `ResendTransport` already uses for outbound email —
- *      no SDK dependency for one HTTP call.
+ *   1. Replace the bodies of `sendCodeViaProvider` and `sendTextViaProvider`
+ *      below with real HTTP calls to the chosen provider, in the same
+ *      unauthenticated-`fetch` style `lib/mail.ts`'s `ResendTransport`
+ *      already uses for outbound email — no SDK dependency for one HTTP call.
  *   2. The five environment variables already exist in `env.ts`, unused
  *      until this file reads them: `SMS_PROVIDER` (which branch of this
  *      file to run, if it ever needs more than one), `SMS_API_KEY`,
