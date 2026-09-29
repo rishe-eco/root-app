@@ -45,7 +45,11 @@ export type User = {
   clientName: string | null;
   locale: string;
   passwordChangeRequired: boolean;
+  /** Journeys build plan S3. */
+  state: UserState;
 };
+
+export type UserState = 'INVITED' | 'ACTIVE' | 'DISABLED';
 
 export type PageDesign = {
   id: string;
@@ -512,6 +516,7 @@ const USER_FIELDS = gql`
     clientName
     locale
     passwordChangeRequired
+    state
   }
 `;
 
@@ -1157,6 +1162,146 @@ export const ALL_CUSTOMERS = gql`
     allCustomers {
       ...UserFields
     }
+  }
+`;
+
+/**
+ * Journeys build plan S3 — the customer page and the Users place's first slice
+ * (PD-12). One shape, `CustomerProfile`, for the page and for both tool
+ * mutations (they return it, so Apollo's cache is right without a refetch).
+ */
+export type ToolKey = 'PRODUCT_IMPORT';
+
+export type CustomerProfile = {
+  id: string;
+  user: User;
+  grants: Array<{ id: string; tool: ToolKey; grantedAt: string; grantedBy: Pick<User, 'id' | 'name'> }>;
+  contracts: Array<Pick<Contract, 'id' | 'ref' | 'titleFa' | 'titleEn' | 'status' | 'amount' | 'publishedAt'>>;
+  tickets: Array<{
+    id: string;
+    subject: string;
+    status: TicketStatus;
+    urgency: TicketUrgency;
+    type: TicketType;
+    createdAt: string;
+  }>;
+  /** Null without `money.read` — never zero, which would read as "owes nothing". */
+  invoices: { totalIssued: string; totalPaid: string; totalOutstanding: string } | null;
+};
+
+const CUSTOMER_PROFILE_FIELDS = gql`
+  ${USER_FIELDS}
+  fragment CustomerProfileFields on CustomerProfile {
+    id
+    user {
+      ...UserFields
+    }
+    grants {
+      id
+      tool
+      grantedAt
+      grantedBy {
+        id
+        name
+      }
+    }
+    contracts {
+      id
+      ref
+      titleFa
+      titleEn
+      status
+      amount
+      publishedAt
+    }
+    tickets {
+      id
+      subject
+      status
+      urgency
+      type
+      createdAt
+    }
+    invoices {
+      totalIssued
+      totalPaid
+      totalOutstanding
+    }
+  }
+`;
+
+/** `customers.manage`. Null for an id that is not a customer. */
+export const CUSTOMER_PROFILE = gql`
+  ${CUSTOMER_PROFILE_FIELDS}
+  query CustomerProfile($id: ID!) {
+    customer(id: $id) {
+      ...CustomerProfileFields
+    }
+  }
+`;
+
+export const GRANT_TOOL = gql`
+  ${CUSTOMER_PROFILE_FIELDS}
+  mutation GrantTool($customerId: ID!, $tool: ToolKey!) {
+    grantTool(customerId: $customerId, tool: $tool) {
+      ...CustomerProfileFields
+    }
+  }
+`;
+
+export const REVOKE_TOOL = gql`
+  ${CUSTOMER_PROFILE_FIELDS}
+  mutation RevokeTool($customerId: ID!, $tool: ToolKey!) {
+    revokeTool(customerId: $customerId, tool: $tool) {
+      ...CustomerProfileFields
+    }
+  }
+`;
+
+/** Disable or restore. `customers.manage` for a customer, `staff.manage` for anyone with a staff role. */
+export const SET_USER_STATE = gql`
+  ${USER_FIELDS}
+  mutation SetUserState($userId: ID!, $state: UserState!) {
+    setUserState(userId: $userId, state: $state) {
+      ...UserFields
+    }
+  }
+`;
+
+/** `staff.manage`. Every account, customers included. */
+export const ALL_USERS = gql`
+  ${USER_FIELDS}
+  query AllUsers {
+    allUsers {
+      ...UserFields
+    }
+  }
+`;
+
+export const INVITE_STAFF = gql`
+  mutation InviteStaff($name: String!, $roles: [Role!]!, $phone: String, $email: String) {
+    inviteStaff(name: $name, roles: $roles, phone: $phone, email: $email) {
+      userId
+      email
+      inviteUrl
+      expiresAt
+    }
+  }
+`;
+
+export const SET_USER_ROLES = gql`
+  ${USER_FIELDS}
+  mutation SetUserRoles($userId: ID!, $roles: [Role!]!) {
+    setUserRoles(userId: $userId, roles: $roles) {
+      ...UserFields
+    }
+  }
+`;
+
+/** The tools the caller may use — feeds the portal rail's Tools item. */
+export const MY_TOOLS = gql`
+  query MyTools {
+    myTools
   }
 `;
 

@@ -103,6 +103,8 @@ export const typeDefs = /* GraphQL */ `
   money.read. Requests join it with J2.
   """
   type CustomerProfile {
+    "The customer's user id — so a client cache can tell two profiles apart and merge a mutation's result into the query's."
+    id: ID!
     user: User!
     "Active grants only, oldest first."
     grants: [ToolGrant!]!
@@ -1567,6 +1569,8 @@ export const typeDefs = /* GraphQL */ `
     "Admin only."
     allContracts: [Contract!]!
     allCustomers: [User!]!
+    "The tools the caller holds an active grant for — what the portal's rail offers (journeys build plan S3)."
+    myTools: [ToolKey!]!
     "Staff (customers.manage). Null for an id that is not a customer, exactly as for one that does not exist."
     customer(id: ID!): CustomerProfile
     "Staff (staff.manage — ADMIN only). Every account, customers included, newest first. The Users place's list (PD-12)."

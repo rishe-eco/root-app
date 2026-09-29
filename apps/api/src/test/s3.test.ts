@@ -77,6 +77,7 @@ const REVOKE = `mutation($customerId: ID!) { revokeTool(customerId: $customerId,
 const CUSTOMER = `
   query($id: ID!) {
     customer(id: $id) {
+      id
       user { id name state roles }
       grants { tool }
       contracts { id ref }
@@ -585,6 +586,15 @@ test('a revoked grant turns every import query and mutation into NOT_FOUND for t
   assert.equal((applied.applyServiceRun as { status: string }).status, 'APPLIED');
 });
 
+test('myTools lists exactly the active grants — what the portal rail offers', async () => {
+  const ask = (as: User) => exec(`{ myTools }`, { as });
+  assert.deepEqual(ok(await ask(f.customer)).myTools, ['PRODUCT_IMPORT']);
+  assert.deepEqual(ok(await ask(f.stranger)).myTools, []);
+  ok(await exec(REVOKE, { as: await sales(), variables: { customerId: f.customer.id } }));
+  assert.deepEqual(ok(await ask(f.customer)).myTools, []);
+  assert.equal((await exec(`{ myTools }`)).code, 'UNAUTHENTICATED');
+});
+
 test('a customer who was never granted the tool meets the same NOT_FOUND', async () => {
   const fresh = await makeUser(['CUSTOMER']);
   assert.equal((await exec(`{ myProjects { id } }`, { as: fresh })).code, 'NOT_FOUND');
@@ -610,6 +620,7 @@ test('customer(id): the profile — user, grants, contracts, tickets and the inv
     invoices: { totalIssued: string; totalOutstanding: string };
   };
   assert.equal(data.user.id, f.customer.id);
+  assert.equal((data as unknown as { id: string }).id, f.customer.id, 'the profile is keyed by the customer, so a client cache can merge it');
   assert.deepEqual(data.grants.map((g) => g.tool), ['PRODUCT_IMPORT']);
   assert.deepEqual(data.contracts.map((c) => c.ref), ['RC-TEST-001']);
   assert.equal(data.invoices.totalIssued, '5000000');

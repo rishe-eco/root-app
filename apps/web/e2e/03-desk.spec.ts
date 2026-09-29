@@ -118,6 +118,8 @@ const NAV_LABELS = {
     billing: 'Billing',
     services: 'Services',
     templates: 'Templates',
+    reviewAdmin: 'Corpus',
+    users: 'Users',
     apiTokens: 'Tokens',
   },
   fa: {
@@ -131,6 +133,8 @@ const NAV_LABELS = {
     billing: 'صورت‌حساب',
     services: 'خدمات',
     templates: 'قالب‌ها',
+    reviewAdmin: 'پیکره',
+    users: 'کاربران',
     apiTokens: 'توکن‌ها',
   },
 } as const;
@@ -154,6 +158,31 @@ async function assertNavShowsExactly(
     }
   }
 }
+
+// Journeys build plan S3: `users` is `staff.manage`, ADMIN's alone — the one
+// row only the administrator's nav gains. Every other role's assertion below
+// checks it absent too, because `assertNavShowsExactly` walks every label.
+test('an admin sees every section, Users included — in both languages', async ({ page }) => {
+  const sections = [
+    'overview',
+    'contracts',
+    'customers',
+    'library',
+    'review',
+    'reviewAdmin',
+    'builds',
+    'tickets',
+    'billing',
+    'services',
+    'templates',
+    'users',
+    'apiTokens',
+  ] as const;
+  await signIn(page, ADMIN, 'en');
+  await assertNavShowsExactly(page, 'en', sections);
+  await signIn(page, ADMIN, 'fa');
+  await assertNavShowsExactly(page, 'fa', sections);
+});
 
 test('a sales user sees Overview, Contracts, Customers, Tickets, Billing, Services and Templates — in both languages', async ({
   page,

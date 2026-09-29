@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import {
   MY_PROJECTS,
+  MY_TOOLS,
   PROJECT_SERVICE_RUNS,
   CREATE_SERVICE_RUN,
   PREVIEW_SERVICE_RUN,
@@ -17,8 +18,13 @@ import { formatAmount, formatCount, fullDateTime } from '@/lib/format';
 import Topbar from './Topbar';
 
 /**
- * The portal's `services` rail item, going live (build plan L7; spec §9) —
- * the product-import panel. Upload -> validate -> preview diff -> explicit
+ * The portal's Tools page (journeys build plan S3 renamed it from Services;
+ * `/app/services` redirects here). Each tool on it is one a staff member has
+ * granted this customer — the rail item exists only while a grant does, and
+ * the API answers `NOT_FOUND` to every query behind it without one, so a
+ * stale tab or a typed URL meets an honest empty state rather than an error.
+ *
+ * The product-import panel (build plan L7; spec §9) is the only tool today. Upload -> validate -> preview diff -> explicit
  * apply -> run history. "The preview diff IS the feature" (L7's banked
  * trap): there is no button here that applies a run before it has been
  * previewed — `Apply` is only ever rendered once `status` is `PREVIEWED`.
@@ -155,22 +161,28 @@ function RunCard({ run, onChanged }: { run: ServiceRun; onChanged: () => void })
   );
 }
 
-export default function Services() {
+export default function Tools() {
   const { t } = useTranslation();
   const me = useOutletContext<User>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // Asked first, and the panel's own queries are skipped without the grant:
+  // they would answer NOT_FOUND, which is correct on the wire and noise here.
+  const { data: toolsData, loading: toolsLoading } = useQuery<{ myTools: string[] }>(MY_TOOLS);
+  const hasImport = toolsData?.myTools.includes('PRODUCT_IMPORT') ?? false;
+
   const { data: projectsData, loading: projectsLoading } = useQuery<{ myProjects: { id: string; titleFa: string; titleEn: string }[] }>(
     MY_PROJECTS,
+    { skip: !hasImport },
   );
   const projects = projectsData?.myProjects ?? [];
   const projectId = projects[0]?.id ?? null;
 
   const { data, loading, error, refetch } = useQuery<{ projectServiceRuns: ServiceRun[] }>(PROJECT_SERVICE_RUNS, {
     variables: { projectId },
-    skip: !projectId,
+    skip: !hasImport || !projectId,
   });
   const [createRun] = useMutation(CREATE_SERVICE_RUN);
 
@@ -195,14 +207,14 @@ export default function Services() {
 
   return (
     <>
-      <Topbar user={me} start={<h1 className="t-h3 topbar-title">{t('portal.navServices')}</h1>} />
+      <Topbar user={me} start={<h1 className="t-h3 topbar-title">{t('portal.navTools')}</h1>} />
       <div className="content">
         <div className="content-head">
           <div>
-            <h1 className="t-h2">{t('services.pageTitle')}</h1>
-            <p className="t-lead">{t('services.pageLede')}</p>
+            <h1 className="t-h2">{t('tools.pageTitle')}</h1>
+            <p className="t-lead">{t('tools.pageLede')}</p>
           </div>
-          {projectId ? (
+          {hasImport && projectId ? (
             <>
               <input
                 ref={fileInputRef}
@@ -212,17 +224,19 @@ export default function Services() {
                 onChange={onPickFile}
               />
               <button className="btn btn-primary btn-sm" type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadBusy}>
-                {t('services.upload')}
+                {t('tools.upload')}
               </button>
             </>
           ) : null}
         </div>
         {uploadError ? <p className="error">{uploadError}</p> : null}
 
-        {projectsLoading ? (
+        {toolsLoading || (hasImport && projectsLoading) ? (
           <div className="empty">{t('portal.loading')}</div>
+        ) : !hasImport ? (
+          <div className="empty">{t('tools.none')}</div>
         ) : !projectId ? (
-          <div className="empty">{t('services.noProject')}</div>
+          <div className="empty">{t('tools.noProject')}</div>
         ) : error ? (
           <div className="empty">
             <p className="t-small">{t('portal.errorTitle')}</p>
@@ -233,7 +247,7 @@ export default function Services() {
         ) : loading && runs.length === 0 ? (
           <div className="empty">{t('portal.loading')}</div>
         ) : runs.length === 0 ? (
-          <div className="empty">{t('services.empty')}</div>
+          <div className="empty">{t('tools.empty')}</div>
         ) : (
           <div className="editor-list">
             {runs.map((run) => (

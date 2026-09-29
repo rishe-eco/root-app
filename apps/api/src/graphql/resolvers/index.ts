@@ -63,6 +63,7 @@ export const resolvers = {
   ServiceRun,
   ServiceRunRow,
   User,
+  CustomerProfile: { id: (p: { user: { id: string } }) => p.user.id },
   LibraryEntry,
   ReviewDocument: reviewThreadFields.ReviewDocument,
 

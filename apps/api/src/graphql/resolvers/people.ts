@@ -133,6 +133,22 @@ export async function loadCustomerProfile(id: string, viewer: User) {
 }
 
 export const peopleQueries = {
+  /**
+   * The tools the caller may use, so the portal's rail shows an item only for
+   * a tool that exists for them. A customer's list is their active grants;
+   * a name that is not on it is not a tool they are refused — it is one they
+   * do not have, and the queries behind it answer `NOT_FOUND` to match.
+   */
+  myTools: async (_p: unknown, _a: unknown, ctx: Context) => {
+    const user = requireUser(ctx);
+    const grants = await prisma.toolGrant.findMany({
+      where: { customerId: user.id, revokedAt: null },
+      select: { tool: true },
+      orderBy: { grantedAt: 'asc' },
+    });
+    return grants.map((g) => g.tool);
+  },
+
   customer: async (_p: unknown, args: { id: string }, ctx: Context) => {
     const viewer = requireCapability(ctx, 'customers.manage');
     return loadCustomerProfile(args.id, viewer);
