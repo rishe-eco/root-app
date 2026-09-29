@@ -10,7 +10,7 @@ import {
   type Context,
 } from '../../context.js';
 import { signSession, newLinkToken, hashToken } from '../../auth/tokens.js';
-import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from '../../auth/password.js';
+import { burnPasswordCheck, hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from '../../auth/password.js';
 import { notify } from '../../lib/notify.js';
 import { normalizePhone } from '../../lib/phone.js';
 import {
@@ -156,7 +156,12 @@ export const authMutations = {
         ? await prisma.user.findUnique({ where: { phone: normalizedPhone } })
         : null;
 
-    if (!user || !user.passwordHash || user.state !== 'ACTIVE') throw bad();
+    if (!user || !user.passwordHash || user.state !== 'ACTIVE') {
+      // Same cost as a real comparison, so response time does not say which
+      // identifiers have an account — see burnPasswordCheck (J1 review).
+      await burnPasswordCheck(args.password);
+      throw bad();
+    }
     if (!(await verifyPassword(args.password, user.passwordHash))) throw bad();
 
     // PD-20: only after the password has been verified, so a code alone
@@ -230,7 +235,12 @@ export const authMutations = {
 
     setImmediate(() => {
       if (!user || user.state !== 'ACTIVE' || !normalized) return;
-      void issueCode(user.id, normalized, user.locale, 'LOGIN_CODE');
+      // Caught here, not left to `void`: this runs after the response, so a
+      // rejection (the token insert failing) would be an unhandled rejection,
+      // which terminates a Node process by default (J1 review).
+      issueCode(user.id, normalized, user.locale, 'LOGIN_CODE').catch((err) => {
+        console.error('[auth] requestLoginCode: could not issue a code', err);
+      });
     });
 
     return true;
@@ -260,6 +270,17 @@ export const authMutations = {
    *  functions. */
   setNewPassword: async (_p: unknown, args: { password: string }, ctx: Context) => {
     const user = requireUserAllowingPasswordChange(ctx);
+    // Only for the forced change (J1 review). Without this, any session — a
+    // stolen cookie included — could replace the password without knowing
+    // the current one and lock the owner out. This mutation is the second
+    // half of the SMS recovery, where the code already proved control of the
+    // phone; a voluntary change, if one is ever built, asks for the current
+    // password instead.
+    if (!user.passwordChangeRequired) {
+      throw new GraphQLError('There is no password change pending on this account.', {
+        extensions: { code: 'PASSWORD_CHANGE_NOT_REQUIRED' },
+      });
+    }
     if (args.password.length < MIN_PASSWORD_LENGTH) {
       throw new GraphQLError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`, {
         extensions: { code: 'PASSWORD_TOO_SHORT' },

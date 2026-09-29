@@ -324,3 +324,22 @@ test('sign-in attempts are rate-limited per identifier', async () => {
   const eleventh = await exec(SIGN_IN, { variables: { i: staff.email, p: 'wrong' } });
   assert.equal(eleventh.code, 'RATE_LIMITED');
 });
+
+test('setNewPassword refuses a session with no change pending (PASSWORD_CHANGE_NOT_REQUIRED)', async () => {
+  // J1 review: without this, any session — a stolen cookie included — could
+  // replace the password without knowing the current one.
+  const res = await exec(SET_NEW_PASSWORD, { as: f.customer, variables: { pw: 'a-brand-new-password' } });
+  assert.equal(res.code, 'PASSWORD_CHANGE_NOT_REQUIRED');
+  const reloaded = await prisma.user.findUniqueOrThrow({ where: { id: f.customer.id } });
+  assert.equal(reloaded.passwordHash, f.customer.passwordHash, 'the password did not change');
+});
+
+test('signIn with an unknown identifier is refused the same way as a wrong password', async () => {
+  // The J1 review's timing fix (burnPasswordCheck) must not change the answer.
+  const q = 'mutation($i:String!,$p:String!){ signIn(identifier:$i,password:$p){ user { id } } }';
+  const unknown = await exec(q, { variables: { i: 'nobody@test.local', p: 'whatever-it-is-long' } });
+  const wrong = await exec(q, { variables: { i: f.customer.email!, p: 'not-the-password-at-all' } });
+  assert.equal(unknown.code, 'BAD_CREDENTIALS');
+  assert.equal(wrong.code, 'BAD_CREDENTIALS');
+  assert.equal(unknown.errors[0].message, wrong.errors[0].message);
+});
