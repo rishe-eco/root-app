@@ -33,7 +33,7 @@ after(async () => {
  *  GraphQL: arranging fixture state through the same door `seedFixture`
  *  itself uses, so what is under test stays the L3 mutations alone. */
 async function seedDemo(opts: { temporary?: boolean; decided?: boolean } = {}) {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({
     data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' },
   });

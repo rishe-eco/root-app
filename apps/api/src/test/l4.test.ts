@@ -30,7 +30,7 @@ after(async () => {
  *  a declared page — the same shape L3b's own suite uses to get to a
  *  disposable item, since createTicketFromFeedback shares that precondition. */
 async function seedRatifiedFeedback(body = 'رنگِ دکمه اشتباه است') {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
   const page = await prisma.demoPage.create({
@@ -132,7 +132,7 @@ test('createTicketFromFeedback converts a RATIFIED item into a CHANGE_REQUEST ti
 });
 
 test('createTicketFromFeedback refuses (NOT_RATIFIED) an item that is merely OPEN', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
   const page = await prisma.demoPage.create({

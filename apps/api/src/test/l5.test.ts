@@ -49,7 +49,7 @@ const YESTERDAY = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 const TOMORROW = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
 test('createDependency records a commitment for either side, and overdue is derived from dueAt/verifiedAt, not stored', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
 
   const created = ok(
     await exec(CREATE_DEPENDENCY, {
@@ -77,7 +77,7 @@ test('createDependency records a commitment for either side, and overdue is deri
 // --- The banked trap: verification requires its "how" -----------------------
 
 test('verifyDependency is refused (VERIFICATION_NOTE_REQUIRED) without a note, and structurally at the database too', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const created = ok(
     await exec(CREATE_DEPENDENCY, {
       as: f.admin,
@@ -114,7 +114,7 @@ test('verifyDependency is refused (VERIFICATION_NOTE_REQUIRED) without a note, a
 });
 
 test('unverifyDependency clears verifiedAt/verifiedById/verifiedNote together', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const created = ok(
     await exec(CREATE_DEPENDENCY, {
       as: f.admin,
@@ -143,7 +143,7 @@ test('unverifyDependency clears verifiedAt/verifiedById/verifiedNote together', 
 // --- Symmetry: overdue surfaces on both dashboards, for both sides ---------
 
 test('overdueDependencies (staff) surfaces an overdue ROOT-side dependency exactly as a CUSTOMER-side one — the same board, the same rule', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   ok(
     await exec(CREATE_DEPENDENCY, {
       as: f.admin,
@@ -175,7 +175,7 @@ test('overdueDependencies (staff) surfaces an overdue ROOT-side dependency exact
 });
 
 test('overdueDependencies is refused for a customer (FORBIDDEN); myOverdueDependencies is scoped to the caller\'s own CUSTOMER-side rows only', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   ok(
     await exec(CREATE_DEPENDENCY, {
       as: f.admin,
@@ -203,7 +203,7 @@ test('overdueDependencies is refused for a customer (FORBIDDEN); myOverdueDepend
 });
 
 test('createDependency/updateDependency/verifyDependency/deleteDependency are all refused for a customer (FORBIDDEN)', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const asCustomer = await exec(CREATE_DEPENDENCY, {
     as: f.customer,
     variables: { projectId, side: 'ROOT', titleFa: 'س', titleEn: 'x', dueAt: TOMORROW },
@@ -212,7 +212,7 @@ test('createDependency/updateDependency/verifyDependency/deleteDependency are al
 });
 
 test('deleteDependency removes the row; updateDependency edits title and due date', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const created = ok(
     await exec(CREATE_DEPENDENCY, {
       as: f.admin,

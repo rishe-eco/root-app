@@ -94,13 +94,13 @@ const APPLY_RUN = `
 // --- Upload: who may, and what may be uploaded ------------------------
 
 test('an anonymous caller cannot upload a service-import spreadsheet', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const res = await upload(base, { fileClass: 'SERVICE_IMPORT', projectId, body: await buildWorkbook([]) });
   assert.equal(res.status, 401);
 });
 
 test('a stranger (not the project\'s customer, not staff) cannot upload to this project', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const res = await upload(base, {
     as: f.stranger,
     fileClass: 'SERVICE_IMPORT',
@@ -112,7 +112,7 @@ test('a stranger (not the project\'s customer, not staff) cannot upload to this 
 });
 
 test('the project\'s own customer can upload, and the row records the project (not a contract)', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const fileId = await uploadXlsx(f.customer, projectId, await buildWorkbook([]));
   const row = await prisma.storedFile.findUniqueOrThrow({ where: { id: fileId } });
   assert.equal(row.class, 'SERVICE_IMPORT');
@@ -122,7 +122,7 @@ test('the project\'s own customer can upload, and the row records the project (n
 });
 
 test('staff can also upload, on the customer\'s behalf', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const fileId = await uploadXlsx(f.admin, projectId, await buildWorkbook([]));
   assert.ok(fileId);
 });
@@ -140,7 +140,7 @@ test('an upload naming no project is refused (PROJECT_REQUIRED)', async () => {
 });
 
 test('a non-workbook file is refused by its own bytes, not its claimed name or type', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const res = await upload(base, {
     as: f.customer,
     fileClass: 'SERVICE_IMPORT',
@@ -155,7 +155,7 @@ test('a non-workbook file is refused by its own bytes, not its claimed name or t
 // --- The preview diff IS the feature (L7's banked trap) --------------------
 
 test('apply is refused without a preview first (NOT_PREVIEWED) — there is no path from upload to apply that skips it', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const fileId = await uploadXlsx(f.customer, projectId, await buildWorkbook([['A-1', 'کالای یک', 'Item One', '10000', '5']]));
   const created = ok(await exec(CREATE_RUN, { as: f.customer, variables: { projectId, fileId } }));
   const runId = (created.createServiceRun as { id: string }).id;
@@ -168,7 +168,7 @@ test('apply is refused without a preview first (NOT_PREVIEWED) — there is no p
 });
 
 test('preview -> apply is the only legal path, and applying twice is refused (ALREADY_APPLIED)', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const fileId = await uploadXlsx(f.customer, projectId, await buildWorkbook([['A-1', 'کالای یک', 'Item One', '10000', '5']]));
   const created = ok(await exec(CREATE_RUN, { as: f.customer, variables: { projectId, fileId } }));
   const runId = (created.createServiceRun as { id: string }).id;
@@ -189,7 +189,7 @@ test('preview -> apply is the only legal path, and applying twice is refused (AL
 });
 
 test('an unreadable/invalid workbook fails the preview (FAILED, with a reason), never a silent empty diff', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const fileId = await uploadXlsx(f.customer, projectId, await buildBadWorkbook());
   const created = ok(await exec(CREATE_RUN, { as: f.customer, variables: { projectId, fileId } }));
   const runId = (created.createServiceRun as { id: string }).id;
@@ -207,7 +207,7 @@ test('an unreadable/invalid workbook fails the preview (FAILED, with a reason), 
 // --- The diff against "the store" (the last applied run) -------------------
 
 test('a second run diffs CREATE/UPDATE/UNCHANGED against the first applied run, and rejects a bad row with a reason', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
 
   const firstFileId = await uploadXlsx(
     f.customer,
@@ -255,7 +255,7 @@ test('a second run diffs CREATE/UPDATE/UNCHANGED against the first applied run, 
 // --- Persian text round-trips without corruption (R1's fold, write path) --
 
 test('a Persian product name with ZWNJ round-trips exactly — the fold is never applied to stored text', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const nameWithZwnj = 'می‌کنم'; // contains U+200C ZWNJ — folding would strip it
   const fileId = await uploadXlsx(f.customer, projectId, await buildWorkbook([['A-1', nameWithZwnj, '', '1000', '']]));
   const created = ok(await exec(CREATE_RUN, { as: f.customer, variables: { projectId, fileId } }));
@@ -266,7 +266,7 @@ test('a Persian product name with ZWNJ round-trips exactly — the fold is never
 });
 
 test('SKUs typed with different yeh/kaf variants across two uploads still match as the same product (comparison reuses the fold), while each upload keeps its own literal SKU text', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
 
   // Arabic yeh (ي) and kaf (ك) in the first upload.
   const firstFileId = await uploadXlsx(f.customer, projectId, await buildWorkbook([['كالاي', 'X', '', '1000', '']]));
@@ -288,7 +288,7 @@ test('SKUs typed with different yeh/kaf variants across two uploads still match 
 });
 
 test('Persian digits in a price cell parse to the correct integer', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const fileId = await uploadXlsx(f.customer, projectId, await buildWorkbook([['A-1', 'X', '', '۱۲۵۰۰۰', '']]));
   const created = ok(await exec(CREATE_RUN, { as: f.customer, variables: { projectId, fileId } }));
   const runId = (created.createServiceRun as { id: string }).id;
@@ -300,7 +300,7 @@ test('Persian digits in a price cell parse to the correct integer', async () => 
 // --- Ownership boundaries (house rule 2) ------------------------------
 
 test('a stranger cannot read, preview, or apply another customer\'s run', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const fileId = await uploadXlsx(f.customer, projectId, await buildWorkbook([['A-1', 'X', '', '1000', '']]));
   const created = ok(await exec(CREATE_RUN, { as: f.customer, variables: { projectId, fileId } }));
   const runId = (created.createServiceRun as { id: string }).id;
@@ -329,7 +329,7 @@ test('allServiceRuns is staff-only', async () => {
 // --- The billing edge (build plan L6/L7) -------------------------------
 
 test('createServiceRunBillingEntry refuses an unapplied run (NOT_APPLIED), then succeeds once applied, then refuses a second charge (ALREADY_BILLED)', async () => {
-  const projectId = f.contract.projectId!;
+  const projectId = f.contract.projectId;
   const fileId = await uploadXlsx(f.customer, projectId, await buildWorkbook([['A-1', 'X', '', '1000', '']]));
   const created = ok(await exec(CREATE_RUN, { as: f.customer, variables: { projectId, fileId } }));
   const runId = (created.createServiceRun as { id: string }).id;

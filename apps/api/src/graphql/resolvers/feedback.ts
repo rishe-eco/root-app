@@ -2,14 +2,12 @@ import { GraphQLError } from 'graphql';
 import type { Prisma, User } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
-import { can } from '../../lib/capabilities.js';
 import { isContractReader } from '../../lib/visibility.js';
 import { checkInterception, reopensOnComment } from '../../lib/feedback.js';
-import { notify } from '../../lib/notify.js';
+import { notify, recipientsHolding } from '../../lib/notify.js';
 import { env } from '../../lib/env.js';
 import { loadDemoForActor } from './demo.js';
-import { reload } from './contracts.js';
-import { firstContractId } from './admin/shared.js';
+import { linkContractId, reloadOnProject } from './admin/shared.js';
 
 /**
  * Per-item feedback intake and ratification (build plan L3; spec §6).
@@ -43,15 +41,12 @@ export const feedbackItemInclude = {
 
 const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extensions: { code: 'NOT_FOUND' } });
 
-/** Every account holding `contracts.readAll` — "Root," for feedback
+/** Every active account holding `contracts.readAll` — "Root," for feedback
  *  notifications (journeys build plan S1 kept this working through the
- *  capability split; J1's notification router replaces it). Same pattern reviewThreads.ts's own `reviewAdmins()` uses
- *  for a different capability; filtered in application code, never by
- *  testing a role directly (lib/capabilities.ts's own rule). */
-async function contractManagers(): Promise<User[]> {
-  const active = await prisma.user.findMany({ where: { state: 'ACTIVE' } });
-  return active.filter((u) => can(u, 'contracts.readAll'));
-}
+ *  capability split; J1's notification router replaces it). Found by
+ *  capability, never by testing a role directly (lib/capabilities.ts's own
+ *  rule) — `recipientsHolding` is the one place that filter is written. */
+const contractManagers = (): Promise<User[]> => recipientsHolding('contracts.readAll');
 
 function deskDemoUrl(locale: string, contractId: string): string {
   return `${env.APP_ORIGIN}/${locale === 'en' ? 'en' : 'fa'}/desk/contracts/${contractId}/phases`;
@@ -173,7 +168,7 @@ export const feedbackMutations = {
     // of contracts, not only the ones who receive it.
     if (!isContractReader(user)) {
       const project = demo.phase.project;
-      const contractId = await firstContractId(project.id);
+      const contractId = await linkContractId(project.id, 'staff');
       const recipients = await contractManagers();
       await Promise.all(
         recipients.map((r) =>
@@ -205,7 +200,11 @@ export const feedbackMutations = {
    * silently skipped, the same idempotent shape `resolveReviewThread`
    * already uses for "already done" rather than treating it as an error.
    */
-  ratifyFeedback: async (_p: unknown, args: { demoId: string; itemIds: string[] }, ctx: Context) => {
+  ratifyFeedback: async (
+    _p: unknown,
+    args: { demoId: string; itemIds: string[]; contractId?: string | null },
+    ctx: Context,
+  ) => {
     const user = requireUser(ctx);
     const demo = await loadDemoForActor(args.demoId, user);
 
@@ -216,7 +215,7 @@ export const feedbackMutations = {
 
     if (count > 0) {
       const project = demo.phase.project;
-      const contractId = await firstContractId(project.id);
+      const contractId = await linkContractId(project.id, 'staff');
       const recipients = await contractManagers();
       await Promise.all(
         recipients.map((r) =>
@@ -234,7 +233,7 @@ export const feedbackMutations = {
       );
     }
 
-    return reload(await firstContractId(demo.phase.projectId));
+    return reloadOnProject(demo.phase.projectId, args.contractId);
   },
 
   /**

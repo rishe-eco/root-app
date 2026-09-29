@@ -1,9 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LOCALES, loginCodeSms, signInFactorSms, inviteSms, type SmsContent } from './smsTemplates.js';
+import {
+  LOCALES,
+  loginCodeSms,
+  signInFactorSms,
+  inviteSms,
+  requestSubmittedSms,
+  requestMessageSms,
+  requestArchivedSms,
+  type SmsContent,
+} from './smsTemplates.js';
 
 const CODE = '482913';
 const INVITE_URL = 'https://example.com/fa/portal/invite/tok123';
+const REQUEST_URL = 'https://example.com/fa/app/contracts?request=proj1';
 
 /** Persian SMS is UCS-2 the moment it carries a Persian character — ~70
  *  characters is one segment, per this file's own header. */
@@ -13,6 +23,10 @@ const builders: Array<{ name: string; build: (locale: string) => SmsContent; mus
   { name: 'login-code', build: (l) => loginCodeSms(l, { code: CODE }), mustInclude: CODE },
   { name: 'signin-factor', build: (l) => signInFactorSms(l, { code: CODE }), mustInclude: CODE },
   { name: 'invite', build: (l) => inviteSms(l, { inviteUrl: INVITE_URL }), mustInclude: INVITE_URL },
+  // Journeys build plan J2 — one placeholder each, the URL.
+  { name: 'request-submitted', build: (l) => requestSubmittedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  { name: 'request-message', build: (l) => requestMessageSms(l, { url: REQUEST_URL }), mustInclude: REQUEST_URL },
+  { name: 'request-archived', build: (l) => requestArchivedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
 ];
 
 for (const { name, build, mustInclude } of builders) {
@@ -51,4 +65,17 @@ test('a code is printed in Latin digits, never folded to Persian — it must be 
 
 test('signInFactorSms is loginCodeSms — one template, one pattern to register', () => {
   assert.equal(signInFactorSms, loginCodeSms);
+});
+
+test('the request SMS bodies carry no free text — only fixed words and the URL — so their length is ours to set', () => {
+  for (const build of [
+    (l: string) => requestSubmittedSms(l, { deskUrl: REQUEST_URL }),
+    (l: string) => requestMessageSms(l, { url: REQUEST_URL }),
+    (l: string) => requestArchivedSms(l, { portalUrl: REQUEST_URL }),
+  ]) {
+    for (const locale of LOCALES) {
+      const words = build(locale).text.replace(REQUEST_URL, '');
+      assert.ok(words.length <= ONE_SEGMENT, `${locale}: the words around the URL fit one segment (${words.length})`);
+    }
+  }
 });

@@ -25,7 +25,10 @@ type ContractForVisibility = {
   customerId: string;
   publishedAt: Date | null;
   status: ContractStatus;
-  project?: { status: ProjectStatus } | null;
+  /** Required since J2 made `Contract.projectId` NOT NULL: every caller's
+   *  query must select the project's status, and a caller that forgets is a
+   *  type error rather than a contract silently read as active. */
+  project: { status: ProjectStatus };
 };
 
 /**
@@ -33,14 +36,17 @@ type ContractForVisibility = {
  * clause — not yet delivered — arrives with `Contract.deliveredAt` in J11;
  * until then it is absent, not false, so every undelivered contract passes.
  *
- * A contract with no project reads as active: `projectId` is nullable only
- * as a migration artefact (L1), and J2 makes it NOT NULL. Treating the
- * artefact as "inactive" would hide a live contract from its designer.
+ * "On an active project" is the whole answer to what the request statuses
+ * mean here. A `REQUESTED` project has no contract yet, so there is nothing
+ * to ask; but were one ever attached to a project that is not `ACTIVE`, it
+ * would read as inactive — a request is not a project being worked, and
+ * design and development (who hold `contracts.readActive`, never
+ * `contracts.readAll`) must not see it. Sales sees requests through
+ * `contracts.readAll`, and the customer through `requestVisibleTo` below.
  */
 export function isActiveContract(c: Pick<ContractForVisibility, 'status' | 'project'>): boolean {
   if (c.status === 'DISCARDED') return false;
-  if (c.project && c.project.status !== 'ACTIVE') return false;
-  return true;
+  return c.project.status === 'ACTIVE';
 }
 
 /**
@@ -86,14 +92,22 @@ export function canAuthorBuild(user: Viewer, c: { developerId: string | null }):
 /**
  * Projects hold demos, phases and builds; contracts hold assignees. Until
  * J4 puts a contract on each phase (`Phase.contractId`), a developer's claim
- * on a project's demos is "developer of any contract on it" — and a project
- * has exactly one contract today (L1's `firstContractId`), so this is the
- * same answer as the contract's, stated so it survives a second contract.
+ * on a project's demos is "developer of any contract on it".
+ *
+ * Since J2 a project can hold a second contract (a new feature for an
+ * existing site), so "any" is a real choice rather than a restatement: both
+ * contracts' developers may work the shared demos. A **discarded** contract's
+ * developer may not — the contract is dead, and a project that has moved on
+ * to a second contract with a different developer must not leave the first
+ * one holding the keys.
  */
-export function canAuthorBuildOnProject(user: Viewer, contracts: Array<{ developerId: string | null }>): boolean {
+export function canAuthorBuildOnProject(
+  user: Viewer,
+  contracts: Array<{ developerId: string | null; status: ContractStatus }>,
+): boolean {
   if (!can(user, 'builds.author')) return false;
   if (can(user, 'assignments.override')) return true;
-  return contracts.some((c) => c.developerId === user.id);
+  return contracts.some((c) => c.status !== 'DISCARDED' && c.developerId === user.id);
 }
 
 /**
@@ -106,6 +120,23 @@ export function projectVisibleTo(
   p: { customerId: string; status: ProjectStatus; contracts: Array<Pick<ContractForVisibility, 'status'>> },
 ): boolean {
   return p.customerId === user.id || projectVisibleToStaff(user, p);
+}
+
+/**
+ * A request (journeys build plan J2) is read by the customer who made it and
+ * by anyone holding `contracts.readAll` — sales, and ADMIN by construction.
+ * **Not** by `contracts.readActive` (design, development): a request is
+ * not a project being worked, it is a conversation with a prospect about
+ * something that may never become one, and the designer has no business in
+ * it until sales has turned it into a contract they are assigned to.
+ *
+ * Takes the project's own columns, so it answers the same for a request that
+ * is pending, archived or already converted — the thread outlives the
+ * status, read-only.
+ */
+export function requestVisibleTo(user: Viewer, p: { customerId: string; requestedAt: Date | null }): boolean {
+  if (p.requestedAt === null) return false;
+  return p.customerId === user.id || can(user, 'contracts.readAll');
 }
 
 /** The staff half alone — for authoring guards, where the customer's own

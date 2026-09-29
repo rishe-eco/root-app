@@ -85,15 +85,10 @@ export async function seedFixture() {
     },
   });
 
-  // Every contract has a project as of L1 (build plan D1) — `createContract`
-  // makes one in the same transaction, and the L1 migration backfilled one for
-  // every contract that already existed. `Contract.projectId` is nullable only
-  // so that migration could run in the right order, never as a state the app
-  // produces. A fixture that inserts a contract straight through Prisma is the
-  // one thing in the codebase that can still manufacture the project-less
-  // contract, so it mirrors `createContract` here rather than leaving the
-  // registry mutations to fail with NO_PROJECT against a shape no real
-  // customer has.
+  // Every contract has a project (build plan D1; required by the database
+  // since J2) — `createContract` makes one in the same transaction, or is
+  // handed a requested one. A fixture that inserts a contract straight through
+  // Prisma names one too.
   const project = await prisma.project.create({
     data: {
       customerId: customer.id,

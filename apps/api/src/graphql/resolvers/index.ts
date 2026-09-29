@@ -31,6 +31,7 @@ import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
 import { apiTokenMutations, apiTokenQueries } from './apiTokens.js';
 import { templateMutations, templateQueries } from './templates.js';
+import { Request, requestMutations, requestQueries } from './requests.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -62,6 +63,7 @@ export const resolvers = {
   ServiceRun,
   ServiceRunRow,
   User,
+  Request,
   LibraryEntry,
   ReviewDocument: reviewThreadFields.ReviewDocument,
 
@@ -84,6 +86,9 @@ export const resolvers = {
     // journeys build plan T1: templates.types / templates.scope write, any staff
     // holding either (or contracts.author) reads — see resolvers/templates.ts.
     ...templateQueries,
+    // journeys build plan J2: myRequests is ownership-gated, allRequests is
+    // contracts.readAll, request is both — see resolvers/requests.ts.
+    ...requestQueries,
   },
 
   Mutation: {
@@ -112,5 +117,9 @@ export const resolvers = {
     ...reviewThreadMutations,
     ...apiTokenMutations,
     ...templateMutations,
+    // journeys build plan J2: submitRequest/postRequestMessage are
+    // ownership-gated, archiveRequest is contracts.author — the conversion
+    // itself is createContract's, in admin/contracts.ts.
+    ...requestMutations,
   },
 };

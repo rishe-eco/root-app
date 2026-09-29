@@ -43,16 +43,31 @@ async function assertAssignable(userId: string | null | undefined, capability: C
 }
 export const contractAdminMutations = {
   /**
-   * Creates the project alongside the contract (build plan D1 / L1): L1 does
-   * not build the screens that produce a project *before* a contract exists
-   * (lifecycle spec §4 stages 1-2), so every contract gets one project of its
-   * own here rather than requiring a separate "create project" step first. A
-   * project spanning more than one contract (the wedge's design-then-build
-   * pair, ADR 0001) is a schema-supported shape this mutation does not yet
-   * offer a way to reach — see docs/development/L1.md.
+   * Creates a contract — and, unless it is handed a project, the project
+   * alongside it (build plan D1 / L1).
    *
-   * The completeness checklist (spec §3) is seeded on the project here, all
-   * DECLINED, so a hole like Nahal's missing dashboard coverage is visible
+   * **`projectId` (journeys build plan J2)** names the project the contract
+   * attaches to, and the project's state decides what that means:
+   *
+   * - `REQUESTED` — **conversion.** The customer's request becomes a project
+   *   in the same transaction that creates its contract: status → `ACTIVE`,
+   *   the project takes the titles sales typed (the request's own were
+   *   placeholders), and the completeness checklist is seeded, as for any new
+   *   project. The request thread stays on the project, read-only.
+   * - `ACTIVE` — **a second contract** on an existing project (the founder's
+   *   Q5, lifecycle plan §0.3.5: "a feature for an existing website"). The
+   *   registry and its checklist already exist and are not touched.
+   * - `ARCHIVED` — refused, `PROJECT_ARCHIVED`.
+   *
+   * And it must be the same customer (`PROJECT_CUSTOMER_MISMATCH`): sales
+   * picks the customer in the form, and a contract on customer A naming
+   * customer B's project would put B's registry, demos and thread in front of
+   * A. The project row is locked `FOR UPDATE` for the transaction, so two
+   * sales users converting the same request cannot both see it `REQUESTED`.
+   *
+   * Without a `projectId` the behaviour is exactly what it was: a project of
+   * the contract's own, its completeness checklist (spec §3) seeded all
+   * DECLINED so a hole like Nahal's missing dashboard coverage is visible
    * from day one rather than discovered in review.
    */
   createContract: async (
@@ -67,6 +82,8 @@ export const contractAdminMutations = {
         /** Journeys build plan S1 — sales picks both at creation (Q-S4). */
         designerId?: string | null;
         developerId?: string | null;
+        /** Journeys build plan J2 — attach to this project (convert a request, or add a second contract). */
+        projectId?: string | null;
       };
     },
     ctx: Context,
@@ -78,50 +95,81 @@ export const contractAdminMutations = {
     await assertAssignable(input.designerId, 'design.author');
     await assertAssignable(input.developerId, 'builds.author');
 
-    const project = await prisma.project.create({
-      data: {
-        customerId: input.customerId,
-        titleFa: input.titleFa,
-        titleEn: input.titleEn,
-        scopeItems: {
-          createMany: {
-            data: CHECKLIST.map(([key, labelFa, labelEn], position) => ({
-              key,
-              labelFa,
-              labelEn,
-              position,
-              // Always EXTRA: the checklist is the one thing this creates.
-              kind: 'EXTRA' as const,
-              status: 'DECLINED' as const,
-            })),
-          },
-        },
-      },
-    });
+    const contractId = await prisma.$transaction(async (tx) => {
+      let projectId: string;
+      // Whether this contract is the one that seeds the completeness
+      // checklist: it is, for a project made here and for a converted
+      // request; it is not for a second contract, whose project already has
+      // its registry (seeding again would double every key).
+      let seedsChecklist = true;
 
-    const contract = await prisma.contract.create({
-      data: {
-        customerId: input.customerId,
-        projectId: project.id,
-        ref: input.ref,
-        titleFa: input.titleFa,
-        titleEn: input.titleEn,
-        amount: input.amount ? BigInt(input.amount) : null,
-        designerId: input.designerId ?? null,
-        developerId: input.developerId ?? null,
-      },
+      if (input.projectId) {
+        // Locked for the transaction — see the header. Raw, because Prisma
+        // has no `FOR UPDATE`; the same idiom T1's `setTemplateScope` uses.
+        await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${input.projectId} FOR UPDATE`;
+        const project = await tx.project.findUnique({ where: { id: input.projectId } });
+        if (!project) {
+          throw new GraphQLError('No such project.', { extensions: { code: 'NOT_FOUND' } });
+        }
+        if (project.customerId !== input.customerId) {
+          throw new GraphQLError('That project belongs to a different customer.', {
+            extensions: { code: 'PROJECT_CUSTOMER_MISMATCH' },
+          });
+        }
+        if (project.status === 'ARCHIVED') {
+          throw new GraphQLError('That project is archived.', { extensions: { code: 'PROJECT_ARCHIVED' } });
+        }
+        projectId = project.id;
+        if (project.status === 'REQUESTED') {
+          await tx.project.update({
+            where: { id: project.id },
+            data: { status: 'ACTIVE', titleFa: input.titleFa, titleEn: input.titleEn },
+          });
+        } else {
+          seedsChecklist = false;
+        }
+      } else {
+        const project = await tx.project.create({
+          data: { customerId: input.customerId, titleFa: input.titleFa, titleEn: input.titleEn },
+        });
+        projectId = project.id;
+      }
+
+      const contract = await tx.contract.create({
+        data: {
+          customerId: input.customerId,
+          projectId,
+          ref: input.ref,
+          titleFa: input.titleFa,
+          titleEn: input.titleEn,
+          amount: input.amount ? BigInt(input.amount) : null,
+          designerId: input.designerId ?? null,
+          developerId: input.developerId ?? null,
+        },
+      });
+      if (seedsChecklist) {
+        // Written after the contract, not with the project, so each row names
+        // its agreement from birth (T1's `ScopeItem.contractId`) — rather than
+        // a follow-up `updateMany where contractId is null`, which on a
+        // project that already held a proposed item would claim that too.
+        await tx.scopeItem.createMany({
+          data: CHECKLIST.map(([key, labelFa, labelEn], position) => ({
+            projectId,
+            key,
+            labelFa,
+            labelEn,
+            position,
+            // Always EXTRA: the checklist is the one thing this creates.
+            kind: 'EXTRA' as const,
+            status: 'DECLINED' as const,
+            contractId: contract.id,
+          })),
+        });
+      }
+      await log(contract.id, admin.id, 'CREATED', null, tx);
+      return contract.id;
     });
-    // The checklist was written before its contract existed (the contract
-    // points at the project, so the project comes first), so it names its
-    // agreement now — the T1 backfill gave every existing checklist row its
-    // project's first contract, and this is the same rule for a row born
-    // after it.
-    await prisma.scopeItem.updateMany({
-      where: { projectId: project.id, contractId: null },
-      data: { contractId: contract.id },
-    });
-    await log(contract.id, admin.id, 'CREATED');
-    return reload(contract.id);
+    return reload(contractId);
   },
 
   /**
@@ -150,20 +198,13 @@ export const contractAdminMutations = {
     // would refuse on every contract, always (L1).
     const [articleCount, nonChecklistScopeCount] = await Promise.all([
       prisma.article.count({ where: { contractId: args.contractId } }),
-      contract.projectId
-        ? prisma.scopeItem.count({
-            where: { projectId: contract.projectId, key: { not: { startsWith: 'checklist.' } } },
-          })
-        : Promise.resolve(0),
+      prisma.scopeItem.count({
+        where: { projectId: contract.projectId, key: { not: { startsWith: 'checklist.' } } },
+      }),
     ]);
     if (articleCount > 0 || nonChecklistScopeCount > 0) {
       throw new GraphQLError('This contract already has articles or scope items.', {
         extensions: { code: 'TEMPLATE_NOT_EMPTY' },
-      });
-    }
-    if (!contract.projectId) {
-      throw new GraphQLError('This contract has no project to hold scope items.', {
-        extensions: { code: 'NO_PROJECT' },
       });
     }
 
@@ -182,7 +223,7 @@ export const contractAdminMutations = {
       }),
       prisma.scopeItem.createMany({
         data: SCOPE.map(([key, labelFa, labelEn], i) => ({
-          projectId: contract.projectId!,
+          projectId: contract.projectId,
           key,
           labelFa,
           labelEn,
@@ -294,7 +335,7 @@ export const contractAdminMutations = {
 
     // Appendix 1 as a view of the registry (L1) — the agreed-or-beyond set,
     // in registry order, exactly as agreedScopeSnapshot defines "agreed".
-    const scopeItems = agreedScopeSnapshot(contract.project?.scopeItems ?? []);
+    const scopeItems = agreedScopeSnapshot(contract.project.scopeItems);
     const { snapshot, hash, dirty } = draftState(contract, contract.articles, current, scopeItems);
     if (!dirty) {
       throw new GraphQLError('Nothing has changed since the last revision.', {

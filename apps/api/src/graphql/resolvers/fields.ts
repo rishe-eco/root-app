@@ -2,7 +2,7 @@ import type { Role as RoleName } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
-import { isContractReader, mayReadMoney } from '../../lib/visibility.js';
+import { isContractReader, mayReadMoney, requestVisibleTo } from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../lib/scope.js';
@@ -39,12 +39,22 @@ export const Contract = {
   /**
    * ScopeItem re-parented to Project at L1 (build plan D1) — this proxies
    * `project.scopeItems` so every existing caller of `Contract.scopeItems`
-   * keeps working unchanged. Null project (pre-migration edge case, or a
-   * contract created outside `createContract`) reads as an empty registry
-   * rather than an error.
+   * keeps working unchanged. Every contract has a project since J2.
    */
-  scopeItems: (c: FullContract) => c.project?.scopeItems ?? [],
-  project: (c: FullContract) => c.project ?? null,
+  scopeItems: (c: FullContract) => c.project.scopeItems,
+  project: (c: FullContract) => c.project,
+
+  /**
+   * The request this contract's project began as (journeys build plan J2),
+   * with its thread — read-only from here on, and the `origin` of what sales
+   * types into step 1. Null for a project that never was a request, and for a
+   * viewer who may not read it: the customer whose request it was and
+   * `contracts.readAll` only (`requestVisibleTo`) — a designer or developer
+   * assigned to the contract reads the contract, not the sales conversation
+   * that preceded it.
+   */
+  request: (c: FullContract, _a: unknown, ctx: Context) =>
+    requestVisibleTo(requireUser(ctx), c.project) ? c.project : null,
 
   /**
    * Appendix 1 as a *view of the registry's agreed set*, frozen at the
@@ -114,7 +124,7 @@ export const Contract = {
     // The registry's agreed set is part of what publishing would produce
     // (L1) — without it here, marking one more item agreed would never
     // register as "dirty" until some unrelated field also changed.
-    const scopeItems = agreedScopeSnapshot(c.project?.scopeItems ?? []);
+    const scopeItems = agreedScopeSnapshot(c.project.scopeItems);
     const { hash, dirty } = draftState(c, c.articles, c.currentContractRevision, scopeItems);
     return {
       titleFa: c.titleFa,

@@ -16,6 +16,10 @@
  * A fifth was once promised alongside the first four — contract-revised —
  * and never built; no stage has needed it yet. See `later-tracks.md`'s C0
  * section.
+ *
+ * Journeys build plan J2 adds three for a customer's request: submitted (to
+ * sales), a new message (to whichever side did not write it), and archived
+ * (to the customer, with the reason).
  */
 
 export const LOCALES = ['fa', 'en'] as const;
@@ -310,5 +314,116 @@ export function feedbackRatifiedEmail(
       <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
     `),
     text: `${params.recipientName} عزیز،\n\n${countFa} موردِ بازخورد روی «${params.projectTitleFa}» تازه تأیید شد و آماده‌ی اقدام است.\n\n${params.deskUrl}`,
+  };
+}
+
+/** A request's title and reason are the customer's and sales's own words, so
+ *  they are escaped like any other name; a reason keeps its line breaks. */
+function multiline(value: string): string {
+  return escapeHtml(value).replace(/\r?\n/g, '<br>');
+}
+
+/**
+ * Journeys build plan J2: the first the desk hears of a request — sent to
+ * every account that can answer one (`contracts.author`), so a request is not
+ * something a customer submits into silence and finds out about a week later.
+ */
+export function requestSubmittedEmail(
+  locale: string | null | undefined,
+  params: { recipientName: string; customerName: string; requestTitle: string; deskUrl: string },
+): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const customer = escapeHtml(params.customerName);
+  const title = escapeHtml(params.requestTitle);
+  if (resolveLocale(locale) === 'en') {
+    return {
+      subject: `New request from ${params.customerName}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${customer} submitted a new request: <strong>${title}</strong>.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\n${params.customerName} submitted a new request: "${params.requestTitle}".\n\n${params.deskUrl}`,
+    };
+  }
+  return {
+    subject: `درخواست تازه از ${params.customerName}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${customer} درخواست تازه‌ای با عنوانِ «${title}» ثبت کرد.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\n${params.customerName} درخواست تازه‌ای با عنوانِ «${params.requestTitle}» ثبت کرد.\n\n${params.deskUrl}`,
+  };
+}
+
+/**
+ * Journeys build plan J2: one template, two directions, like
+ * `newCommentEmail` — sales gets it when the customer writes, the customer
+ * when sales replies. The caller decides who the "other side" is from the
+ * message's author; the message itself is not in the email, because the thread
+ * is the record and a copy in an inbox is a second, unmoderated one.
+ */
+export function requestMessageEmail(
+  locale: string | null | undefined,
+  params: { recipientName: string; requestTitle: string; url: string },
+): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const title = escapeHtml(params.requestTitle);
+  if (resolveLocale(locale) === 'en') {
+    return {
+      subject: `New message on “${params.requestTitle}”`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>There’s a new message on the request <strong>${title}</strong>.</p>
+        <p><a href="${params.url}">${params.url}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\nThere's a new message on the request "${params.requestTitle}".\n\n${params.url}`,
+    };
+  }
+  return {
+    subject: `پیام تازه روی «${params.requestTitle}»`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>پیام تازه‌ای روی درخواستِ «${title}» ثبت شد.</p>
+      <p><a href="${params.url}">${params.url}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\nپیام تازه‌ای روی درخواستِ «${params.requestTitle}» ثبت شد.\n\n${params.url}`,
+  };
+}
+
+/**
+ * Journeys build plan J2: a request that is not going ahead is closed *with
+ * the reason*, and the customer is told what it was — an archive nobody
+ * explains is the silence this stage exists to remove.
+ */
+export function requestArchivedEmail(
+  locale: string | null | undefined,
+  params: { customerName: string; requestTitle: string; reason: string; portalUrl: string },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  const title = escapeHtml(params.requestTitle);
+  const reason = multiline(params.reason);
+  if (resolveLocale(locale) === 'en') {
+    return {
+      subject: `Your request was archived — ${params.requestTitle}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Your request <strong>${title}</strong> was archived. The reason:</p>
+        <p>${reason}</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\nYour request "${params.requestTitle}" was archived. The reason:\n\n${params.reason}\n\n${params.portalUrl}`,
+    };
+  }
+  return {
+    subject: `درخواستِ شما بایگانی شد — ${params.requestTitle}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>درخواستِ شما با عنوانِ «${title}» بایگانی شد. دلیل:</p>
+      <p>${reason}</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\nدرخواستِ شما با عنوانِ «${params.requestTitle}» بایگانی شد. دلیل:\n\n${params.reason}\n\n${params.portalUrl}`,
   };
 }

@@ -42,6 +42,8 @@ async function loadProjectForActor(projectId: string, user: { id: string; roles:
   if (!project) throw notFound('project');
   const staff = can(user as Parameters<typeof can>[0], 'customers.manage');
   if (!staff && project.customerId !== user.id) throw notFound('project');
+  // A request (J2) is not a project anyone is working: no product imports.
+  if (project.status !== 'ACTIVE') throw notFound('project');
   return project;
 }
 
@@ -52,7 +54,12 @@ export const serviceQueries = {
    *  is reached from a contract. */
   myProjects: async (_p: unknown, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
-    return prisma.project.findMany({ where: { customerId: user.id }, orderBy: { createdAt: 'asc' } });
+    // ACTIVE only (J2): a pending or archived request is not a project the
+    // services panel can run an import against.
+    return prisma.project.findMany({
+      where: { customerId: user.id, status: 'ACTIVE' },
+      orderBy: { createdAt: 'asc' },
+    });
   },
 
   /** Staff, or the project's own customer. */

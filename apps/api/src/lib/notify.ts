@@ -1,5 +1,6 @@
 import type { User } from '@prisma/client';
 import { prisma } from './prisma.js';
+import { can, type Capability } from './capabilities.js';
 import { sendMail } from './mail.js';
 import { sendSmsText } from './sms.js';
 import {
@@ -11,9 +12,12 @@ import {
   feedbackSubmittedEmail,
   buildPublishedEmail,
   feedbackRatifiedEmail,
+  requestSubmittedEmail,
+  requestMessageEmail,
+  requestArchivedEmail,
   type MailContent,
 } from './mailTemplates.js';
-import { inviteSms } from './smsTemplates.js';
+import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms } from './smsTemplates.js';
 
 /**
  * The notification router (journeys build plan J1). One call, `notify(user,
@@ -26,10 +30,13 @@ import { inviteSms } from './smsTemplates.js';
  * (the C0 rule `requestPasswordReset`'s own comment already states, applied
  * to every event now instead of just that one).
  *
- * **Not every event kind has an SMS body.** `smsTemplates.ts` only defines
- * one for `INVITE_CUSTOMER` — the identity flow where a customer may have
- * no email at all, so SMS is not an enhancement there, it can be the *only*
- * way the invite reaches them. The five L3/L3b retrofits
+ * **Not every event kind has an SMS body.** `smsTemplates.ts` defines one for
+ * `INVITE_CUSTOMER` — the identity flow where a customer may have no email at
+ * all, so SMS is not an enhancement there, it can be the *only* way the
+ * invite reaches them — and, since J2, for the three request events
+ * (`REQUEST_SUBMITTED`, `REQUEST_MESSAGE`, `REQUEST_ARCHIVED`): a customer who
+ * signs in by phone alone is asking a question and waiting for the answer,
+ * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
  * `FEEDBACK_RATIFIED`) and `PASSWORD_RESET` keep going by email only: every
  * recipient of those is either a reviewer (never has a phone, PD-20) or a
@@ -70,6 +77,16 @@ export type NotifyEvent =
   | {
       kind: 'FEEDBACK_RATIFIED';
       params: { recipientName: string; projectTitleFa: string; projectTitleEn: string; count: number; deskUrl: string };
+    }
+  // Journeys build plan J2 — a customer's request.
+  | {
+      kind: 'REQUEST_SUBMITTED';
+      params: { recipientName: string; customerName: string; requestTitle: string; deskUrl: string };
+    }
+  | { kind: 'REQUEST_MESSAGE'; params: { recipientName: string; requestTitle: string; url: string } }
+  | {
+      kind: 'REQUEST_ARCHIVED';
+      params: { customerName: string; requestTitle: string; reason: string; portalUrl: string };
     };
 
 /** Every event's email rendering — always defined, since every event this
@@ -92,14 +109,43 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return buildPublishedEmail(locale, event.params);
     case 'FEEDBACK_RATIFIED':
       return feedbackRatifiedEmail(locale, event.params);
+    case 'REQUEST_SUBMITTED':
+      return requestSubmittedEmail(locale, event.params);
+    case 'REQUEST_MESSAGE':
+      return requestMessageEmail(locale, event.params);
+    case 'REQUEST_ARCHIVED':
+      return requestArchivedEmail(locale, event.params);
   }
 }
 
 /** Only the kinds `smsTemplates.ts` actually renders a body for — see this
  *  file's own header for why the rest are `null` here. */
 function renderSms(locale: string | null | undefined, event: NotifyEvent): { text: string } | null {
-  if (event.kind === 'INVITE_CUSTOMER') return inviteSms(locale, event.params);
-  return null;
+  switch (event.kind) {
+    case 'INVITE_CUSTOMER':
+      return inviteSms(locale, event.params);
+    case 'REQUEST_SUBMITTED':
+      return requestSubmittedSms(locale, event.params);
+    case 'REQUEST_MESSAGE':
+      return requestMessageSms(locale, event.params);
+    case 'REQUEST_ARCHIVED':
+      return requestArchivedSms(locale, event.params);
+    default:
+      return null;
+  }
+}
+
+/**
+ * Every **active** account holding a capability — how "sales" (or "Root") is
+ * found for a notification, by what the account can do rather than what it is
+ * called (house rule 1). The one place this is written: feedback's "Root"
+ * recipients and J2's request recipients both come here instead of each
+ * filtering the user table their own way. Filtered in application code
+ * because a capability is a function of a role *set*, not a column.
+ */
+export async function recipientsHolding(capability: Capability): Promise<User[]> {
+  const active = await prisma.user.findMany({ where: { state: 'ACTIVE' } });
+  return active.filter((u) => can(u, capability));
 }
 
 export type NotifyRecipient = Pick<User, 'id' | 'email' | 'phone' | 'locale'>;

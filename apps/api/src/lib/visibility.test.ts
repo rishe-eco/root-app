@@ -11,6 +11,7 @@ import {
   mayReadMoney,
   projectVisibleTo,
   projectVisibleToStaff,
+  requestVisibleTo,
 } from './visibility.js';
 
 /**
@@ -23,7 +24,7 @@ import {
 const person = (id: string, ...roles: Role[]) => ({ id, roles });
 
 const contract = (
-  over: Partial<{ customerId: string; publishedAt: Date | null; status: ContractStatus; project: { status: ProjectStatus } | null }> = {},
+  over: Partial<{ customerId: string; publishedAt: Date | null; status: ContractStatus; project: { status: ProjectStatus } }> = {},
 ) => ({
   customerId: 'cust',
   publishedAt: new Date('2026-09-01T00:00:00Z'),
@@ -40,8 +41,11 @@ test('isActiveContract: discarded and archived-project contracts are not active'
   // absent, not false (plan S1).
   assert.equal(isActiveContract(contract({ status: 'DONE' })), true);
   assert.equal(isActiveContract(contract({ status: 'DRAFT' })), true);
-  // The L1 migration artefact: no project reads as active, not hidden.
-  assert.equal(isActiveContract(contract({ project: null })), true);
+  // J2: a request is not a project being worked. A contract can never sit on
+  // one (conversion flips the project to ACTIVE in the same transaction that
+  // attaches the contract), but if one ever did it would read as inactive —
+  // the type has no "no project" any more, so there is no artefact case left.
+  assert.equal(isActiveContract(contract({ project: { status: 'REQUESTED' } })), false);
 });
 
 test('contractVisibleTo: the customer sees their own, once published', () => {
@@ -102,10 +106,25 @@ test('canAuthorBuild and its project form', () => {
   assert.equal(canAuthorBuild(person('des', 'DESIGNER'), { developerId: 'des' }), false);
   assert.equal(canAuthorBuild(person('a', 'ADMIN'), { developerId: null }), true);
 
-  assert.equal(canAuthorBuildOnProject(dev, [{ developerId: 'x' }, { developerId: 'dev' }]), true);
-  assert.equal(canAuthorBuildOnProject(dev, [{ developerId: 'x' }]), false);
+  const live = (developerId: string | null) => ({ developerId, status: 'IN_PROGRESS' as ContractStatus });
+  assert.equal(canAuthorBuildOnProject(dev, [live('x'), live('dev')]), true);
+  assert.equal(canAuthorBuildOnProject(dev, [live('x')]), false);
   assert.equal(canAuthorBuildOnProject(dev, []), false);
   assert.equal(canAuthorBuildOnProject(person('a', 'ADMIN'), []), true);
+});
+
+test('canAuthorBuildOnProject: a second contract (J2) — either live contract\'s developer, never a discarded one\'s', () => {
+  const dev = person('dev', 'DEVELOPER');
+  const first = { developerId: 'dev', status: 'DISCARDED' as ContractStatus };
+  const second = { developerId: 'other', status: 'IN_PROGRESS' as ContractStatus };
+  // The project moved on to a second contract with a different developer:
+  // the first developer's discarded contract no longer holds the keys.
+  assert.equal(canAuthorBuildOnProject(dev, [first, second]), false);
+  assert.equal(canAuthorBuildOnProject(person('other', 'DEVELOPER'), [first, second]), true);
+  // Two live contracts, two developers: both may work the shared demos.
+  const live = { developerId: 'dev', status: 'WAITING_ON_CUSTOMER' as ContractStatus };
+  assert.equal(canAuthorBuildOnProject(dev, [live, second]), true);
+  assert.equal(canAuthorBuildOnProject(person('other', 'DEVELOPER'), [live, second]), true);
 });
 
 test('projectVisibleTo: the customer edge, or any active contract for readActive', () => {
@@ -132,4 +151,43 @@ test('mayReadMoney: the customer and money.read, never design or development', (
   assert.equal(mayReadMoney(person('des', 'DESIGNER'), c), false);
   assert.equal(mayReadMoney(person('dev', 'DEVELOPER'), c), false);
   assert.equal(mayReadMoney(person('other', 'CUSTOMER'), c), false);
+});
+
+/**
+ * Journeys build plan J2: how the new `REQUESTED` status reads. A request is
+ * a project with no contract, and the rule is written once, here: sales
+ * (`contracts.readAll`) and the customer who made it see it; design and
+ * development (`contracts.readActive`) do not, however the project is asked
+ * about.
+ */
+test('a REQUESTED project: sales and its own customer see it; design, development and other customers do not', () => {
+  const requested = { customerId: 'cust', status: 'REQUESTED' as ProjectStatus, contracts: [] };
+  // The project-level rule (what demos, builds and the desk's project query use).
+  assert.equal(projectVisibleTo(person('s', 'SALES'), requested), true);
+  assert.equal(projectVisibleTo(person('a', 'ADMIN'), requested), true);
+  assert.equal(projectVisibleTo(person('cust', 'CUSTOMER'), requested), true);
+  assert.equal(projectVisibleTo(person('d', 'DESIGNER'), requested), false);
+  assert.equal(projectVisibleTo(person('v', 'DEVELOPER'), requested), false);
+  assert.equal(projectVisibleTo(person('other', 'CUSTOMER'), requested), false);
+  assert.equal(projectVisibleTo(person('c', 'CONTRIBUTOR'), requested), false);
+  // Not even a contract that somehow named it would make it visible to them.
+  const withContract = { ...requested, contracts: [{ status: 'IN_PROGRESS' as ContractStatus }] };
+  assert.equal(projectVisibleToStaff(person('d', 'DESIGNER'), withContract), false);
+  assert.equal(projectVisibleToStaff(person('v', 'DEVELOPER'), withContract), false);
+});
+
+test('requestVisibleTo: the customer who asked and contracts.readAll, in every request status; never readActive', () => {
+  const asked = new Date('2026-09-29T09:00:00Z');
+  const request = { customerId: 'cust', requestedAt: asked };
+  assert.equal(requestVisibleTo(person('cust', 'CUSTOMER'), request), true);
+  assert.equal(requestVisibleTo(person('s', 'SALES'), request), true);
+  assert.equal(requestVisibleTo(person('a', 'ADMIN'), request), true);
+  assert.equal(requestVisibleTo(person('other', 'CUSTOMER'), request), false);
+  for (const role of ['DESIGNER', 'DEVELOPER', 'CONTRIBUTOR', 'REVIEWER'] as Role[]) {
+    assert.equal(requestVisibleTo(person('x', role), request), false, role);
+  }
+  // A project that never was a request has nothing to read, for anyone.
+  const plain = { customerId: 'cust', requestedAt: null };
+  assert.equal(requestVisibleTo(person('cust', 'CUSTOMER'), plain), false);
+  assert.equal(requestVisibleTo(person('a', 'ADMIN'), plain), false);
 });
