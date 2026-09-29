@@ -144,7 +144,7 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
   };
 }
 
-async function attentionInputOf(c: FullContract, facts: Facts, now: Date): Promise<AttentionInput> {
+async function loadAttentionInput(c: FullContract, facts: Facts, now: Date): Promise<AttentionInput> {
   const pending = await ContractFields.pending(c);
   const current = c.currentContractRevision;
   return {
@@ -180,18 +180,30 @@ async function attentionInputOf(c: FullContract, facts: Facts, now: Date): Promi
   };
 }
 
+/** `attention` and `statusSummary` (which counts what attention lists) both need
+ *  this, and it includes `Contract.pending`'s own queries — so once per request. */
+const inputCache = new WeakMap<Context, Map<string, Promise<AttentionInput>>>();
+
+function attentionInputFor(ctx: Context, c: FullContract, facts: Facts): Promise<AttentionInput> {
+  let perRequest = inputCache.get(ctx);
+  if (!perRequest) inputCache.set(ctx, (perRequest = new Map()));
+  let input = perRequest.get(c.id);
+  if (!input) perRequest.set(c.id, (input = loadAttentionInput(c, facts, new Date())));
+  return input;
+}
+
 const agreementApproved = (facts: Facts) => facts.approvals.some((a) => a.step === 'AGREEMENT' && a.phaseId === null);
 
 export const contractWizardFields = {
-  wizard: async (c: FullContract, _a: unknown, ctx: Context) => {
-    viewerOf(ctx);
-    return computeWizard(stateOf(c, await factsFor(ctx, c)));
-  },
+  // The road is the same for every viewer — what differs is what is *on* it,
+  // which is the panels' business (and the API's, field by field).
+  wizard: async (c: FullContract, _a: unknown, ctx: Context) =>
+    computeWizard(stateOf(c, await factsFor(ctx, c))),
 
   attention: async (c: FullContract, _a: unknown, ctx: Context) => {
     const viewer = viewerOf(ctx);
     const facts = await factsFor(ctx, c);
-    const items = attentionFor(await attentionInputOf(c, facts, new Date()), viewer);
+    const items = attentionFor(await attentionInputFor(ctx, c, facts), viewer);
     return items.map((i) => ({
       ...i,
       params: Object.entries(i.params).map(([key, value]) => ({ key, value: String(value) })),
@@ -201,14 +213,15 @@ export const contractWizardFields = {
   statusSummary: async (c: FullContract, _a: unknown, ctx: Context) => {
     const viewer = viewerOf(ctx);
     const facts = await factsFor(ctx, c);
-    const now = new Date();
+    const input = await attentionInputFor(ctx, c, facts);
+    const now = input.now;
     const revision = c.currentContractRevision;
     const approval = facts.approvals.find((a) => a.step === 'AGREEMENT' && a.phaseId === null);
-    const summary = computeStatusSummary({
+    return computeStatusSummary({
       now,
       sequence: c.sequence,
       wizard: computeWizard(stateOf(c, facts)),
-      attention: attentionFor(await attentionInputOf(c, facts, now), viewer),
+      attention: attentionFor(input, viewer),
       // The agreement's approval on the new road, the signature on the old;
       // J7 makes the first the only one.
       signedAt: approval?.approvedAt ?? revision?.signature?.signedAt ?? null,
@@ -227,7 +240,6 @@ export const contractWizardFields = {
         publishedDemoPhaseIds: facts.phases.filter((p) => p.demos.length > 0).map((p) => p.id),
       },
     });
-    return summary;
   },
 
   timeline: async (c: FullContract, _a: unknown, ctx: Context) => {

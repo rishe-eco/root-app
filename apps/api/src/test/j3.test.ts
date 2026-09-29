@@ -632,8 +632,8 @@ function everything(): string {
    * Build.declaredBy"). Nothing selects them (the web query takes the four
    * scalars), so the edge is held to scalars here rather than fixed in this
    * stage: the fix — putting the developer's `User` row on a build a customer
-   * can read — is a visibility decision, not J3's to take quietly. Reported
-   * in J3.md.
+   * can read — is a visibility decision, not J3's to take quietly. Recorded as a
+   * defect for the reviewer to place.
    */
   const SCALARS_ONLY = new Set(['FeedbackItem.addressedInBuild']);
   const walk = (type: GraphQLType, path: string[], scalarsOnly = false): string | null => {
