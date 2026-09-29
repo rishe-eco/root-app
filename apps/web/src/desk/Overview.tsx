@@ -19,20 +19,22 @@ import { logText } from '@/lib/changelog';
 import StatusBadge from '@/components/StatusBadge';
 
 /**
- * V4's screen: what the desk answers without clicking into anything. Three
- * independent panels, each its own query — a reviewer without
- * `contracts.manage` sees this route (F3's nav is capability: null for it)
- * but not this data, the same `skip` pattern DeskContracts already uses
- * rather than a page full of FORBIDDEN errors.
- *
- * T4: an empty Overview on a system with few contracts is accurate. Nothing
- * here is seeded to look busier than it is.
+ * V4's screen: what the desk answers without clicking into anything. Four
+ * panels, all four gated on `contracts.readAll` (journeys build plan S1) —
+ * `allContractStatusCounts`, `needsRootQueue`, `activity` and
+ * `overdueDependencies` are the sales/whole-book view of the desk, and design
+ * and development hold only `contracts.readActive`. Skipping the queries
+ * (the same `skip` pattern DeskContracts already uses) rather than letting
+ * four FORBIDDEN errors render is what T4 asks for either way; the
+ * difference this stage adds is that "not allowed" is no longer "not ADMIN"
+ * — a designer or developer lands here too (Overview's own nav row is
+ * capability: null) and needs somewhere to go instead of four empty panels.
  */
 export default function Overview() {
   const { t } = useTranslation();
   const locale = useLocale();
   const me = useOutletContext<User>();
-  const allowed = can(me, 'contracts.manage');
+  const allowed = can(me, 'contracts.readAll');
 
   const { data: countsData } = useQuery<{ allContractStatusCounts: StatusCount[] }>(
     ALL_CONTRACT_STATUS_COUNTS,
@@ -59,6 +61,32 @@ export default function Overview() {
   const queue = queueData?.needsRootQueue ?? [];
   const activity = activityData?.activity ?? [];
   const overdueDependencies = dependenciesData?.overdueDependencies ?? [];
+
+  // A designer or developer holds no capability this dashboard reads at all
+  // — rather than four empty panels that look like an idle desk, point them
+  // at the one or two working surfaces they do have.
+  if (!allowed) {
+    const canContracts = can(me, 'contracts.readActive');
+    const canBuilds = can(me, 'builds.author');
+    return (
+      <div className="desk-section">
+        <h2 className="t-h2">{t('desk.navOverview')}</h2>
+        <p className="t-lead">{t('desk.overviewNoDashboard')}</p>
+        <div className="queue-list">
+          {canContracts ? (
+            <Link className="queue-row" to={lp(locale, '/desk/contracts')}>
+              <span className="t-small">{t('desk.navContracts')}</span>
+            </Link>
+          ) : null}
+          {canBuilds ? (
+            <Link className="queue-row" to={lp(locale, '/desk/builds')}>
+              <span className="t-small">{t('desk.navBuilds')}</span>
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="desk-section">

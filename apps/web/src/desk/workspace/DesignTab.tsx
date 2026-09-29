@@ -3,6 +3,7 @@ import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
+import { canAuthorDesign } from '@/lib/access';
 import {
   ADD_CONCEPT,
   ADD_PAGE_DESIGN,
@@ -332,7 +333,7 @@ function ConceptCard({
 export default function DesignTab() {
   const { t } = useTranslation();
   const locale = useLocale();
-  const { contract } = useOutletContext<WorkspaceContext>();
+  const { contract, me } = useOutletContext<WorkspaceContext>();
   const [addingConcept, setAddingConcept] = useState(false);
   const [newConceptKey, setNewConceptKey] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -340,6 +341,12 @@ export default function DesignTab() {
   const [discard, { loading: discarding }] = useMutation(DISCARD_DESIGN_DRAFT);
   const [publish, { loading: publishing }] = useMutation(PUBLISH_DESIGN_REVISION);
 
+  // Journeys build plan S1: design.author, and being this contract's own
+  // designer (or holding assignments.override) — the API's canAuthorDesign,
+  // mirrored here so the tab never offers a button the resolver will refuse
+  // with NOT_ASSIGNED. Unassigned or uncapable, the tab still reads; it just
+  // never writes.
+  const editable = canAuthorDesign(me, contract);
   const draft = contract.designDraft;
 
   async function onAddConcept(e: FormEvent) {
@@ -376,7 +383,19 @@ export default function DesignTab() {
     }
   }
 
-  const addConceptForm = addingConcept ? (
+  // S1's own trap: an unassigned designer (or a viewer who is not this
+  // contract's designer) would get NOT_ASSIGNED from every mutation below —
+  // so the tab shows who is assigned instead of buttons that would be
+  // refused.
+  const designerLine = !editable ? (
+    <p className="t-small desk-muted">
+      {contract.designer
+        ? t('workspace.designerAssignedTo', { name: contract.designer.name })
+        : t('workspace.designerUnassigned')}
+    </p>
+  ) : null;
+
+  const addConceptForm = !editable ? null : addingConcept ? (
     <form className="workspace-row" onSubmit={onAddConcept}>
       <input
         className="input num-latin"
@@ -400,6 +419,7 @@ export default function DesignTab() {
     return (
       <>
         <p className="t-small desk-muted">{t('workspace.noDraftHelp')}</p>
+        {designerLine}
         <div className="editor-list">
           {contract.concepts.map((c) => (
             <ConceptCard key={c.id} contractId={contract.id} concept={c} editable={false} />
@@ -418,15 +438,18 @@ export default function DesignTab() {
     <>
       <div className="workspace-row">
         <p className="t-small desk-muted">{t('workspace.editingDraft', { version: draft.version })}</p>
-        <div className="editor-card-actions">
-          <button className="btn btn-ghost btn-sm" type="button" onClick={onDiscard} disabled={discarding}>
-            {t('workspace.discardDraft')}
-          </button>
-          <button className="btn btn-primary btn-sm" type="button" onClick={onPublish} disabled={publishing}>
-            {t('workspace.publishDesign')}
-          </button>
-        </div>
+        {editable ? (
+          <div className="editor-card-actions">
+            <button className="btn btn-ghost btn-sm" type="button" onClick={onDiscard} disabled={discarding}>
+              {t('workspace.discardDraft')}
+            </button>
+            <button className="btn btn-primary btn-sm" type="button" onClick={onPublish} disabled={publishing}>
+              {t('workspace.publishDesign')}
+            </button>
+          </div>
+        ) : null}
       </div>
+      {designerLine}
       {error ? <p className="error">{error}</p> : null}
 
       <div className="carry-preview">
@@ -454,7 +477,7 @@ export default function DesignTab() {
 
       <div className="editor-list">
         {draft.concepts.map((c) => (
-          <ConceptCard key={c.id} contractId={contract.id} concept={c} editable />
+          <ConceptCard key={c.id} contractId={contract.id} concept={c} editable={editable} />
         ))}
       </div>
 

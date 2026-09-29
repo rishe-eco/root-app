@@ -22,6 +22,10 @@ export const CUSTOMER = { email: 'nahal@example.com', password: 'change-me-pleas
 export const REVIEWER = { email: 'reviewer@root.local', password: 'change-me-please' };
 export const REVIEWER2 = { email: 'reviewer2@root.local', password: 'change-me-please' };
 export const CONTRIBUTOR = { email: 'contributor@root.local', password: 'change-me-please' };
+// Journeys build plan S1 (P0-6): one account per new staff role — sales sees
+// the whole book, the designer is assigned to the seeded contract alongside
+// DEVELOPER (prisma/seed.ts). J1: each carries its seeded phone, which the
+// second factor's code is sent to.
 export const SALES = { email: 'sales@root.local', password: 'change-me-please', phone: '+989120000002' };
 export const DESIGNER = { email: 'designer@root.local', password: 'change-me-please', phone: '+989120000003' };
 export const DEVELOPER = { email: 'developer@root.local', password: 'change-me-please', phone: '+989120000004' };

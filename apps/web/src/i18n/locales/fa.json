@@ -238,6 +238,7 @@
       }
     },
     "backToPortal": "بازگشت به پرتال",
+    "overviewNoDashboard": "این داشبورد نمای فروش از کلِ دفتر است. کارِ خودت را اینجا پیدا کن:",
     "needsRootTitle": "منتظر ریشه",
     "needsRootEmpty": "چیزی منتظر ریشه نیست.",
     "reviewQueueTitle": "فعالیت اخیر مشتری‌ها",
@@ -263,6 +264,9 @@
     "newContractPickCustomer": "یک مشتری انتخاب کن…",
     "newContractTitleFa": "عنوان (فارسی)",
     "newContractTitleEn": "عنوان (انگلیسی)",
+    "newContractDesigner": "طراح (اختیاری)",
+    "newContractDeveloper": "توسعه‌دهنده (اختیاری)",
+    "newContractUnassigned": "تخصیص‌نیافته",
     "library": {
       "newEntry": "مدخل تازه",
       "searchPlaceholder": "جست‌وجو…",
@@ -452,6 +456,19 @@
     "titleFa": "عنوان (فارسی)",
     "titleEn": "عنوان (انگلیسی)",
     "amount": "حق‌الزحمه (تومان)",
+    "moneyHidden": "نمایش داده نمی‌شود",
+    "assignmentLine": "طراح: {{designer}} · توسعه‌دهنده: {{developer}}",
+    "unassigned": "تخصیص‌نیافته",
+    "changeAssignment": "تغییر",
+    "assignError": {
+      "ASSIGNEE_LACKS_CAPABILITY": "آن فرد نمی‌تواند این کار را انجام دهد.",
+      "ASSIGNEE_INACTIVE": "آن حساب فعال نیست."
+    },
+    "readOnlyNotice": "این تب را می‌بینی؛ تغییرات را کسی می‌دهد که ظرفیتِ نویسندگی را دارد.",
+    "designerAssignedTo": "طراحِ این قرارداد {{name}} است.",
+    "designerUnassigned": "هنوز طراحی به این قرارداد تخصیص نیافته.",
+    "developerAssignedTo": "توسعه‌دهنده‌ی این قرارداد {{name}} است.",
+    "developerUnassigned": "هنوز توسعه‌دهنده‌ای به این قرارداد تخصیص نیافته.",
     "bodyFa": "متن (فارسی)",
     "bodyEn": "متن (انگلیسی)",
     "save": "ذخیره",

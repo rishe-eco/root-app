@@ -494,6 +494,11 @@ export type Contract = {
   // Staff-only; present only on queries that select them (the workspace).
   draft?: ContractDraft | null;
   designDraft?: DesignDraft | null;
+  // Journeys build plan S1 — the assignment edges. Present only on the
+  // workspace query (the header's own display and change control); null
+  // means unassigned, not "not selected" (see CONTRACT_WORKSPACE_FIELDS).
+  designer?: Pick<User, 'id' | 'name'> | null;
+  developer?: Pick<User, 'id' | 'name'> | null;
 };
 
 const USER_FIELDS = gql`
@@ -906,6 +911,14 @@ export const CONTRACT_WORKSPACE_FIELDS = gql`
   ${CONTRACT_FIELDS}
   fragment ContractWorkspaceFields on Contract {
     ...ContractFields
+    designer {
+      id
+      name
+    }
+    developer {
+      id
+      name
+    }
     draft {
       titleFa
       titleEn
@@ -1147,6 +1160,25 @@ export const ALL_CUSTOMERS = gql`
   }
 `;
 
+/** Journeys build plan S1 — the two jobs `assignContract` accepts. */
+export type AssignmentJob = 'DESIGN' | 'BUILD';
+
+/**
+ * Who `assignContract` would accept for a job — the active accounts holding
+ * `design.author` (DESIGN) or `builds.author` (BUILD). Feeds the create-
+ * contract form's two optional pickers and the workspace header's own
+ * change control, so the list offered and the mutation's own refusal can
+ * never disagree.
+ */
+export const ASSIGNABLE_USERS = gql`
+  ${USER_FIELDS}
+  query AssignableUsers($job: AssignmentJob!) {
+    assignableUsers(job: $job) {
+      ...UserFields
+    }
+  }
+`;
+
 export type StatusCount = {
   status: ContractStatus;
   count: number;
@@ -1268,6 +1300,22 @@ export const CREATE_CONTRACT = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
   mutation CreateContract($input: CreateContractInput!) {
     createContract(input: $input) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+/**
+ * Journeys build plan S1: sales changes who designs and who develops a
+ * contract from the workspace header. An omitted argument leaves that side
+ * unchanged; `null` unassigns it — the same convention `updateContractDraft`
+ * uses for `amount`. Returns `Contract!` (the T9 convention), so Apollo's
+ * cache updates without a refetch.
+ */
+export const ASSIGN_CONTRACT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation AssignContract($contractId: ID!, $designerId: ID, $developerId: ID) {
+    assignContract(contractId: $contractId, designerId: $designerId, developerId: $developerId) {
       ...ContractWorkspaceFields
     }
   }
@@ -1734,9 +1782,10 @@ export const ACCEPT_FEEDBACK = gql`
 
 // ---------------------------------------------------------------------------
 // Builds and the resolution ledger (build plan L3b; spec §6's gap). Gated on
-// builds.author, never contracts.manage — none of these mutations or queries
-// return Contract!, on purpose: see resolvers/builds.ts's own comment on why
-// a DEVELOPER holding only builds.author must never reach that payload.
+// builds.author, never contracts.author (journeys build plan S1) — none of
+// these mutations or queries return Contract!, on purpose: see
+// resolvers/builds.ts's own comment on why a DEVELOPER holding only
+// builds.author must never reach that payload.
 // ---------------------------------------------------------------------------
 
 export type BuildChangeOutcome = 'ADDRESSED' | 'DECLINED' | 'CARRIED_FORWARD';

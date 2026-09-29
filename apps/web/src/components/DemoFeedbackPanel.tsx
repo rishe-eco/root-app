@@ -26,12 +26,18 @@ import {
  * component `DemoViewport` already is for the live site itself. Named
  * without the bare word "review" — see schema.prisma's `DemoFrame` comment.
  *
- * Two modes over one shape: `canAuthor` (staff, `contracts.manage`) reveals
- * generation, hand-authored lines and the publish gate; everyone who can see
- * a published demo at all may comment and, per D3, ratify (the decider is
- * the project's own customer or staff — an ownership edge, never a role,
- * checked server-side; this component does not attempt to guess who "the
- * decider" is beyond offering the control to whoever is looking).
+ * Two modes over one shape: `canAuthor` (staff, `builds.author` and the
+ * project's own developer — journeys build plan S1's `canAuthorBuild`)
+ * reveals generation, hand-authored lines and the publish gate; everyone who
+ * can see a published demo at all may comment and, per D3, ratify (the
+ * decider is the project's own customer or staff — an ownership edge, never
+ * a role, checked server-side; this component does not attempt to guess who
+ * "the decider" is beyond offering the control to whoever is looking).
+ *
+ * A ratified item becoming a change ticket is a third, separate capability
+ * (`tickets.answer` — sales's job, not the developer authoring this frame),
+ * so it is its own prop, `canConvertToTicket`, rather than folded into
+ * `canAuthor`.
  */
 
 const KIND_ORDER: DemoFrameLineKind[] = ['NEW', 'KNOWN_MISSING', 'TEMPORARY', 'DECIDED'];
@@ -149,12 +155,12 @@ function FeedbackThread({
   item,
   t,
   locale,
-  canAuthor,
+  canConvertToTicket,
 }: {
   item: FeedbackItem;
   t: T;
   locale: 'fa' | 'en';
-  canAuthor: boolean;
+  canConvertToTicket: boolean;
 }) {
   return (
     <div className="feedback-thread">
@@ -188,8 +194,9 @@ function FeedbackThread({
         </p>
       ) : null}
       {/* Build plan L4: a ratified item may become a change ticket — the
-          brief. Never offered for an item already converted. */}
-      {canAuthor && item.status === 'RATIFIED' && !item.ticket ? (
+          brief. `tickets.answer` (sales), not `canAuthor` (the frame's own
+          builds.author) — never offered for an item already converted. */}
+      {canConvertToTicket && item.status === 'RATIFIED' && !item.ticket ? (
         <ConvertToTicketForm itemId={item.id} t={t} />
       ) : item.ticket ? (
         <span className="badge">{t('feedback.convertedToTicket')}</span>
@@ -297,10 +304,16 @@ function CommentForm({
 export default function DemoFeedbackPanel({
   demo,
   canAuthor,
+  canConvertToTicket = false,
   onChanged,
 }: {
   demo: Demo;
   canAuthor: boolean;
+  /** tickets.answer — a ratified item may become a change ticket. A
+   *  distinct capability from the frame's own `canAuthor`; see the module
+   *  comment above. Optional (default false): the portal's own call site
+   *  never offers this, matching its canAuthor={false}. */
+  canConvertToTicket?: boolean;
   /** Called after a comment is written for the first time against a target
    *  (submitFeedback does not return Contract! — see queries.ts's own note
    *  — so the caller's query needs an explicit nudge to see the new item). */
@@ -602,7 +615,7 @@ export default function DemoFeedbackPanel({
 
                   {line.feedbackItem ? (
                     <>
-                      <FeedbackThread item={line.feedbackItem} t={t} locale={locale} canAuthor={canAuthor} />
+                      <FeedbackThread item={line.feedbackItem} t={t} locale={locale} canConvertToTicket={canConvertToTicket} />
                       {line.feedbackItem.status === 'OPEN' ? (
                         <label className="feedback-ratify-check">
                           <input type="checkbox" checked={selected.has(line.feedbackItem.id)} onChange={() => toggle(line.feedbackItem!.id)} />
@@ -653,7 +666,7 @@ export default function DemoFeedbackPanel({
                 </div>
                 {item ? (
                   <>
-                    <FeedbackThread item={item} t={t} locale={locale} canAuthor={canAuthor} />
+                    <FeedbackThread item={item} t={t} locale={locale} canConvertToTicket={canConvertToTicket} />
                     {item.status === 'OPEN' ? (
                       <label className="feedback-ratify-check">
                         <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggle(item.id)} />

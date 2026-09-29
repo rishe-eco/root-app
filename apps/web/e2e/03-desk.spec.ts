@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { ADMIN, CUSTOMER, REVIEWER, resetTestDatabase, signIn } from './helpers';
+import { test, expect, type Page } from '@playwright/test';
+import { ADMIN, CUSTOMER, REVIEWER, SALES, DESIGNER, DEVELOPER, CONTRACT_REF, resetTestDatabase, signIn } from './helpers';
 
 /**
  * The staff shell at `/desk`, and the role boundary around it.
@@ -98,4 +98,123 @@ test('a reviewer sees Overview and Review and nothing else, and cannot type thei
   await page.goto('/en/desk/contracts');
   await expect(page).toHaveURL(/\/en\/desk\/overview/);
   await expect(page.getByText('RC-2026-014')).toHaveCount(0);
+});
+
+/**
+ * Journeys build plan S1's own acceptance criterion, in both languages —
+ * the plan says so explicitly, because the desk's Persian nav is a second,
+ * independent read of `desk/sections.ts` through `i18next`, not a mirror
+ * that could silently drift from the English one.
+ */
+const NAV_LABELS = {
+  en: {
+    overview: 'Overview',
+    contracts: 'Contracts',
+    customers: 'Customers',
+    library: 'Library',
+    review: 'Review',
+    builds: 'Builds',
+    tickets: 'Tickets',
+    billing: 'Billing',
+    services: 'Services',
+    apiTokens: 'Tokens',
+  },
+  fa: {
+    overview: 'نمای کلی',
+    contracts: 'قراردادها',
+    customers: 'مشتریان',
+    library: 'کتابخانه',
+    review: 'بازبینی',
+    builds: 'بیلدها',
+    tickets: 'تیکت‌ها',
+    billing: 'صورت‌حساب',
+    services: 'خدمات',
+    apiTokens: 'توکن‌ها',
+  },
+} as const;
+
+/** Checks the nav actually rendered in `lang` — never the other language's
+ *  labels, which are simply absent from an `lang` page and would otherwise
+ *  pass `toHaveCount(0)` for the wrong reason. */
+async function assertNavShowsExactly(
+  page: Page,
+  lang: 'en' | 'fa',
+  visible: Array<keyof (typeof NAV_LABELS)['en']>,
+) {
+  const nav = page.locator('.desk-nav');
+  const labels = NAV_LABELS[lang];
+  for (const key of Object.keys(labels) as Array<keyof typeof labels>) {
+    const locator = nav.getByText(labels[key], { exact: true });
+    if (visible.includes(key)) {
+      await expect(locator).toBeVisible();
+    } else {
+      await expect(locator).toHaveCount(0);
+    }
+  }
+}
+
+test('a sales user sees Overview, Contracts, Customers, Tickets, Billing and Services — in both languages', async ({
+  page,
+}) => {
+  const sections = ['overview', 'contracts', 'customers', 'tickets', 'billing', 'services'] as const;
+  await signIn(page, SALES, 'en');
+  await assertNavShowsExactly(page, 'en', sections);
+  await signIn(page, SALES, 'fa');
+  await assertNavShowsExactly(page, 'fa', sections);
+});
+
+test('a designer sees only Overview and Contracts — in both languages', async ({ page }) => {
+  await signIn(page, DESIGNER, 'en');
+  await assertNavShowsExactly(page, 'en', ['overview', 'contracts']);
+  await signIn(page, DESIGNER, 'fa');
+  await assertNavShowsExactly(page, 'fa', ['overview', 'contracts']);
+});
+
+test('a developer sees Overview, Contracts and Builds — in both languages (D-2 closed: a developer can open a demo)', async ({
+  page,
+}) => {
+  await signIn(page, DEVELOPER, 'en');
+  await assertNavShowsExactly(page, 'en', ['overview', 'contracts', 'builds']);
+  await signIn(page, DEVELOPER, 'fa');
+  await assertNavShowsExactly(page, 'fa', ['overview', 'contracts', 'builds']);
+});
+
+test('the seeded designer opens the seeded contract and sees no fee', async ({ page }) => {
+  await signIn(page, DESIGNER);
+  await page.goto('/en/desk/contracts');
+  // The ref cell, not the row's centre: for sales the centre is the status
+  // select, whose cell rightly keeps the click from opening the contract.
+  await page.locator('tr.crow', { hasText: CONTRACT_REF }).locator('td').first().click();
+  await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
+
+  // money.read is SALES/ADMIN only (PD-14) — a designer reading their own
+  // assigned contract must see a neutral placeholder, never "0" or a blank
+  // standing in for the real figure.
+  await expect(page.getByText('Not shown')).toBeVisible();
+  await expect(page.getByText('180,000,000')).toHaveCount(0);
+
+  // Read-only: the tab shows the published articles but no author controls.
+  await expect(page.getByRole('button', { name: 'Add article' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Publish revision' })).toHaveCount(0);
+});
+
+test('sales assigns and then changes the contract designer through the workspace header', async ({ page }) => {
+  await signIn(page, SALES);
+  await page.goto('/en/desk/contracts');
+  // The ref cell, not the row's centre: for sales the centre is the status
+  // select, whose cell rightly keeps the click from opening the contract.
+  await page.locator('tr.crow', { hasText: CONTRACT_REF }).locator('td').first().click();
+  await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
+
+  // The seed assigns both designer@ and developer@ to this contract.
+  await expect(page.getByText('Designer: Designer')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Change' }).click();
+  const selects = page.locator('form.workspace-row select');
+  await selects.first().selectOption({ label: 'Root' });
+  await page.locator('form.workspace-row').getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.getByText('Designer: Root')).toBeVisible();
+  // Changing the designer did not touch the developer side.
+  await expect(page.getByText('Developer: Developer')).toBeVisible();
 });

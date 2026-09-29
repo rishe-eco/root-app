@@ -3,6 +3,7 @@ import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
+import { can } from '@/lib/access';
 import {
   APPLY_CONTRACT_TEMPLATE,
   DELETE_AMENDMENT,
@@ -17,7 +18,7 @@ import {
   type Amendment,
   type Article,
 } from '@/lib/queries';
-import { fullDateTime } from '@/lib/format';
+import { fullDateTime, pick } from '@/lib/format';
 import type { WorkspaceContext } from './ContractWorkspace';
 
 function errorMessage(err: unknown): string {
@@ -302,9 +303,47 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
   );
 }
 
+/**
+ * Journeys build plan S1: whoever can read this contract but not author it
+ * (design, development, on their own active contracts) sees the published
+ * title, fee and articles — never the draft (the API's own `draft` field is
+ * null for them already) and never a form that would be refused. The fee is
+ * `contract.amount`, which comes back null both when there genuinely is none
+ * and when the viewer lacks `money.read` (PD-14) — `can(me, 'money.read')`
+ * tells the two apart on this side, so "no fee set" and "not shown to you"
+ * never look identical to someone who is allowed to tell the difference.
+ */
+function ReadOnlyContractView({ contract, canReadMoney }: { contract: WorkspaceContext['contract']; canReadMoney: boolean }) {
+  const { t } = useTranslation();
+  const locale = useLocale();
+  const articles = [...contract.articles].sort((a, b) => a.number - b.number);
+  const moneyText = contract.amount !== null ? contract.amount : canReadMoney ? '—' : t('workspace.moneyHidden');
+
+  return (
+    <>
+      <p className="t-small desk-muted">{t('workspace.readOnlyNotice')}</p>
+      <section className="card editor-card">
+        <p className="t-h3">{pick(contract, 'title', locale)}</p>
+        <p className="t-small">
+          {t('workspace.amount')}: <span className="num-latin">{moneyText}</span>
+        </p>
+      </section>
+      <div className="editor-list">
+        {articles.map((a) => (
+          <div key={a.id} className="card editor-card">
+            <span className="t-eyebrow num-latin">{a.number}</span>
+            <p className="t-small">{pick(a, 'title', locale)}</p>
+            {pick(a, 'body', locale) ? <p className="t-small desk-muted">{pick(a, 'body', locale)}</p> : null}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function ContractTab() {
   const { t } = useTranslation();
-  const { contract } = useOutletContext<WorkspaceContext>();
+  const { contract, me } = useOutletContext<WorkspaceContext>();
   const [addingArticle, setAddingArticle] = useState(false);
   const [issuingAmendment, setIssuingAmendment] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -320,6 +359,10 @@ export default function ContractTab() {
   const nextNumber = (articles.at(-1)?.number ?? 0) + 1;
   const amendments = contract.revision?.amendments ?? [];
   const baseSigned = !!contract.revision?.signature;
+
+  if (!can(me, 'contracts.author')) {
+    return <ReadOnlyContractView contract={contract} canReadMoney={can(me, 'money.read')} />;
+  }
 
   async function onApplyTemplate() {
     setPublishError(null);

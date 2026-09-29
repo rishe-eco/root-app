@@ -238,6 +238,7 @@
       }
     },
     "backToPortal": "Back to the portal",
+    "overviewNoDashboard": "The desk-wide dashboard is sales's view of the whole book. Here is where your own work is:",
     "needsRootTitle": "Needs Root",
     "needsRootEmpty": "Nothing is waiting on Root.",
     "reviewQueueTitle": "Recent customer activity",
@@ -263,6 +264,9 @@
     "newContractPickCustomer": "Pick a customer…",
     "newContractTitleFa": "Title (Persian)",
     "newContractTitleEn": "Title (English)",
+    "newContractDesigner": "Designer (optional)",
+    "newContractDeveloper": "Developer (optional)",
+    "newContractUnassigned": "Unassigned",
     "library": {
       "newEntry": "New entry",
       "searchPlaceholder": "Search…",
@@ -452,6 +456,19 @@
     "titleFa": "Title (Persian)",
     "titleEn": "Title (English)",
     "amount": "Fee (Toman)",
+    "moneyHidden": "Not shown",
+    "assignmentLine": "Designer: {{designer}} · Developer: {{developer}}",
+    "unassigned": "Unassigned",
+    "changeAssignment": "Change",
+    "assignError": {
+      "ASSIGNEE_LACKS_CAPABILITY": "That person cannot do this job.",
+      "ASSIGNEE_INACTIVE": "That account is not active."
+    },
+    "readOnlyNotice": "You can see this tab; changes here are made by whoever holds the authoring capability.",
+    "designerAssignedTo": "This contract's designer is {{name}}.",
+    "designerUnassigned": "No designer is assigned to this contract yet.",
+    "developerAssignedTo": "This contract's developer is {{name}}.",
+    "developerUnassigned": "No developer is assigned to this contract yet.",
     "bodyFa": "Body (Persian)",
     "bodyEn": "Body (English)",
     "save": "Save",
