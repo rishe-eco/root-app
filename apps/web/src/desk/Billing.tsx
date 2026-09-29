@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@apollo/client';
+import { Navigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useLocale } from '@/lib/locale';
+import { useLocale, lp } from '@/lib/locale';
+import { can } from '@/lib/access';
 import {
   ALL_BILLING_ENTRIES,
   BILLING_REPORT,
@@ -23,8 +25,10 @@ import { formatAmount, fullDateTime, pick } from '@/lib/format';
 
 /**
  * The desk's own billing surface (build plan L6; spec §8) — the report
- * across customers, the ledger, and subscription authoring. `contracts.manage`
- * only, same reasoning as every other registry-adjacent section.
+ * across customers, the ledger, and subscription authoring. `billing.manage`
+ * (journeys build plan S1 — before it, `contracts.manage`), the money
+ * capability every one of these resolvers now checks; design and development
+ * hold neither it nor `money.read` and must not reach this screen at all.
  */
 
 const SOURCES: BillingSource[] = ['CONTRACT', 'SERVICE', 'TICKET'];
@@ -120,20 +124,25 @@ function SubscriptionRow({ sub }: { sub: Subscription }) {
 export default function Billing() {
   const { t } = useTranslation();
   const locale = useLocale();
+  const me = useOutletContext<User>();
 
   const [customerId, setCustomerId] = useState<string>('');
   const [addingEntry, setAddingEntry] = useState(false);
   const [addingSub, setAddingSub] = useState(false);
 
-  const { data: customersData } = useQuery<{ allCustomers: User[] }>(ALL_CUSTOMERS);
+  const allowed = can(me, 'billing.manage');
+  const { data: customersData } = useQuery<{ allCustomers: User[] }>(ALL_CUSTOMERS, { skip: !allowed });
   const { data, loading, error, refetch } = useQuery<{ allBillingEntries: BillingEntry[] }>(ALL_BILLING_ENTRIES, {
     variables: { customerId: customerId || null },
+    skip: !allowed,
   });
   const { data: reportData } = useQuery<{ billingReport: BillingReport }>(BILLING_REPORT, {
     variables: { customerId: customerId || null },
+    skip: !allowed,
   });
   const { data: subsData } = useQuery<{ allSubscriptions: Subscription[] }>(ALL_SUBSCRIPTIONS, {
     variables: { customerId: customerId || null },
+    skip: !allowed,
   });
 
   const [createEntry, { loading: creatingEntry }] = useMutation(CREATE_BILLING_ENTRY, {
@@ -155,6 +164,8 @@ export default function Billing() {
   const [subPeriod, setSubPeriod] = useState<SubscriptionPeriod>('MONTHLY');
   const [subActiveFrom, setSubActiveFrom] = useState('');
   const [subError, setSubError] = useState<string | null>(null);
+
+  if (!allowed) return <Navigate to={lp(locale, '/desk')} replace />;
 
   const customers = customersData?.allCustomers ?? [];
   const entries = data?.allBillingEntries ?? [];

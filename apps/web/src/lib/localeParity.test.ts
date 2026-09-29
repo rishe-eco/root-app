@@ -99,6 +99,9 @@ const ROLE_PAIRS: Record<string, string> = {
   'تغییرکرده': 'compound verb vs. participial adjective (workspace.changeChanged)',
   // verb «منتشر نشده» / adjective «منتشرنشده»
   'منتشرنشده': 'compound verb vs. participial adjective (workspace.dirty)',
+  // verb «تخصیص نیافته» (a sentence: "no one has been assigned yet") /
+  // adjective «تخصیص‌نیافته» (a picker option's label: "Unassigned")
+  'تخصیصنیافته': 'compound verb vs. participial adjective (workspace.designerUnassigned vs. workspace.unassigned)',
 };
 
 const PERSIAN_RUN = /[؀-ۿ‌]+/g;

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { can } from '@/lib/access';
 import {
   ADD_SCOPE_ITEM,
   DELETE_SCOPE_ITEM,
@@ -25,7 +26,17 @@ function errorMessage(err: unknown): string {
   return (err as { message?: string })?.message ?? String(err);
 }
 
-function ScopeItemCard({ item, atTop, atBottom }: { item: ScopeItem; atTop: boolean; atBottom: boolean }) {
+function ScopeItemCard({
+  item,
+  atTop,
+  atBottom,
+  editable,
+}: {
+  item: ScopeItem;
+  atTop: boolean;
+  atBottom: boolean;
+  editable: boolean;
+}) {
   const { t } = useTranslation();
   const [labelFa, setLabelFa] = useState(item.labelFa);
   const [labelEn, setLabelEn] = useState(item.labelEn);
@@ -92,6 +103,36 @@ function ScopeItemCard({ item, atTop, atBottom }: { item: ScopeItem; atTop: bool
 
   async function onReorder(direction: 'UP' | 'DOWN') {
     await guarded(() => reorder({ variables: { scopeItemId: item.id, direction } }));
+  }
+
+  // Journeys build plan S1: registry writes are contracts.author. A reader
+  // without it (design, development on their own active contracts) sees the
+  // same facts — label, status, flags, the decided note — with nothing that
+  // would come back FORBIDDEN.
+  if (!editable) {
+    return (
+      <div className="card editor-card">
+        <div className="editor-card-head">
+          <span className="t-eyebrow num-latin">{item.key}</span>
+          <span className={`badge ${item.checked ? '' : 'badge-neutral'}`}>
+            {item.checked ? t('workspace.scopeChecked') : t('workspace.scopeUnchecked')}
+          </span>
+        </div>
+        <p className="t-small">{item.labelFa}</p>
+        <div className="workspace-row">
+          <span className="badge">{t(`workspace.scopeStatus${item.status}`)}</span>
+          {item.temporary ? <span className="badge">{t('workspace.scopeFlagTemporary')}</span> : null}
+          {item.outOfScope ? <span className="badge">{t('workspace.scopeFlagOutOfScope')}</span> : null}
+          {item.adminWork ? <span className="badge">{t('workspace.scopeFlagAdminWork')}</span> : null}
+        </div>
+        {item.decidedAt ? (
+          <div className="workspace-row">
+            <span className="badge">{t('workspace.scopeDecided')}</span>
+            <span className="t-small">{item.decidedNote}</span>
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -219,7 +260,7 @@ function ScopeItemCard({ item, atTop, atBottom }: { item: ScopeItem; atTop: bool
   );
 }
 
-function ScopeTradeCard({ trade }: { trade: ScopeTrade }) {
+function ScopeTradeCard({ trade, editable }: { trade: ScopeTrade; editable: boolean }) {
   const { t } = useTranslation();
   const [confirmRoot, { loading }] = useMutation(CONFIRM_SCOPE_TRADE_ROOT);
   const [error, setError] = useState<string | null>(null);
@@ -252,11 +293,11 @@ function ScopeTradeCard({ trade }: { trade: ScopeTrade }) {
           <>
             {trade.rootConfirmedAt ? (
               <span className="badge">{t('workspace.scopeTradeRootConfirmed')}</span>
-            ) : (
+            ) : editable ? (
               <button className="btn btn-secondary btn-sm" type="button" onClick={onConfirm} disabled={loading}>
                 {t('workspace.scopeTradeConfirmRoot')}
               </button>
-            )}
+            ) : null}
             <span className="t-small badge-neutral badge">{t('workspace.scopeTradeCustomerPending')}</span>
           </>
         )}
@@ -268,7 +309,11 @@ function ScopeTradeCard({ trade }: { trade: ScopeTrade }) {
 
 export default function ScopeTab() {
   const { t } = useTranslation();
-  const { contract } = useOutletContext<WorkspaceContext>();
+  const { contract, me } = useOutletContext<WorkspaceContext>();
+  // Journeys build plan S1: the registry (this whole tab) is contracts.author
+  // — design and development read active contracts but never write the
+  // registry, matching the API's admin/registry.ts guards.
+  const editable = can(me, 'contracts.author');
   const [adding, setAdding] = useState(false);
   const [key, setKey] = useState('');
   const [labelFa, setLabelFa] = useState('');
@@ -328,12 +373,14 @@ export default function ScopeTab() {
 
       <div className="workspace-row">
         <h3 className="t-h3">{t('workspace.scopeTitle')}</h3>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding((v) => !v)}>
-          {t('workspace.addScopeItem')}
-        </button>
+        {editable ? (
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding((v) => !v)}>
+            {t('workspace.addScopeItem')}
+          </button>
+        ) : null}
       </div>
 
-      {adding ? (
+      {adding && editable ? (
         <form className="card editor-card auth-form" onSubmit={onAdd}>
           <div className="field">
             <label className="label">{t('workspace.scopeKey')}</label>
@@ -360,20 +407,20 @@ export default function ScopeTab() {
 
       <div className="editor-list">
         {items.map((s, i) => (
-          <ScopeItemCard key={s.id} item={s} atTop={i === 0} atBottom={i === items.length - 1} />
+          <ScopeItemCard key={s.id} item={s} atTop={i === 0} atBottom={i === items.length - 1} editable={editable} />
         ))}
       </div>
 
       <div className="workspace-row">
         <h3 className="t-h3">{t('workspace.scopeTradeTitle')}</h3>
-        {contract.project ? (
+        {contract.project && editable ? (
           <button className="btn btn-ghost btn-sm" type="button" onClick={() => setProposing((v) => !v)}>
             {t('workspace.scopeTradePropose')}
           </button>
         ) : null}
       </div>
 
-      {proposing ? (
+      {proposing && editable ? (
         <form className="card editor-card auth-form" onSubmit={onPropose}>
           <div className="field">
             <label className="label">{t('workspace.scopeTradeOutItem')}</label>
@@ -413,7 +460,7 @@ export default function ScopeTab() {
 
       <div className="editor-list">
         {trades.map((trade) => (
-          <ScopeTradeCard key={trade.id} trade={trade} />
+          <ScopeTradeCard key={trade.id} trade={trade} editable={editable} />
         ))}
       </div>
     </>
