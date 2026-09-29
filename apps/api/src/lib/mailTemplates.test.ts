@@ -6,6 +6,7 @@ import {
   inviteEmail,
   resetEmail,
   reviewerInviteEmail,
+  staffInviteEmail,
   newCommentEmail,
   requestSubmittedEmail,
   requestMessageEmail,
@@ -16,6 +17,7 @@ import {
 const INVITE_URL = 'https://example.com/fa/portal/invite/tok123';
 const RESET_URL = 'https://example.com/en/portal/reset/tok456';
 const REVIEWER_INVITE_URL = 'https://example.com/fa/portal/invite/tok789';
+const STAFF_INVITE_URL = 'https://example.com/fa/portal/invite/tokstaff';
 const THREAD_URL = 'https://example.com/en/desk/review/round1/doc1#thread-abc';
 const DESK_REQUEST_URL = 'https://example.com/en/desk/requests/proj1';
 const PORTAL_REQUEST_URL = 'https://example.com/fa/app/contracts?request=proj1';
@@ -27,6 +29,11 @@ const builders: Array<{ name: string; build: (locale: string) => MailContent; li
     name: 'reviewer-invite',
     build: (l) => reviewerInviteEmail(l, { name: 'کاربر', inviteUrl: REVIEWER_INVITE_URL }),
     link: REVIEWER_INVITE_URL,
+  },
+  {
+    name: 'staff-invite',
+    build: (l) => staffInviteEmail(l, { name: 'کاربر', inviteUrl: STAFF_INVITE_URL }),
+    link: STAFF_INVITE_URL,
   },
   {
     name: 'new-comment',

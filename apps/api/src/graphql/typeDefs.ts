@@ -13,6 +13,18 @@ export const typeDefs = /* GraphQL */ `
     DESIGNER
   }
 
+  "Journeys build plan S3."
+  enum UserState {
+    INVITED
+    ACTIVE
+    DISABLED
+  }
+
+  "Journeys build plan S3 — the tools a customer can be given. One value today."
+  enum ToolKey {
+    PRODUCT_IMPORT
+  }
+
   enum ContractStatus {
     DRAFT
     WAITING_ON_CUSTOMER
@@ -72,6 +84,35 @@ export const typeDefs = /* GraphQL */ `
     locale: String!
     "PD-10. While true, every mutation but setNewPassword (and reading me/signing out) refuses PASSWORD_CHANGE_REQUIRED."
     passwordChangeRequired: Boolean!
+    "Journeys build plan S3. DISABLED accounts lose their session on the next request."
+    state: UserState!
+  }
+
+  "An active tool grant (journeys build plan S3). A revoked one is history and is not listed."
+  type ToolGrant {
+    id: ID!
+    tool: ToolKey!
+    grantedAt: DateTime!
+    grantedBy: User!
+  }
+
+  """
+  One customer, everything sales needs on one page (journeys build plan S3).
+  Each part answers to its own visibility rule rather than to the page's:
+  contracts by contract visibility, tickets by tickets.answer, invoices by
+  money.read. Requests join it with J2.
+  """
+  type CustomerProfile {
+    "The customer's user id — so a client cache can tell two profiles apart and merge a mutation's result into the query's."
+    id: ID!
+    user: User!
+    "Active grants only, oldest first."
+    grants: [ToolGrant!]!
+    contracts: [Contract!]!
+    "Empty without tickets.answer."
+    tickets: [Ticket!]!
+    "The billing totals for this customer. Null without money.read — never zero, which would read as 'owes nothing'."
+    invoices: BillingReport
   }
 
   type PageDesign {
@@ -1586,6 +1627,12 @@ export const typeDefs = /* GraphQL */ `
     "Admin only."
     allContracts: [Contract!]!
     allCustomers: [User!]!
+    "The tools the caller holds an active grant for — what the portal's rail offers (journeys build plan S3)."
+    myTools: [ToolKey!]!
+    "Staff (customers.manage). Null for an id that is not a customer, exactly as for one that does not exist."
+    customer(id: ID!): CustomerProfile
+    "Staff (staff.manage — ADMIN only). Every account, customers included, newest first. The Users place's list (PD-12)."
+    allUsers: [User!]!
 
     "Staff. Counts across every contract — not the caller's own, unlike contractStatusCounts."
     allContractStatusCounts: [StatusCount!]!
@@ -1771,6 +1818,33 @@ export const typeDefs = /* GraphQL */ `
     "locale defaults to the inviting admin's own locale when omitted. Journeys build plan J1: phone is now the required identifier, email optional — the SMS carries the link; email too if given, and the desk always shows the link either way."
     inviteCustomer(phone: String!, name: String!, clientName: String, locale: String, email: String): InviteResult!
     revokeInvite(userId: ID!): Boolean!
+    """
+    Disable or restore an account (journeys build plan S3). customers.manage for
+    a customer, staff.manage for anyone holding a staff role — a mixed account
+    is a staff account. Disabling revokes every outstanding token in the same
+    transaction. Refused: CANNOT_DISABLE_SELF, LAST_SUPERUSER, INVALID_STATE
+    (INVITED is not something you set). Restoring an account that never
+    accepted its invite returns it to INVITED.
+    """
+    setUserState(userId: ID!, state: UserState!): User!
+    "customers.manage. Idempotent."
+    grantTool(customerId: ID!, tool: ToolKey!): CustomerProfile!
+    "customers.manage. Idempotent; the grant stays as history."
+    revokeTool(customerId: ID!, tool: ToolKey!): CustomerProfile!
+    """
+    staff.manage. Staff roles only. A phone is required when any role needs the
+    second factor (PHONE_REQUIRED_FOR_STAFF); otherwise a phone or an email.
+    Refused: ROLES_REQUIRED, INVALID_ROLE, PHONE_INVALID, IDENTIFIER_REQUIRED,
+    NAME_REQUIRED, ALREADY_ACTIVE, ACCOUNT_DISABLED, ACCOUNT_EXISTS (a customer),
+    IDENTIFIER_CONFLICT. The desk always shows the link (PD-18).
+    """
+    inviteStaff(name: String!, roles: [Role!]!, phone: String, email: String, locale: String): InviteResult!
+    """
+    staff.manage. Replaces the role set. Refused: LAST_ROLE (an empty set),
+    LAST_SUPERUSER (removing ADMIN from the last active administrator),
+    PHONE_REQUIRED_FOR_STAFF (a factor role for an account with no phone).
+    """
+    setUserRoles(userId: ID!, roles: [Role!]!): User!
     "review.admin, not customers.manage — inviting a specialist to read a corpus is not account administration (C2.md §5)."
     inviteReviewer(email: String!, name: String!, locale: String): InviteResult!
     "Drops REVIEWER from the account's role set. Refused if it is their only role — that would violate the non-empty-roles constraint (C2.md §5). Comments and threads are untouched."

@@ -74,6 +74,13 @@ export async function seedFixture() {
       passwordHash,
     },
   });
+  // Journeys build plan S3: the product-import tool is a grant, and L7's
+  // suites (and anything else that drives the services resolvers as this
+  // customer) predate that — so the fixture customer holds it, exactly as the
+  // seeded one does. A test about *not* having the tool revokes it.
+  await prisma.toolGrant.create({
+    data: { customerId: customer.id, tool: 'PRODUCT_IMPORT', grantedById: admin.id },
+  });
   // A second customer, so "can A read B's contract?" is answerable.
   const stranger = await prisma.user.create({
     data: {

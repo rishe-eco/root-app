@@ -20,7 +20,7 @@ import { feedbackItemInclude } from './feedback.js';
  * splits by domain.
  */
 
-const ticketInclude = {
+export const ticketInclude = {
   customer: true,
   project: true,
   sourceFeedbackItem: { include: feedbackItemInclude },

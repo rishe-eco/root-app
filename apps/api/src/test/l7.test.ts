@@ -24,6 +24,12 @@ before(async () => {
 beforeEach(async () => {
   await resetDatabase();
   f = await seedFixture();
+  // S3: the fixture customer holds the import tool (test/db.ts); the stranger
+  // must too, or "not the project's customer" would pass for the wrong
+  // reason — no tool — and stop proving the ownership check these tests are for.
+  await prisma.toolGrant.create({
+    data: { customerId: f.stranger.id, tool: 'PRODUCT_IMPORT', grantedById: f.admin.id },
+  });
 });
 
 after(async () => {

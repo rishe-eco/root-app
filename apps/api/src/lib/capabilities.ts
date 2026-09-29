@@ -255,6 +255,44 @@ export function requiresSecondFactor(user: Pick<User, 'roles'>): boolean {
   return user.roles.some((role) => SECOND_FACTOR_ROLES.has(role));
 }
 
+/**
+ * Journeys build plan S3. "Staff" is every role but CUSTOMER — the roles the
+ * desk exists for, and so the roles `inviteStaff` and `setUserRoles` deal in.
+ * Named here because it is a fact about *roles*, which no other file may read
+ * (house rule 1); resolvers ask `isStaffRole` / `hasStaffRole` instead of
+ * comparing to `'CUSTOMER'`.
+ *
+ * It is deliberately not "holds a capability" (the web's `isStaff`): that is
+ * true of every staff role today, but a role that granted nothing would still
+ * be a role a customer-manager must not be able to disable.
+ */
+export function isStaffRole(role: Role): boolean {
+  return role !== 'CUSTOMER';
+}
+
+/** Any staff role at all — a mixed customer-and-staff account counts. */
+export function hasStaffRole(user: Pick<User, 'roles'>): boolean {
+  return user.roles.some(isStaffRole);
+}
+
+/**
+ * The role no one may be left without: "the last active ADMIN" (S3's
+ * `LAST_SUPERUSER`) is a fact about this role specifically, since it alone
+ * holds `staff.manage` and so alone can grant a role to anyone. Exported as a
+ * value so a query can say `roles: { has: SUPERUSER_ROLE }` without spelling
+ * the name outside this file.
+ */
+export const SUPERUSER_ROLE: Role = 'ADMIN';
+
+export function isSuperuser(user: Pick<User, 'roles'>): boolean {
+  return user.roles.includes(SUPERUSER_ROLE);
+}
+
+/** Holds the customer role — alone, or alongside staff ones. */
+export function hasCustomerRole(user: Pick<User, 'roles'>): boolean {
+  return user.roles.includes('CUSTOMER');
+}
+
 /** Every capability held across a user's role set. */
 export function capabilitiesOf(user: Pick<User, 'roles'>): Set<Capability> {
   const held = new Set<Capability>();

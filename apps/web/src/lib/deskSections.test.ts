@@ -30,6 +30,16 @@ test('the nav offers exactly the rows canSeeSection accepts', () => {
   );
 });
 
+test('users (S3) is staff.manage and nothing else: no other capability, however broad, opens it', () => {
+  const users = DESK_SECTIONS.find((s) => s.key === 'users')!;
+  assert.equal(canSeeSection(holding('staff.manage'), users), true);
+  assert.equal(
+    canSeeSection(holding('customers.manage', 'contracts.author', 'apiTokens.manage', 'assignments.override'), users),
+    false,
+  );
+  assert.equal(canSeeSection(holding(), users), false);
+});
+
 test('single-capability rows and the any-staff row behave as before', () => {
   const tokens = DESK_SECTIONS.find((s) => s.key === 'apiTokens')!;
   const overview = DESK_SECTIONS.find((s) => s.key === 'overview')!;

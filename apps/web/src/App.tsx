@@ -21,13 +21,15 @@ import ContractDetail from '@/portal/ContractDetail';
 import ContractPrint from '@/portal/ContractPrint';
 import Support from '@/portal/Support';
 import PortalBilling from '@/portal/Billing';
-import PortalServices from '@/portal/Services';
+import PortalTools from '@/portal/Tools';
 import DeskLayout from '@/desk/DeskLayout';
 import DeskHome from '@/desk/DeskHome';
 import Overview from '@/desk/Overview';
 import DeskContracts from '@/desk/Contracts';
 import DeskRequests, { DeskRequestDetail } from '@/desk/Requests';
 import Customers from '@/desk/Customers';
+import CustomerDetail from '@/desk/CustomerDetail';
+import Users from '@/desk/Users';
 import Library from '@/desk/Library';
 import LibraryEntry from '@/desk/LibraryEntry';
 import LibraryConcepts from '@/desk/LibraryConcepts';
@@ -110,8 +112,10 @@ export default function App() {
               printable contract is no less private than the screen it came
               from. The chrome around it is hidden at print time, not here. */}
           <Route path="contracts/:id/print" element={<ContractPrint />} />
-          {/* Build plan L7: the services rail goes live — see portal/Services.tsx. */}
-          <Route path="services" element={<PortalServices />} />
+          {/* Build plan L7: the services rail goes live — see portal/Tools.tsx (S3 renamed it). */}
+          <Route path="tools" element={<PortalTools />} />
+          {/* S3: Services became Tools; old links and bookmarks keep working. */}
+          <Route path="services" element={<Navigate to="../tools" replace />} />
           {/* Build plan L4: the support rail goes live — see Support.tsx. */}
           <Route path="support" element={<Support />} />
           {/* Build plan L6: the billing rail goes live — see portal/Billing.tsx. */}
@@ -136,6 +140,8 @@ export default function App() {
           <Route path="requests" element={<DeskRequests />} />
           <Route path="requests/:id" element={<DeskRequestDetail />} />
           <Route path="customers" element={<Customers />} />
+          <Route path="customers/:id" element={<CustomerDetail />} />
+          <Route path="users" element={<Users />} />
           <Route path="library" element={<Library />} />
           <Route path="library/concepts" element={<LibraryConcepts />} />
           <Route path="library/new" element={<LibraryEntry />} />

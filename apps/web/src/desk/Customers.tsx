@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useOutletContext } from 'react-router-dom';
+import { Link, Navigate, useOutletContext } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
@@ -126,15 +126,24 @@ export default function Customers() {
                 <th>{t('desk.invitePhone')}</th>
                 <th>{t('desk.inviteEmail')}</th>
                 <th>{t('desk.inviteClient')}</th>
+                <th>{t('desk.colStatus')}</th>
               </tr>
             </thead>
             <tbody>
               {(data?.allCustomers ?? []).map((c) => (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
+                  {/* Journeys build plan S3: the name opens the customer's page. */}
+                  <td>
+                    <Link to={lp(locale, `/desk/customers/${c.id}`)}>{c.name}</Link>
+                  </td>
                   <td dir="ltr">{c.phone ?? '—'}</td>
                   <td dir="ltr">{c.email ?? '—'}</td>
                   <td>{c.clientName ?? '—'}</td>
+                  <td>
+                    <span className={c.state === 'DISABLED' ? 'badge badge-danger' : 'badge badge-neutral'}>
+                      {t(`desk.people.state.${c.state}`)}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

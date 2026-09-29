@@ -175,7 +175,7 @@
   "portal": {
     "workspace": "Workspace",
     "navContracts": "Contracts",
-    "navServices": "Services",
+    "navTools": "Tools",
     "navBilling": "Billing",
     "navSupport": "Support",
     "navDesk": "Desk",
@@ -196,6 +196,94 @@
     "navBuilds": "Builds",
     "navApiTokens": "Tokens",
     "navTemplates": "Templates",
+    "navUsers": "Users",
+    "people": {
+      "state": {
+        "INVITED": "Invited",
+        "ACTIVE": "Active",
+        "DISABLED": "Disabled"
+      },
+      "tool": {
+        "PRODUCT_IMPORT": "Product import"
+      },
+      "role": {
+        "ADMIN": "Administrator",
+        "SALES": "Sales",
+        "DESIGNER": "Designer",
+        "DEVELOPER": "Developer",
+        "CONTRIBUTOR": "Contributor",
+        "REVIEWER": "Reviewer",
+        "CUSTOMER": "Customer"
+      },
+      "customer": {
+        "back": "All customers",
+        "notFound": "No such customer.",
+        "email": "Email",
+        "amount": "Fee (Toman)",
+        "disable": "Disable account",
+        "restore": "Restore account",
+        "disableConfirm": "Disable {{name}}? They are signed out on their next request, and any invite or reset link they were sent stops working.",
+        "restoreConfirm": "Restore {{name}}'s account?",
+        "toolsTitle": "Tools",
+        "toolsLede": "What this customer can use in their portal. Taking one away keeps everything they already did with it.",
+        "toolGranted": "Available",
+        "toolNotGranted": "Not available",
+        "grant": "Give access",
+        "revoke": "Take away",
+        "grantedBy": "Given by {{name}}, {{date}}",
+        "revokeConfirm": "Take {{tool}} away from {{name}}? Their earlier uploads stay on record.",
+        "contractsTitle": "Contracts",
+        "noContracts": "No contracts yet.",
+        "ticketsTitle": "Tickets",
+        "noTickets": "No tickets.",
+        "billingTitle": "Billing",
+        "moneyHidden": "Billing figures are shown only to people who can read money."
+      },
+      "users": {
+        "title": "Users",
+        "lede": "Every account, staff and customers, with its roles and state. Invite a member of staff, change roles, or switch an account off.",
+        "inviteTitle": "Invite a member of staff",
+        "phoneHint": "Required for administrators, sales, designers and developers: their sign-in code is sent to it.",
+        "rolesLabel": "Roles",
+        "inviteCta": "Generate invite link",
+        "colContact": "Contact",
+        "you": "You",
+        "editRoles": "Edit roles",
+        "saveRoles": "Save roles",
+        "cancel": "Cancel",
+        "disable": "Disable",
+        "restore": "Restore",
+        "disableConfirm": "Disable {{name}}? They are signed out on their next request, and any invite or reset link they were sent stops working.",
+        "restoreConfirm": "Restore {{name}}'s account?"
+      },
+      "errors": {
+        "FORBIDDEN": "You don't have permission to do that. An account that holds a staff role can only be changed by an administrator.",
+        "NOT_FOUND": "That account no longer exists.",
+        "CANNOT_DISABLE_SELF": "You can't disable your own account.",
+        "LAST_SUPERUSER": "That is the last active administrator. There has to be at least one.",
+        "LAST_ROLE": "An account has to keep at least one role.",
+        "INVALID_STATE": "An account can only be switched on or off.",
+        "ROLES_REQUIRED": "Choose at least one role.",
+        "INVALID_ROLE": "Staff can only be invited to staff roles.",
+        "PHONE_INVALID": "That doesn't look like a phone number.",
+        "IDENTIFIER_REQUIRED": "Enter a phone number or an email.",
+        "PHONE_REQUIRED_FOR_STAFF": "These roles sign in with a code sent to a phone, so a phone number is needed.",
+        "NAME_REQUIRED": "Enter a name.",
+        "ALREADY_ACTIVE": "That account is already active.",
+        "ACCOUNT_DISABLED": "That account is disabled. Restore it first.",
+        "ACCOUNT_EXISTS": "That is a customer account. Change its roles instead of inviting it.",
+        "IDENTIFIER_CONFLICT": "That phone or email belongs to another account.",
+        "UNKNOWN": "That did not work. Try again."
+      }
+    },
+    "services": {
+      "title": "Services",
+      "lede": "Every customer's uploads, and the charge for the ones that were applied.",
+      "empty": "Nothing has been uploaded yet.",
+      "billedAmount": "Charged {{amount}} Toman",
+      "billAmountPlaceholder": "Amount (Toman)",
+      "billAction": "Charge"
+    },
     "templates": {
       "title": "Templates",
       "lede": "Site types, and the pages, features and deliverables a contract of each type starts with.",
@@ -962,6 +1050,50 @@
       "EMPTY_SUBJECT": "Add a subject.",
       "EMPTY_COMMENT": "A message can't be empty."
     }
+  },
+  "services": {
+    "status": {
+      "UPLOADED": "Uploaded",
+      "PREVIEWED": "Previewed",
+      "APPLIED": "Applied",
+      "FAILED": "Failed"
+    },
+    "summary": {
+      "create": "New",
+      "update": "Changed",
+      "unchanged": "Unchanged",
+      "rejected": "Rejected"
+    },
+    "col": {
+      "sku": "SKU",
+      "name": "Name",
+      "price": "Price (Toman)",
+      "action": "Action",
+      "reason": "Reason"
+    },
+    "action": {
+      "CREATE": "Create",
+      "UPDATE": "Update",
+      "UNCHANGED": "Unchanged",
+      "REJECTED": "Rejected"
+    },
+    "preview": "Preview changes",
+    "apply": "Apply changes",
+    "appliedLine": "Applied by {{name}} · {{date}}",
+    "error": {
+      "NOT_PREVIEWED": "Preview the changes before applying them.",
+      "ALREADY_APPLIED": "This upload has already been applied.",
+      "ALREADY_ATTACHED": "This file is already part of an upload.",
+      "NOT_FOUND": "That is no longer available."
+    }
+  },
+  "tools": {
+    "pageTitle": "Tools",
+    "pageLede": "Tools Root has switched on for you. Product import: upload your spreadsheet, check what would change, then apply it.",
+    "upload": "Upload spreadsheet",
+    "noProject": "You don't have a project yet.",
+    "empty": "Nothing uploaded yet.",
+    "none": "No tools have been switched on for your account yet. Your Root contact can enable them."
   },
   "billing": {
     "pageTitle": "Billing",
