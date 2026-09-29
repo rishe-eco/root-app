@@ -317,3 +317,13 @@ test('assignableUsers lists exactly who assignContract would accept', async () =
   assert.deepEqual(await ids('BUILD'), [f.admin.id, staff.DEVELOPER.id, staff.DEVELOPER_UNASSIGNED.id].sort());
   assert.equal((await exec(q, { as: staff.DESIGNER, variables: { j: 'DESIGN' } })).code, 'FORBIDDEN');
 });
+
+test('every staff role survives a round trip through User.roles (the SDL enum)', async () => {
+  // Regression for the S1 web lane's finding: SALES and DESIGNER were in the
+  // Prisma enum and not the SDL one, so selecting `roles` threw for them —
+  // `signIn` included. `me` selects the same field the sign-in payload does.
+  for (const who of ['SALES', 'DESIGNER', 'DEVELOPER']) {
+    const data = ok(await exec('{ me { roles capabilities } }', { as: staff[who] })) as { me: { roles: string[] } };
+    assert.deepEqual(data.me.roles, [who]);
+  }
+});

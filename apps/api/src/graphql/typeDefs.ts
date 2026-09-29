@@ -7,6 +7,10 @@ export const typeDefs = /* GraphQL */ `
     CONTRIBUTOR
     REVIEWER
     DEVELOPER
+    "Journeys build plan S1."
+    SALES
+    "Journeys build plan S1."
+    DESIGNER
   }
 
   enum ContractStatus {
