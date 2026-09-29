@@ -9,46 +9,20 @@
  * migration broke is not, which is the case a database-backed counter would
  * actually risk.
  *
+ * **The bucket itself moved to `lib/rateLimit.ts`** (journeys build plan J1,
+ * PD-15): `routes/ask.ts` now checks `askBucket` there directly, with the
+ * exact numbers this file used to hold (capacity 5, refill one every 30s) —
+ * this file keeps only the spend ceiling, which is Ask-specific money
+ * tracking, not a generic rate limiter, and was never part of what PD-15
+ * asked to be generalized.
+ *
  * Nginx `limit_req` (R4.md §4, item 1) is deployment configuration, not code
  * — out of scope here the same way C0's mail provider left Nginx alone
  * until there was a reason to touch it (see docs/development/README.md
  * "no stage from V1b to R1 needs a deployment change").
  */
 
-const BUCKET_CAPACITY = 5;
-/** Tokens regained per millisecond — one every 30s, so a sustained asker
- *  still gets through, and a loop cannot. */
-const REFILL_PER_MS = 1 / 30_000;
-
-type Bucket = { tokens: number; lastRefill: number };
-const buckets = new Map<string, Bucket>();
-
-/** Bounds memory under sustained traffic from many distinct IPs — the
- *  bucket map is never allowed to grow without limit either. */
-const MAX_TRACKED_IPS = 10_000;
-
-export function checkRateLimit(ip: string, now: number = Date.now()): boolean {
-  let bucket = buckets.get(ip);
-  if (!bucket) {
-    if (buckets.size >= MAX_TRACKED_IPS) {
-      // Evict the oldest-seen entry rather than let the map grow forever;
-      // losing one stranger's bucket under this kind of pressure is the
-      // acceptable failure, not refusing every new IP.
-      const oldestKey = buckets.keys().next().value;
-      if (oldestKey !== undefined) buckets.delete(oldestKey);
-    }
-    bucket = { tokens: BUCKET_CAPACITY, lastRefill: now };
-    buckets.set(ip, bucket);
-  }
-
-  const elapsed = now - bucket.lastRefill;
-  bucket.tokens = Math.min(BUCKET_CAPACITY, bucket.tokens + elapsed * REFILL_PER_MS);
-  bucket.lastRefill = now;
-
-  if (bucket.tokens < 1) return false;
-  bucket.tokens -= 1;
-  return true;
-}
+import { askBucket } from './rateLimit.js';
 
 /**
  * claude-opus-4-8 pricing, cached 2026-06-24 — $5/1M input, $25/1M output.
@@ -111,7 +85,7 @@ export function recordSpend(usd: number, now: number = Date.now()): void {
 /** Test-only seam — resets both trackers between test files/cases so one
  *  test's IP or spend history cannot leak into the next. */
 export function __resetAskRateLimitForTests(): void {
-  buckets.clear();
+  askBucket.reset();
   spentToday = 0;
   spendDay = utcDay(Date.now());
 }

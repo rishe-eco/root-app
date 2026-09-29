@@ -33,6 +33,12 @@ const run = spawnSync('npx tsx --test --test-concurrency=1 src/test/*.test.ts', 
     JWT_SECRET: process.env.JWT_SECRET || 'integration-only-secret-not-used-anywhere-else-0123',
     RESEND_API_KEY: '',
     MAIL_FROM: '',
+    // J1's test-env pinning rule — see test-unit.ts's identical block.
+    SMS_PROVIDER: '',
+    SMS_API_KEY: '',
+    SMS_SENDER: '',
+    SMS_CODE_PATTERN: '',
+    SMS_INVITE_PATTERN: '',
   },
   stdio: 'inherit',
   // cmd.exe does not expand the glob, and does not need to: Node's test

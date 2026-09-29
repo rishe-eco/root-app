@@ -232,6 +232,29 @@ const GRANTS: Record<Role, readonly Capability[]> = {
   ],
 };
 
+/**
+ * PD-20: the roles that can change a customer's contract or money —
+ * `ADMIN`, `SALES`, `DESIGNER`, `DEVELOPER` — must clear a second factor to
+ * sign in at all; `CONTRIBUTOR` and `REVIEWER` do not, because both are
+ * routinely outside specialists invited by email who reach no customer
+ * data. A literal set rather than a derived one (e.g. "any role granting
+ * `contracts.readActive`"): the second factor is a property of the *role*,
+ * decided once here, not an accidental consequence of today's capability
+ * grants drifting under it later.
+ */
+const SECOND_FACTOR_ROLES: ReadonlySet<Role> = new Set(['ADMIN', 'SALES', 'DESIGNER', 'DEVELOPER']);
+
+/**
+ * PD-20 — the one function `signIn`/`verifySignInFactor` (resolvers/auth.ts)
+ * ask instead of reading a role themselves, per house rule 1. A user holding
+ * *any* second-factor role must clear the factor, even if they also hold a
+ * role that would not require it on its own — the same union-never-subtracts
+ * rule `can` already applies to capabilities.
+ */
+export function requiresSecondFactor(user: Pick<User, 'roles'>): boolean {
+  return user.roles.some((role) => SECOND_FACTOR_ROLES.has(role));
+}
+
 /** Every capability held across a user's role set. */
 export function capabilitiesOf(user: Pick<User, 'roles'>): Set<Capability> {
   const held = new Set<Capability>();
