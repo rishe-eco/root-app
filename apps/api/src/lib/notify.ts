@@ -26,7 +26,7 @@ import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms }
  * The notification router (journeys build plan J1). One call, `notify(user,
  * event)`, replaces every direct `sendMail(...)` call site the codebase had
  * before this stage: invite, reset, reviewer-invite, new-comment,
- * demo-published, feedback-submitted, build-published, feedback-ratified.
+ * demo-published, feedback-submitted, build-published, and (S2) the three answer events.
  * It renders whichever templates this event kind defines, sends to
  * whichever channels the user actually has, logs the SMS half, and **never
  * throws** — a failed notification must never fail the act that caused it
