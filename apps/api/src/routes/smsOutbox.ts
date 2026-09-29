@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { devSmsTransport } from '../lib/sms.js';
 import { normalizePhone } from '../lib/phone.js';
+import { __resetNamedRateLimitsForTests } from '../lib/rateLimit.js';
 
 /**
  * The e2e-only route onto `DevSmsTransport`'s outbox (journeys build plan
@@ -46,4 +47,20 @@ smsOutboxRouter.get('/__e2e/sms-outbox', (req, res) => {
   }
 
   res.json({ code: entry.code ?? null, text: entry.text ?? null, at: entry.at });
+});
+
+/**
+ * e2e-only, behind the same flag as the outbox above (env.ts refuses it in
+ * production): empties every named rate-limit bucket. The e2e API is one
+ * long-lived process for the whole suite and every spec signs in from the
+ * same address, so J1's real budgets (10 sign-ins per 15 minutes per
+ * identifier and per IP) tripped a third of the way through the run and
+ * every later spec met "Too many attempts" (J1 review). Resetting before
+ * each sign-in keeps the real budgets in force *within* a test — the rate
+ * limits themselves are proven by rateLimit.test.ts and j1.test.ts — without
+ * letting one spec spend the next one's allowance.
+ */
+smsOutboxRouter.post('/__e2e/rate-limits/reset', (_req, res) => {
+  __resetNamedRateLimitsForTests();
+  res.status(204).end();
 });

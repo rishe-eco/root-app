@@ -55,7 +55,9 @@ test('invite by phone → set password → sign in with phone', async ({ page })
   const inviteUrl = new URL(link!.trim());
 
   await page.context().clearCookies();
-  await page.goto(inviteUrl.pathname);
+  // The link carries the new customer's locale (Persian by default); this
+  // part of the flow is asserted in English, so open the English form.
+  await page.goto(inviteUrl.pathname.replace(/^\/fa\//, '/en/'));
   await page.locator('#name').fill('نام تازه');
   await page.locator('#pw').fill('a-brand-new-password');
   await page.locator('#pw2').fill('a-brand-new-password');
@@ -90,7 +92,9 @@ test('forgot password by phone → code → forced new password → portal (fa)'
   const link = await page.locator('.desk-code').textContent();
   const inviteUrl = new URL(link!.trim());
   await page.context().clearCookies();
-  await page.goto(inviteUrl.pathname);
+  // The link carries the new customer's locale (Persian by default); this
+  // part of the flow is asserted in English, so open the English form.
+  await page.goto(inviteUrl.pathname.replace(/^\/fa\//, '/en/'));
   await page.locator('#name').fill('مشتری فراموش‌کار');
   await page.locator('#pw').fill('the-old-password-123');
   await page.locator('#pw2').fill('the-old-password-123');

@@ -133,14 +133,32 @@ export async function publishTestRound(
   request: APIRequestContext,
   opts: { sha: string; label?: string; documents: Array<{ path: string; title: string; order: number; blocks: TestBlock[] }> },
 ): Promise<{ id: string }> {
+  // J1: sign-in takes an identifier, and ADMIN meets the staff second factor
+  // — so this is the same two steps the browser helper below takes, over the
+  // API, with the code read from the e2e outbox. The request context keeps
+  // the cookie verifySignInFactor sets.
+  await resetRateLimits();
   const signIn = await request.post(`${E2E_API_URL}/graphql`, {
     data: {
-      query: 'mutation($email:String!,$password:String!){ signIn(email:$email,password:$password){ user { id } } }',
-      variables: { email: ADMIN.email, password: ADMIN.password },
+      query:
+        'mutation($i:String!,$p:String!){ signIn(identifier:$i,password:$p){ user { id } factorChallengeId } }',
+      variables: { i: ADMIN.email, p: ADMIN.password },
     },
   });
   const signInBody = await signIn.json();
   if (signInBody.errors) throw new Error(`publishTestRound sign-in failed: ${JSON.stringify(signInBody.errors)}`);
+  const challengeId = signInBody.data.signIn.factorChallengeId as string | null;
+  if (challengeId) {
+    const code = await readSmsCode(ADMIN.phone);
+    const factor = await request.post(`${E2E_API_URL}/graphql`, {
+      data: {
+        query: 'mutation($c:String!,$k:String!){ verifySignInFactor(challengeId:$c,code:$k){ user { id } } }',
+        variables: { c: challengeId, k: code },
+      },
+    });
+    const factorBody = await factor.json();
+    if (factorBody.errors) throw new Error(`publishTestRound factor failed: ${JSON.stringify(factorBody.errors)}`);
+  }
 
   const res = await request.post(`${E2E_API_URL}/graphql`, {
     data: {
@@ -165,9 +183,32 @@ export async function publishTestRound(
  * already there the instant the factor screen renders, but a short retry
  * costs nothing and removes any doubt about ordering.
  */
+/**
+ * Node's fetch keeps connections alive, and the API closes idle ones after a
+ * few seconds; a request that lands on a socket the server has just closed
+ * fails with ECONNRESET before it was ever processed (seen in the J1 e2e
+ * run). Retried once, for these test-only helper calls alone.
+ */
+async function e2eFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    const cause = (err as { cause?: { code?: string } }).cause;
+    if (cause?.code !== 'ECONNRESET') throw err;
+    return fetch(url, init);
+  }
+}
+
+/** See routes/smsOutbox.ts's reset route: every sign-in starts with fresh
+ *  budgets, so one spec cannot spend the next one's allowance. */
+async function resetRateLimits(): Promise<void> {
+  const res = await e2eFetch(`${E2E_API_URL}/__e2e/rate-limits/reset`, { method: 'POST' });
+  if (!res.ok) throw new Error(`resetRateLimits: ${res.status}`);
+}
+
 async function readSmsCode(phone: string): Promise<string> {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await fetch(`${E2E_API_URL}/__e2e/sms-outbox?phone=${encodeURIComponent(phone)}`);
+    const res = await e2eFetch(`${E2E_API_URL}/__e2e/sms-outbox?phone=${encodeURIComponent(phone)}`);
     if (res.ok) {
       const body = (await res.json()) as { code: string | null };
       if (body.code) return body.code;
@@ -206,6 +247,7 @@ export async function signIn(
   lang = 'en',
 ) {
   await page.context().clearCookies();
+  await resetRateLimits();
   await page.goto(`/${lang}/portal`);
   await page.locator('#email').fill(who.email);
   await page.locator('#password').fill(who.password);
