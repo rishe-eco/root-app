@@ -244,7 +244,11 @@ export default function DeskContracts() {
                 <td dir="ltr">{c.ref}</td>
                 <td>{pick(c, 'title', locale)}</td>
                 <td>{c.customer.clientName ?? c.customer.name}</td>
-                <td onClick={(e) => e.stopPropagation()}>
+                {/* The two control cells stop the row's click only when they
+                    hold a control: for a reader (design, development) they
+                    hold a badge or nothing, and swallowing the click there
+                    made half the row dead — found by the S1 e2e. */}
+                <td onClick={canAuthor ? (e) => e.stopPropagation() : undefined}>
                   {canAuthor ? (
                     // Permissive by design: any status to any status, with a
                     // manual override always available.
@@ -274,7 +278,7 @@ export default function DeskContracts() {
                 </td>
                 <td>{fullDateTime(c.updatedAt, locale)}</td>
                 <td>{c.publishedAt ? fullDateTime(c.publishedAt, locale) : '—'}</td>
-                <td onClick={(e) => e.stopPropagation()}>
+                <td onClick={canAuthor ? (e) => e.stopPropagation() : undefined}>
                   {canAuthor ? (
                     <button
                       className="btn btn-secondary btn-sm"

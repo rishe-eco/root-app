@@ -178,7 +178,9 @@ test('a developer sees Overview, Contracts and Builds — in both languages (D-2
 test('the seeded designer opens the seeded contract and sees no fee', async ({ page }) => {
   await signIn(page, DESIGNER);
   await page.goto('/en/desk/contracts');
-  await page.locator('tr.crow', { hasText: CONTRACT_REF }).click();
+  // The ref cell, not the row's centre: for sales the centre is the status
+  // select, whose cell rightly keeps the click from opening the contract.
+  await page.locator('tr.crow', { hasText: CONTRACT_REF }).locator('td').first().click();
   await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
 
   // money.read is SALES/ADMIN only (PD-14) — a designer reading their own
@@ -195,7 +197,9 @@ test('the seeded designer opens the seeded contract and sees no fee', async ({ p
 test('sales assigns and then changes the contract designer through the workspace header', async ({ page }) => {
   await signIn(page, SALES);
   await page.goto('/en/desk/contracts');
-  await page.locator('tr.crow', { hasText: CONTRACT_REF }).click();
+  // The ref cell, not the row's centre: for sales the centre is the status
+  // select, whose cell rightly keeps the click from opening the contract.
+  await page.locator('tr.crow', { hasText: CONTRACT_REF }).locator('td').first().click();
   await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
 
   // The seed assigns both designer@ and developer@ to this contract.
