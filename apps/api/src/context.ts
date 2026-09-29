@@ -28,6 +28,15 @@ export type Context = {
   res: Response;
   user: User | null;
   auth: Auth | null;
+  /**
+   * View as customer (journeys build plan J3). Set **only** by the `contract`
+   * root field when a staff reader passes `asCustomer: true`, to the contract's
+   * own customer; never by `buildContext`, so a request without that argument
+   * cannot have it. Field resolvers do not read it — they ask `viewerOf(ctx)`
+   * who is looking, and that answer changes; the *rules* they then apply
+   * (`lib/visibility.ts`) do not. See `viewerOf`.
+   */
+  viewAs?: User | null;
 };
 
 /** `Authorization: Bearer …`, or null. Case-insensitive on the scheme, because
@@ -121,6 +130,35 @@ export function requireUserAllowingPasswordChange(ctx: Context): User {
     throw new GraphQLError('You need to sign in.', { extensions: { code: 'UNAUTHENTICATED' } });
   }
   return ctx.user;
+}
+
+/**
+ * **Whose eyes a field resolver reads through.** The signed-in user — except
+ * under view-as-customer, when it is the contract's customer.
+ *
+ * This is the whole of the "as customer" feature, deliberately: the trap the
+ * journeys plan names is a second implementation of visibility, which would
+ * drift from the portal's the first time a rule changed. So there is no
+ * `asCustomer` branch anywhere. Every field resolver asks one question — "what
+ * does *this viewer* see?" — of the one set of rules in `lib/visibility.ts`,
+ * and `viewAs` changes the viewer, not the rule. A staff member looking as a
+ * customer therefore sees exactly what `isContractReader(customer)`,
+ * `mayReadMoney(customer, …)` and `requestVisibleTo(customer, …)` say — the
+ * same answers the customer's own request would get.
+ *
+ * **Field resolvers use this; guards and mutations never do.** `requireUser`
+ * and `requireCapability` stay on the real caller: view-as never widens or
+ * narrows what someone may *do*, only what a read shows. (It is set only by a
+ * query root field, so no mutation runs under it.)
+ *
+ * The context is per request, so `viewAs` set by one root field is seen by its
+ * sibling root fields in the same operation. That can only ever *narrow* what
+ * a staff reader gets back (a customer's view is a subset of theirs), never
+ * widen it, so it is safe — and predictable enough in practice, because the
+ * web asks for the view alone.
+ */
+export function viewerOf(ctx: Context): User {
+  return ctx.viewAs ?? requireUser(ctx);
 }
 
 /**

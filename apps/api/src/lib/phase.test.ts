@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeProjectProgress, type PhaseLike, type ScopeStatusLike } from './phase.js';
+import { computeProjectProgress, isPhaseAccepted, type PhaseLike, type ScopeStatusLike } from './phase.js';
 
 const item = (status: ScopeStatusLike) => ({ status });
 
@@ -72,6 +72,16 @@ test('a project with only empty phases reports the last one, with a 0/0 item cou
   assert.equal(progress.currentPhaseNumber, 2);
   assert.equal(progress.itemsAcceptedInPhase, 0);
   assert.equal(progress.itemsTotalInPhase, 0);
+});
+
+test('isPhaseAccepted: accepted means non-empty and every counted item ACCEPTED (J3) — unlike isPhaseDone, an empty phase has finished nothing', () => {
+  assert.equal(isPhaseAccepted(phase(1, [])), false);
+  assert.equal(isPhaseAccepted(phase(1, ['ACCEPTED', 'ACCEPTED'])), true);
+  assert.equal(isPhaseAccepted(phase(1, ['ACCEPTED', 'IN_DEMO'])), false);
+  // Declined and traded items are not part of the deal, so they neither block…
+  assert.equal(isPhaseAccepted(phase(1, ['ACCEPTED', 'DECLINED', 'TRADED'])), true);
+  // …nor count as work done on their own.
+  assert.equal(isPhaseAccepted(phase(1, ['DECLINED', 'TRADED'])), false);
 });
 
 test('titles come from the current phase, not the first or last', () => {

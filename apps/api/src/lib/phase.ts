@@ -65,6 +65,20 @@ function isPhaseDone(phase: PhaseLike): boolean {
 }
 
 /**
+ * The wizard's reading of "this phase's demo is finished" (journeys build
+ * plan J3, `legacyFinished` in lib/steps.ts): at least one item is bound to
+ * the phase and every counted one is ACCEPTED. **Not `isPhaseDone`**, which
+ * deliberately treats an empty phase as done so a freshly created phase 4
+ * cannot stall "the current phase" — that is the right answer for finding
+ * where the project is, and the wrong one for saying a step has been
+ * completed, where a phase with nothing in it has completed nothing.
+ */
+export function isPhaseAccepted(phase: Pick<PhaseLike, 'scopeItems'>): boolean {
+  const counted = phase.scopeItems.filter((i) => i.status !== 'DECLINED' && i.status !== 'TRADED');
+  return counted.length > 0 && counted.every((i) => i.status === 'ACCEPTED');
+}
+
+/**
  * The single computation behind `Project.progress` (GraphQL) — read fresh on
  * every request, never cached in a column. `phases` should be given in
  * project order; this function does not sort them, so an out-of-order

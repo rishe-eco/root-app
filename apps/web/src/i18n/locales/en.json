@@ -768,7 +768,9 @@
     "dependencyVerifyNotePlaceholder": "E.g., we deployed a test file to the host.",
     "dependencyVerifiedLine": "Verified by {{name}} on {{date}}",
     "dependencyOverdue": "Overdue",
-    "confirmDeleteDependency": "Delete this dependency?"
+    "confirmDeleteDependency": "Delete this dependency?",
+    "tabSteps": "Steps",
+    "tabNotes": "Notes"
   },
   "upload": {
     "errAuth": "You do not have access to upload this.",
@@ -1201,5 +1203,148 @@
       "archivedNote": "Archived: {{reason}}",
       "openRequest": "View the original request"
     }
+  },
+  "wizard": {
+    "title": "Steps",
+    "step": {
+      "REQUIREMENTS": "Requirements",
+      "SCOPE": "Pages and features",
+      "DRAFT": "The draft",
+      "AGREEMENT": "Approve and sign",
+      "DESIGN": "Design",
+      "MOCKUP": "Mockup",
+      "DEMO": "Demo",
+      "SUMMARY": "Summary"
+    },
+    "demoPhase": "Demo · phase {{n}}",
+    "state": {
+      "DONE": "Done",
+      "CURRENT": "Current",
+      "UPCOMING": "Upcoming"
+    },
+    "locked": "Locked",
+    "lockedSince": "Locked {{when}} — this step can no longer be changed.",
+    "panel": {
+      "notYetTitle": "Not available yet",
+      "notYetCustomer": "Root has not opened this step yet. It will appear here when it is ready.",
+      "notYetStaff": "There is nothing to author in this step yet — its tools are not built.",
+      "doneNote": "This step is done.",
+      "summaryNote": "The summary only collects what the other steps produced."
+    },
+    "who": {
+      "CUSTOMER": "the customer",
+      "ROOT": "Root"
+    },
+    "caption": "{{step}} · waiting on {{who}}",
+    "allDone": "Every step is done",
+    "legacyNote": "This contract follows the design-first road. The sections below are its steps."
+  },
+  "statusArea": {
+    "title": "Where this stands",
+    "currentStep": "Current step",
+    "nextMove": "Next move",
+    "move": {
+      "customer": {
+        "CUSTOMER": "Yours",
+        "ROOT": "Root's"
+      },
+      "staff": {
+        "CUSTOMER": "The customer's",
+        "ROOT": "Root's"
+      }
+    },
+    "waiting": {
+      "customer": {
+        "CUSTOMER": "Waiting on you",
+        "ROOT": "Waiting on Root"
+      },
+      "staff": {
+        "CUSTOMER": "Waiting on the customer",
+        "ROOT": "Waiting on Root"
+      }
+    },
+    "started": "Started",
+    "notStarted": "Not started yet",
+    "notStartedHelp": "Work begins once the agreement is signed.",
+    "planned": "Planned",
+    "plannedRange": "{{start}} – {{end}}",
+    "plannedNone": "No dates set yet",
+    "overdue": "Overdue",
+    "progress": "Last progress",
+    "progressToday": "Today",
+    "progressDays_one": "{{n}} day ago",
+    "progressDays_other": "{{n}} days ago",
+    "progressNever": "Nothing shown yet",
+    "attentionTitle": "Waiting for action",
+    "attentionEmpty": "Nothing is waiting right now.",
+    "since": "since {{when}}"
+  },
+  "attention": {
+    "DRAFT_TO_REVIEW": {
+      "contract": {
+        "customer": "The contract text changed to v{{toVersion}}. Reviewing and approving it is up to you.",
+        "staff": "The customer has not yet reviewed and approved v{{toVersion}} of the contract."
+      },
+      "amendmentApprove": {
+        "customer": "Amendment {{label}} is waiting for your approval.",
+        "staff": "The customer has not yet approved amendment {{label}}."
+      },
+      "amendmentSign": {
+        "customer": "Amendment {{label}} is approved. Sign it to finish.",
+        "staff": "The customer has approved amendment {{label}} but not yet signed it."
+      }
+    },
+    "ROUND_PUBLISHED": {
+      "default": {
+        "customer_one": "The design changed — {{n}} page is waiting for your approval.",
+        "customer_other": "The design changed — {{n}} pages are waiting for your approval.",
+        "staff_one": "The customer has not yet approved the {{n}} page that changed in the design.",
+        "staff_other": "The customer has not yet approved the {{n}} pages that changed in the design."
+      }
+    },
+    "ANSWER_PUBLISHED": {
+      "default": {
+        "customer_one": "Root addressed {{n}} item of your feedback. Look at it, then accept it or reopen it.",
+        "customer_other": "Root addressed {{n}} items of your feedback. Look at them, then accept them or reopen them.",
+        "staff_one": "{{n}} item of the customer’s feedback was addressed and awaits their acceptance.",
+        "staff_other": "{{n}} items of the customer’s feedback were addressed and await their acceptance."
+      }
+    },
+    "COMMITMENT_OVERDUE": {
+      "customer": {
+        "customer": "“{{title}}” is past its due date and has not been confirmed.",
+        "staff": "The customer is late on “{{title}}”."
+      },
+      "root": {
+        "staff": "Root is late on “{{title}}”."
+      }
+    }
+  },
+  "timeline": {
+    "REQUEST_SUBMITTED": "Request submitted",
+    "CONTRACT_HANDED_OVER": "Contract handed over",
+    "STEP_APPROVED": "{{step}} approved",
+    "REVISION_PUBLISHED": "Contract text v{{number}} published",
+    "REVISION_APPROVED": "Contract text v{{number}} approved",
+    "CONTRACT_SIGNED": "Contract signed (v{{number}})",
+    "DESIGN_PUBLISHED": "Design v{{number}} published",
+    "BUILD_PUBLISHED": "Build {{number}} published on the demo"
+  },
+  "notes": {
+    "title": "Internal notes",
+    "help": "Only Root’s staff read these. The customer never does — not even under “View as customer”.",
+    "placeholder": "Write a note for the team…",
+    "cta": "Add note",
+    "empty": "No notes yet.",
+    "errors": {
+      "EMPTY_COMMENT": "Write something first.",
+      "TOO_LONG": "That note is too long."
+    }
+  },
+  "viewAs": {
+    "cta": "View as customer",
+    "banner": "You are seeing this contract the way {{name}} sees it. Nothing here can be changed.",
+    "back": "Back to the desk",
+    "notVisible": "The customer cannot see this contract yet — it has not been handed over."
   }
 }

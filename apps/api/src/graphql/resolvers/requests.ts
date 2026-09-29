@@ -2,7 +2,7 @@ import { GraphQLError } from 'graphql';
 import type { Prisma, Project, User } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { clampLimit } from '../../lib/pagination.js';
-import { requireUser, requireCapability, type Context } from '../../context.js';
+import { requireUser, requireCapability, viewerOf, type Context } from '../../context.js';
 import { can } from '../../lib/capabilities.js';
 import { requestVisibleTo } from '../../lib/visibility.js';
 import {
@@ -275,7 +275,10 @@ export const Request = {
    * customer is only pointed at one they can open (published).
    */
   contractId: async (p: Project, _a: unknown, ctx: Context) => {
-    const user = requireUser(ctx);
+    // `viewerOf`, not `requireUser` (J3): this field is reached through
+    // `Contract.request`, so under "view as customer" it must answer as the
+    // customer would be answered.
+    const user = viewerOf(ctx);
     const where: Prisma.ContractWhereInput = {
       projectId: p.id,
       ...(can(user, 'contracts.readAll') ? {} : { publishedAt: { not: null } }),

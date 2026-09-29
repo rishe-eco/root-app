@@ -5,6 +5,7 @@ import { requireCapability, type Context } from '../../../context.js';
 import { can, type Capability } from '../../../lib/capabilities.js';
 import { draftState } from '../../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../../lib/scope.js';
+import { SEQUENCE_FOR_NEW_CONTRACTS } from '../../../lib/steps.js';
 import { ARTICLES, SCOPE, CHECKLIST, scopeKindForKey } from '../../../lib/templates.js';
 import { loadContract, log, nudgeStatus, reload } from '../contracts.js';
 import { asConcurrentPublish } from './shared.js';
@@ -145,6 +146,8 @@ export const contractAdminMutations = {
           amount: input.amount ? BigInt(input.amount) : null,
           designerId: input.designerId ?? null,
           developerId: input.developerId ?? null,
+          // Stated here, not left to the column's default — see the constant.
+          sequence: SEQUENCE_FOR_NEW_CONTRACTS,
         },
       });
       if (seedsChecklist) {

@@ -1,10 +1,11 @@
+import { GraphQLError } from 'graphql';
 import type { ChangeAction, ContractStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { clampLimit } from '../../lib/pagination.js';
 import { requireUser, requireCapability, type Context } from '../../context.js';
 import { contractInclude, loadForActor } from './contracts.js';
 import { can } from '../../lib/capabilities.js';
-import { isActiveContract, projectVisibleToStaff } from '../../lib/visibility.js';
+import { contractVisibleTo, isActiveContract, projectVisibleToStaff } from '../../lib/visibility.js';
 import { ensureDueEntriesFor, computeBillingReport } from '../../lib/billing.js';
 import { smsProviderConfigured } from '../../lib/sms.js';
 
@@ -110,8 +111,33 @@ export const Query = {
     return grouped.map((g) => ({ status: g.status, count: g._count._all }));
   },
 
-  contract: async (_p: unknown, args: { id: string }, ctx: Context) =>
-    loadForActor(args.id, requireUser(ctx)),
+  /**
+   * **View as customer** (journeys build plan J3). `loadForActor` first, as
+   * for anyone: a staff reader who may not see this contract gets `NOT_FOUND`
+   * whether or not they asked for the customer's view. Then, for
+   * `asCustomer`, the contract's own customer becomes the viewer for every
+   * field resolver below (`ctx.viewAs`, read through `viewerOf`) — and the
+   * contract itself is put to the customer's own visibility test, so one
+   * Root has not handed over yet is refused exactly as the customer would be:
+   * *this is what they see* has to include "nothing".
+   *
+   * There is no filtering here and no second rule: the customer's view is the
+   * customer's rules applied to the customer. A customer passing `asCustomer`
+   * is their own viewer already, so the flag changes nothing for them.
+   */
+  contract: async (_p: unknown, args: { id: string; asCustomer?: boolean }, ctx: Context) => {
+    const user = requireUser(ctx);
+    const contract = await loadForActor(args.id, user);
+    if (args.asCustomer) {
+      if (!contractVisibleTo(contract.customer, contract)) {
+        throw new GraphQLError('The customer cannot see this contract yet.', {
+          extensions: { code: 'NOT_VISIBLE_TO_CUSTOMER' },
+        });
+      }
+      ctx.viewAs = contract.customer;
+    }
+    return contract;
+  },
 
   /**
    * Journeys build plan S1: the whole book for `contracts.readAll`, and only

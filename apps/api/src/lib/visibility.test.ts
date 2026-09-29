@@ -8,7 +8,9 @@ import {
   contractVisibleTo,
   isActiveContract,
   isContractReader,
+  mayReadInternalNotes,
   mayReadMoney,
+  mayReadPlannedDates,
   projectVisibleTo,
   projectVisibleToStaff,
   requestVisibleTo,
@@ -190,4 +192,36 @@ test('requestVisibleTo: the customer who asked and contracts.readAll, in every r
   const plain = { customerId: 'cust', requestedAt: null };
   assert.equal(requestVisibleTo(person('cust', 'CUSTOMER'), plain), false);
   assert.equal(requestVisibleTo(person('a', 'ADMIN'), plain), false);
+});
+
+/**
+ * Journeys build plan J3: Root's private notes. A staff reader of contracts who
+ * may see *this* contract — never a customer, whichever side of the row.
+ */
+test('mayReadInternalNotes: contract readers who can see the contract; never the customer, owner or not', () => {
+  const owner = person('cust', 'CUSTOMER');
+  const live = contract();
+  assert.equal(mayReadInternalNotes(owner, live), false);
+  assert.equal(mayReadInternalNotes(person('other', 'CUSTOMER'), live), false);
+  assert.equal(mayReadInternalNotes(person('s', 'SALES'), live), true);
+  assert.equal(mayReadInternalNotes(person('a', 'ADMIN'), live), true);
+  assert.equal(mayReadInternalNotes(person('d', 'DESIGNER'), live), true);
+  assert.equal(mayReadInternalNotes(person('v', 'DEVELOPER'), live), true);
+  // A reader with readActive only cannot read the notes of a contract they cannot open…
+  const dead = contract({ status: 'DISCARDED' });
+  assert.equal(mayReadInternalNotes(person('d', 'DESIGNER'), dead), false);
+  assert.equal(mayReadInternalNotes(person('s', 'SALES'), dead), true);
+  // …and roles that read no contracts at all read no notes.
+  for (const role of ['CONTRIBUTOR', 'REVIEWER'] as Role[]) {
+    assert.equal(mayReadInternalNotes(person('x', role), live), false, role);
+  }
+  // An unpublished contract is staff's: notes are exactly what sales writes on a draft.
+  assert.equal(mayReadInternalNotes(person('s', 'SALES'), contract({ publishedAt: null })), true);
+});
+
+test('mayReadPlannedDates: staff readers always; a customer only once the agreement is approved', () => {
+  assert.equal(mayReadPlannedDates(person('s', 'SALES'), false), true);
+  assert.equal(mayReadPlannedDates(person('d', 'DESIGNER'), false), true);
+  assert.equal(mayReadPlannedDates(person('cust', 'CUSTOMER'), false), false);
+  assert.equal(mayReadPlannedDates(person('cust', 'CUSTOMER'), true), true);
 });
