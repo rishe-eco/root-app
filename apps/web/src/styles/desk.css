@@ -175,6 +175,14 @@
 .editor-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
 @media (max-width: 720px) { .editor-grid-2 { grid-template-columns: 1fr; } }
 
+/* Templates (T1). One scope-list row: key and kind beside the two labels, the
+   row's own controls underneath across the full width. A deactivated type is
+   drawn with a dashed edge — still there, visibly set aside. */
+.template-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); align-items: end; }
+.template-row .editor-card-actions { grid-column: 1 / -1; }
+@media (max-width: 720px) { .template-row { grid-template-columns: 1fr; } }
+.template-inactive { border-style: dashed; }
+
 .dirty-note { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); color: var(--color-text-muted); }
 .dirty-dot { inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--gold-600); flex: none; }
 .dirty-dot-clean { background: var(--color-border-strong); }

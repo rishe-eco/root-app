@@ -390,6 +390,10 @@ model Contract {
   contractRevisions ContractRevision[] @relation("ContractRevisions")
   designRevisions   DesignRevision[]   @relation("ContractDesignRevisions")
 
+  /// The registry rows this contract agreed (T1, PD-5). The registry itself is
+  /// still read through `project.scopeItems`.
+  agreedItems ScopeItem[] @relation("ContractScopeItems")
+
   // ScopeItem re-parented to Project at L1 (build plan D1) — reached here via
   // `project.scopeItems`, never a direct relation. See Project and ScopeItem
   // below.
@@ -769,6 +773,18 @@ enum ScopeStatus {
   TRADED
 }
 
+/// What an item *is*, so the registry can be read by kind (journeys build plan
+/// T1): the pages step 2a lists, the features it negotiates, the deliverables
+/// the summary hands over, and the completeness checklist's standard areas
+/// (`EXTRA`). A template's own lists never hold `EXTRA` — see
+/// `TemplateScopeItem_kind_not_extra`.
+enum ScopeKind {
+  PAGE
+  FEATURE
+  DELIVERABLE
+  EXTRA
+}
+
 /// Appendix 1, grown from a flat tickable checklist into the registry every
 /// other document reads from (spec §3). `checkedAt` is kept exactly as it
 /// was — the customer's own tick on the working checklist — and is never
@@ -789,6 +805,21 @@ model ScopeItem {
   labelFa  String
   labelEn  String
   position Int    @default(0)
+
+  /// No default, on purpose (T1): a kind nobody chose is a guess, and a
+  /// column default would let the next `scopeItem.create` make that guess
+  /// without saying so. Every writer sets it — `scopeKindForKey`
+  /// (lib/templates.ts) is the one rule for the legacy creators, and the
+  /// T1 migration's backfill states the same rule in SQL.
+  kind ScopeKind
+
+  /// The agreement that agreed this item (journeys build plan PD-5): a project
+  /// can hold several contracts over time, and each item remembers which one
+  /// it came in under. Nullable because a project can have a registry before
+  /// it has a contract (J2), and SET NULL because the item belongs to the
+  /// project — the contract is its provenance, never its owner.
+  contractId String?
+  contract   Contract? @relation("ContractScopeItems", fields: [contractId], references: [id], onDelete: SetNull)
 
   checkedAt DateTime?
 
@@ -858,6 +889,7 @@ model ScopeItem {
   buildChangeEntries BuildChangeEntry[]
 
   @@unique([projectId, key])
+  @@index([contractId])
 }
 
 /// Paired movements — one item out, one in — recorded as a single row so the
@@ -2175,4 +2207,52 @@ model ReviewComment {
   createdAt DateTime @default(now())
 
   @@index([threadId, createdAt])
+}
+
+/// A kind of site — store, blog, brand, portfolio, other — as data a designer
+/// manages rather than an enum a deploy changes (journeys build plan T1). Each
+/// type carries the scope list a new contract of that type starts from.
+///
+/// **A type in use is never deleted, only deactivated.** J4's
+/// `ContractBrief.templateTypeId` will point here with `onDelete: Restrict`;
+/// until then nothing points here, and there is deliberately no delete
+/// mutation to make the rule depend on a foreign key that does not exist yet.
+/// `active: false` hides a type from the picker and leaves what chose it
+/// intact.
+model TemplateType {
+  id String @id @default(cuid())
+
+  /// Latin, lowercase, hyphenated — an identifier (house rule 14), also what
+  /// e2e and later stages address a type by.
+  slug    String @unique
+  labelFa String
+  labelEn String
+
+  position Int     @default(0)
+  active   Boolean @default(true)
+
+  items TemplateScopeItem[]
+}
+
+/// One line of a type's scope list: the page, feature or deliverable a new
+/// contract of that type starts with. Replaced wholesale by `setTemplateScope`
+/// — a list edited row by row would need a merge rule for the rows a sales
+/// user did not touch, and "the list on screen is the list" needs none.
+///
+/// `kind` is never `EXTRA` (CHECK, added by hand in the migration): the
+/// completeness checklist is its own mechanism, seeded at project creation.
+model TemplateScopeItem {
+  id     String       @id @default(cuid())
+  typeId String
+  type   TemplateType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+
+  /// Latin, and never `checklist.*` — a template key becomes a `ScopeItem`
+  /// key, and that namespace belongs to the checklist (lib/templates.ts).
+  key      String
+  kind     ScopeKind
+  labelFa  String
+  labelEn  String
+  position Int       @default(0)
+
+  @@unique([typeId, key])
 }

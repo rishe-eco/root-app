@@ -3314,3 +3314,95 @@ export const REVOKE_API_TOKEN = gql`
     }
   }
 `;
+
+// ---------------------------------------------------------------------
+// Template types and scope templates (journeys build plan T1). A designer
+// keeps the types, sales keeps what each type contains; the API checks the
+// two capabilities separately, and the desk screen mirrors that split.
+// ---------------------------------------------------------------------
+
+/** What a template's own list may hold — the API refuses EXTRA there. */
+export type TemplateScopeKind = 'PAGE' | 'FEATURE' | 'DELIVERABLE';
+
+export type TemplateScopeItem = {
+  id: string;
+  key: string;
+  kind: TemplateScopeKind;
+  labelFa: string;
+  labelEn: string;
+  position: number;
+};
+
+export type TemplateType = {
+  id: string;
+  slug: string;
+  labelFa: string;
+  labelEn: string;
+  position: number;
+  active: boolean;
+  items: TemplateScopeItem[];
+};
+
+const TEMPLATE_TYPE_FIELDS = gql`
+  fragment TemplateTypeFields on TemplateType {
+    id
+    slug
+    labelFa
+    labelEn
+    position
+    active
+    items {
+      id
+      key
+      kind
+      labelFa
+      labelEn
+      position
+    }
+  }
+`;
+
+export const TEMPLATE_TYPES = gql`
+  ${TEMPLATE_TYPE_FIELDS}
+  query TemplateTypes {
+    templateTypes {
+      ...TemplateTypeFields
+    }
+  }
+`;
+
+export const CREATE_TEMPLATE_TYPE = gql`
+  ${TEMPLATE_TYPE_FIELDS}
+  mutation CreateTemplateType($slug: String!, $labelFa: String!, $labelEn: String!) {
+    createTemplateType(slug: $slug, labelFa: $labelFa, labelEn: $labelEn) {
+      ...TemplateTypeFields
+    }
+  }
+`;
+
+export const UPDATE_TEMPLATE_TYPE = gql`
+  ${TEMPLATE_TYPE_FIELDS}
+  mutation UpdateTemplateType($id: ID!, $slug: String, $labelFa: String, $labelEn: String, $active: Boolean) {
+    updateTemplateType(id: $id, slug: $slug, labelFa: $labelFa, labelEn: $labelEn, active: $active) {
+      ...TemplateTypeFields
+    }
+  }
+`;
+
+export const REORDER_TEMPLATE_TYPES = gql`
+  ${TEMPLATE_TYPE_FIELDS}
+  mutation ReorderTemplateTypes($ids: [ID!]!) {
+    reorderTemplateTypes(ids: $ids) {
+      ...TemplateTypeFields
+    }
+  }
+`;
+
+export const SET_TEMPLATE_SCOPE = gql`
+  ${TEMPLATE_TYPE_FIELDS}
+  mutation SetTemplateScope($typeId: ID!, $items: [TemplateScopeItemInput!]!) {
+    setTemplateScope(typeId: $typeId, items: $items) {
+      ...TemplateTypeFields
+    }
+  }
+`;

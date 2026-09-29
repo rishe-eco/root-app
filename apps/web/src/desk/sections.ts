@@ -13,9 +13,15 @@ export type DeskSection = {
     | 'tickets'
     | 'billing'
     | 'services'
+    | 'templates'
     | 'apiTokens';
-  /** null means "any staff capability", which is what Overview needs. */
-  capability: Capability | null;
+  /**
+   * null means "any staff capability", which is what Overview needs. A list
+   * means *any one of these* — the section has more than one half, each behind
+   * its own capability, and holding either is a reason to see the room (T1's
+   * Templates: a designer keeps the types, sales the scope).
+   */
+  capability: Capability | readonly Capability[] | null;
 };
 
 /**
@@ -54,11 +60,28 @@ export const DESK_SECTIONS: DeskSection[] = [
   // API side (`allServiceRuns`) — not `contracts.author`, since authoring a
   // contract is not the same act as running a customer's import.
   { key: 'services', capability: 'customers.manage' },
+  // Journeys build plan T1: two halves, two capabilities, one room. The
+  // designer keeps the types and sales keeps what each contains; each sees the
+  // other's tab read-only, so the row shows for either. Each tab then decides
+  // for itself what it lets its viewer edit (desk/Templates.tsx).
+  { key: 'templates', capability: ['templates.types', 'templates.scope'] },
   // Last, and it is not an ordering accident: this is the only section that
   // hands out a credential rather than editing content, so it sits at the end
   // of the nav where settings live rather than among the working surfaces.
   { key: 'apiTokens', capability: 'apiTokens.manage' },
 ];
 
+/**
+ * One test for "may this person see this section", read by the nav
+ * (`visibleSections`) and by a section's own route guard — a row with a list of
+ * capabilities must mean the same thing in both, or the nav offers a link the
+ * screen bounces.
+ */
+export function canSeeSection(me: Pick<User, 'capabilities'> | null | undefined, section: DeskSection): boolean {
+  const { capability } = section;
+  if (capability === null) return isStaff(me);
+  return (typeof capability === 'string' ? [capability] : capability).some((c) => can(me, c));
+}
+
 export const visibleSections = (me: Pick<User, 'capabilities'> | null | undefined) =>
-  DESK_SECTIONS.filter((s) => (s.capability === null ? isStaff(me) : can(me, s.capability)));
+  DESK_SECTIONS.filter((s) => canSeeSection(me, s));

@@ -117,6 +117,7 @@ const NAV_LABELS = {
     tickets: 'Tickets',
     billing: 'Billing',
     services: 'Services',
+    templates: 'Templates',
     apiTokens: 'Tokens',
   },
   fa: {
@@ -129,6 +130,7 @@ const NAV_LABELS = {
     tickets: 'تیکت‌ها',
     billing: 'صورت‌حساب',
     services: 'خدمات',
+    templates: 'قالب‌ها',
     apiTokens: 'توکن‌ها',
   },
 } as const;
@@ -153,21 +155,22 @@ async function assertNavShowsExactly(
   }
 }
 
-test('a sales user sees Overview, Contracts, Customers, Tickets, Billing and Services — in both languages', async ({
+test('a sales user sees Overview, Contracts, Customers, Tickets, Billing, Services and Templates — in both languages', async ({
   page,
 }) => {
-  const sections = ['overview', 'contracts', 'customers', 'tickets', 'billing', 'services'] as const;
+  const sections = ['overview', 'contracts', 'customers', 'tickets', 'billing', 'services', 'templates'] as const;
   await signIn(page, SALES, 'en');
   await assertNavShowsExactly(page, 'en', sections);
   await signIn(page, SALES, 'fa');
   await assertNavShowsExactly(page, 'fa', sections);
 });
 
-test('a designer sees only Overview and Contracts — in both languages', async ({ page }) => {
+// Templates (T1) is the designer's second row: `templates.types` opens it.
+test('a designer sees only Overview, Contracts and Templates — in both languages', async ({ page }) => {
   await signIn(page, DESIGNER, 'en');
-  await assertNavShowsExactly(page, 'en', ['overview', 'contracts']);
+  await assertNavShowsExactly(page, 'en', ['overview', 'contracts', 'templates']);
   await signIn(page, DESIGNER, 'fa');
-  await assertNavShowsExactly(page, 'fa', ['overview', 'contracts']);
+  await assertNavShowsExactly(page, 'fa', ['overview', 'contracts', 'templates']);
 });
 
 test('a developer sees Overview, Contracts and Builds — in both languages (D-2 closed: a developer can open a demo)', async ({
