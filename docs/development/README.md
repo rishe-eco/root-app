@@ -98,7 +98,7 @@ S3    customer and staff management (and the Tools rename)
 J2    requests — a project before a contract
 J3    steps, sequence, the wizard shell, status area, attention
 S2    one feedback model, the §3.1 rule, answers, approval queue
-T1    template types, scope templates, ScopeItem.kind
+T1    template types, scope templates, ScopeItem.kind      ✔ 2026-09-29 [T1.md]
 J4    step 1 — requirements
 J5    step 2a — pages, features and deliverables
 J6    step 2b — the draft and its anchored notes
@@ -379,6 +379,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`P0.md`](P0.md) | journeys pre-flight — test lanes, frame-src, the dev README, same-site hardening | ✔ code half · P0-4/P0-5 the founder's |
 | [`S1.md`](S1.md) | roles, the capability split, visibility, assignment | ✔ built |
 | [`J1.md`](J1.md) | phone identity, SMS, the notify router, the staff second factor | ✔ built · SMS provider owed |
+| [`T1.md`](T1.md) | template types, scope templates, `ScopeItem.kind` | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |
