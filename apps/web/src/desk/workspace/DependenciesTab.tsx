@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react';
-import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
@@ -14,7 +13,7 @@ import {
   type Dependency,
   type DependencySide,
 } from '@/lib/queries';
-import type { WorkspaceContext } from './ContractWorkspace';
+import { useWorkspaceMutation, type WorkspaceContext } from './ContractWorkspace';
 
 /**
  * The dependency board (build plan L5; spec §7) — symmetric commitments,
@@ -39,8 +38,8 @@ function VerifyForm({
 }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
-  const [verify, { loading }] = useMutation(VERIFY_DEPENDENCY);
-  const [unverify] = useMutation(UNVERIFY_DEPENDENCY);
+  const [verify, { loading }] = useWorkspaceMutation(VERIFY_DEPENDENCY);
+  const [unverify] = useWorkspaceMutation(UNVERIFY_DEPENDENCY);
 
   if (dep.verifiedAt) {
     return (
@@ -101,8 +100,8 @@ function DependencyRow({ dep, canManage, canVerify }: { dep: Dependency; canMana
   const [titleFa, setTitleFa] = useState(dep.titleFa);
   const [titleEn, setTitleEn] = useState(dep.titleEn);
   const [dueAt, setDueAt] = useState(dep.dueAt.slice(0, 10));
-  const [update, { loading }] = useMutation(UPDATE_DEPENDENCY);
-  const [remove] = useMutation(DELETE_DEPENDENCY);
+  const [update, { loading }] = useWorkspaceMutation(UPDATE_DEPENDENCY);
+  const [remove] = useWorkspaceMutation(DELETE_DEPENDENCY);
 
   async function onSave(e: FormEvent) {
     e.preventDefault();
@@ -180,7 +179,7 @@ export default function DependenciesTab() {
   const [titleEn, setTitleEn] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [createDependency, { loading }] = useMutation(CREATE_DEPENDENCY);
+  const [createDependency, { loading }] = useWorkspaceMutation(CREATE_DEPENDENCY);
 
   if (!project) {
     return <p className="t-small muted">{t('workspace.phaseNoProject')}</p>;

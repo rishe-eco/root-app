@@ -204,3 +204,28 @@
   .content, .detail { padding: var(--space-6); }
   .col-amount { display: none; }
 }
+
+/* ---- Requests (journeys build plan J2) -------------------------------------
+   A customer's request rows above the contracts, the "New request" modal, and
+   the chat drawer. Logical properties throughout, so the drawer opens on the
+   inline-end edge in both directions. */
+.request-section { display: flex; flex-direction: column; gap: var(--space-3); }
+.request-section .muted, .request-thread .muted, .modal .muted, .drawer .muted { color: var(--color-text-muted); }
+.request-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.request-item { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-raised); }
+.request-row { display: flex; align-items: center; gap: var(--space-3); inline-size: 100%; padding: var(--space-3) var(--space-4); border: 0; background: transparent; font: inherit; color: inherit; text-align: start; cursor: pointer; }
+.request-row:hover { background: var(--color-panel); }
+.request-title { flex: 1; min-inline-size: 0; font-weight: var(--weight-medium); }
+.request-reason { margin: 0; padding-block: 0 var(--space-3); padding-inline: var(--space-4); color: var(--color-text-muted); }
+.request-thread { display: flex; flex-direction: column; gap: var(--space-4); }
+.request-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
+.overlay-drawer { justify-content: flex-end; align-items: stretch; padding: 0; }
+.overlay-scrim { position: absolute; inset: 0; background: var(--color-inverse); opacity: 0.45; }
+.modal, .drawer { position: relative; background: var(--color-raised); box-shadow: var(--shadow-lg); overflow-y: auto; }
+.modal { inline-size: 100%; max-inline-size: 36rem; max-block-size: 100%; border-radius: var(--radius-md); padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); }
+.modal-actions { display: flex; gap: var(--space-3); }
+.drawer { inline-size: 100%; max-inline-size: 30rem; padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); }
+.drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.drawer-head h2 { margin: 0; overflow-wrap: anywhere; }

@@ -23,7 +23,7 @@ import {
 } from '@/lib/queries';
 import DemoViewport from '@/components/DemoViewport';
 import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
-import type { WorkspaceContext } from './ContractWorkspace';
+import { useWorkspaceMutation, type WorkspaceContext } from './ContractWorkspace';
 
 /**
  * The desk phase board (build plan L2; spec §4 stage 6, §6) — Root's own
@@ -68,8 +68,8 @@ function DemoPageRow({
   const [canonicalPath, setCanonicalPath] = useState(page.canonicalPath);
   const [pageDesignId, setPageDesignId] = useState(page.pageDesign?.id ?? '');
   const [error, setError] = useState<string | null>(null);
-  const [update, { loading }] = useMutation(UPDATE_DEMO_PAGE);
-  const [remove] = useMutation(DELETE_DEMO_PAGE);
+  const [update, { loading }] = useWorkspaceMutation(UPDATE_DEMO_PAGE);
+  const [remove] = useWorkspaceMutation(DELETE_DEMO_PAGE);
 
   async function onSave(e: FormEvent) {
     e.preventDefault();
@@ -154,13 +154,14 @@ function DemoCard({
 }) {
   const { t } = useTranslation();
   const locale = useLocale();
+  const { contract } = useOutletContext<WorkspaceContext>();
   const [stagingUrl, setStagingUrl] = useState(demo.stagingUrl);
   const [buildRef, setBuildRef] = useState(demo.buildRef ?? '');
   const [reviewWindowStart, setReviewWindowStart] = useState(demo.reviewWindowStart?.slice(0, 10) ?? '');
   const [reviewWindowEnd, setReviewWindowEnd] = useState(demo.reviewWindowEnd?.slice(0, 10) ?? '');
   const [error, setError] = useState<string | null>(null);
-  const [update, { loading }] = useMutation(UPDATE_DEMO);
-  const [remove] = useMutation(DELETE_DEMO);
+  const [update, { loading }] = useWorkspaceMutation(UPDATE_DEMO);
+  const [remove] = useWorkspaceMutation(DELETE_DEMO);
 
   const [addingPage, setAddingPage] = useState(false);
   const [pageKey, setPageKey] = useState('');
@@ -168,7 +169,7 @@ function DemoCard({
   const [pageLabelEn, setPageLabelEn] = useState('');
   const [pagePath, setPagePath] = useState('');
   const [pageError, setPageError] = useState<string | null>(null);
-  const [declarePage, { loading: declaring }] = useMutation(DECLARE_DEMO_PAGE);
+  const [declarePage, { loading: declaring }] = useWorkspaceMutation(DECLARE_DEMO_PAGE);
 
   async function onSaveDemo(e: FormEvent) {
     e.preventDefault();
@@ -275,7 +276,13 @@ function DemoCard({
 
       <DemoViewport demo={demo} />
 
-      <DemoFeedbackPanel demo={demo} canAuthor={editable} canConvertToTicket={canConvertToTicket} onChanged={onChanged} />
+      <DemoFeedbackPanel
+        demo={demo}
+        contractId={contract.id}
+        canAuthor={editable}
+        canConvertToTicket={canConvertToTicket}
+        onChanged={onChanged}
+      />
 
       <div className="workspace-row">
         <h4 className="t-h3">{t('workspace.demoPagesTitle')}</h4>
@@ -366,14 +373,14 @@ function PhaseCard({
   const [titleFa, setTitleFa] = useState(phase.titleFa);
   const [titleEn, setTitleEn] = useState(phase.titleEn);
   const [milestoneLabel, setMilestoneLabel] = useState(phase.milestoneLabel ?? '');
-  const [update, { loading }] = useMutation(UPDATE_PHASE);
-  const [remove] = useMutation(DELETE_PHASE);
-  const [assign] = useMutation(ASSIGN_SCOPE_ITEM_TO_PHASE);
+  const [update, { loading }] = useWorkspaceMutation(UPDATE_PHASE);
+  const [remove] = useWorkspaceMutation(DELETE_PHASE);
+  const [assign] = useWorkspaceMutation(ASSIGN_SCOPE_ITEM_TO_PHASE);
 
   const [addingDemo, setAddingDemo] = useState(false);
   const [stagingUrl, setStagingUrl] = useState('');
   const [demoError, setDemoError] = useState<string | null>(null);
-  const [createDemo, { loading: creatingDemo }] = useMutation(CREATE_DEMO);
+  const [createDemo, { loading: creatingDemo }] = useWorkspaceMutation(CREATE_DEMO);
 
   const [pickedItem, setPickedItem] = useState('');
 

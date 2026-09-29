@@ -38,3 +38,19 @@ test('single-capability rows and the any-staff row behave as before', () => {
   assert.equal(canSeeSection(holding('templates.types'), overview), true);
   assert.equal(canSeeSection(holding(), overview), false);
 });
+
+/**
+ * Journeys build plan J2: requests are a sales conversation, gated on
+ * `contracts.readAll` — the capability the API's `allRequests` checks — and
+ * not on `contracts.readActive`, which design and development also hold. If
+ * the row were gated on the narrower one they would be offered a link that
+ * only ever bounces.
+ */
+test('requests is visible with contracts.readAll and not with contracts.readActive alone', () => {
+  const requests = DESK_SECTIONS.find((s) => s.key === 'requests')!;
+  assert.equal(canSeeSection(holding('contracts.readAll', 'contracts.readActive'), requests), true);
+  assert.equal(canSeeSection(holding('contracts.readActive', 'design.author'), requests), false);
+  assert.equal(canSeeSection(holding('contracts.readActive', 'builds.author'), requests), false);
+  assert.equal(canSeeSection(holding('contracts.author'), requests), false, 'authoring without reading is not a reason to see the inbox');
+  assert.equal(canSeeSection(null, requests), false);
+});

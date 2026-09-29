@@ -9,6 +9,7 @@ import {
   assertCanSignAmendment,
 } from '../../lib/gate.js';
 import { loadForActor, log, nudgeStatus, reload } from './contracts.js';
+import { linkContractId } from './admin/shared.js';
 
 /**
  * What the customer does to their own contract: choose a concept, approve
@@ -142,30 +143,30 @@ export const customerMutations = {
 
   setScopeItem: async (
     _p: unknown,
-    args: { scopeItemId: string; checked: boolean },
+    args: { scopeItemId: string; checked: boolean; contractId?: string | null },
     ctx: Context,
   ) => {
     const user = requireUser(ctx);
-    const item = await prisma.scopeItem.findUnique({
-      where: { id: args.scopeItemId },
-      include: { project: { include: { contracts: { orderBy: { createdAt: 'asc' }, take: 1 } } } },
-    });
+    const item = await prisma.scopeItem.findUnique({ where: { id: args.scopeItemId } });
     if (!item) {
       throw new GraphQLError('No such scope item.', { extensions: { code: 'NOT_FOUND' } });
     }
-    // ScopeItem belongs to a Project (build plan D1), which may in principle
-    // span more than one contract — L1 does not yet build the screen that
-    // would create a second, so the project's (only) contract is what
-    // ownership and the returned Contract! resolve against. loadForActor's
-    // own check is `contract.customerId === user.id`, and every contract this
-    // stage creates gets that from the same project.customerId — the two
-    // agree today by construction, which is what keeps this an ownership
-    // check on the project in spirit (house rule 5) rather than a role test.
-    const contractRow = item.project.contracts[0];
-    if (!contractRow) {
+    // ScopeItem belongs to a Project (build plan D1), and since J2 a project
+    // can hold more than one contract, so which contract this acts through
+    // has to be named: the one the caller has open (`contractId`), else the
+    // one that agreed the item (T1's `ScopeItem.contractId`), else the newest
+    // published one. Ownership then goes through `loadForActor` on *that*
+    // contract, exactly as every other customer mutation does (house rule 2):
+    // an unpublished or someone else's contract is NOT_FOUND. The contract
+    // must be on the item's own project — a contract of another project would
+    // turn this into a way to tick boxes on rows the caller never saw.
+    const contract = await loadForActor(
+      args.contractId ?? item.contractId ?? (await linkContractId(item.projectId, 'customer')),
+      user,
+    );
+    if (contract.projectId !== item.projectId) {
       throw new GraphQLError('No such scope item.', { extensions: { code: 'NOT_FOUND' } });
     }
-    const contract = await loadForActor(contractRow.id, user);
 
     // Never gated — the checklist stays editable at every stage.
     await prisma.scopeItem.update({

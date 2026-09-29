@@ -9,6 +9,7 @@ import { exec, ok, stop } from './graphql.js';
 import { CHECKLIST } from '../lib/templates.js';
 import { __setMailTransportForTests, __resetMailTransportForTests, type MailMessage } from '../lib/mail.js';
 import { __setSmsTransportForTests, __resetSmsTransportForTests } from '../lib/sms.js';
+import { __resetNamedRateLimitsForTests } from '../lib/rateLimit.js';
 import {
   contractOnProject,
   linkContractId,
@@ -58,6 +59,7 @@ beforeEach(async () => {
   }
   mail = [];
   sms = [];
+  __resetNamedRateLimitsForTests();
   __setMailTransportForTests({ send: async (m) => void mail.push(m) });
   __setSmsTransportForTests({
     sendCode: async (to, code) => void sms.push({ to, code }),
@@ -235,6 +237,26 @@ test('submitRequest refuses what cannot be a request, with codes', async () => {
   assert.equal(await prisma.project.count({ where: { requestedAt: { not: null } } }), 0, 'nothing was written');
   const anon = await exec(SUBMIT, { variables: { t: 'a', b: 'b', l: 'en' } });
   assert.equal(anon.code, 'UNAUTHENTICATED');
+});
+
+test('a flood is refused (RATE_LIMITED) before it spends anyone\'s SMS: ten requests a day, sixty messages an hour', async () => {
+  for (let i = 0; i < 10; i++) await submit(`Request ${i}`);
+  const eleventh = await exec(SUBMIT, { as: f.customer, variables: { t: 'One too many', b: 'b', l: 'en' } });
+  assert.equal(eleventh.code, 'RATE_LIMITED');
+  assert.equal(await prisma.project.count({ where: { customerId: f.customer.id, requestedAt: { not: null } } }), 10);
+  // A different account has its own budget.
+  ok(await exec(SUBMIT, { as: f.stranger, variables: { t: 'Mine', b: 'b', l: 'en' } }));
+
+  const id = await submit('Chatty').catch(() => null);
+  assert.equal(id, null, 'the customer is out of requests for today');
+  const target = (await prisma.project.findFirstOrThrow({ where: { requestTitle: 'Request 0' } })).id;
+  mail.length = 0;
+  sms.length = 0;
+  for (let i = 0; i < 60; i++) ok(await exec(POST, { as: f.customer, variables: { p: target, b: `m${i}` } }));
+  const sixtyFirst = await exec(POST, { as: f.customer, variables: { p: target, b: 'one too many' } });
+  assert.equal(sixtyFirst.code, 'RATE_LIMITED');
+  assert.equal(await prisma.requestMessage.count({ where: { projectId: target } }), 60);
+  assert.equal(smsTo(staff.SALES.phone).length, 60, 'and the refused one notified nobody');
 });
 
 // ---- who may read a request ---------------------------------------------------------------
@@ -656,6 +678,36 @@ test('executeScopeTrade amends the contract that agreed the outgoing item, and a
   assert.equal(after.status, 'AGREED');
   assert.equal(after.contractId, second.id, 'the trade agreed the item into the contract that agreed the one it replaced — not the first');
   assert.notEqual(after.contractId, first.id);
+});
+
+test('setScopeItem (the customer\'s tick): acts through the contract named, else the one that agreed the item, else the newest published', async () => {
+  const { first, second, item, projectId } = await twoContracts(); // item.contractId = second
+  const proposed = await prisma.scopeItem.create({
+    data: { projectId, key: 'proposed-two', kind: 'FEATURE', labelFa: 'پ', labelEn: 'p', status: 'PROPOSED' },
+  });
+  const TICK = 'mutation($i: ID!, $c: ID){ setScopeItem(scopeItemId: $i, checked: true, contractId: $c) { id } }';
+  const tick = async (as: User, i: string, c: string | null) =>
+    exec(TICK, { as, variables: { i, c } });
+
+  const named = ok(await tick(f.customer, item.id, first.id));
+  assert.equal((named.setScopeItem as { id: string }).id, first.id, 'named: the contract the customer has open');
+  const agreed = ok(await tick(f.customer, item.id, null));
+  assert.equal((agreed.setScopeItem as { id: string }).id, second.id, 'unnamed: the contract that agreed the item');
+  const neither = ok(await tick(f.customer, proposed.id, null));
+  assert.equal((neither.setScopeItem as { id: string }).id, second.id, 'no agreeing contract either: the newest published one');
+
+  // Not someone else's contract, not another project's, not an unpublished one.
+  const otherProject = await prisma.project.create({ data: { customerId: f.customer.id, titleFa: 'ا', titleEn: 'o' } });
+  const elsewhere = await prisma.contract.create({
+    data: { ref: 'RC-ELSEWHERE', titleFa: 'ا', titleEn: 'e', customerId: f.customer.id, projectId: otherProject.id, publishedAt: new Date() },
+  });
+  assert.equal((await tick(f.customer, item.id, elsewhere.id)).code, 'NOT_FOUND', 'the contract must be on the item\'s own project');
+  assert.equal((await tick(f.stranger, item.id, first.id)).code, 'NOT_FOUND');
+  assert.equal((await tick(f.stranger, item.id, null)).code, 'NOT_FOUND');
+  const draft = await prisma.contract.create({
+    data: { ref: 'RC-J2-DRAFT2', titleFa: 'ا', titleEn: 'd', customerId: f.customer.id, projectId },
+  });
+  assert.equal((await tick(f.customer, item.id, draft.id)).code, 'NOT_FOUND', 'an unpublished draft is not the customer\'s to act through');
 });
 
 test('linkContractId: the customer is pointed at the newest published live contract; staff at the newest live one', async () => {

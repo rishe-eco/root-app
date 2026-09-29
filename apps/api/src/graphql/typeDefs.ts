@@ -1756,7 +1756,7 @@ export const typeDefs = /* GraphQL */ `
     chooseConcept(contractId: ID!, conceptId: ID!): Contract!
     setPageApproval(pageDesignId: ID!, approved: Boolean!): Contract!
     approveContract(contractId: ID!): Contract!
-    setScopeItem(scopeItemId: ID!, checked: Boolean!): Contract!
+    setScopeItem(scopeItemId: ID!, checked: Boolean!, contractId: ID): Contract!
     signContract(contractId: ID!, typedName: String!): Contract!
     addComment(contractId: ID!, body: String!, target: CommentTarget): Contract!
 

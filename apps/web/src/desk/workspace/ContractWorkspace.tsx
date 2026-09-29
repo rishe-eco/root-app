@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
+import { Link, NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
+import type { DocumentNode } from 'graphql';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { can } from '@/lib/access';
@@ -27,6 +28,20 @@ import StatusBadge from '@/components/StatusBadge';
  * capabilities the API checks, without each tab running its own `ME` query.
  */
 export type WorkspaceContext = { contract: Contract; refetch: () => void; me: User };
+
+/**
+ * `useMutation` for a mutation that acts on the project's registry, phases,
+ * demos or commitments — and so returns `Contract!` for *some* contract of
+ * the project. Since J2 a project can have two, and which one comes back
+ * matters: the scope list on the screen is `contract.scopeItems`, and it only
+ * refreshes on the contract the response is about. This binds the mutation's
+ * optional `contractId` to the contract the workspace is open on, as a hook-
+ * level default that Apollo merges under each call's own variables.
+ */
+export function useWorkspaceMutation(document: DocumentNode) {
+  const { contract } = useOutletContext<WorkspaceContext>();
+  return useMutation(document, { variables: { contractId: contract.id } });
+}
 
 const TABS = ['contract', 'design', 'scope', 'phases', 'dependencies', 'activity'] as const;
 
@@ -163,6 +178,13 @@ export default function ContractWorkspace() {
           <p className="t-caption num-latin">{contract.ref}</p>
           <h2 className="t-h2">{pick(contract, 'title', locale)}</h2>
           <AssignmentControl contract={contract} canAssign={can(me, 'contracts.author')} />
+          {/* J2: the request this contract began as (its thread, read-only) —
+              only for those who may read one, so a designer never sees the link. */}
+          {contract.request ? (
+            <p className="t-caption">
+              <Link to={lp(locale, `/desk/requests/${contract.request.id}`)}>{t('requests.desk.openRequest')}</Link>
+            </p>
+          ) : null}
         </div>
         <StatusBadge status={contract.status} />
       </div>

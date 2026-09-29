@@ -26,6 +26,7 @@ import DeskLayout from '@/desk/DeskLayout';
 import DeskHome from '@/desk/DeskHome';
 import Overview from '@/desk/Overview';
 import DeskContracts from '@/desk/Contracts';
+import DeskRequests, { DeskRequestDetail } from '@/desk/Requests';
 import Customers from '@/desk/Customers';
 import Library from '@/desk/Library';
 import LibraryEntry from '@/desk/LibraryEntry';
@@ -132,6 +133,8 @@ export default function App() {
             <Route path="dependencies" element={<WorkspaceDependenciesTab />} />
             <Route path="activity" element={<WorkspaceActivityTab />} />
           </Route>
+          <Route path="requests" element={<DeskRequests />} />
+          <Route path="requests/:id" element={<DeskRequestDetail />} />
           <Route path="customers" element={<Customers />} />
           <Route path="library" element={<Library />} />
           <Route path="library/concepts" element={<LibraryConcepts />} />

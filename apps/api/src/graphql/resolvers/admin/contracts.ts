@@ -168,7 +168,13 @@ export const contractAdminMutations = {
       }
       await log(contract.id, admin.id, 'CREATED', null, tx);
       return contract.id;
-    });
+    },
+    // Up from Prisma's five seconds: this waits on the project's row lock when
+    // two people convert one request at once, and the checklist is a dozen
+    // inserts — neither is slow, but a busy database should make it late, not
+    // make it fail half-way.
+    { timeout: 20_000 },
+    );
     return reload(contractId);
   },
 

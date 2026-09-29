@@ -502,7 +502,10 @@
       "entriesTitle": "Entries",
       "addEntry": "Add entry",
       "entriesEmpty": "No billing entries yet."
-    }
+    },
+    "navRequests": "Requests",
+    "newContractFromRequest": "Converting the request “{{title}}” from {{customer}}. The conversation stays with the project, read-only, and is linked from the contract.",
+    "newContractRequestGone": "That request can’t be converted (it is closed or not yours to convert)."
   },
   "workspace": {
     "tabContract": "Contract",
@@ -992,6 +995,79 @@
       "QUARTERLY": "Quarterly",
       "YEARLY": "Yearly",
       "range": "{{start}} – {{end}}"
+    }
+  },
+  "requests": {
+    "newRequest": "New request",
+    "sectionTitle": "Your requests",
+    "sectionLede": "What you have asked for that is not a contract yet. The conversation with Root happens here.",
+    "formTitle": "New request",
+    "formLede": "Tell us what you would like. Root answers here, or asks you a question.",
+    "titleLabel": "Title",
+    "bodyLabel": "What would you like?",
+    "submit": "Send request",
+    "sending": "Sending…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "loading": "Loading…",
+    "retry": "Try again",
+    "badge": {
+      "REQUESTED": "Pending",
+      "ARCHIVED": "Archived",
+      "CONVERTED": "Being drawn up"
+    },
+    "archivedBecause": "Reason: {{reason}}",
+    "you": "You",
+    "replyPlaceholder": "Write a message…",
+    "send": "Send message",
+    "closedArchived": "This request was archived; the conversation is read-only.",
+    "closedConverted": "This request became a contract; the conversation is read-only.",
+    "originTitle": "Original request",
+    "originLede": "How this contract began — read-only.",
+    "viewContract": "View contract",
+    "lang": {
+      "fa": "Persian",
+      "en": "English"
+    },
+    "error": {
+      "EMPTY_TITLE": "Add a title.",
+      "EMPTY_BODY": "Describe what you would like.",
+      "TOO_LONG": "That is too long.",
+      "INVALID_LANG": "Unsupported language.",
+      "EMPTY_COMMENT": "A message can’t be empty.",
+      "REQUEST_CLOSED": "This request is closed, so it no longer takes new messages.",
+      "REASON_REQUIRED": "Give the reason for archiving — the customer is shown it.",
+      "NOT_FOUND": "There is no such request.",
+      "FORBIDDEN": "You don’t have access to that.",
+      "PROJECT_CUSTOMER_MISMATCH": "That request belongs to a different customer.",
+      "PROJECT_ARCHIVED": "That request was archived and can’t become a contract.",
+      "RATE_LIMITED": "You’re sending too quickly — try again in a little while."
+    },
+    "desk": {
+      "title": "Requests",
+      "lede": "What customers asked for before there was a contract. Answer, archive with a reason, or convert to a contract.",
+      "empty": "No requests here.",
+      "filter": {
+        "REQUESTED": "Pending",
+        "ARCHIVED": "Archived",
+        "ACTIVE": "Converted",
+        "ALL": "All"
+      },
+      "colTitle": "Request",
+      "colCustomer": "Customer",
+      "colRequested": "Requested",
+      "colStatus": "Status",
+      "back": "Back to requests",
+      "from": "From {{customer}} · {{when}}",
+      "archive": "Archive",
+      "archiveTitle": "Archive this request",
+      "archiveReasonLabel": "Reason (the customer is shown this)",
+      "archiveConfirm": "Archive request",
+      "convert": "Convert to contract",
+      "converted": "This request became a contract.",
+      "openContract": "Open the contract",
+      "archivedNote": "Archived: {{reason}}",
+      "openRequest": "View the original request"
     }
   }
 }

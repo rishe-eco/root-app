@@ -1,12 +1,20 @@
-import { useMemo, useState } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
-import { MY_CONTRACTS, type Contract, type ContractStatus, type User } from '@/lib/queries';
+import { MY_CONTRACTS, MY_REQUESTS, type Contract, type ContractStatus, type Request, type User } from '@/lib/queries';
 import { ALL_STATUSES, formatAmount, formatCount, pick, relativeTime } from '@/lib/format';
 import StatusBadge from '@/components/StatusBadge';
 import Topbar from './Topbar';
+import NewRequestModal from './NewRequestModal';
+import RequestDrawer from './RequestDrawer';
+
+/** A request's badge: pending, archived, or converted-but-not-yet-handed-over
+ *  (`ACTIVE` — once a contract on it is published the API stops listing the
+ *  request and the contract is the row). */
+const requestBadge = (status: Request['status']) =>
+  status === 'REQUESTED' ? 'REQUESTED' : status === 'ARCHIVED' ? 'ARCHIVED' : 'CONVERTED';
 
 type Filter = ContractStatus | 'ALL';
 
@@ -18,6 +26,33 @@ export default function Contracts() {
 
   const { data, loading, error, refetch } = useQuery<{ myContracts: Contract[] }>(MY_CONTRACTS);
   const [filter, setFilter] = useState<Filter>('ALL');
+
+  // Journeys build plan J2. The open drawer lives in the URL (`?request=<id>`)
+  // so a notification's link opens it directly and a reload keeps it; the
+  // list is re-read whenever the window regains focus, the same "no
+  // websocket" rule the drawer follows.
+  const [params, setParams] = useSearchParams();
+  const openRequestId = params.get('request');
+  const [composing, setComposing] = useState(false);
+  const { data: requestData, refetch: refetchRequests } = useQuery<{ myRequests: Request[] }>(MY_REQUESTS, {
+    fetchPolicy: 'cache-and-network',
+  });
+  useEffect(() => {
+    const refresh = () => void refetchRequests();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [refetchRequests]);
+  const requests = requestData?.myRequests ?? [];
+  const openRequest = (id: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id) next.set('request', id);
+        else next.delete('request');
+        return next;
+      },
+      { replace: id === null },
+    );
 
   const contracts = useMemo(() => data?.myContracts ?? [], [data]);
 
@@ -43,7 +78,46 @@ export default function Contracts() {
             <h1 className="t-h2">{t('contracts.pageTitle')}</h1>
             <p className="t-lead">{t('contracts.pageLede')}</p>
           </div>
+          <button className="btn btn-primary btn-sm" type="button" onClick={() => setComposing(true)}>
+            {t('requests.newRequest')}
+          </button>
         </div>
+
+        {/* Requests sit above the contracts — what you have asked for that is
+            not a contract yet. Absent entirely when there are none. */}
+        {requests.length > 0 ? (
+          <section className="request-section" aria-labelledby="requests-heading">
+            <div>
+              <h2 className="t-h3" id="requests-heading">
+                {t('requests.sectionTitle')}
+              </h2>
+              <p className="t-small muted">{t('requests.sectionLede')}</p>
+            </div>
+            <ul className="request-list">
+              {requests.map((r) => {
+                const badge = requestBadge(r.status);
+                return (
+                  <li key={r.id} className="request-item">
+                    <button type="button" className="request-row" onClick={() => openRequest(r.id)}>
+                      <span className="request-title" dir="auto">
+                        {r.title}
+                      </span>
+                      <span className={`badge${badge === 'REQUESTED' ? '' : badge === 'ARCHIVED' ? ' badge-neutral' : ' badge-locked'}`}>
+                        {t(`requests.badge.${badge}`)}
+                      </span>
+                      <span className="t-caption muted">{relativeTime(r.requestedAt, locale)}</span>
+                    </button>
+                    {r.status === 'ARCHIVED' && r.archivedReason ? (
+                      <p className="t-small request-reason" dir="auto">
+                        {t('requests.archivedBecause', { reason: r.archivedReason })}
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
 
         <div className="chips">
           {(['ALL', ...ALL_STATUSES] as Filter[]).map((key) => (
@@ -134,6 +208,17 @@ export default function Contracts() {
           </div>
         )}
       </div>
+
+      {composing ? (
+        <NewRequestModal
+          onClose={() => setComposing(false)}
+          onSubmitted={(request) => {
+            setComposing(false);
+            openRequest(request.id);
+          }}
+        />
+      ) : null}
+      {openRequestId ? <RequestDrawer requestId={openRequestId} meId={me.id} onClose={() => openRequest(null)} /> : null}
     </>
   );
 }

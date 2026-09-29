@@ -12,6 +12,7 @@ import {
   checkRequestMessage,
 } from '../../lib/requests.js';
 import { notify, recipientsHolding } from '../../lib/notify.js';
+import { requestMessagesPerUserPerHour, requestsPerUserPerDay } from '../../lib/rateLimit.js';
 import { env } from '../../lib/env.js';
 
 /**
@@ -39,6 +40,7 @@ import { env } from '../../lib/env.js';
 
 const notFound = () => new GraphQLError('No such request.', { extensions: { code: 'NOT_FOUND' } });
 const refuse = (code: string, message: string) => new GraphQLError(message, { extensions: { code } });
+const rateLimited = () => refuse('RATE_LIMITED', 'Too many requests. Try again later.');
 
 /** The customer's link (portal) and the desk's link, in the recipient's own language. */
 const portalUrl = (locale: string, projectId: string) =>
@@ -108,6 +110,8 @@ export const requestMutations = {
     const user = requireUser(ctx);
     const refusal = checkNewRequest(args);
     if (refusal) throw refuse(refusal, 'That request cannot be submitted.');
+    // After validation, so a malformed request does not spend the budget.
+    if (!requestsPerUserPerDay.check(user.id)) throw rateLimited();
 
     const title = args.title.trim();
     const project = await prisma.project.create({
@@ -164,6 +168,7 @@ export const requestMutations = {
     }
     const refusal = checkRequestMessage(args.body);
     if (refusal) throw refuse(refusal, 'That message cannot be posted.');
+    if (!requestMessagesPerUserPerHour.check(user.id)) throw rateLimited();
 
     // Re-checked in the write, under a row lock: two people acting at once
     // (sales archiving as the customer replies) must not leave a message on a

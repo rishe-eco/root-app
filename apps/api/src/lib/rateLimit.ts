@@ -135,6 +135,17 @@ export const loginCodePerIpPerHour = new RateLimitBucket(perPeriod(10, HOUR));
 export const signInAttemptsPerIdentifier = new RateLimitBucket(perPeriod(10, 15 * MINUTE));
 export const signInAttemptsPerIp = new RateLimitBucket(perPeriod(10, 15 * MINUTE));
 
+/**
+ * Journeys build plan J2. Every request and every message notifies every sales
+ * account by email *and SMS* (`lib/notify.ts`), and an SMS costs money — so an
+ * account that floods the thread, by script or by a stuck button, would spend
+ * Root's budget and bury the inbox. Generous for any real conversation (ten
+ * requests a day; a message a minute, sustained), and per account rather than
+ * per address: the requests are signed-in acts.
+ */
+export const requestsPerUserPerDay = new RateLimitBucket(perPeriod(10, DAY));
+export const requestMessagesPerUserPerHour = new RateLimitBucket(perPeriod(60, HOUR));
+
 /** Test-only seam — every named bucket above, reset together, so one test
  *  file's identifiers and IPs cannot leak into the next (the same reasoning
  *  `askRateLimit.ts`'s own reset function already applied to its one bucket). */
@@ -145,4 +156,6 @@ export function __resetNamedRateLimitsForTests(): void {
   loginCodePerIpPerHour.reset();
   signInAttemptsPerIdentifier.reset();
   signInAttemptsPerIp.reset();
+  requestsPerUserPerDay.reset();
+  requestMessagesPerUserPerHour.reset();
 }
