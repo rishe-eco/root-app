@@ -34,6 +34,27 @@ export const TEST_DATABASE_URL = `${SERVER}/${TEST_DB}?schema=public`;
 
 const API_DIR = fileURLToPath(new URL('..', import.meta.url));
 
+/**
+ * Several lanes share one Docker Postgres on a Windows host, and under load
+ * (every lane's suite truncating and seeding at once) the first connection
+ * through Docker Desktop's port proxy has been seen to fail outright with
+ * "Can't reach database server" while the server itself was healthy
+ * (2026-09-29, the S1 e2e run). A connection that fails is retried; a query
+ * that *answers* with an error is not — only reachability is flaky here.
+ */
+async function withRetry<T>(run: () => Promise<T>, attempts = 5): Promise<T> {
+  for (let i = 1; ; i += 1) {
+    try {
+      return await run();
+    } catch (err) {
+      const unreachable = err instanceof Error && /Can't reach database server|ECONNREFUSED|ECONNRESET|timed out/i.test(err.message);
+      if (!unreachable || i >= attempts) throw err;
+      console.warn(`[test-db] database unreachable (attempt ${i}/${attempts}); retrying`);
+      await new Promise((r) => setTimeout(r, 2000 * i));
+    }
+  }
+}
+
 /** Creates the database if missing, then applies any migration it lacks. */
 export async function ensureTestDatabase() {
   // CREATE DATABASE cannot name the database it is connected to, so this goes
@@ -42,7 +63,9 @@ export async function ensureTestDatabase() {
   // is a strict allowlist rather than a check for "_test" somewhere in it.
   const admin = new PrismaClient({ datasourceUrl: `${SERVER}/postgres` });
   try {
-    const found = await admin.$queryRaw<unknown[]>`SELECT 1 FROM pg_database WHERE datname = ${TEST_DB}`;
+    const found = await withRetry(
+      () => admin.$queryRaw<unknown[]>`SELECT 1 FROM pg_database WHERE datname = ${TEST_DB}`,
+    );
     if (found.length === 0) {
       await admin.$executeRawUnsafe(`CREATE DATABASE "${TEST_DB}"`);
       console.log(`[test-db] created ${TEST_DB}`);
