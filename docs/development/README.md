@@ -97,7 +97,7 @@ J1    phone identity, SMS, the notify router, staff 2FA      ✔ 2026-09-29 [J1.
 S3    customer and staff management (and the Tools rename)  ✔ 2026-09-29 [S3.md]
       ── M1 (S1 · J1 · T1 · S3) full suites green 2026-09-29: unit 472+38 · integration 476 · e2e 47
 J2    requests — a project before a contract                ✔ 2026-09-29 [J2.md]
-J3    steps, sequence, the wizard shell, status area, attention
+J3    steps, the wizard shell, status area, attention       ✔ 2026-09-29 [J3.md]
 S2    one feedback model, the §3.1 rule, answers, approval queue
 T1    template types, scope templates, ScopeItem.kind      ✔ 2026-09-29 [T1.md]
 J4    step 1 — requirements
@@ -386,6 +386,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`S3.md`](S3.md) | customer and staff management, the Users place's first slice, Tools | ✔ built |
 | [`J2.md`](J2.md) | requests; several contracts per project; `firstContractId` retired | ✔ built |
 | [`T2.md`](T2.md) | the theme catalogue (T2's half of T2+J8) | ✔ built |
+| [`J3.md`](J3.md) | steps, the wizard shell, status area, attention, notes, view-as-customer | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |
