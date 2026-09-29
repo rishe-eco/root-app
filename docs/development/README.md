@@ -101,7 +101,7 @@ J3    steps, the wizard shell, status area, attention       ✔ 2026-09-29 [J3.m
 S2    one feedback model, the §3.1 rule, answers, approvals   ✔ 2026-09-30 [S2.md]
       ── M2 (J2 · J3 · S2) full suites green 2026-09-30: unit 594+46 · integration 595 · e2e 67
 T1    template types, scope templates, ScopeItem.kind      ✔ 2026-09-29 [T1.md]
-J4    step 1 — requirements
+J4    step 1 — requirements; phases belong to a contract   ✔ 2026-09-30 [J4.md]
 J5    step 2a — pages, features and deliverables
 J6    step 2b — the draft and its anchored notes
 J7    step 3 — approve and sign; the agreement gate; snapshot format 2
@@ -389,6 +389,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`T2.md`](T2.md) | the theme catalogue (T2's half of T2+J8) | ✔ built |
 | [`J3.md`](J3.md) | steps, the wizard shell, status area, attention, notes, view-as-customer | ✔ built |
 | [`S2.md`](S2.md) | one feedback model, answers and the approval queue, `approveStepTx` | ✔ built |
+| [`J4.md`](J4.md) | step 1: the brief, the payment plan, phases that belong to a contract, money gating | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |
