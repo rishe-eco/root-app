@@ -781,3 +781,24 @@ test('the generated selection really covers the surface: it reaches the fields t
     assert.match(query, new RegExp(`\\b${field}\\b`), field);
   }
 });
+
+test('a customer reads no staff email or phone through the contract — and staff still do (J3 review)', async () => {
+  const designer = await prisma.user.create({
+    data: { email: 'designer-contact@test.local', phone: '+989121110000', name: 'Designer', roles: ['DESIGNER'], state: 'ACTIVE' },
+  });
+  await prisma.contract.update({ where: { id: f.contract.id }, data: { designerId: designer.id } });
+  const q = 'query($id: ID!){ contract(id: $id) { designer { id name email phone } customer { email } } }';
+
+  const asCustomer = ok(await exec(q, { as: f.customer, variables: { id: f.contract.id } })) as {
+    contract: { designer: { name: string; email: string | null; phone: string | null }; customer: { email: string | null } };
+  };
+  assert.equal(asCustomer.contract.designer.name, 'Designer', 'the name is still shown');
+  assert.equal(asCustomer.contract.designer.email, null);
+  assert.equal(asCustomer.contract.designer.phone, null);
+  assert.equal(asCustomer.contract.customer.email, f.customer.email, 'their own, yes');
+
+  const asAdmin = ok(await exec(q, { as: f.admin, variables: { id: f.contract.id } })) as {
+    contract: { designer: { email: string | null } };
+  };
+  assert.equal(asAdmin.contract.designer.email, 'designer-contact@test.local');
+});

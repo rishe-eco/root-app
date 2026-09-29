@@ -2,7 +2,7 @@ import type { Role as RoleName } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { viewerOf, type Context } from '../../context.js';
 import { can, capabilitiesOf } from '../../lib/capabilities.js';
-import { isContractReader, mayReadMoney, requestVisibleTo } from '../../lib/visibility.js';
+import { isContractReader, mayReadContactOf, mayReadMoney, requestVisibleTo } from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../lib/scope.js';
@@ -601,4 +601,25 @@ export const User = {
    * union happens here, once, against the same table the server guards with.
    */
   capabilities: (u: { roles: RoleName[] }) => [...capabilitiesOf(u)],
+
+  /**
+   * J3 review: contact details only for the account itself and for staff
+   * who work with accounts — `mayReadContactOf`. The viewer is read straight
+   * off the context rather than through `requireUser`: the auth mutations
+   * return the user they just authenticated with no session yet on the
+   * context (and that user is, by construction, the caller), and an account
+   * in a forced password change must still read its own `me`. No anonymous
+   * query returns a `User` (the Library's public shapes have no author
+   * field — see r2.test.ts), so "no viewer" only ever means an auth payload.
+   * Under view-as, `viewAs` is the customer, so the customer's projection
+   * hides staff contacts exactly as the customer's own read does.
+   */
+  email: (u: { id: string; email: string | null }, _a: unknown, ctx: Context) => {
+    const viewer = ctx.viewAs ?? ctx.user;
+    return !viewer || mayReadContactOf(viewer, u) ? u.email : null;
+  },
+  phone: (u: { id: string; phone: string | null }, _a: unknown, ctx: Context) => {
+    const viewer = ctx.viewAs ?? ctx.user;
+    return !viewer || mayReadContactOf(viewer, u) ? u.phone : null;
+  },
 };

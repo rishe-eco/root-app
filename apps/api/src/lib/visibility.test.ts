@@ -9,6 +9,7 @@ import {
   isActiveContract,
   isContractReader,
   mayReadInternalNotes,
+  mayReadContactOf,
   mayReadMoney,
   mayReadPlannedDates,
   projectVisibleTo,
@@ -224,4 +225,15 @@ test('mayReadPlannedDates: staff readers always; a customer only once the agreem
   assert.equal(mayReadPlannedDates(person('d', 'DESIGNER'), false), true);
   assert.equal(mayReadPlannedDates(person('cust', 'CUSTOMER'), false), false);
   assert.equal(mayReadPlannedDates(person('cust', 'CUSTOMER'), true), true);
+});
+
+test('mayReadContactOf: yourself, and the staff who work with accounts — never a customer, contributor or reviewer (J3 review)', () => {
+  const staffer = { id: 'des' };
+  assert.equal(mayReadContactOf(person('des', 'DESIGNER'), staffer), true, 'your own');
+  for (const role of ['ADMIN', 'SALES', 'DESIGNER', 'DEVELOPER'] as Role[]) {
+    assert.equal(mayReadContactOf(person('x', role), staffer), true, role);
+  }
+  for (const role of ['CUSTOMER', 'CONTRIBUTOR', 'REVIEWER'] as Role[]) {
+    assert.equal(mayReadContactOf(person('x', role), staffer), false, role);
+  }
 });

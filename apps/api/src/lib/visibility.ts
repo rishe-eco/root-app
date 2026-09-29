@@ -207,3 +207,26 @@ export function mayReadPlannedDates(user: Viewer, agreementApproved: boolean): b
 export function mayReadMoney(user: Viewer, c: { customerId: string }): boolean {
   return c.customerId === user.id || can(user, 'money.read');
 }
+
+/**
+ * Whose email and phone a viewer may read (J3 review). `User` rows reach
+ * customers through several edges — a contract's designer and developer, a
+ * comment's author — and until this rule each carried the staff member's
+ * email and phone to the customer. Contact details are for the account
+ * itself and for the staff who work with accounts: contract readers, and
+ * whoever manages customers, staff or the Review Room's corpus. Customers,
+ * contributors and reviewers see no one's but their own.
+ *
+ * Checked on the `User` field itself, not per edge, so a later edge that
+ * returns a `User` cannot reopen it.
+ */
+export function mayReadContactOf(viewer: Viewer, target: { id: string }): boolean {
+  if (viewer.id === target.id) return true;
+  return (
+    isContractReader(viewer) ||
+    can(viewer, 'customers.manage') ||
+    can(viewer, 'staff.manage') ||
+    // The Review Room's corpus admin lists its reviewers' emails (ReviewAdmin).
+    can(viewer, 'review.admin')
+  );
+}
