@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client';
-import { useOutletContext } from 'react-router-dom';
+import { Navigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useLocale } from '@/lib/locale';
+import { useLocale, lp } from '@/lib/locale';
+import { can } from '@/lib/access';
 import {
   ALL_TICKETS,
   ADMIN_REQUEST_COUNT,
@@ -22,8 +23,9 @@ import { formatCount, formatAmount, initialOf, relativeTime, clockTime, pick } f
 /**
  * The support desk (build plan L4; spec §5) — every ticket, the channel-move
  * action, and the ADMIN_REQUEST counter (§10.2's demand signal, made real
- * and queryable rather than left as a feeling). Gated on `contracts.manage`
- * (`desk/sections.ts`'s own comment on why).
+ * and queryable rather than left as a feeling). Gated on `tickets.answer`
+ * (journeys build plan S1 — before it, `contracts.manage`), the capability
+ * SALES holds for exactly this surface.
  */
 
 const ALL_TYPES: TicketType[] = ['CHANGE_REQUEST', 'BUG', 'QUESTION', 'ADMIN_REQUEST'];
@@ -227,16 +229,20 @@ export default function Tickets() {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
+  const allowed = can(me, 'tickets.answer');
 
   const { data, loading, error, refetch } = useQuery<{ allTickets: Ticket[] }>(ALL_TICKETS, {
     variables: {
       status: statusFilter === 'ALL' ? null : statusFilter,
       type: typeFilter === 'ALL' ? null : typeFilter,
     },
+    skip: !allowed,
   });
-  const { data: countData } = useQuery<{ adminRequestCount: number }>(ADMIN_REQUEST_COUNT);
+  const { data: countData } = useQuery<{ adminRequestCount: number }>(ADMIN_REQUEST_COUNT, { skip: !allowed });
 
   const tickets = data?.allTickets ?? [];
+
+  if (!allowed) return <Navigate to={lp(locale, '/desk')} replace />;
 
   return (
     <div className="desk-section">

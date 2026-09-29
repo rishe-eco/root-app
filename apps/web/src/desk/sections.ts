@@ -25,35 +25,35 @@ export type DeskSection = {
  */
 export const DESK_SECTIONS: DeskSection[] = [
   { key: 'overview', capability: null },
-  { key: 'contracts', capability: 'contracts.manage' },
+  // Journeys build plan S1: the contracts list answers both `contracts.readAll`
+  // (sales, the whole book) and `contracts.readActive` (design, development —
+  // the contracts still being worked). Gating the nav row on the narrower of
+  // the two is enough: everyone who holds `readAll` holds `readActive` too
+  // (S1's grant table), and the list itself narrows further per viewer
+  // (`allContracts`), so this row only ever decides whether the row exists.
+  { key: 'contracts', capability: 'contracts.readActive' },
   { key: 'customers', capability: 'customers.manage' },
   { key: 'library', capability: 'library.write' },
   { key: 'review', capability: 'review.participate' },
   { key: 'reviewAdmin', capability: 'review.admin' },
-  // Build plan D6: a DEVELOPER holds `builds.author` alone, so without this
-  // row they would see *no* working surface at all — lending them the
-  // contract workspace instead would hand over `contracts.manage`'s whole
-  // remit for one verb. A stub today (L3b builds the real screen): the open
-  // feedback queue and the build-authoring form.
+  // Build plan D6, widened by S1: a DEVELOPER holds `builds.author` and reads
+  // active contracts, but authors only the demos and builds they are assigned
+  // to — this is their one working surface beyond the contracts list.
   { key: 'builds', capability: 'builds.author' },
-  // Build plan L4: the support desk — every ticket, the channel-move action,
-  // and the ADMIN_REQUEST counter (spec §10.2). Gated on `contracts.manage`
-  // rather than a new capability: nothing in the plan asks for a narrower
-  // "support only" staff persona yet, and every other Root-side working
-  // surface added since L1 (phases, demo frames, the registry) reused this
-  // same capability rather than growing its own. Revisit if that persona
-  // ever earns itself.
-  { key: 'tickets', capability: 'contracts.manage' },
-  // Build plan L6: the report, the ledger, and subscription authoring.
-  // `contracts.manage`, same reasoning as `tickets` above — nothing in the
-  // plan asks for a narrower "billing only" staff persona.
-  { key: 'billing', capability: 'contracts.manage' },
-  // Build plan L7: the service panels — the product import, and whatever
-  // follows it. Same `contracts.manage` reasoning as the two rows above. The
-  // stage's own framing is that a service is a panel plus a run history plus
-  // a billing edge, so the second service is a row in a registry rather than
-  // a second section here.
-  { key: 'services', capability: 'contracts.manage' },
+  // Journeys build plan S1: the support desk moves off `contracts.manage`
+  // onto its own verb — the one SALES holds for exactly this surface (the
+  // plan's guard-mapping table).
+  { key: 'tickets', capability: 'tickets.answer' },
+  // Journeys build plan S1: billing is money, and `billing.manage` is the
+  // capability the API's billing resolvers actually check now — a designer or
+  // developer holding neither `billing.manage` nor `money.read` must not even
+  // see this row exists.
+  { key: 'billing', capability: 'billing.manage' },
+  // Journeys build plan S1: the service panels are account administration
+  // (importing a customer's product list), which is `customers.manage` on the
+  // API side (`allServiceRuns`) — not `contracts.author`, since authoring a
+  // contract is not the same act as running a customer's import.
+  { key: 'services', capability: 'customers.manage' },
   // Last, and it is not an ordering accident: this is the only section that
   // hands out a credential rather than editing content, so it sits at the end
   // of the nav where settings live rather than among the working surfaces.
