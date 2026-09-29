@@ -620,7 +620,8 @@ test('every project-scoped mutation returns the contract it is told to; unnamed,
     ['updateScopeItem', 'mutation($c: ID, $i: ID!){ updateScopeItem(scopeItemId: $i, labelFa: "ب", labelEn: "Blog", contractId: $c) { id } }', { i: item.id }],
     ['setScopeItemStatus', 'mutation($c: ID, $i: ID!){ setScopeItemStatus(scopeItemId: $i, status: AGREED, contractId: $c) { id } }', { i: item.id }],
     ['reorderScopeItem', 'mutation($c: ID, $i: ID!){ reorderScopeItem(scopeItemId: $i, direction: UP, contractId: $c) { id } }', { i: item.id }],
-    ['updatePhase', 'mutation($c: ID, $p: ID!){ updatePhase(phaseId: $p, titleFa: "ف", titleEn: "P1", contractId: $c) { id } }', { p: phase.id }],
+    // (updatePhase left this list in J4: a phase names its contract, so it answers
+    // with *that* contract and refuses another one — see j4.test.ts.)
     ['assignScopeItemToPhase', 'mutation($c: ID, $i: ID!, $p: ID){ assignScopeItemToPhase(scopeItemId: $i, phaseId: $p, contractId: $c) { id } }', { i: item.id, p: phase.id }],
     ['createDependency', 'mutation($c: ID, $p: ID!){ createDependency(projectId: $p, side: ROOT, titleFa: "د", titleEn: "E", dueAt: "2026-12-05T00:00:00Z", contractId: $c) { id } }', { p: projectId }],
     ['updateDependency', 'mutation($c: ID, $d: ID!){ updateDependency(dependencyId: $d, titleFa: "د", titleEn: "D", dueAt: "2026-12-01T00:00:00Z", contractId: $c) { id } }', { d: dep.id }],

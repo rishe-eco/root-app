@@ -7,6 +7,7 @@ import { stepLabel, type Audience } from '@/lib/wizard';
 import Lock from '@/components/Lock';
 import DemoViewport from '@/components/DemoViewport';
 import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
+import RequirementsPanel from '@/components/RequirementsPanel';
 import { can } from '@/lib/access';
 
 /**
@@ -23,7 +24,9 @@ import { can } from '@/lib/access';
  *
  * Register the stage's panel in `PANELS` below — one line each:
  *
- * - J4  `REQUIREMENTS` — the brief (staff author it; the customer reads and confirms it)
+ * - J4  `REQUIREMENTS` — ✔ built: the brief as read-only cards with a note on every
+ *   field (`RequirementsPanel`), and for staff the form above them
+ *   (`RequirementsEditor`)
  * - J5  `SCOPE`        — pages, features and deliverables; the proposal decisions
  * - J6  `DRAFT`        — the contract draft with its anchored notes
  * - J7  `AGREEMENT`    — approve and sign; the agreement gate
@@ -44,6 +47,10 @@ export type StepPanelProps = {
   step: WizardStep;
   audience: Audience;
   me: User;
+  /** Reading through "view as customer": a panel that fetches something of its
+   *  own (a step's feedback) asks the API as the customer would be asked, so a
+   *  pending answer is as invisible here as on the customer's own screen. */
+  asCustomer?: boolean;
 };
 
 /**
@@ -53,7 +60,7 @@ export type StepPanelProps = {
  * Authoring the demo stays in the desk's Phases tab. J10 extends this panel
  * with submission, readiness and its own approval preconditions.
  */
-function DemoStepPanel({ contract, step, audience, me }: StepPanelProps) {
+function DemoStepPanel({ contract, step, audience, me, asCustomer = false }: StepPanelProps) {
   const phase = contract.project?.phases.find((p) => p.id === step.phaseId);
   const demo = phase?.demos[0];
   if (!phase || !demo) return <NotYet step={step} audience={audience} />;
@@ -70,13 +77,17 @@ function DemoStepPanel({ contract, step, audience, me }: StepPanelProps) {
         answerDirect={can(me, 'answers.direct.demo')}
         locked={step.locked}
         canApprove={audience === 'customer'}
+        asCustomer={asCustomer}
         onChanged={() => undefined}
       />
     </>
   );
 }
 
-const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = { DEMO: DemoStepPanel };
+const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {
+  REQUIREMENTS: RequirementsPanel,
+  DEMO: DemoStepPanel,
+};
 
 function NotYet({ step, audience }: Pick<StepPanelProps, 'step' | 'audience'>) {
   const { t } = useTranslation();

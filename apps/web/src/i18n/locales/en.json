@@ -838,7 +838,10 @@
     "dependencyOverdue": "Overdue",
     "confirmDeleteDependency": "Delete this dependency?",
     "tabSteps": "Steps",
-    "tabNotes": "Notes"
+    "tabNotes": "Notes",
+    "dependencyFromBrief": "From the requirements",
+    "dependencyTechnical": "Technical",
+    "dependencyBriefOwnedHelp": "This commitment comes from the requirements: its title and who provides it are set there. Only its due date is changed here."
   },
   "upload": {
     "errAuth": "You do not have access to upload this.",
@@ -1473,5 +1476,236 @@
     "banner": "You are seeing this contract the way {{name}} sees it. Nothing here can be changed.",
     "back": "Back to the desk",
     "notVisible": "The customer cannot see this contract yet — it has not been handed over."
+  },
+  "jalali": {
+    "day": "Day",
+    "month": "Month",
+    "year": "Year",
+    "clear": "Clear",
+    "months": {
+      "1": "Farvardin",
+      "2": "Ordibehesht",
+      "3": "Khordad",
+      "4": "Tir",
+      "5": "Mordad",
+      "6": "Shahrivar",
+      "7": "Mehr",
+      "8": "Aban",
+      "9": "Azar",
+      "10": "Dey",
+      "11": "Bahman",
+      "12": "Esfand"
+    }
+  },
+  "brief": {
+    "lede": {
+      "customer": "This is what Root wrote down from what you asked for. Read it, and comment on anything that is not right.",
+      "staff": "Fill this in from the request chat. The customer reads it as cards, field by field, and comments on anything that is not right. Whatever is left empty is shown to them as “Root is completing this”."
+    },
+    "notHandedOver": "Not handed over yet — the customer cannot see this. Hand it over below once the kind of site is set.",
+    "empty": {
+      "customer": "Root has not written the requirements yet.",
+      "staff": "Nothing is written yet — fill in the form above."
+    },
+    "missingTitle": {
+      "customer": "Root is completing this",
+      "staff": "Still missing"
+    },
+    "missing": {
+      "BRIEF": "the requirements themselves",
+      "EXISTING_SITE_URL": "the address of the existing site",
+      "BUDGET_CAP": "the budget",
+      "HARD_DEADLINE": "the hard deadline",
+      "DOMAIN_PROVIDER": "who provides the domain",
+      "HOST_PROVIDER": "who provides the hosting",
+      "CONTENT_PROVIDER": "who provides the content",
+      "SUPPORT_MONTHS": "the support period",
+      "PREMADE_ROUNDS": "how many rounds of changes the pre-made design includes",
+      "MOCKUP_ITERATIONS": "how many rounds of mockup changes are included",
+      "DEMO_ITERATIONS": "how many rounds of demo changes each phase includes",
+      "COMMITMENT_UNDATED": "a due date for: {{what}}",
+      "PHASES": "the phases",
+      "PHASE_END_DATE": "a planned end date for phase {{n}}",
+      "PAYMENT_PLAN": "the payment plan",
+      "PAYMENT_PLAN_TOTAL": "a payment plan that adds up to the fee"
+    },
+    "notSet": "Not set yet",
+    "dueOn": "due {{date}}",
+    "amount": "{{amount}} Toman",
+    "months_one": "{{n}} month",
+    "months_other": "{{n}} months",
+    "group": {
+      "site": "The site",
+      "budgetTime": "Budget and time",
+      "allowances": "What is included",
+      "extras": "Extras",
+      "customerProvides": "Your commitments",
+      "customerProvidesStaff": "The customer’s commitments",
+      "rootProvides": "Root’s commitments",
+      "phases": "Phases",
+      "plan": "Payment plan"
+    },
+    "label": {
+      "kind": "Kind of project",
+      "existingSiteUrl": "Existing site",
+      "templateType": "Type of site",
+      "designTier": "Design",
+      "budgetCap": "Your budget",
+      "idealDeadline": "Ideal deadline",
+      "hardDeadline": "Hard deadline",
+      "supportMonths": "Support after delivery",
+      "allowances": "Rounds of changes",
+      "extras": "Extras",
+      "phases": "Phases and their planned end dates",
+      "paymentPlan": "Payment plan ({{split}})"
+    },
+    "kind": {
+      "NEW_SITE": "A new site",
+      "FEATURE_FOR_EXISTING": "A feature for an existing site"
+    },
+    "path": {
+      "PREMADE": "Pre-made design — picked from a catalogue of themes",
+      "CUSTOM": "Custom design — wireframes and a palette made for you"
+    },
+    "tier": {
+      "THEME_PICK": "Pre-made — pick a theme",
+      "CLAUDE_ASSISTED": "Custom — assisted by Claude",
+      "SENIOR_DESIGNER": "Custom — a senior designer"
+    },
+    "side": {
+      "CUSTOMER": "The customer",
+      "ROOT": "Root"
+    },
+    "allowance": {
+      "premadeRounds_one": "{{n}} round of changes to the pre-made design",
+      "premadeRounds_other": "{{n}} rounds of changes to the pre-made design",
+      "wireframes_one": "{{n}} round of wireframe changes",
+      "wireframes_other": "{{n}} rounds of wireframe changes",
+      "mockups_one": "{{n}} round of mockup changes",
+      "mockups_other": "{{n}} rounds of mockup changes",
+      "demos_one": "{{n}} round of demo changes per phase",
+      "demos_other": "{{n}} rounds of demo changes per phase"
+    },
+    "commitment": {
+      "domain": "Website domain",
+      "host": "Website hosting",
+      "content": "Website content (text and images)",
+      "gateway": "Payment gateway account",
+      "smsLine": "SMS line",
+      "enamad": "Enamad registration"
+    },
+    "form": {
+      "title": "Requirements",
+      "help": "The customer reads what you save here as cards. Dates are chosen in the Jalali calendar.",
+      "kind": "Kind of project",
+      "templateType": "Type of site",
+      "templateTypePick": "Choose a type…",
+      "existingSiteUrl": "Address of the existing site",
+      "designTier": "Design",
+      "designTierHelp": "Pre-made: the customer picks from the theme catalogue. Custom: wireframes and a palette are made for them.",
+      "budgetCap": "Budget the customer named (Toman)",
+      "budgetCapHelp": "What they said they can spend — not the fee Root quotes. Only people who may read money see it.",
+      "idealDeadline": "Ideal deadline",
+      "hardDeadline": "Hard deadline",
+      "supportMonths": "Months of support after delivery",
+      "providersTitle": "Who provides what",
+      "provider": {
+        "domain": "Domain provided by",
+        "host": "Hosting provided by",
+        "content": "Content provided by"
+      },
+      "providerUnset": "Not decided",
+      "domainName": "Domain name",
+      "commitmentsTitle": "Commitments and their due dates",
+      "commitmentsHelp": "Every commitment the requirements imply needs a due date. It goes on the dependency board, and the customer sees their own.",
+      "commitmentDue": "Due date — {{what}}",
+      "commitmentSide": "Provided by",
+      "allowancesTitle": "What is included",
+      "premadeRounds": "Rounds of changes to the pre-made design",
+      "wireframeIterations": "Rounds of wireframe changes",
+      "mockupIterations": "Rounds of mockup changes",
+      "demoIterations": "Rounds of demo changes per phase",
+      "saved": "Saved.",
+      "savedSeparately": "Each part above is saved on its own."
+    },
+    "extras": {
+      "title": "Extras",
+      "help": "Tick what is in scope. An extra that needs something from the customer — a payment gateway, an SMS line, Enamad — becomes a commitment above, with a due date.",
+      "included": "In scope",
+      "notIncluded": "Not in scope"
+    },
+    "phases": {
+      "title": "Phases",
+      "help": "Each phase has a planned end date that the customer reads. Phases are frozen when the agreement is approved.",
+      "confirmDelete": "Delete this phase?",
+      "plannedEnd": "Planned end of phase {{n}}",
+      "newPlannedEnd": "Planned end of the new phase",
+      "add": "Add phase",
+      "endsOn": "ends {{date}}",
+      "noEnd": "end date to be set"
+    },
+    "plan": {
+      "title": "Payment plan",
+      "help": "The split is only a shorthand that fills the rows in. The rows are the plan, and you can edit every one before saving.",
+      "splitLabel": "Split",
+      "splitOption": {
+        "LUMP_SUM": "Lump sum",
+        "INSTALLMENTS": "Installments",
+        "MONTHLY": "Monthly"
+      },
+      "count": "Number of rows",
+      "propose": "Propose rows",
+      "proposeHelp": "Proposing replaces the rows below with an even split of the fee — not of the budget. Edit them afterwards.",
+      "labelFa": "Label (Persian)",
+      "labelEn": "Label (English)",
+      "amount": "Amount (Toman)",
+      "phase": "Phase",
+      "noPhase": "No phase",
+      "phaseOption": "Phase {{n}} — {{title}}",
+      "term": "Payment term (days)",
+      "addRow": "Add row",
+      "totalNoFee": "Total {{total}} Toman. No fee is set on the contract yet, so there is nothing to compare it with.",
+      "totalMatches": "Total {{total}} Toman — it matches the fee.",
+      "totalDiffers": "Total {{total}} Toman — the fee is {{fee}} Toman.",
+      "termNow": "on delivery",
+      "termDays_one": "within {{n}} day",
+      "termDays_other": "within {{n}} days",
+      "afterPhase": "after phase {{n}}",
+      "total": "Total",
+      "proposal": {
+        "lump": "Full payment",
+        "installment": "Installment {{n}} of {{of}}",
+        "month": "Payment for {{month}} {{year}}"
+      }
+    },
+    "handOver": {
+      "title": "Hand over to the customer",
+      "help": "The customer cannot see this contract until you do. They are told by email and SMS, and anything still unfinished is shown to them as “Root is completing this”. The kind of site must be set first.",
+      "action": "Hand over"
+    },
+    "error": {
+      "INVALID_BUDGET": "The budget must be a whole number of Toman above zero.",
+      "INVALID_DEADLINE": "That is not a date.",
+      "INVALID_DATE": "That is not a date.",
+      "DEADLINES_OUT_OF_ORDER": "The ideal deadline cannot be after the hard deadline.",
+      "INVALID_SITE_URL": "The existing site must be an http or https address.",
+      "INVALID_SUPPORT_MONTHS": "Support months must be a whole number from 0 to 120.",
+      "INVALID_ALLOWANCE": "Each number of rounds must be a whole number above zero.",
+      "TEMPLATE_TYPE_INACTIVE": "That type of site is no longer offered.",
+      "STEP_LOCKED": "The agreement is approved, so this can no longer be changed.",
+      "BRIEF_MISSING": "Fill in the requirements — at least the kind of project and the type of site — before handing this over.",
+      "PLAN_ROWS_REQUIRED": "A payment plan needs at least one row.",
+      "TOO_MANY_ROWS": "That is more rows than a payment plan can have.",
+      "LABEL_REQUIRED": "Every row needs a label in both languages.",
+      "INVALID_AMOUNT": "Every amount must be a whole number of Toman above zero.",
+      "INVALID_TERM": "A payment term is a whole number of days, from 0 to 365.",
+      "PHASE_WRONG_CONTRACT": "A payment row names a phase this contract does not have.",
+      "PHASE_NUMBER_TAKEN": "This contract already has a phase with that number.",
+      "NOT_AN_EXTRA": "Only an extra can be switched on or off here.",
+      "EXTRA_IN_PROGRESS": "Work has started on that, so it cannot be switched off here.",
+      "STEP_NOT_ON_ROAD": "This contract has no requirements step.",
+      "FORBIDDEN": "You do not have access to that.",
+      "NOT_FOUND": "Not found."
+    }
   }
 }

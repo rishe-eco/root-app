@@ -1108,7 +1108,7 @@ test('the migration’s backfill and guard, run over a legacy-shaped row: projec
   // (J4: a phase must name a contract, so this one borrows the fixture's — the
   // database has no composite key tying a phase's contract to its own project,
   // and the guard under test looks the project's primary contract up by project.)
-  const orphanPhase = await prisma.phase.create({ data: { projectId: orphanProject.id, contractId: f.contract.id, number: 1, titleFa: 'ف', titleEn: 'p' } });
+  const orphanPhase = await prisma.phase.create({ data: { projectId: orphanProject.id, contractId: f.contract.id, number: 99, titleFa: 'ف', titleEn: 'p' } });
   const orphanDemo = await prisma.demo.create({ data: { phaseId: orphanPhase.id, stagingUrl: 'https://o.example.com' } });
   const orphanPage = await prisma.demoPage.create({ data: { demoId: orphanDemo.id, key: 'o', labelFa: 'ا', labelEn: 'o', canonicalPath: '/o' } });
   await assert.rejects(

@@ -66,7 +66,7 @@ export default function Wizard({ contract, me, asCustomer }: { contract: Contrac
 
             <StatusArea contract={contract} audience="customer" />
             <StepList steps={wizard} selected={selected} onSelect={setPicked} />
-            {selected ? <StepPanel contract={contract} step={selected} audience="customer" me={me} /> : null}
+            {selected ? <StepPanel contract={contract} step={selected} audience="customer" me={me} asCustomer={asCustomer} /> : null}
           </div>
 
           <aside className="rail">

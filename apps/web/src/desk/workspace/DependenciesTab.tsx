@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
-import { pick, fullDateTime } from '@/lib/format';
+import { pick, fullDateTime, calendarDate } from '@/lib/format';
 import {
   CREATE_DEPENDENCY,
   UPDATE_DEPENDENCY,
@@ -12,6 +12,7 @@ import {
   DELETE_DEPENDENCY,
   type Dependency,
   type DependencySide,
+  type User,
 } from '@/lib/queries';
 import { useWorkspaceMutation, type WorkspaceContext } from './ContractWorkspace';
 
@@ -93,7 +94,7 @@ function VerifyForm({
   );
 }
 
-function DependencyRow({ dep, canManage, canVerify }: { dep: Dependency; canManage: boolean; canVerify: boolean }) {
+function DependencyRow({ dep, canManage, me }: { dep: Dependency; canManage: boolean; me: User }) {
   const { t } = useTranslation();
   const locale = useLocale();
   const [editing, setEditing] = useState(false);
@@ -102,6 +103,15 @@ function DependencyRow({ dep, canManage, canVerify }: { dep: Dependency; canMana
   const [dueAt, setDueAt] = useState(dep.dueAt.slice(0, 10));
   const [update, { loading }] = useWorkspaceMutation(UPDATE_DEPENDENCY);
   const [remove] = useWorkspaceMutation(DELETE_DEPENDENCY);
+  // Journeys build plan J4: a technical row (the domain, the hosting) is the
+  // developer's to verify, every other row sales'. The API holds the same rule
+  // (and, for a technical row, that it is *this* project's developer) — a
+  // button that can only be refused is worse than one that is not there.
+  const canVerify = can(me, dep.technical ? 'dependencies.verifyTechnical' : 'dependencies.verifyGeneral');
+  // The requirements own a row they created (`briefKey`): its title and side
+  // come from the brief, and it is not deleted from here (`BRIEF_OWNED`) — only
+  // its date is edited, the one thing the brief's form asks separately.
+  const fromBrief = dep.briefKey !== null;
 
   async function onSave(e: FormEvent) {
     e.preventDefault();
@@ -119,34 +129,44 @@ function DependencyRow({ dep, canManage, canVerify }: { dep: Dependency; canMana
       <div className="workspace-row">
         <span className="badge">{t(`workspace.dependencySide.${dep.side}`)}</span>
         {dep.overdue ? <span className="badge dependency-overdue-badge">{t('workspace.dependencyOverdue')}</span> : null}
+        {fromBrief ? <span className="badge" data-testid="dependency-from-brief">{t('workspace.dependencyFromBrief')}</span> : null}
+        {dep.technical ? <span className="badge" data-testid="dependency-technical">{t('workspace.dependencyTechnical')}</span> : null}
         <span className="t-small" style={{ flex: 1 }}>
           {pick(dep, 'title', locale)}
         </span>
-        <span className="t-caption">{fullDateTime(dep.dueAt, locale)}</span>
+        {/* A due date is a day (PD-19), whatever the column's type: the board's
+            own date input writes midnight UTC, and so does the brief. */}
+        <span className="t-caption" data-testid="dependency-due">{calendarDate(dep.dueAt, locale)}</span>
         {canManage ? (
           <>
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing((v) => !v)}>
               {t('workspace.edit')}
             </button>
-            <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete}>
-              {t('workspace.delete')}
-            </button>
+            {fromBrief ? null : (
+              <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete}>
+                {t('workspace.delete')}
+              </button>
+            )}
           </>
         ) : null}
       </div>
 
       {editing && canManage ? (
         <form className="card editor-card auth-form" onSubmit={onSave}>
-          <div className="editor-grid-2">
-            <div className="field">
-              <label className="label">{t('workspace.titleFa')}</label>
-              <input className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
+          {fromBrief ? (
+            <p className="t-caption">{t('workspace.dependencyBriefOwnedHelp')}</p>
+          ) : (
+            <div className="editor-grid-2">
+              <div className="field">
+                <label className="label">{t('workspace.titleFa')}</label>
+                <input className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="label">{t('workspace.titleEn')}</label>
+                <input className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
+              </div>
             </div>
-            <div className="field">
-              <label className="label">{t('workspace.titleEn')}</label>
-              <input className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-            </div>
-          </div>
+          )}
           <div className="field">
             <label className="label">{t('workspace.dependencyDueAt')}</label>
             <input className="input num-latin" type="date" required value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
@@ -166,12 +186,12 @@ export default function DependenciesTab() {
   const { t } = useTranslation();
   const { contract, me } = useOutletContext<WorkspaceContext>();
   const project = contract.project;
-  // Journeys build plan S1: what is owed and by when is contracts.author
-  // (the agreement); marking a row met is dependencies.verifyGeneral — a
-  // developer holds neither today (verifyTechnical is unused until J4's
-  // technical flag), which is why the board can be all-read-only for them.
+  // Journeys build plan S1: what is owed and by when is contracts.author (the
+  // agreement). Marking a row met is per row since J4: a technical row is the
+  // developer's (`dependencies.verifyTechnical`), any other sales'
+  // (`dependencies.verifyGeneral`) — so the board is read-only for a person
+  // holding neither, and each row asks for its own.
   const canManage = can(me, 'contracts.author');
-  const canVerify = can(me, 'dependencies.verifyGeneral');
 
   const [adding, setAdding] = useState(false);
   const [side, setSide] = useState<DependencySide>('CUSTOMER');
@@ -253,7 +273,7 @@ export default function DependenciesTab() {
       ) : (
         <div className="editor-list">
           {rows.map((dep) => (
-            <DependencyRow key={dep.id} dep={dep} canManage={canManage} canVerify={canVerify} />
+            <DependencyRow key={dep.id} dep={dep} canManage={canManage} me={me} />
           ))}
         </div>
       )}

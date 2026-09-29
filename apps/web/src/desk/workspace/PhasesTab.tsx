@@ -4,7 +4,7 @@ import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { can, canAuthorBuild } from '@/lib/access';
-import { pick, formatCount, relativeTime } from '@/lib/format';
+import { pick, formatCount, relativeTime, calendarDate } from '@/lib/format';
 import {
   CREATE_PHASE,
   UPDATE_PHASE,
@@ -446,6 +446,11 @@ function PhaseCard({
       </div>
 
       {phase.milestoneLabel ? <p className="t-caption">{phase.milestoneLabel}</p> : null}
+      {phase.plannedEndAt ? (
+        <p className="t-caption" data-testid="phase-planned-end">
+          {t('brief.phases.endsOn', { date: calendarDate(phase.plannedEndAt, locale) })}
+        </p>
+      ) : null}
 
       {editing && canManagePhases ? (
         <form className="card editor-card auth-form" onSubmit={onSave}>
@@ -586,7 +591,9 @@ export default function PhasesTab() {
     return <p className="t-small muted">{t('workspace.phaseNoProject')}</p>;
   }
 
-  const phases = [...project.phases].sort((a, b) => a.number - b.number);
+  // This contract's phases (J4, PD-5): the project holds every contract's, and a
+  // board that listed them all would let a designer edit another contract's demos.
+  const phases = project.phases.filter((p) => p.contractId === contract.id).sort((a, b) => a.number - b.number);
   const nextNumber = phases.length === 0 ? 1 : Math.max(...phases.map((p) => p.number)) + 1;
   const unassignedItems = contract.scopeItems.filter((i) => i.phaseId === null);
 

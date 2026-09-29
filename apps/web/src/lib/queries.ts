@@ -70,6 +70,8 @@ export type DesignConcept = {
   pages: PageDesign[];
 };
 
+export type ScopeKind = 'PAGE' | 'FEATURE' | 'DELIVERABLE' | 'EXTRA';
+
 export type ScopeStatus = 'PROPOSED' | 'AGREED' | 'IN_BUILD' | 'IN_DEMO' | 'ACCEPTED' | 'DECLINED' | 'TRADED';
 
 export type ScopeItem = {
@@ -78,6 +80,9 @@ export type ScopeItem = {
   labelFa: string;
   labelEn: string;
   position: number;
+  /** Journeys build plan T1 — `EXTRA` rows are the completeness checklist's
+   *  areas, which step 1 (J4) toggles as the brief's "extras". */
+  kind: ScopeKind;
   checked: boolean;
   status: ScopeStatus;
   temporary: boolean;
@@ -124,6 +129,11 @@ export type Dependency = {
   verifiedBy: Pick<User, 'id' | 'name'> | null;
   /** What was actually done to verify it — the banked trap's own fix. Set exactly when verifiedAt is. */
   verifiedNote: string | null;
+  /** J4: the step-1 brief owns this row (`domain`, `host`, `content`, `gateway`,
+   *  `smsLine`, `enamad`) — it cannot be deleted from the board (`BRIEF_OWNED`). */
+  briefKey: string | null;
+  /** J4: verified by the developer (`dependencies.verifyTechnical`) rather than sales. */
+  technical: boolean;
 };
 
 /** The staff dashboard's own cross-project shape — a Dependency plus which
@@ -318,6 +328,11 @@ export type Phase = {
   number: number;
   titleFa: string;
   titleEn: string;
+  /** J4 (PD-5): the contract this phase delivers — `Project.phases` lists the
+   *  project's, and a screen for one contract filters by this. */
+  contractId: string;
+  /** A calendar day (PD-19) as an ISO instant at midnight UTC — render with `calendarDate`. */
+  plannedEndAt: string | null;
   milestoneLabel: string | null;
   scopeItems: PhaseScopeItemRef[];
   demos: Demo[];
@@ -345,8 +360,10 @@ export type Article = {
   number: number;
   titleFa: string;
   titleEn: string;
+  /** Null for a sensitive article when the viewer may not read the contract's money (PD-14, J4). */
   bodyFa: string | null;
   bodyEn: string | null;
+  sensitive?: boolean;
 };
 
 export type Comment = {
@@ -637,7 +654,60 @@ export type Contract = {
   // means unassigned, not "not selected" (see CONTRACT_WORKSPACE_FIELDS).
   designer?: Pick<User, 'id' | 'name'> | null;
   developer?: Pick<User, 'id' | 'name'> | null;
+  // Journeys build plan J4 — step 1. Selected by `WizardFields`, so wherever
+  // the wizard is.
+  brief?: ContractBrief | null;
+  /** What step 1 still lacks, as codes. Empty means the step is done. */
+  briefCompleteness?: BriefMissing[];
+  /** Money (PD-14): null for staff without `money.read` who are not the customer. */
+  paymentPlan?: PaymentPlan | null;
+  /** This contract's own phases (`project.phases` is every phase of the project). */
+  phases?: Array<Pick<Phase, 'id' | 'number' | 'titleFa' | 'titleEn' | 'contractId' | 'plannedEndAt'>>;
 };
+
+export type BriefKind = 'NEW_SITE' | 'FEATURE_FOR_EXISTING';
+export type DesignTier = 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+export type PaymentSplit = 'LUMP_SUM' | 'INSTALLMENTS' | 'MONTHLY';
+
+/** Step 1 (journeys build plan J4). Dates are calendar days (PD-19): ISO
+ *  instants at midnight UTC, rendered with `calendarDate` and edited through
+ *  `DayInput`, which speaks `YYYY-MM-DD`. */
+export type ContractBrief = {
+  id: string;
+  kind: BriefKind;
+  existingSiteUrl: string | null;
+  templateType: { id: string; slug: string; labelFa: string; labelEn: string };
+  designTier: DesignTier;
+  /** Toman as a decimal string; null for staff without `money.read` (PD-14). */
+  budgetCap: string | null;
+  idealDeadline: string | null;
+  hardDeadline: string | null;
+  domainName: string | null;
+  domainProvidedBy: DependencySide | null;
+  hostProvidedBy: DependencySide | null;
+  contentProvidedBy: DependencySide | null;
+  supportMonths: number | null;
+  premadeRounds: number | null;
+  wireframeIterations: number;
+  mockupIterations: number | null;
+  demoIterationsPerPhase: number | null;
+  updatedAt: string;
+};
+
+export type BriefMissing = { code: string; key: string | null };
+
+export type PlannedInvoice = {
+  id: string;
+  ordinal: number;
+  labelFa: string;
+  labelEn: string;
+  /** Toman as a decimal string. */
+  amount: string;
+  phaseId: string | null;
+  paymentTermDays: number;
+};
+
+export type PaymentPlan = { id: string; split: PaymentSplit; total: string; invoices: PlannedInvoice[] };
 
 const USER_FIELDS = gql`
   fragment UserFields on User {
@@ -764,6 +834,8 @@ export const DEPENDENCY_FIELDS = gql`
       id
       name
     }
+    briefKey
+    technical
   }
 `;
 
@@ -828,6 +900,57 @@ export const WIZARD_FIELDS = gql`
       phaseNumber
       number
     }
+    brief {
+      id
+      kind
+      existingSiteUrl
+      templateType {
+        id
+        slug
+        labelFa
+        labelEn
+      }
+      designTier
+      budgetCap
+      idealDeadline
+      hardDeadline
+      domainName
+      domainProvidedBy
+      hostProvidedBy
+      contentProvidedBy
+      supportMonths
+      premadeRounds
+      wireframeIterations
+      mockupIterations
+      demoIterationsPerPhase
+      updatedAt
+    }
+    briefCompleteness {
+      code
+      key
+    }
+    paymentPlan {
+      id
+      split
+      total
+      invoices {
+        id
+        ordinal
+        labelFa
+        labelEn
+        amount
+        phaseId
+        paymentTermDays
+      }
+    }
+    phases {
+      id
+      number
+      titleFa
+      titleEn
+      contractId
+      plannedEndAt
+    }
   }
 `;
 
@@ -889,6 +1012,7 @@ export const CONTRACT_FIELDS = gql`
       originNote
       originRound
       phaseId
+      kind
     }
     project {
       id
@@ -931,6 +1055,8 @@ export const CONTRACT_FIELDS = gql`
         number
         titleFa
         titleEn
+        contractId
+        plannedEndAt
         milestoneLabel
         scopeItems {
           id
@@ -1751,6 +1877,66 @@ export const PUBLISH_CONTRACT = gql`
   }
 `;
 
+// --- Step 1 — requirements (journeys build plan J4) ---
+
+/** Hands step 1 to the customer is `PUBLISH_CONTRACT` above; these three write it. Each returns `Contract!` with the wizard's own fields, so the step's panel,
+ *  the status area and the completeness list move with the write. */
+export const SET_BRIEF = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetBrief($contractId: ID!, $input: BriefInput!) {
+    setBrief(contractId: $contractId, input: $input) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SET_EXTRA = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetExtra($scopeItemId: ID!, $included: Boolean!, $contractId: ID) {
+    setExtra(scopeItemId: $scopeItemId, included: $included, contractId: $contractId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SET_PAYMENT_PLAN = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetPaymentPlan($contractId: ID!, $split: PaymentSplit!, $invoices: [PlannedInvoiceInput!]!) {
+    setPaymentPlan(contractId: $contractId, split: $split, invoices: $invoices) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+/** The shape `setBrief` takes — the form's whole state, dates as `YYYY-MM-DD`. */
+export type BriefInput = {
+  kind: BriefKind;
+  existingSiteUrl?: string | null;
+  templateTypeId: string;
+  designTier: DesignTier;
+  budgetCap?: string | null;
+  idealDeadline?: string | null;
+  hardDeadline?: string | null;
+  domainName?: string | null;
+  domainProvidedBy?: DependencySide | null;
+  hostProvidedBy?: DependencySide | null;
+  contentProvidedBy?: DependencySide | null;
+  supportMonths?: number | null;
+  premadeRounds?: number | null;
+  wireframeIterations?: number | null;
+  mockupIterations?: number | null;
+  demoIterationsPerPhase?: number | null;
+  commitments?: Array<{ key: string; side?: DependencySide | null; dueAt?: string | null }>;
+};
+
+export type PlannedInvoiceInput = {
+  labelFa: string;
+  labelEn: string;
+  amount: string;
+  phaseId?: string | null;
+  paymentTermDays: number;
+};
+
 export const SET_CONTRACT_STATUS = gql`
   ${CONTRACT_FIELDS}
   mutation SetContractStatus($contractId: ID!, $status: ContractStatus!) {
@@ -2021,8 +2207,8 @@ export const CONFIRM_SCOPE_TRADE_ROOT = gql`
 
 export const CREATE_PHASE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation CreatePhase($contractId: ID!, $number: Int!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String) {
-    createPhase(contractId: $contractId, number: $number, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel) {
+  mutation CreatePhase($contractId: ID!, $number: Int!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String, $plannedEndAt: String) {
+    createPhase(contractId: $contractId, number: $number, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel, plannedEndAt: $plannedEndAt) {
       ...ContractWorkspaceFields
     }
   }
@@ -2030,8 +2216,8 @@ export const CREATE_PHASE = gql`
 
 export const UPDATE_PHASE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UpdatePhase($phaseId: ID!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String, $contractId: ID) {
-    updatePhase(phaseId: $phaseId, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel, contractId: $contractId) {
+  mutation UpdatePhase($phaseId: ID!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String, $plannedEndAt: String, $contractId: ID) {
+    updatePhase(phaseId: $phaseId, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel, plannedEndAt: $plannedEndAt, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }

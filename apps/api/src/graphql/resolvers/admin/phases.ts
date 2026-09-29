@@ -206,7 +206,9 @@ export const phaseMutations = {
         data: {
           titleFa: args.titleFa,
           titleEn: args.titleEn,
-          milestoneLabel: args.milestoneLabel ?? null,
+          // Omitted leaves it (the step-1 form edits a phase without knowing its
+          // milestone label); null clears it, as the phase board always meant.
+          milestoneLabel: args.milestoneLabel === undefined ? undefined : args.milestoneLabel,
           plannedEndAt: end,
         },
       });

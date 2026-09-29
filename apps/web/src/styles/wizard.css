@@ -122,6 +122,71 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 .step-notyet-title { margin: 0; font-weight: var(--weight-medium); }
 .step-notyet .t-small { margin: 0; }
 
+/* ---- step 1, requirements (journeys build plan J4) ------------------------
+   The brief as cards with a note on every field, the staff form above them,
+   and the Jalali day input. Tokens and logical properties only. */
+.requirements { display: flex; flex-direction: column; gap: var(--space-4); }
+.req-editor { display: flex; flex-direction: column; gap: var(--space-4); }
+.req-notice {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+}
+.req-completing {
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel);
+}
+.req-completing-title { margin: 0 0 var(--space-2); font-weight: var(--weight-medium); }
+.req-completing ul { margin: 0; padding-inline-start: var(--space-6); font-size: var(--text-small); color: var(--color-text-muted); }
+
+/* One row of the readout: the field's name, and what it says. */
+.req-row { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.req-label { font-size: var(--text-caption); color: var(--color-text-subtle); }
+.req-value { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-body); }
+.req-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.req-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+.req-total { font-weight: var(--weight-semibold); border-block-start: 1px solid var(--color-border); padding-block-start: var(--space-2); }
+.req-checklist { display: flex; flex-direction: column; gap: var(--space-2); }
+.req-check { display: flex; align-items: center; gap: var(--space-2); }
+.req-check[data-included='false'] { color: var(--color-text-subtle); }
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The staff phase rows and the payment table: a grid that wraps, so a narrow
+   screen stacks the cells instead of scrolling the page sideways. */
+.req-phase {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, 1fr) minmax(8rem, 1fr) auto auto;
+  align-items: start;
+  gap: var(--space-2);
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--color-border);
+}
+.req-phase .error { grid-column: 1 / -1; margin: 0; }
+.plan-table { display: flex; flex-direction: column; gap: var(--space-2); }
+.plan-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* The Jalali day input: day, month, year — in the reader's reading order. */
+.dayinput { display: flex; flex-direction: column; gap: var(--space-1); }
+.dayinput-selects { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.dayinput-select { inline-size: auto; min-inline-size: 5.5rem; }
+.dayinput-readout { color: var(--color-text-subtle); }
+
 /* ---- the desk's workspace header, and internal notes --------------------- */
 .workspace-head-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .notes { display: flex; flex-direction: column; gap: var(--space-4); }
