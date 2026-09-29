@@ -96,6 +96,19 @@ export function stepsFor(
   ];
 }
 
+/**
+ * Whether a contract of this sequence has this step *at all*, whatever its
+ * phases and design path (journeys build plan S2). `DESIGN_FIRST` is today's
+ * page regrouped — design, agreement, demos — and has no requirements, scope,
+ * draft, mockup or summary, so the feedback API refuses those for it rather
+ * than growing rows nothing will ever show. `AGREEMENT_FIRST` has all eight
+ * (MOCKUP joins the road only on the custom design path, which J8 decides).
+ */
+export function stepOnRoad(sequence: ContractSequence, step: StepKind): boolean {
+  if (sequence === 'DESIGN_FIRST') return step === 'DESIGN' || step === 'AGREEMENT' || step === 'DEMO';
+  return true;
+}
+
 export type Approval = { step: StepKind; phaseId: string | null; approvedAt: Date };
 
 /** "This step's work is complete", supplied by data other than an approval.

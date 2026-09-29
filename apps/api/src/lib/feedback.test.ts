@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkInterception, reopensOnComment } from './feedback.js';
+import { checkInterception } from './feedback.js';
 
 test('checkInterception: null target (a page, or a hand-authored line) never intercepts', () => {
   assert.deepEqual(checkInterception(null), { intercepted: false });
@@ -25,12 +25,5 @@ test('checkInterception: decided wins when an item is somehow both', () => {
   assert.deepEqual(result, { intercepted: true, reason: 'DECIDED', scopeItemId: 's1' });
 });
 
-// --- reopensOnComment (build plan L3b.2's first rule, from the other side) -
-
-test('reopensOnComment: only ADDRESSED reopens on a new comment', () => {
-  assert.equal(reopensOnComment('ADDRESSED'), true);
-  assert.equal(reopensOnComment('OPEN'), false);
-  assert.equal(reopensOnComment('RATIFIED'), false);
-  assert.equal(reopensOnComment('ACCEPTED'), false);
-  assert.equal(reopensOnComment('DECLINED'), false);
-});
+// `reopensOnComment` moved to lib/feedbackRules.ts in S2 (and is tested in
+// feedbackRules.test.ts).

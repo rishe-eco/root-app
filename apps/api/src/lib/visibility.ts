@@ -1,5 +1,6 @@
 import type { ContractStatus, ProjectStatus, User } from '@prisma/client';
 import { can } from './capabilities.js';
+import { isMoneyAnchored } from './feedbackRules.js';
 
 /**
  * Which contracts a person sees, and which of them they may author — the
@@ -229,4 +230,35 @@ export function mayReadContactOf(viewer: Viewer, target: { id: string }): boolea
     // The Review Room's corpus admin lists its reviewers' emails (ReviewAdmin).
     can(viewer, 'review.admin')
   );
+}
+
+/**
+ * Whether a comment on a feedback item is shown to this viewer (journeys build
+ * plan S2, PD-4): **the customer projection.** A contract reader — sales, and
+ * the designer and developer working it — sees every comment, pending and
+ * declined answers included; anyone else sees the customer's own comments and
+ * the staff answers that have reached them (`NOT_REQUIRED`, `APPROVED`).
+ *
+ * Asked of `viewerOf(ctx)`, never of the signed-in user, so it holds under
+ * view-as-customer without a branch: sales looking as the customer is asked
+ * about the customer, and a pending answer stays invisible to them.
+ */
+export function visibleComment(comment: { approval: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'DECLINED' }, viewer: Viewer): boolean {
+  return isContractReader(viewer) || comment.approval === 'NOT_REQUIRED' || comment.approval === 'APPROVED';
+}
+
+/**
+ * PD-21: feedback about money — anchored to the budget, the payment plan or a
+ * sensitive article — is itself about money, and a designer answering it would
+ * read the numbers in the customer's own words. So it is hidden from any staff
+ * viewer without `money.read`: the queue, the step panel, the attention module.
+ * The customer always sees their own (`mayReadMoney`), and so does whoever
+ * holds `money.read`, which is also who can answer it (SALES, ADMIN).
+ */
+export function visibleItem(
+  item: { briefField: string | null; articleSensitive?: boolean },
+  viewer: Viewer,
+  contract: { customerId: string },
+): boolean {
+  return !isMoneyAnchored(item) || mayReadMoney(viewer, contract);
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import type { Role } from '@prisma/client';
+import type { Role, StepKind } from '@prisma/client';
 import {
   ATTENTION_KINDS,
   ATTENTION_SENTENCES,
@@ -31,9 +31,11 @@ const empty = (over: Partial<AttentionInput> = {}): AttentionInput => ({
   now: NOW,
   pending: null,
   dependencies: [],
-  addressed: [],
+  feedback: { unresolved: [], pendingApproval: [], answered: [] },
   ...over,
 });
+
+const fact = (step: StepKind, phaseId: string | null, since: Date, money = false) => ({ step, phaseId, money, since });
 
 const summary = (items: AttentionItem[]) => items.map((i) => `${i.kind}/${i.variant}/${i.waitingOn}`);
 
@@ -111,22 +113,60 @@ test('overdue dependencies: only unverified, only past due, and the side decides
   assert.deepEqual(customerSide.params, { dependencyId: 'late-customer', titleFa: 'الف late-customer', titleEn: 'Title late-customer' });
 });
 
-test('addressed demo items collapse to one line per phase, since the earliest publish', () => {
+test('answered items collapse to one line per step and phase, since the earliest answer', () => {
   const items = attentionFor(
     empty({
-      addressed: [
-        { id: 'f1', phaseId: 'p1', since: day(-2) },
-        { id: 'f2', phaseId: 'p1', since: day(-5) },
-        { id: 'f3', phaseId: 'p2', since: day(-1) },
-      ],
+      feedback: {
+        unresolved: [],
+        pendingApproval: [],
+        answered: [fact('DEMO', 'p1', day(-2)), fact('DEMO', 'p1', day(-5)), fact('DEMO', 'p2', day(-1)), fact('DESIGN', null, day(-3))],
+      },
     }),
     CUSTOMER,
   );
   assert.deepEqual(items.map((i) => [i.kind, i.phaseId, i.params, i.since]), [
-    ['ANSWER_PUBLISHED', 'p1', { count: 2 }, day(-5)],
-    ['ANSWER_PUBLISHED', 'p2', { count: 1 }, day(-1)],
+    ['ANSWER_PUBLISHED', 'p1', { count: 2, step: 'DEMO' }, day(-5)],
+    ['ANSWER_PUBLISHED', null, { count: 1, step: 'DESIGN' }, day(-3)],
+    ['ANSWER_PUBLISHED', 'p2', { count: 1, step: 'DEMO' }, day(-1)],
   ]);
   assert.ok(items.every((i) => i.waitingOn === 'CUSTOMER'));
+});
+
+test('feedback Root owes is Root’s move, routed to the step’s job; a customer sees it, and sees nothing of the approval queue', () => {
+  const input = empty({
+    feedback: {
+      unresolved: [fact('REQUIREMENTS', null, day(-4)), fact('DESIGN', null, day(-3)), fact('DEMO', 'p1', day(-2))],
+      pendingApproval: [fact('DESIGN', null, day(-1)), fact('DESIGN', null, day(-6))],
+      answered: [],
+    },
+  });
+  const staff = attentionFor(input, SALES);
+  assert.deepEqual(
+    staff.map((i) => [i.kind, i.waitingOn, i.role, i.internal, i.params]),
+    [
+      ['ANSWER_PENDING_APPROVAL', 'ROOT', 'SALES', true, { count: 2, step: 'DESIGN' }],
+      ['FEEDBACK_UNRESOLVED', 'ROOT', 'SALES', false, { count: 1, step: 'REQUIREMENTS' }],
+      ['FEEDBACK_UNRESOLVED', 'ROOT', 'DESIGNER', false, { count: 1, step: 'DESIGN' }],
+      ['FEEDBACK_UNRESOLVED', 'ROOT', 'DEVELOPER', false, { count: 1, step: 'DEMO' }],
+    ],
+  );
+  assert.equal(staff[0].since.getTime(), day(-6).getTime(), 'a group waits since its earliest member');
+  // The customer is told Root owes them an answer — never that one is waiting
+  // for sales to release it.
+  assert.deepEqual(attentionFor(input, CUSTOMER).map((i) => i.kind), ['FEEDBACK_UNRESOLVED', 'FEEDBACK_UNRESOLVED', 'FEEDBACK_UNRESOLVED']);
+});
+
+test('feedback about money is its own line, and only money readers see it (PD-21)', () => {
+  const input = empty({
+    feedback: {
+      unresolved: [fact('REQUIREMENTS', null, day(-2), true), fact('REQUIREMENTS', null, day(-1), false)],
+      pendingApproval: [],
+      answered: [],
+    },
+  });
+  assert.equal(attentionFor(input, SALES).length, 2);
+  assert.deepEqual(attentionFor(input, DESIGNER).map((i) => i.money), [false]);
+  assert.equal(attentionFor(input, CUSTOMER).length, 2, 'the customer’s own feedback about money is theirs to see');
 });
 
 test('longest-waiting first; equal times fall back to the catalogue order, so the list is total', () => {
@@ -138,7 +178,7 @@ test('longest-waiting first; equal times fall back to the catalogue order, so th
         designSince: day(-1),
         amendment: null,
       },
-      addressed: [{ id: 'f', phaseId: 'p1', since: day(-9) }],
+      feedback: { unresolved: [], pendingApproval: [], answered: [fact('DEMO', 'p1', day(-9))] },
       dependencies: [{ id: 'd', side: 'CUSTOMER', titleFa: 'ا', titleEn: 'a', dueAt: day(-4), verifiedAt: null }],
     }),
     CUSTOMER,
@@ -225,7 +265,11 @@ test('every item the module can emit names a sentence that exists in the table',
         { id: 'a', side: 'CUSTOMER', titleFa: 'ا', titleEn: 'a', dueAt: day(-1), verifiedAt: null },
         { id: 'b', side: 'ROOT', titleFa: 'ا', titleEn: 'a', dueAt: day(-1), verifiedAt: null },
       ],
-      addressed: [{ id: 'f', phaseId: 'p', since: day(-1) }],
+      feedback: {
+        unresolved: [fact('DEMO', 'p', day(-1))],
+        pendingApproval: [fact('DEMO', 'p', day(-1))],
+        answered: [fact('DEMO', 'p', day(-1))],
+      },
     }),
     SALES,
   );

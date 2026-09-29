@@ -10,7 +10,8 @@ import {
   legacyFinished,
   type WizardState,
 } from '../../lib/steps.js';
-import { attentionFor, type AttentionInput } from '../../lib/attention.js';
+import { attentionFor, type AttentionInput, type FeedbackFacts } from '../../lib/attention.js';
+import { isMoneyAnchored } from '../../lib/feedbackRules.js';
 import { computeStatusSummary } from '../../lib/statusSummary.js';
 import { timelineFor } from '../../lib/timeline.js';
 import { checkInternalNote } from '../../lib/internalNotes.js';
@@ -50,7 +51,7 @@ import { primaryContractId } from './admin/shared.js';
  * it, a new-road contract added to a project mid-flight would inherit another
  * contract's demos as its own. J4 replaces this with the column.
  */
-async function ownsProjectWork(contractId: string, projectId: string): Promise<boolean> {
+export async function ownsProjectWork(contractId: string, projectId: string): Promise<boolean> {
   return (await primaryContractId(projectId)) === contractId;
 }
 
@@ -58,7 +59,7 @@ type Facts = Awaited<ReturnType<typeof loadFacts>>;
 
 async function loadFacts(c: FullContract) {
   const owns = await ownsProjectWork(c.id, c.projectId);
-  const [approvals, phases, dependencies, builds, contractRevisions, designRevisions] = await Promise.all([
+  const [approvals, phases, dependencies, builds, contractRevisions, designRevisions, feedback] = await Promise.all([
     prisma.stepApproval.findMany({
       where: { contractId: c.id },
       select: { id: true, step: true, phaseId: true, approvedAt: true, approvedById: true },
@@ -74,13 +75,7 @@ async function loadFacts(c: FullContract) {
             scopeItems: { select: { status: true } },
             demos: {
               where: { publishedAt: { not: null } },
-              select: {
-                id: true,
-                feedbackItems: {
-                  where: { status: 'ADDRESSED', addressedInBuild: { publishedAt: { not: null } } },
-                  select: { id: true, addressedInBuild: { select: { publishedAt: true } } },
-                },
-              },
+              select: { id: true },
             },
           },
         })
@@ -103,8 +98,27 @@ async function loadFacts(c: FullContract) {
       where: { contractId: c.id, publishedAt: { not: null } },
       select: { id: true, version: true, publishedAt: true },
     }),
+    // Every step's feedback (S2), with just enough of each thread to say when
+    // the customer last spoke and when an answer reached them. Items only
+    // matter until the step is accepted, so an accepted one is not loaded.
+    prisma.feedbackItem.findMany({
+      where: { contractId: c.id, status: { not: 'ACCEPTED' } },
+      select: {
+        id: true,
+        step: true,
+        phaseId: true,
+        status: true,
+        briefField: true,
+        updatedAt: true,
+        createdAt: true,
+        addressedInBuild: { select: { publishedAt: true } },
+        comments: {
+          select: { authorId: true, createdAt: true, approval: true, approvedAt: true, resolution: true },
+        },
+      },
+    }),
   ]);
-  return { approvals, phases, dependencies, builds, contractRevisions, designRevisions };
+  return { approvals, phases, dependencies, builds, contractRevisions, designRevisions, feedback };
 }
 
 /** One load per contract per request: the four views share it. Keyed on the
@@ -144,6 +158,43 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
   };
 }
 
+/**
+ * The rows → the three lists attention groups (`lib/attention.ts`). One rule
+ * per list, in one place: an item that is `OPEN` is Root's to answer; a
+ * comment that is `PENDING` is sales'; an item Root has resolved and the step's
+ * approval has not yet accepted is the customer's move — unless it was
+ * addressed in a build the customer has not been told about yet (the build's
+ * publish is when the customer learns of it, as L3b decided).
+ */
+function feedbackFacts(customerId: string, items: Facts['feedback']): FeedbackFacts {
+  const out: FeedbackFacts = { unresolved: [], pendingApproval: [], answered: [] };
+  for (const item of items) {
+    const fact = { step: item.step, phaseId: item.phaseId, money: isMoneyAnchored(item) };
+
+    for (const c of item.comments) {
+      if (c.approval === 'PENDING') out.pendingApproval.push({ ...fact, since: c.createdAt });
+    }
+
+    if (item.status === 'OPEN') {
+      const theirs = item.comments.filter((c) => c.authorId === customerId).map((c) => c.createdAt.getTime());
+      out.unresolved.push({ ...fact, since: new Date(theirs.length > 0 ? Math.max(...theirs) : item.createdAt.getTime()) });
+      continue;
+    }
+
+    if (item.addressedInBuild) {
+      if (item.addressedInBuild.publishedAt) out.answered.push({ ...fact, since: item.addressedInBuild.publishedAt });
+      continue;
+    }
+    // Resolved by an answer that reached the customer — or MOVED, which is
+    // not an answer at all: the item's own last change is when it happened.
+    const reached = item.comments
+      .filter((c) => c.resolution !== null && (c.approval === 'NOT_REQUIRED' || c.approval === 'APPROVED'))
+      .map((c) => (c.approvedAt ?? c.createdAt).getTime());
+    out.answered.push({ ...fact, since: new Date(reached.length > 0 ? Math.max(...reached) : item.updatedAt.getTime()) });
+  }
+  return out;
+}
+
 async function loadAttentionInput(c: FullContract, facts: Facts, now: Date): Promise<AttentionInput> {
   const pending = await ContractFields.pending(c);
   const current = c.currentContractRevision;
@@ -172,11 +223,7 @@ async function loadAttentionInput(c: FullContract, facts: Facts, now: Date): Pro
         }
       : null,
     dependencies: facts.dependencies,
-    addressed: facts.phases.flatMap((p) =>
-      p.demos.flatMap((d) =>
-        d.feedbackItems.map((f) => ({ id: f.id, phaseId: p.id, since: f.addressedInBuild!.publishedAt! })),
-      ),
-    ),
+    feedback: feedbackFacts(c.customerId, facts.feedback),
   };
 }
 
@@ -316,7 +363,10 @@ export const wizardMutations = {
 
 /**
  * `assertStepOpen` (lib/steps.ts) over the database: the call every mutation
- * that edits a step's content makes before it writes. **Nothing calls it yet.**
+ * that edits a step's content makes before it writes. **S2's feedback
+ * mutations call it** (submit, answer, approve and decline an answer — staff
+ * cannot answer on a locked step either, journeys §3.1); the content
+ * mutations below are still to wire.
  *
  * The survey J3 made, so the stages that wire it need not repeat it: three
  * groups of existing mutations edit content a `StepApproval` will one day lock.
@@ -337,6 +387,20 @@ export async function assertStepOpenOn(
   phaseId: string | null = null,
   db: typeof prisma | Prisma.TransactionClient = prisma,
 ): Promise<void> {
+  assertStepOpen(await wizardStateOn(contractId, db), step, phaseId);
+}
+
+/**
+ * A contract's `WizardState` as far as locks are concerned — its sequence,
+ * the phases it owns (`ownsProjectWork`) and its `StepApproval` rows, with no
+ * "finished" signals (a lock does not depend on them). What `assertStepOpenOn`
+ * and `approveStep` (which needs to know that a step is on this contract's
+ * road before it approves it) both read, so the two cannot disagree.
+ */
+export async function wizardStateOn(
+  contractId: string,
+  db: typeof prisma | Prisma.TransactionClient = prisma,
+): Promise<WizardState> {
   const contract = await db.contract.findUnique({
     where: { id: contractId },
     select: {
@@ -352,9 +416,5 @@ export async function assertStepOpenOn(
     (await ownsProjectWork(contractId, contract.projectId))
       ? await db.phase.findMany({ where: { projectId: contract.projectId }, select: { id: true, number: true } })
       : [];
-  assertStepOpen(
-    { sequence: contract.sequence, designPath: null, phases, approvals: contract.stepApprovals, finished: [] },
-    step,
-    phaseId,
-  );
+  return { sequence: contract.sequence, designPath: null, phases, approvals: contract.stepApprovals, finished: [] };
 }

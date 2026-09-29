@@ -21,20 +21,31 @@ export function canChooseTicketType(isStaff: boolean, type: TicketTypeLike): boo
 }
 
 /**
- * The page a feedback item targets, snapshotted for a ticket's brief (build
- * plan L4) — a demo page's own label, or (for a frame-line target) the
- * line's own text, which already describes what is true about the
- * underlying scope item. Never both; `FeedbackItem_exactly_one_target`
- * already holds that a target is exactly one of the two.
+ * What a feedback item is about, snapshotted for a ticket's brief (build plan
+ * L4) — a demo page's own label, or (for a frame-line target) the line's own
+ * text, which already describes what is true about the underlying scope item.
+ * Since S2 an item can be anchored to any step's target, so the same
+ * snapshot is taken of those: a scope item's label, an article's number, a
+ * brief field's key, and — for a `general` comment — the step it was about
+ * (`generalStepName`, the caller's bilingual name for it).
  */
 export function briefPageFromTarget(target: {
   demoPage: { labelFa: string; labelEn: string } | null;
   frameLine: { textFa: string; textEn: string } | null;
+  anchorScopeItem?: { labelFa: string; labelEn: string } | null;
+  articleNumber?: number | null;
+  briefField?: string | null;
+  generalStepName?: { fa: string; en: string } | null;
 }): { fa: string; en: string } {
   if (target.demoPage) return { fa: target.demoPage.labelFa, en: target.demoPage.labelEn };
   if (target.frameLine) return { fa: target.frameLine.textFa, en: target.frameLine.textEn };
-  // Unreachable given the schema's own CHECK, but a total function is worth
-  // more than a thrown error two lines from here.
+  if (target.anchorScopeItem) return { fa: target.anchorScopeItem.labelFa, en: target.anchorScopeItem.labelEn };
+  if (target.articleNumber) return { fa: `ماده ${target.articleNumber}`, en: `Article ${target.articleNumber}` };
+  if (target.briefField) return { fa: target.briefField, en: target.briefField };
+  if (target.generalStepName) return target.generalStepName;
+  // A design revision, a concept or a page have labels of their own that J8
+  // will snapshot when the design step can produce a change request; until a
+  // step needs it, a total function is worth more than a thrown error.
   return { fa: '', en: '' };
 }
 

@@ -8,6 +8,9 @@ import {
   Project,
   ScopeItem,
   DemoFrame,
+  FeedbackItem,
+  FeedbackComment,
+  Build,
   Dependency,
   BillingEntry,
   Subscription,
@@ -22,7 +25,7 @@ import { authMutations } from './auth.js';
 import { customerMutations } from './customer.js';
 import { adminMutations } from './admin/index.js';
 import { demoMutations } from './demo.js';
-import { feedbackMutations } from './feedback.js';
+import { feedbackMutations, feedbackQueries } from './feedback.js';
 import { buildQueries, buildMutations } from './builds.js';
 import { ticketQueries, ticketMutations } from './tickets.js';
 import { serviceQueries, serviceMutations } from './services.js';
@@ -61,6 +64,9 @@ export const resolvers = {
   Project,
   ScopeItem,
   DemoFrame,
+  FeedbackItem,
+  FeedbackComment,
+  Build,
   Dependency,
   BillingEntry,
   Subscription,
@@ -85,6 +91,9 @@ export const resolvers = {
     // resolvers/builds.ts's own comment on why this stays out of the admin
     // barrel entirely.
     ...buildQueries,
+    // journeys build plan S2: pendingAnswers (feedback.approveAnswers) and
+    // myFeedbackQueue (feedback.answer) — see resolvers/feedback.ts.
+    ...feedbackQueries,
     // build plan L4: myTickets is ownership-gated, allTickets and
     // adminRequestCount are contracts.manage — see resolvers/tickets.ts.
     ...ticketQueries,
@@ -112,8 +121,10 @@ export const resolvers = {
     // resolvers/demo.ts's own comment on why it is not folded into
     // adminMutations.
     ...demoMutations,
-    // build plan L3: same reasoning — submitFeedback/ratifyFeedback are
-    // ownership-gated against project.customerId, not capability-gated.
+    // build plan L3, journeys build plan S2: submitFeedback and approveStep
+    // are the contract's own customer's (an ownership edge); answerFeedback,
+    // approveAnswer and declineAnswer are capabilities (feedback.answer,
+    // feedback.approveAnswers). ratifyFeedback and acceptFeedback are retired.
     ...feedbackMutations,
     // build plan L3b: builds.author-gated — see resolvers/builds.ts.
     ...buildMutations,

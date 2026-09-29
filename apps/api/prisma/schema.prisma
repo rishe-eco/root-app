@@ -76,33 +76,33 @@ enum UserState {
 }
 
 model User {
-  id    String  @id @default(cuid())
+  id                     String    @id @default(cuid())
   /// Journeys build plan J1 (PD-20 Q1): optional, because a customer may now
   /// be identified by phone alone. Postgres allows any number of NULLs under
   /// a unique index, so two phone-only accounts never collide with each
   /// other over this column being unset.
-  email String? @unique
+  email                  String?   @unique
   /// E.164, normalized by `lib/phone.ts` before it ever reaches a query —
   /// this column never holds a second spelling of the same number. Optional
   /// for the same reason `email` now is: some accounts have one identifier,
   /// some the other, some both. The CHECK below is what refuses neither.
-  phone String? @unique
-  name  String
+  phone                  String?   @unique
+  name                   String
   /// Non-empty, enforced by a CHECK constraint in the migration — Prisma
   /// cannot express it, and a user with no roles is one no capability check
   /// can ever admit.
-  roles Role[] @default([CUSTOMER])
+  roles                  Role[]    @default([CUSTOMER])
   /// **CHECK `User_has_identifier`** (migration j1_phone_identity): `phone
   /// IS NOT NULL OR email IS NOT NULL`. An account reachable by neither is
   /// one nobody — not even the recovery CLI — can ever sign into.
-  state        UserState @default(INVITED)
-  passwordHash String?
+  state                  UserState @default(INVITED)
+  passwordHash           String?
   /// Journeys build plan J1 (PD-10). Set the moment a phone-code sign-in
   /// succeeds — the account holder proved control of the phone, not
   /// knowledge of the password, so the password is no longer trusted to be
   /// theirs alone. `requireUser` (context.ts) refuses every mutation but
   /// `setNewPassword` while this is true; see that file's own comment.
-  passwordChangeRequired Boolean @default(false)
+  passwordChangeRequired Boolean   @default(false)
 
   // Company/brand this customer belongs to, shown as the sub-line in the
   // contracts table. Null for admins.
@@ -111,15 +111,15 @@ model User {
   // Preferred locale, so notifications can go out in the right language.
   locale String @default("fa")
 
-  contracts             Contract[]      @relation("CustomerContracts")
+  contracts             Contract[]       @relation("CustomerContracts")
   /// Journeys build plan S1 — the assignment edges (house rule 2: an
   /// ownership edge, checked separately from `design.author`/`builds.author`).
-  designedContracts     Contract[]      @relation("ContractDesigner")
-  developedContracts    Contract[]      @relation("ContractDeveloper")
-  projects              Project[]       @relation("CustomerProjects")
+  designedContracts     Contract[]       @relation("ContractDesigner")
+  developedContracts    Contract[]       @relation("ContractDeveloper")
+  projects              Project[]        @relation("CustomerProjects")
   /// Journeys build plan J2 — the requests this account archived (sales) and
   /// the messages it wrote on any request's thread (customer or sales).
-  archivedProjects      Project[]       @relation("ProjectArchivedBy")
+  archivedProjects      Project[]        @relation("ProjectArchivedBy")
   requestMessages       RequestMessage[]
   scopeTrades           ScopeTrade[]
   comments              Comment[]
@@ -129,17 +129,17 @@ model User {
   apiTokens             ApiToken[]
   billingEntry          BillingEntry[]
   /// Build plan L6 — see Subscription's own comment.
-  subscriptions         Subscription[]  @relation("SubscriptionCustomer")
+  subscriptions         Subscription[]   @relation("SubscriptionCustomer")
   /// Build plan L7 — the product-import panel's run history.
-  serviceRunsUploaded   ServiceRun[]    @relation("ServiceRunUploadedBy")
-  serviceRunsApplied    ServiceRun[]    @relation("ServiceRunAppliedBy")
+  serviceRunsUploaded   ServiceRun[]     @relation("ServiceRunUploadedBy")
+  serviceRunsApplied    ServiceRun[]     @relation("ServiceRunAppliedBy")
   tickets               Ticket[]
   ticketMessage         TicketMessage[]
   uploads               StoredFile[]
   libraryEntries        LibraryEntry[]
   reviewRounds          ReviewRound[]
-  reviewThreadsOpened   ReviewThread[]  @relation("ThreadAuthor")
-  reviewThreadsResolved ReviewThread[]  @relation("ThreadResolver")
+  reviewThreadsOpened   ReviewThread[]   @relation("ThreadAuthor")
+  reviewThreadsResolved ReviewThread[]   @relation("ThreadResolver")
   reviewComments        ReviewComment[]
 
   // Demo review frames and feedback intake (build plan L3; spec §6) — named
@@ -151,7 +151,9 @@ model User {
   // Builds and the resolution ledger (build plan L3b; spec §6's gap) — see
   // Build's own comment.
   declaredBuilds   Build[]
-  acceptedFeedback FeedbackItem[] @relation("FeedbackAcceptedBy")
+  acceptedFeedback FeedbackItem[]    @relation("FeedbackAcceptedBy")
+  /// S2: the sales user who approved or declined a staff answer.
+  approvedAnswers  FeedbackComment[] @relation("AnswerApprovedBy")
 
   // The dependency board (build plan L5; spec §7) — see Dependency's own
   // comment. Both relations are staff in practice today (createDependency and
@@ -253,9 +255,9 @@ enum SmsPurpose {
 /// in creates the `User` row first in every path today, so in practice this
 /// is always set, but the column does not assume that will stay true.
 model SmsLog {
-  id          String      @id @default(cuid())
+  id          String     @id @default(cuid())
   userId      String?
-  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   toPhone     String
   purpose     SmsPurpose
   /// Set on a real provider's success; null under `DevSmsTransport`, which
@@ -265,9 +267,9 @@ model SmsLog {
   /// keeps every body under one, so this is 1 today — kept as a column
   /// rather than assumed, because a provider is free to report otherwise
   /// once one is wired (P0-4).
-  segments  Int      @default(1)
-  projectId String?
-  createdAt DateTime @default(now())
+  segments    Int        @default(1)
+  projectId   String?
+  createdAt   DateTime   @default(now())
 
   @@index([userId])
   @@index([toPhone])
@@ -451,6 +453,10 @@ model Contract {
   stepApprovals StepApproval[]
   internalNotes InternalNote[]
 
+  /// Journeys build plan S2: every step's feedback hangs off the contract it
+  /// is about (PD-1, PD-5).
+  feedbackItems FeedbackItem[]
+
   // ScopeItem re-parented to Project at L1 (build plan D1) — reached here via
   // `project.scopeItems`, never a direct relation. See Project and ScopeItem
   // below.
@@ -574,7 +580,8 @@ model ContractRevision {
 
   signature  Signature?
   amendments Amendment[]
-  currentFor Contract?   @relation("CurrentContractRevision")
+  currentFor Contract?      @relation("CurrentContractRevision")
+  feedback   FeedbackItem[]
 
   createdAt DateTime @default(now())
 
@@ -602,6 +609,7 @@ model DesignRevision {
 
   concepts   DesignConcept[]
   currentFor Contract?       @relation("CurrentDesignRevision")
+  feedback   FeedbackItem[]
 
   createdAt DateTime @default(now())
 
@@ -672,6 +680,8 @@ model DesignConcept {
 
   pages PageDesign[]
 
+  feedbackItem FeedbackItem?
+
   @@unique([designRevisionId, key])
 }
 
@@ -710,6 +720,8 @@ model PageDesign {
   /// stays decided: no code reached through this relation may set
   /// `approvedAt` above or `DesignConcept.chosenAt`.
   demoPages DemoPage[]
+
+  feedbackItem FeedbackItem?
 
   @@unique([conceptId, key])
 }
@@ -799,20 +811,20 @@ model StoredFile {
   uploadedById String
   uploadedBy   User   @relation(fields: [uploadedById], references: [id])
 
-  conceptImages DesignConcept[] @relation("ConceptImage")
-  pageImages    PageDesign[]    @relation("PageImage")
+  conceptImages  DesignConcept[] @relation("ConceptImage")
+  pageImages     PageDesign[]    @relation("PageImage")
   /// The other asymmetry to `contractId`: an entry has *one* full text and
   /// the edge lives on the entry (§1.1), so this side is a nullable scalar,
   /// not an array — a contract has many files, an entry's hosted text is one.
-  entryFullText LibraryEntry?   @relation("EntryFullText")
+  entryFullText  LibraryEntry?   @relation("EntryFullText")
   /// Build plan L7 — the run this upload belongs to, if it has been turned
   /// into one yet (createServiceRun is a separate act from the upload
   /// itself, matching the two-step shape POST /upload already has
   /// everywhere else in this codebase).
-  serviceRun    ServiceRun?
+  serviceRun     ServiceRun?
   /// Journeys build plan T2 — the theme this file is the preview *of*, when
   /// it is the one the theme currently points at (Theme.previewFileId).
-  themePreviewOf Theme? @relation("ThemePreview")
+  themePreviewOf Theme?          @relation("ThemePreview")
 
   /// The Anthropic Files API id for this PDF's bytes (R4.md §2.3) — set the
   /// first time a `quotableFullText` entry is asked about, never re-uploaded
@@ -874,12 +886,12 @@ model Project {
   /// step 1, and its thread stays readable (never writable) from the
   /// contract. Null on a project that `createContract` made directly, as
   /// every project before J2 was.
-  requestTitle String?
-  requestBody  String?
+  requestTitle   String?
+  requestBody    String?
   /// The language the customer wrote it in — sales reads it in that language
   /// even when the desk is in the other.
-  requestLang  String?
-  requestedAt  DateTime?
+  requestLang    String?
+  requestedAt    DateTime?
   /// **CHECK `Project_archived_has_reason`**: `status <> 'ARCHIVED' OR
   /// "archivedReason" IS NOT NULL` — an archived request always says why, to
   /// the customer who is shown it.
@@ -895,6 +907,7 @@ model Project {
   scopeTrades   ScopeTrade[]
   phases        Phase[]
   builds        Build[]
+  feedbackItems FeedbackItem[]
   /// Build plan L4 — nullable on the Ticket side; a project reads this as
   /// "every ticket ever attached to it," never the other way around.
   tickets       Ticket[]
@@ -1057,6 +1070,9 @@ model ScopeItem {
   /// filed after it was already `decided` or `temporary`, and the submitter
   /// chose to proceed (D4's interception, recorded rather than only prompted).
   reopenedFeedback FeedbackItem[]  @relation("FeedbackReopenedScopeItem")
+  /// S2: feedback about this item itself (the SCOPE step's anchor) — not the
+  /// same edge as `reopenedFeedback`, which is interception's record.
+  anchoredFeedback FeedbackItem[]  @relation("FeedbackAnchorScopeItem")
 
   /// A build's change list naming "this was on the plan" (build plan L3b) —
   /// each entry moves this item to IN_DEMO at declaration time. A row here
@@ -1146,6 +1162,7 @@ model Phase {
   billingEntries BillingEntry[]
   /// Journeys build plan J3 — the demo approvals (one per phase, J10).
   stepApprovals  StepApproval[]
+  feedbackItems  FeedbackItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1340,45 +1357,135 @@ model DemoFrameLine {
 }
 
 /// Fates a feedback item can occupy (spec §6: "every item shows its fate —
-/// accepted / done / declined-because"). L3 writes and reads OPEN and
-/// RATIFIED; ADDRESSED/ACCEPTED/DECLINED are the states L3b's build ledger
-/// will write (build plan L3b) — banked here as the full enum on the same
-/// precedent L1 used for `ScopeStatus.ACCEPTED` (built before anything could
-/// reach it), so the surface this stage builds can already render whatever a
-/// later stage sets, rather than needing a second migration to add them.
+/// accepted / done / declined-because"), on every step (journeys build plan
+/// S2, PD-1).
+///
+/// **`RATIFIED` is gone** (PD-2): D3 made the customer the only account and
+/// the decider, so a submission *is* the ratification and the status that
+/// separated an opinion from a decision has nothing left to separate. Rows
+/// that held it moved to `OPEN` in the S2 migration, keeping `ratifiedAt`.
 enum FeedbackStatus {
-  /// Submitted, unratified — an opinion (spec §6 / F8), visible but inert.
+  /// Raised by the customer (or reopened by them) and not yet resolved by
+  /// Root. Blocks the step's approval.
   OPEN
-  /// The decider (D3) ratified the batch this item was part of — actionable.
-  RATIFIED
-  /// L3b: the developer claims this was addressed in a build. Not yet the
-  /// customer's acceptance — see build plan L3b.2's "two fields, never one."
+  /// Root's claim that this is resolved — a direct answer, an approved one, or
+  /// a build's disposition. Not the customer's acceptance: see `acceptedAt`,
+  /// written by the step's approval and nothing else.
   ADDRESSED
-  /// The customer met it in the next review and did not reopen it.
+  /// Declined, with its reason — spec §6's "declined-*because*". The customer
+  /// may reopen it until the step is approved (§3.1, reversing L3b §2.5).
+  DECLINED
+  /// Converted to a change ticket (L4, `createTicketFromFeedback`) — a
+  /// resolution the customer sees ("moved to change request #…").
+  MOVED
+  /// The step was approved with this item resolved. Written only by
+  /// `approveStepTx` (`lib/stepApproval.ts`).
   ACCEPTED
-  /// Declined, with its reason — spec §6's "declined-*because*."
+}
+
+/// What a staff answer resolves an item to (PD-4). A comment carries this or
+/// nothing — a plain reply that leaves the item where it was.
+enum FeedbackResolution {
+  ADDRESSED
   DECLINED
 }
 
-/// Per-item feedback intake (spec §6) — never a comment blob. Binds to a demo
-/// page or a frame line, exactly one of the two, the same shape Signature
-/// already uses for contractRevisionId/amendmentId — enforced by a
-/// hand-written CHECK in the migration (Prisma cannot express it).
+/// Whether a staff answer has reached the customer (PD-3, PD-4).
+/// `NOT_REQUIRED` — the author's route is direct (`answerRoute`), or the
+/// comment is the customer's own; `PENDING` — waiting in sales' queue,
+/// invisible to the customer and to sales viewing as the customer;
+/// `APPROVED` and `DECLINED` — sales decided.
+enum AnswerApproval {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+/// One piece of feedback on any step (journeys build plan S2, PD-1) — the
+/// generalization of L3's demo-only item. It binds to **an anchor** whose kind
+/// depends on the step, or to the step as a whole (`general`), and the one
+/// hand-written CHECK `FeedbackItem_anchor_matches_step` holds which columns
+/// may be set for which step (`lib/feedbackRules.ts`'s `anchorMatchesStep` is
+/// its twin, table-tested, and the resolver's friendlier refusal before the
+/// database would ever see the row):
 ///
-/// **Duplicate collapse lives in the two unique constraints below** (build
-/// plan D4): a second submission against a target that already has a row
-/// here never reaches `create` — `submitFeedback` looks the row up first and
-/// appends a FeedbackComment instead. No model, no semantic matcher — it
-/// keys off the same target row, which is what "dumb" (D4) means in code.
+/// | step | anchor |
+/// |---|---|
+/// | REQUIREMENTS | `briefField`, or `general` |
+/// | SCOPE | `anchorScopeItemId`, or `general` |
+/// | DRAFT | `contractRevisionId` (with or without `articleNumber` — an article is the finest anchor; Appendix 1 is itself article 15), or `general` |
+/// | DESIGN | `designRevisionId` with at most one of `conceptId` / `pageDesignId` / `paletteItemId`, or `general` |
+/// | MOCKUP, DEMO | `demoId` with exactly one of `demoPageId` / `frameLineId`, or `general` |
+/// | AGREEMENT, SUMMARY | none — neither takes feedback |
+///
+/// **Duplicate collapse (D4) lives in the indexes, one per anchor kind**: the
+/// plain `@@unique`s below (a NULL is distinct in Postgres, so a column that
+/// is not this item's anchor never collides), and — because Prisma cannot
+/// express a `WHERE` — four hand-written partial indexes in the migration:
+/// the two `general` ones (per step, and per step *and phase*, for the same
+/// NULL-is-distinct reason `StepApproval` needs two), plus a whole-revision
+/// one each for the DRAFT and DESIGN steps. Every one is proven by a direct
+/// insert in `s2.test.ts`.
+///
+/// **`general` items collapse per step** — one thread for "everything else
+/// about this step", however many comments it takes (the UI says so).
 model FeedbackItem {
-  id     String @id @default(cuid())
-  demoId String
-  demo   Demo   @relation(fields: [demoId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
+
+  /// The project and contract this is about. A contract is the wizard's unit
+  /// (PD-5); the project is denormalized so the demo-era queries (the build
+  /// queue, `Project.phases`) keep their `projectId` filter.
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  step    StepKind
+  /// Set for a DEMO item (a demo is approved once per phase) and null for
+  /// every other step — `StepApproval` keys on the same pair.
+  phaseId String?
+  phase   Phase?   @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  // --- anchors ----------------------------------------------------------
+
+  /// Nullable since S2: a REQUIREMENTS item has no demo. Cascade — an item
+  /// goes with the demo it was about.
+  demoId String?
+  demo   Demo?   @relation(fields: [demoId], references: [id], onDelete: Cascade)
 
   demoPageId  String?        @unique
   demoPage    DemoPage?      @relation(fields: [demoPageId], references: [id], onDelete: Cascade)
   frameLineId String?        @unique
   frameLine   DemoFrameLine? @relation(fields: [frameLineId], references: [id], onDelete: Cascade)
+
+  /// A field of the step-1 brief (`budgetCap`, `paymentPlan`, …). The names
+  /// are J4's; money-anchored ones are hidden from staff without `money.read`
+  /// (PD-21, `visibleItem`).
+  briefField String?
+
+  /// The registry item this SCOPE note is about — distinct from
+  /// `reopenedScopeItemId`, which is interception's record of a *confirmed
+  /// reopening*, not what the note is anchored to.
+  anchorScopeItemId String?
+  anchorScopeItem   ScopeItem? @relation("FeedbackAnchorScopeItem", fields: [anchorScopeItemId], references: [id], onDelete: Cascade)
+
+  contractRevisionId String?
+  contractRevision   ContractRevision? @relation(fields: [contractRevisionId], references: [id], onDelete: Cascade)
+  articleNumber      Int?
+
+  designRevisionId String?
+  designRevision   DesignRevision? @relation(fields: [designRevisionId], references: [id], onDelete: Cascade)
+  conceptId        String?         @unique
+  concept          DesignConcept?  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  pageDesignId     String?         @unique
+  pageDesign       PageDesign?     @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
+  /// The palette (J8) does not exist yet: the column lands now so the CHECK
+  /// is written once, and J8 adds the foreign key.
+  paletteItemId    String?         @unique
+
+  /// "About the step as a whole" — the one anchor every step has.
+  general Boolean @default(false)
 
   status FeedbackStatus @default(OPEN)
 
@@ -1390,12 +1497,9 @@ model FeedbackItem {
   reopenedScopeItemId String?
   reopenedScopeItem   ScopeItem? @relation("FeedbackReopenedScopeItem", fields: [reopenedScopeItemId], references: [id], onDelete: SetNull)
 
-  /// Ratification (spec §6, D3) — the decider approves a batch. Recorded
-  /// here, per item, rather than bound to `Signature` (build plan L3's
-  /// banked trap #4): a signature attests to hashed bytes of a legal
-  /// instrument, and "the customer approved this feedback batch" is not that,
-  /// however signature-shaped it looks — who decided what, when, without
-  /// widening the one model where "signature" is load-bearing.
+  /// L3's ratification stamp, kept as the record of who raised the item and
+  /// when (PD-2: a submission *is* its ratification, written at submit). No
+  /// status hangs off it any more, and the API no longer exposes it.
   ratifiedAt   DateTime?
   ratifiedById String?
   ratifiedBy   User?     @relation("FeedbackRatifiedBy", fields: [ratifiedById], references: [id])
@@ -1403,18 +1507,18 @@ model FeedbackItem {
   /// Build plan L3b.2's first rule, held as two columns rather than one: the
   /// developer's claim. Set by declareBuild the moment a change entry
   /// disposes this item ADDRESSED; cleared (never left dangling) the moment
-  /// a new comment reopens it (lib/feedback.ts's reopensOnComment) — a stale
-  /// pointer at a build that no longer describes this item's current state
-  /// would be exactly the silent-in-Root's-favour failure this rule exists
-  /// to prevent.
+  /// a new comment reopens it (lib/feedbackRules.ts's reopensOnComment) — a
+  /// stale pointer at a build that no longer describes this item's current
+  /// state would be exactly the silent-in-Root's-favour failure this rule
+  /// exists to prevent.
   addressedInBuildId String?
   addressedInBuild   Build?  @relation(fields: [addressedInBuildId], references: [id], onDelete: SetNull)
 
-  /// The second, separate write L3b.2 insists on: the customer (or staff)
-  /// met this in the next review and did not reopen it. Written only by
-  /// acceptFeedback, and only from ADDRESSED — never inferred from
-  /// addressedInBuildId being set, which would collapse the very distinction
-  /// this pair of fields exists to hold apart.
+  /// The customer's acceptance, the second of L3b's two fields. **Written by
+  /// `approveStepTx` and nothing else** (`lib/stepApproval.ts`; a test reads
+  /// every resolver and lib file to hold that): the customer no longer
+  /// accepts items one by one, they accept the step — one act they cannot
+  /// perform while anything is unresolved (journeys §3.1).
   acceptedAt   DateTime?
   acceptedById String?
   acceptedBy   User?     @relation("FeedbackAcceptedBy", fields: [acceptedById], references: [id])
@@ -1424,20 +1528,33 @@ model FeedbackItem {
 
   /// Build plan L4: set once this item becomes a change ticket
   /// (createTicketFromFeedback) — the back half of Ticket.sourceFeedbackItem.
-  /// Null for every item still living purely in the build-feedback channel.
   ticket Ticket?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([contractId, briefField])
+  @@unique([contractId, anchorScopeItemId])
+  @@unique([contractRevisionId, articleNumber])
   @@index([demoId, status])
+  @@index([contractId, step, status])
+  @@index([projectId, step, status])
 }
 
-/// The individual voices on one feedback item (spec §6, F8: "any number of
-/// customer-side contributors may comment; a batch becomes actionable only
-/// when the decider ratifies"). The first comment is written together with
-/// the item; every submission after the first against the same target
-/// appends here instead of creating a second item (D4).
+/// One voice on a feedback item (spec §6, F8: "any number of customer-side
+/// contributors may comment"), and — since S2 — the answer model (PD-4): **a
+/// staff answer is a comment that may carry a resolution**, rather than a
+/// second table that would split one conversation into two lists to merge on
+/// every read.
+///
+/// The first comment is written together with the item; every submission
+/// after the first against the same target appends here instead of creating
+/// a second item (D4).
+///
+/// **Who can see a staff comment** is `visibleComment` (lib/visibility.ts):
+/// the customer sees only `NOT_REQUIRED` and `APPROVED` ones. `resolution`
+/// being staff-only cannot be written in SQL and is held in
+/// `lib/feedbackRules.ts`.
 model FeedbackComment {
   id             String       @id @default(cuid())
   feedbackItemId String
@@ -1447,9 +1564,26 @@ model FeedbackComment {
   author   User   @relation(fields: [authorId], references: [id])
   body     String
 
+  /// What this answer resolves the item to — applied at once for a direct
+  /// answer, at approval for a pending one.
+  resolution FeedbackResolution?
+  approval   AnswerApproval      @default(NOT_REQUIRED)
+
+  /// Who decided, when, and (for a decline) why. The CHECK
+  /// `FeedbackComment_declined_has_reason` holds "declined *with a reason*"
+  /// at the database (Q-S1).
+  approvedById String?
+  approvedBy   User?     @relation("AnswerApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  approvalNote String?
+  /// The author's own words, kept when sales edits an answer before
+  /// approving it (Q-S9). Staff-only: the customer reads `body`.
+  originalBody String?
+
   createdAt DateTime @default(now())
 
   @@index([feedbackItemId, createdAt])
+  @@index([approval, createdAt])
 }
 
 // ---------------------------------------------------------------------------

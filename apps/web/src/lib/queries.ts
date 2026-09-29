@@ -180,31 +180,59 @@ export type FrameLineScopeItemRef = {
   decidedNote: string | null;
 };
 
-export type FeedbackStatus = 'OPEN' | 'RATIFIED' | 'ADDRESSED' | 'ACCEPTED' | 'DECLINED';
+/** Journeys build plan S2: `RATIFIED` is gone (a submission is its own
+ *  ratification) and `MOVED` is a resolution the customer sees. */
+export type FeedbackStatus = 'OPEN' | 'ADDRESSED' | 'DECLINED' | 'MOVED' | 'ACCEPTED';
+export type FeedbackResolution = 'ADDRESSED' | 'DECLINED';
+export type AnswerApproval = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'DECLINED';
 
 export type FeedbackComment = {
   id: string;
   body: string;
   createdAt: string;
+  /** A staff answer that resolves the item. The customer only ever sees the
+   *  ones that reached them; `approval`, `approvedBy`, `approvalNote` and
+   *  `originalBody` are Root's machinery and come back null/NOT_REQUIRED-ish
+   *  for a customer (the API withholds them). */
+  resolution: FeedbackResolution | null;
+  approval: AnswerApproval;
+  approvedAt: string | null;
+  approvalNote: string | null;
+  originalBody: string | null;
+  approvedBy: Pick<User, 'id' | 'name'> | null;
   author: Pick<User, 'id' | 'name'>;
 };
 
 /** Just enough of a Build to trace "which build addressed this" from a
  *  feedback item — never the full change list (that is `Build` below, read
- *  only through the builds.author-gated queries). */
+ *  only through the builds.author-gated queries). The customer may read who
+ *  declared it (a name); contacts and the change list are staff's. */
 export type BuildRef = {
   id: string;
   number: number;
   ref: string | null;
   deployedAt: string;
+  declaredBy: Pick<User, 'id' | 'name'>;
 };
 
 export type FeedbackItem = {
   id: string;
+  contractId: string;
+  step: StepKind;
+  /** Set for a DEMO item; null for every other step. */
+  phaseId: string | null;
+  /** The step as a whole — all such comments are one thread. */
+  general: boolean;
+  briefField: string | null;
+  contractRevisionId: string | null;
+  articleNumber: number | null;
+  designRevisionId: string | null;
+  conceptId: string | null;
+  pageDesignId: string | null;
+  paletteItemId: string | null;
+  anchorScopeItem: FrameLineScopeItemRef | null;
   status: FeedbackStatus;
   createdAt: string;
-  ratifiedAt: string | null;
-  ratifiedBy: Pick<User, 'id' | 'name'> | null;
   reopenedScopeItem: FrameLineScopeItemRef | null;
   demoPage: Pick<DemoPage, 'id' | 'key' | 'labelFa' | 'labelEn'> | null;
   frameLine: { id: string; kind: DemoFrameLineKind; textFa: string; textEn: string } | null;
@@ -634,18 +662,28 @@ const USER_FIELDS = gql`
 export const FEEDBACK_ITEM_FIELDS = gql`
   fragment FeedbackItemFields on FeedbackItem {
     id
+    contractId
+    step
+    phaseId
+    general
+    briefField
+    contractRevisionId
+    articleNumber
+    designRevisionId
+    conceptId
+    pageDesignId
+    paletteItemId
     status
     createdAt
-    ratifiedAt
-    ratifiedBy {
-      id
-      name
-    }
     addressedInBuild {
       id
       number
       ref
       deployedAt
+      declaredBy {
+        id
+        name
+      }
     }
     acceptedAt
     acceptedBy {
@@ -672,10 +710,27 @@ export const FEEDBACK_ITEM_FIELDS = gql`
       textFa
       textEn
     }
+    anchorScopeItem {
+      id
+      labelFa
+      labelEn
+      temporary
+      decidedAt
+      decidedNote
+    }
     comments {
       id
       body
       createdAt
+      resolution
+      approval
+      approvedAt
+      approvalNote
+      originalBody
+      approvedBy {
+        id
+        name
+      }
       author {
         id
         name
@@ -2087,8 +2142,8 @@ export const REPORT_DEMO_PATH = gql`
 // Contract back); submitFeedback returns FeedbackSubmitResult instead — the
 // interception result is not a Contract-shaped fact — so the caller refetches
 // the contract query itself after a first, non-intercepted submission (see
-// ContractDetail.tsx / PhasesTab.tsx). ratifyFeedback returns Contract! since
-// it never needs an interception-shaped answer.
+// ContractDetail.tsx / PhasesTab.tsx). (ratifyFeedback and acceptFeedback are
+// gone — S2, PD-2: a submission is its own ratification.)
 // ---------------------------------------------------------------------------
 
 export const GENERATE_DEMO_FRAME = gql`
@@ -2145,13 +2200,43 @@ export const PUBLISH_DEMO = gql`
   }
 `;
 
+export type FeedbackTargetInput = {
+  general?: boolean;
+  briefField?: string;
+  scopeItemId?: string;
+  contractRevisionId?: string;
+  articleNumber?: number;
+  designRevisionId?: string;
+  conceptId?: string;
+  pageDesignId?: string;
+  paletteItemId?: string;
+  demoId?: string;
+  demoPageId?: string;
+  frameLineId?: string;
+};
+
+/**
+ * Journeys build plan S2: one submit for every step. The contract's own
+ * customer only; `target` names the anchor and `phaseId` the phase of a DEMO.
+ * Returns FeedbackSubmitResult, not Contract!, for the same reason as before —
+ * an interception is not a Contract-shaped fact, and a brand-new item has
+ * nowhere for the normalized cache to put itself — so the caller refetches.
+ */
 export const SUBMIT_FEEDBACK = gql`
   ${FEEDBACK_ITEM_FIELDS}
-  mutation SubmitFeedback($demoId: ID!, $targetDemoPageId: ID, $targetFrameLineId: ID, $body: String!, $confirmReopen: Boolean) {
+  mutation SubmitFeedback(
+    $contractId: ID!
+    $step: StepKind!
+    $phaseId: ID
+    $target: FeedbackTargetInput!
+    $body: String!
+    $confirmReopen: Boolean
+  ) {
     submitFeedback(
-      demoId: $demoId
-      targetDemoPageId: $targetDemoPageId
-      targetFrameLineId: $targetFrameLineId
+      contractId: $contractId
+      step: $step
+      phaseId: $phaseId
+      target: $target
       body: $body
       confirmReopen: $confirmReopen
     ) {
@@ -2172,29 +2257,113 @@ export const SUBMIT_FEEDBACK = gql`
   }
 `;
 
-export const RATIFY_FEEDBACK = gql`
-  ${CONTRACT_FIELDS}
-  mutation RatifyFeedback($demoId: ID!, $itemIds: [ID!]!, $contractId: ID) {
-    ratifyFeedback(demoId: $demoId, itemIds: $itemIds, contractId: $contractId) {
-      ...ContractFields
+/**
+ * A staff answer (S2, PD-4). Returns FeedbackItem!, which Apollo merges into
+ * the item it already holds — whether the answer went straight to the customer
+ * or into sales' queue is the comment's `approval` in what comes back.
+ */
+export const ANSWER_FEEDBACK = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  mutation AnswerFeedback($itemId: ID!, $body: String!, $resolution: FeedbackResolution) {
+    answerFeedback(itemId: $itemId, body: $body, resolution: $resolution) {
+      ...FeedbackItemFields
+    }
+  }
+`;
+
+export const APPROVE_ANSWER = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  mutation ApproveAnswer($commentId: ID!, $body: String) {
+    approveAnswer(commentId: $commentId, body: $body) {
+      ...FeedbackItemFields
+    }
+  }
+`;
+
+export const DECLINE_ANSWER = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  mutation DeclineAnswer($commentId: ID!, $reason: String!) {
+    declineAnswer(commentId: $commentId, reason: $reason) {
+      ...FeedbackItemFields
     }
   }
 `;
 
 /**
- * Build plan L3b.2's second, separate write — the customer (or staff)
- * confirms an ADDRESSED item is actually resolved. Returns FeedbackItem!,
- * not Contract!: unlike submitFeedback, this only ever changes a row
- * Apollo's cache already knows about (T9's ordinary case applies cleanly).
+ * The customer approves a step (journeys §3.1) — accepts every resolved item
+ * at once and locks it. T9: the whole Contract back, wizard included, so the
+ * step's lock shows without a refetch.
  */
-export const ACCEPT_FEEDBACK = gql`
-  ${FEEDBACK_ITEM_FIELDS}
-  mutation AcceptFeedback($itemId: ID!) {
-    acceptFeedback(itemId: $itemId) {
-      ...FeedbackItemFields
+export const APPROVE_STEP = gql`
+  ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
+  mutation ApproveStep($contractId: ID!, $step: StepKind!, $phaseId: ID) {
+    approveStep(contractId: $contractId, step: $step, phaseId: $phaseId) {
+      ...ContractFields
+      ...WizardFields
     }
   }
 `;
+
+/**
+ * A step's feedback on one contract (S2: one model for every step). The demo
+ * panel reads its threads this way; `asCustomer` asks as the customer would be
+ * asked, so view-as-customer shows exactly the customer's list.
+ */
+export const CONTRACT_FEEDBACK = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  query ContractFeedback($id: ID!, $step: StepKind, $phaseId: ID, $asCustomer: Boolean) {
+    contract(id: $id, asCustomer: $asCustomer) {
+      id
+      feedbackItems(step: $step, phaseId: $phaseId) {
+        ...FeedbackItemFields
+      }
+    }
+  }
+`;
+
+/** One answer waiting in sales' queue (`pendingAnswers`). */
+export type PendingAnswer = {
+  id: string;
+  comment: FeedbackComment;
+  item: FeedbackItem;
+  contractId: string;
+  contractRef: string;
+  contractTitleFa: string;
+  contractTitleEn: string;
+  step: StepKind;
+  phaseNumber: number | null;
+};
+
+export const PENDING_ANSWERS = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  query PendingAnswers {
+    pendingAnswers {
+      id
+      contractId
+      contractRef
+      contractTitleFa
+      contractTitleEn
+      step
+      phaseNumber
+      comment {
+        id
+        body
+        createdAt
+        resolution
+        approval
+        author {
+          id
+          name
+        }
+      }
+      item {
+        ...FeedbackItemFields
+      }
+    }
+  }
+`;
+
 
 // ---------------------------------------------------------------------------
 // Builds and the resolution ledger (build plan L3b; spec §6's gap). Gated on
@@ -2306,8 +2475,8 @@ export const PHASES_FOR_BUILDS = gql`
 
 export const OPEN_FEEDBACK_QUEUE = gql`
   ${FEEDBACK_ITEM_FIELDS}
-  query OpenFeedbackQueue($projectId: ID!) {
-    openFeedbackQueue(projectId: $projectId) {
+  query OpenFeedbackQueue($projectId: ID!, $phaseId: ID) {
+    openFeedbackQueue(projectId: $projectId, phaseId: $phaseId) {
       ...FeedbackItemFields
     }
   }

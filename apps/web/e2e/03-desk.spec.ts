@@ -113,6 +113,7 @@ const NAV_LABELS = {
     overview: 'Overview',
     contracts: 'Contracts',
     requests: 'Requests',
+    approvals: 'Approvals',
     customers: 'Customers',
     library: 'Library',
     review: 'Review',
@@ -129,6 +130,7 @@ const NAV_LABELS = {
     overview: 'نمای کلی',
     contracts: 'قراردادها',
     requests: 'درخواست‌ها',
+    approvals: 'صف تأیید',
     customers: 'مشتریان',
     library: 'کتابخانه',
     review: 'بازبینی',
@@ -171,6 +173,7 @@ test('an admin sees every section, Users included — in both languages', async 
     'overview',
     'contracts',
     'requests',
+    'approvals',
     'customers',
     'library',
     'review',
@@ -189,13 +192,14 @@ test('an admin sees every section, Users included — in both languages', async 
   await assertNavShowsExactly(page, 'fa', sections);
 });
 
-test('a sales user sees Overview, Contracts, Requests, Customers, Tickets, Billing, Services and Templates — in both languages', async ({
+test('a sales user sees Overview, Contracts, Requests, Approvals, Customers, Tickets, Billing, Services and Templates — in both languages', async ({
   page,
 }) => {
   const sections = [
     'overview',
     'contracts',
     'requests',
+    'approvals',
     'customers',
     'tickets',
     'billing',

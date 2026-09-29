@@ -1,8 +1,9 @@
 /**
  * Bilingual copy for the mail flows that exist today: customer invite,
  * password reset, reviewer invite, a new Review Room comment (C2.md §6), and
- * — build plan L3/L3b — a published demo, a submitted feedback item, a
- * ratified batch, and a published build. The first user-facing text written
+ * — build plan L3/L3b — a published demo, a submitted feedback item and a
+ * published build; and, since S2, the three answer notifications (pending,
+ * published, declined). L3's ratified-batch email is gone with ratification. The first user-facing text written
  * on the API side — everything else lives in
  * `apps/web/src/i18n/locales/*.json`, a different workspace this module
  * deliberately doesn't reach into.
@@ -41,17 +42,13 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-const PERSIAN_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-
-/**
- * House rule 14: Persian digits for counts, Latin for versions/refs/hashes.
- * `apps/web/src/lib/format.ts`'s `formatCount` is the web-side helper this
- * mirrors; the API has none of its own because no server-authored Persian
- * text has carried a count before this stage's ratification email.
+/*
+ * House rule 14 (Persian digits for counts, Latin for versions/refs/hashes)
+ * had a `toPersianDigits` here for L3's ratification email, the one template
+ * that carried a count. S2 retired that email (PD-2) and no template carries a
+ * count now; if one does again, bring the helper back rather than
+ * interpolating a raw number into Persian prose.
  */
-function toPersianDigits(n: number): string {
-  return String(n).replace(/[0-9]/g, (d) => PERSIAN_DIGITS[Number(d)]);
-}
 
 function wrap(locale: Locale, bodyHtml: string): string {
   const dir = locale === 'fa' ? 'rtl' : 'ltr';
@@ -244,30 +241,32 @@ export function demoPublishedEmail(
  */
 export function feedbackSubmittedEmail(
   locale: string | null | undefined,
-  params: { recipientName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string },
+  params: { recipientName: string; projectTitleFa: string; projectTitleEn: string; step: string; deskUrl: string },
 ): MailContent {
   const name = escapeHtml(params.recipientName);
   if (resolveLocale(locale) === 'en') {
     const title = escapeHtml(params.projectTitleEn);
+    const step = stepName(params.step, 'en');
     return {
-      subject: `New demo feedback — ${params.projectTitleEn}`,
+      subject: `New feedback — ${params.projectTitleEn}`,
       html: wrap('en', `
         <p>Hi ${name},</p>
-        <p>New feedback came in on a demo for <strong>${title}</strong>.</p>
+        <p>New feedback came in on the “${escapeHtml(step)}” step of <strong>${title}</strong>.</p>
         <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
       `),
-      text: `Hi ${params.recipientName},\n\nNew feedback came in on a demo for "${params.projectTitleEn}".\n\n${params.deskUrl}`,
+      text: `Hi ${params.recipientName},\n\nNew feedback came in on the "${step}" step of "${params.projectTitleEn}".\n\n${params.deskUrl}`,
     };
   }
   const title = escapeHtml(params.projectTitleFa);
+  const step = stepName(params.step, 'fa');
   return {
-    subject: `بازخورد تازه روی دمو — ${params.projectTitleFa}`,
+    subject: `بازخورد تازه — ${params.projectTitleFa}`,
     html: wrap('fa', `
       <p>${name} عزیز،</p>
-      <p>بازخوردِ تازه‌ای روی دموی «${title}» ثبت شد.</p>
+      <p>بازخوردِ تازه‌ای روی مرحله‌ی «${escapeHtml(step)}» در «${title}» ثبت شد.</p>
       <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
     `),
-    text: `${params.recipientName} عزیز،\n\nبازخوردِ تازه‌ای روی دموی «${params.projectTitleFa}» ثبت شد.\n\n${params.deskUrl}`,
+    text: `${params.recipientName} عزیز،\n\nبازخوردِ تازه‌ای روی مرحله‌ی «${step}» در «${params.projectTitleFa}» ثبت شد.\n\n${params.deskUrl}`,
   };
 }
 
@@ -312,37 +311,142 @@ export function buildPublishedEmail(
 }
 
 /**
- * Build plan L3: sent to Root once the decider ratifies a batch — the
- * signal that turns "opinions" into a queue a developer may actually pull
- * from (spec §6, F8).
+ * The step names, for the sentence a notification says ("… on the design
+ * step"). The same words the wizard shows (`wizard.step.*` in the locale
+ * files); repeated here because this workspace does not reach into the web's.
  */
-export function feedbackRatifiedEmail(
+const STEP_NAMES: Record<string, { fa: string; en: string }> = {
+  REQUIREMENTS: { fa: 'نیازمندی‌ها', en: 'Requirements' },
+  SCOPE: { fa: 'صفحه‌ها و امکانات', en: 'Pages and features' },
+  DRAFT: { fa: 'پیش‌نویس قرارداد', en: 'The draft' },
+  AGREEMENT: { fa: 'تأیید و امضا', en: 'Approve and sign' },
+  DESIGN: { fa: 'طرح', en: 'Design' },
+  MOCKUP: { fa: 'ماکت', en: 'Mockup' },
+  DEMO: { fa: 'دمو', en: 'Demo' },
+  SUMMARY: { fa: 'جمع‌بندی', en: 'Summary' },
+};
+
+const stepName = (step: string, lang: 'fa' | 'en'): string => STEP_NAMES[step]?.[lang] ?? step;
+
+/** Both spellings of a step's name — a change ticket's brief snapshots a
+ *  `general` comment's step this way (`lib/ticket.ts`). */
+export const stepNamesFor = (step: string): { fa: string; en: string } => ({
+  fa: stepName(step, 'fa'),
+  en: stepName(step, 'en'),
+});
+
+type AnswerMailParams = { projectTitleFa: string; projectTitleEn: string; step: string };
+
+/**
+ * Journeys build plan S2: a staff answer that needs approval has been written
+ * (PD-4) — sent to the people who can approve it. The customer has seen
+ * nothing yet; this is the queue's only nudge, and the approval queue lands on
+ * the founder (plan §9 risk 5), so it says which step and nothing more.
+ */
+export function answerPendingEmail(
   locale: string | null | undefined,
-  params: { recipientName: string; projectTitleFa: string; projectTitleEn: string; count: number; deskUrl: string },
+  params: AnswerMailParams & { recipientName: string; deskUrl: string },
 ): MailContent {
   const name = escapeHtml(params.recipientName);
   if (resolveLocale(locale) === 'en') {
     const title = escapeHtml(params.projectTitleEn);
+    const step = stepName(params.step, 'en');
     return {
-      subject: `Feedback ratified, ready to build — ${params.projectTitleEn}`,
+      subject: `An answer is waiting for your approval — ${params.projectTitleEn}`,
       html: wrap('en', `
         <p>Hi ${name},</p>
-        <p>${params.count} feedback item(s) on <strong>${title}</strong> were just ratified and are ready to act on.</p>
+        <p>An answer on the “${escapeHtml(step)}” step of <strong>${title}</strong> is waiting for your approval. The customer will not see it until you approve it.</p>
         <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
       `),
-      text: `Hi ${params.recipientName},\n\n${params.count} feedback item(s) on "${params.projectTitleEn}" were just ratified and are ready to act on.\n\n${params.deskUrl}`,
+      text: `Hi ${params.recipientName},\n\nAn answer on the "${step}" step of "${params.projectTitleEn}" is waiting for your approval. The customer will not see it until you approve it.\n\n${params.deskUrl}`,
     };
   }
   const title = escapeHtml(params.projectTitleFa);
-  const countFa = toPersianDigits(params.count);
+  const step = stepName(params.step, 'fa');
   return {
-    subject: `دسته‌ای از بازخوردها تأیید شد — ${params.projectTitleFa}`,
+    subject: `پاسخی منتظر تأیید شماست — ${params.projectTitleFa}`,
     html: wrap('fa', `
       <p>${name} عزیز،</p>
-      <p>${countFa} موردِ بازخورد روی «${title}» تازه تأیید شد و آماده‌ی اقدام است.</p>
+      <p>پاسخی درباره‌ی مرحله‌ی «${escapeHtml(step)}» در «${title}» نوشته شده و منتظر تأیید شماست. تا تأیید نکنید، مشتری آن را نمی‌بیند.</p>
       <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
     `),
-    text: `${params.recipientName} عزیز،\n\n${countFa} موردِ بازخورد روی «${params.projectTitleFa}» تازه تأیید شد و آماده‌ی اقدام است.\n\n${params.deskUrl}`,
+    text: `${params.recipientName} عزیز،\n\nپاسخی درباره‌ی مرحله‌ی «${step}» در «${params.projectTitleFa}» نوشته شده و منتظر تأیید شماست. تا تأیید نکنید، مشتری آن را نمی‌بیند.\n\n${params.deskUrl}`,
+  };
+}
+
+/**
+ * Journeys build plan S2: Root has answered — sent to the customer, **once per
+ * act** (an approval, a direct answer), never once per item. The answer is the
+ * dead-end the L3 spec warned about turned round: the customer must be told,
+ * or they go back to WhatsApp to ask.
+ */
+export function answerPublishedEmail(
+  locale: string | null | undefined,
+  params: AnswerMailParams & { customerName: string; portalUrl: string },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    const step = stepName(params.step, 'en');
+    return {
+      subject: `Root answered your feedback — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Root has answered your feedback on the “${escapeHtml(step)}” step of <strong>${title}</strong>. Read the answer — if you disagree, reply to reopen it; otherwise you can approve the step.</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\nRoot has answered your feedback on the "${step}" step of "${params.projectTitleEn}". Read the answer — if you disagree, reply to reopen it; otherwise you can approve the step.\n\n${params.portalUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const step = stepName(params.step, 'fa');
+  return {
+    subject: `ریشه به بازخورد شما پاسخ داد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>ریشه به بازخورد شما درباره‌ی مرحله‌ی «${escapeHtml(step)}» در «${title}» پاسخ داد. پاسخ را بخوانید؛ اگر موافق نیستید، با یک نظر تازه آن را دوباره باز کنید، وگرنه می‌توانید مرحله را تأیید کنید.</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\nریشه به بازخورد شما درباره‌ی مرحله‌ی «${step}» در «${params.projectTitleFa}» پاسخ داد. پاسخ را بخوانید؛ اگر موافق نیستید، با یک نظر تازه آن را دوباره باز کنید، وگرنه می‌توانید مرحله را تأیید کنید.\n\n${params.portalUrl}`,
+  };
+}
+
+/**
+ * Journeys build plan S2: sales declined a pending answer — sent to its
+ * author, **with the reason** (Q-S1: "the designer sees it"). Staff to staff,
+ * so the free text is fine here; SMS carries none (this router has no SMS
+ * body for it).
+ */
+export function answerDeclinedEmail(
+  locale: string | null | undefined,
+  params: AnswerMailParams & { recipientName: string; reason: string; deskUrl: string },
+): MailContent {
+  const name = escapeHtml(params.recipientName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    const step = stepName(params.step, 'en');
+    return {
+      subject: `Your answer was sent back — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Your answer on the “${escapeHtml(step)}” step of <strong>${title}</strong> was not published. The reason:</p>
+        <p>${multiline(params.reason)}</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\nYour answer on the "${step}" step of "${params.projectTitleEn}" was not published. The reason:\n\n${params.reason}\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const step = stepName(params.step, 'fa');
+  return {
+    subject: `پاسخ شما برگردانده شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>پاسخ شما درباره‌ی مرحله‌ی «${escapeHtml(step)}» در «${title}» منتشر نشد. دلیل:</p>
+      <p>${multiline(params.reason)}</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\nپاسخ شما درباره‌ی مرحله‌ی «${step}» در «${params.projectTitleFa}» منتشر نشد. دلیل:\n\n${params.reason}\n\n${params.deskUrl}`,
   };
 }
 

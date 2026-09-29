@@ -7,9 +7,15 @@ import { exec, ok, stop } from './graphql.js';
  * L3b: builds and the resolution ledger (build plan §3 "L3b"; spec §6's
  * gap) — the four rules that make it honest (L3b.2): two fields for
  * "addressed" vs "accepted," no silent fate, declined-requires-reason held
- * by a CHECK, and monotonic project-wide numbering. Also D3's ratification
- * gate staying intact through this stage, and the third source (an
- * unprompted build change) reaching a later review frame.
+ * by a CHECK, and monotonic project-wide numbering. Also the third source
+ * (an unprompted build change) reaching a later review frame.
+ *
+ * **Changed by S2 (each expectation is listed in the stage's hand-off, and
+ * none was changed silently):** the fixture submits through the generalized `submitFeedback` and
+ * no longer ratifies; "accepted" is the customer's step approval, not
+ * `acceptFeedback`; D3's "an unratified item can only be carried forward"
+ * (NOT_RATIFIED) is gone with ratification; the open queue's items are `OPEN`,
+ * not `RATIFIED`.
  */
 
 let f: Fixture;
@@ -47,9 +53,19 @@ async function createDeveloper() {
   });
 }
 
-/** A phase, a published demo with a frame, and one RATIFIED feedback item on
- *  a declared page — the minimum declareBuild has something to disposition. */
-async function seedRatifiedFeedback() {
+/** S2 (PD-2): the submission *is* the ratification, so what L3b's fixture
+ *  called "ratified feedback" is simply an open item now. */
+const SUBMIT_ON_PAGE = `
+  mutation($c: ID!, $ph: ID!, $d: ID!, $p: ID!, $b: String!) {
+    submitFeedback(contractId: $c, step: DEMO, phaseId: $ph, target: { demoId: $d, demoPageId: $p }, body: $b) {
+      item { id status }
+    }
+  }
+`;
+
+/** A phase, a published demo with a frame, and one open feedback item on a
+ *  declared page — the minimum declareBuild has something to disposition. */
+async function seedOpenFeedback() {
   const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
@@ -60,18 +76,12 @@ async function seedRatifiedFeedback() {
   ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 
   const submitted = ok(
-    await exec(
-      'mutation($d: ID!, $p: ID!, $b: String!){ submitFeedback(demoId: $d, targetDemoPageId: $p, body: $b) { item { id } } }',
-      { as: f.customer, variables: { d: demo.id, p: page.id, b: 'رنگِ دکمه اشتباه است' } },
-    ),
-  );
-  const itemId = (submitted.submitFeedback as { item: { id: string } }).item.id;
-  ok(
-    await exec('mutation($d: ID!, $ids: [ID!]!){ ratifyFeedback(demoId: $d, itemIds: $ids) { id } }', {
+    await exec(SUBMIT_ON_PAGE, {
       as: f.customer,
-      variables: { d: demo.id, ids: [itemId] },
+      variables: { c: f.contract.id, ph: phase.id, d: demo.id, p: page.id, b: 'رنگِ دکمه اشتباه است' },
     }),
   );
+  const itemId = (submitted.submitFeedback as { item: { id: string } }).item.id;
   return { projectId, phase, demo, page, itemId };
 }
 
@@ -86,8 +96,8 @@ const DECLARE_BUILD = `
 
 // --- L3b.2 rule 1: two fields, never one ------------------------------------
 
-test('declareBuild marking an item ADDRESSED does not make it ACCEPTED; acceptFeedback is the second, separate write', async () => {
-  const { phase, itemId } = await seedRatifiedFeedback();
+test('declareBuild marking an item ADDRESSED does not make it ACCEPTED; the customer’s approval of the step is the second, separate write', async () => {
+  const { phase, itemId } = await seedOpenFeedback();
 
   const declared = ok(
     await exec(DECLARE_BUILD, {
@@ -103,30 +113,31 @@ test('declareBuild marking an item ADDRESSED does not make it ACCEPTED; acceptFe
   assert.equal(afterDeclare.addressedInBuildId, build.id);
   assert.equal(afterDeclare.acceptedAt, null, 'ADDRESSED must never imply ACCEPTED — that is a second, separate write');
 
-  // The customer's own acceptance — a different mutation, a different actor.
-  const acceptedResult = ok(
-    await exec('mutation($id: ID!){ acceptFeedback(itemId: $id) { id status acceptedAt acceptedBy { id } } }', {
+  // The customer's own acceptance — a different mutation, a different actor,
+  // and it accepts the step (S2), not the item: `acceptFeedback` is retired.
+  ok(
+    await exec('mutation($c: ID!, $p: ID!){ approveStep(contractId: $c, step: DEMO, phaseId: $p) { id } }', {
       as: f.customer,
-      variables: { id: itemId },
+      variables: { c: f.contract.id, p: phase.id },
     }),
   );
-  const accepted = acceptedResult.acceptFeedback as { status: string; acceptedAt: string; acceptedBy: { id: string } };
+  const accepted = await prisma.feedbackItem.findUniqueOrThrow({ where: { id: itemId } });
   assert.equal(accepted.status, 'ACCEPTED');
   assert.ok(accepted.acceptedAt);
-  assert.equal(accepted.acceptedBy.id, f.customer.id);
+  assert.equal(accepted.acceptedById, f.customer.id);
 });
 
-test('acceptFeedback refuses (NOT_ADDRESSED) from any status other than ADDRESSED', async () => {
-  const { itemId } = await seedRatifiedFeedback();
-  const result = await exec('mutation($id: ID!){ acceptFeedback(itemId: $id) { id } }', {
+test('the step cannot be approved while the item is still open — a build that has not addressed it accepts nothing', async () => {
+  const { phase } = await seedOpenFeedback();
+  const result = await exec('mutation($c: ID!, $p: ID!){ approveStep(contractId: $c, step: DEMO, phaseId: $p) { id } }', {
     as: f.customer,
-    variables: { id: itemId },
+    variables: { c: f.contract.id, p: phase.id },
   });
-  assert.equal(result.code, 'NOT_ADDRESSED', 'a merely-RATIFIED item has not been addressed yet');
+  assert.equal(result.code, 'STEP_HAS_OPEN_FEEDBACK');
 });
 
 test('a new comment on an ADDRESSED item reopens it to OPEN, clearing the stale build pointer', async () => {
-  const { phase, demo, page, itemId } = await seedRatifiedFeedback();
+  const { phase, demo, page, itemId } = await seedOpenFeedback();
   ok(
     await exec(DECLARE_BUILD, {
       as: developer,
@@ -135,10 +146,10 @@ test('a new comment on an ADDRESSED item reopens it to OPEN, clearing the stale 
   );
 
   ok(
-    await exec(
-      'mutation($d: ID!, $p: ID!, $b: String!){ submitFeedback(demoId: $d, targetDemoPageId: $p, body: $b) { item { id status } } }',
-      { as: f.customer, variables: { d: demo.id, p: page.id, b: 'هنوز درست نیست' } },
-    ),
+    await exec(SUBMIT_ON_PAGE, {
+      as: f.customer,
+      variables: { c: f.contract.id, ph: phase.id, d: demo.id, p: page.id, b: 'هنوز درست نیست' },
+    }),
   );
 
   const reopened = await prisma.feedbackItem.findUniqueOrThrow({ where: { id: itemId } });
@@ -149,7 +160,7 @@ test('a new comment on an ADDRESSED item reopens it to OPEN, clearing the stale 
 // --- L3b.2 rule 2: a fate must never be silent ------------------------------
 
 test('declareBuild refuses (MISSING_DISPOSITION) when an open feedback item has no disposition', async () => {
-  const { phase } = await seedRatifiedFeedback();
+  const { phase } = await seedOpenFeedback();
   const result = await exec(DECLARE_BUILD, { as: developer, variables: { phaseId: phase.id, changes: [] } });
   assert.equal(result.code, 'MISSING_DISPOSITION');
 });
@@ -161,44 +172,58 @@ test('declareBuild succeeds with an honestly empty change list when nothing is o
   assert.equal((declared.declareBuild as { number: number }).number, 1);
 });
 
-test('a merely-OPEN (unratified) item can only be carried forward, never addressed or declined — D3\'s gate stays intact', async () => {
-  const projectId = f.contract.projectId;
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
-  const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
-  const page = await prisma.demoPage.create({
-    data: { demoId: demo.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' },
-  });
-  ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
-  ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
-  const submitted = ok(
-    await exec(
-      'mutation($d: ID!, $p: ID!, $b: String!){ submitFeedback(demoId: $d, targetDemoPageId: $p, body: $b) { item { id } } }',
-      { as: f.customer, variables: { d: demo.id, p: page.id, b: 'یک نظر' } },
-    ),
-  );
-  const itemId = (submitted.submitFeedback as { item: { id: string } }).item.id;
+test('an OPEN item takes any disposition — there is no ratification gate left (PD-2) — and a carried-forward one stays open', async () => {
+  const { phase, itemId } = await seedOpenFeedback();
 
-  const addressed = await exec(DECLARE_BUILD, {
-    as: developer,
-    variables: { phaseId: phase.id, changes: [{ feedbackItemId: itemId, outcome: 'ADDRESSED', note: 'x', noteLang: 'en' }] },
-  });
-  assert.equal(addressed.code, 'NOT_RATIFIED');
-
+  // L3b: "a merely-OPEN item can only be carried forward" (NOT_RATIFIED). A
+  // submission is its own ratification now, so the developer may address it.
   const carried = ok(
     await exec(DECLARE_BUILD, {
       as: developer,
       variables: { phaseId: phase.id, changes: [{ feedbackItemId: itemId, outcome: 'CARRIED_FORWARD' }] },
     }),
   );
-  assert.ok(carried.declareBuild, 'CARRIED_FORWARD is always legal, ratified or not');
+  assert.ok(carried.declareBuild);
   const stillOpen = await prisma.feedbackItem.findUniqueOrThrow({ where: { id: itemId } });
   assert.equal(stillOpen.status, 'OPEN', 'carrying forward changes nothing about the item\'s own status');
+
+  ok(
+    await exec(DECLARE_BUILD, {
+      as: developer,
+      variables: { phaseId: phase.id, changes: [{ feedbackItemId: itemId, outcome: 'ADDRESSED', note: 'x', noteLang: 'en' }] },
+    }),
+  );
+  assert.equal((await prisma.feedbackItem.findUniqueOrThrow({ where: { id: itemId } })).status, 'ADDRESSED');
+});
+
+test('a disposition is the developer’s answer: a direct comment carrying the resolution, visible to the customer', async () => {
+  const { phase, itemId } = await seedOpenFeedback();
+  ok(
+    await exec(DECLARE_BUILD, {
+      as: developer,
+      variables: { phaseId: phase.id, changes: [{ feedbackItemId: itemId, outcome: 'DECLINED', note: 'already decided', noteLang: 'en' }] },
+    }),
+  );
+  const answer = await prisma.feedbackComment.findFirstOrThrow({ where: { feedbackItemId: itemId, authorId: developer.id } });
+  assert.equal(answer.resolution, 'DECLINED');
+  assert.equal(answer.approval, 'NOT_REQUIRED', 'answers.direct.demo — no approval');
+  assert.equal(answer.body, 'already decided');
+
+  const seen = ok(
+    await exec('query($c: ID!){ contract(id: $c) { feedbackItems(step: DEMO) { id status comments { body resolution approval } } } }', {
+      as: f.customer,
+      variables: { c: f.contract.id },
+    }),
+  );
+  const items = (seen.contract as { feedbackItems: Array<{ status: string; comments: Array<{ body: string; resolution: string | null }> }> }).feedbackItems;
+  assert.equal(items[0].status, 'DECLINED');
+  assert.ok(items[0].comments.some((c) => c.resolution === 'DECLINED' && c.body === 'already decided'));
 });
 
 // --- L3b.2 rule 3: declined requires its reason, structurally ---------------
 
 test('declareBuild refuses (DECLINE_REASON_REQUIRED) at the API layer when a decline has no note', async () => {
-  const { phase, itemId } = await seedRatifiedFeedback();
+  const { phase, itemId } = await seedOpenFeedback();
   const result = await exec(DECLARE_BUILD, {
     as: developer,
     variables: { phaseId: phase.id, changes: [{ feedbackItemId: itemId, outcome: 'DECLINED' }] },
@@ -207,7 +232,7 @@ test('declareBuild refuses (DECLINE_REASON_REQUIRED) at the API layer when a dec
 });
 
 test('the database itself refuses a DECLINED entry with a null reason — the CHECK, not only the resolver', async () => {
-  const { phase, itemId } = await seedRatifiedFeedback();
+  const { phase, itemId } = await seedOpenFeedback();
   const build = await prisma.build.create({
     data: { phaseId: phase.id, projectId: f.contract.projectId, number: 1, declaredById: developer.id },
   });
@@ -222,7 +247,7 @@ test('the database itself refuses a DECLINED entry with a null reason — the CH
 });
 
 test('the database refuses a no-origin entry with no note — "the note is the entry"', async () => {
-  const { phase } = await seedRatifiedFeedback();
+  const { phase } = await seedOpenFeedback();
   const build = await prisma.build.create({
     data: { phaseId: phase.id, projectId: f.contract.projectId, number: 1, declaredById: developer.id },
   });
@@ -233,7 +258,7 @@ test('the database refuses a no-origin entry with no note — "the note is the e
 });
 
 test('the database refuses an entry naming both a feedback item and a scope item', async () => {
-  const { phase, itemId } = await seedRatifiedFeedback();
+  const { phase, itemId } = await seedOpenFeedback();
   const scopeItem = await prisma.scopeItem.create({
     data: { projectId: f.contract.projectId, key: 'x', kind: 'FEATURE', labelFa: 'ایکس', labelEn: 'X', status: 'IN_BUILD', phaseId: phase.id },
   });
@@ -269,7 +294,7 @@ test('publishBuild sets publishedAt and refuses a second time (ALREADY_PUBLISHED
 // --- monotonic, project-wide numbering (L3b.3) ------------------------------
 
 test('build numbers are project-wide and monotonic, never reset per phase', async () => {
-  const { phase, itemId } = await seedRatifiedFeedback();
+  const { phase, itemId } = await seedOpenFeedback();
   const projectId = f.contract.projectId;
   const secondPhase = await prisma.phase.create({ data: { projectId, number: 2, titleFa: 'فاز ۲', titleEn: 'Phase 2' } });
 
@@ -385,7 +410,7 @@ test('unpromptedChanges is empty for a customer — staff-only, and empty is not
 // --- capability boundary: builds.author, never contracts.manage ------------
 
 test('a plain customer cannot call any builds.author-gated mutation or query', async () => {
-  const { phase } = await seedRatifiedFeedback();
+  const { phase } = await seedOpenFeedback();
   const declareResult = await exec(DECLARE_BUILD, { as: f.customer, variables: { phaseId: phase.id, changes: [] } });
   assert.equal(declareResult.code, 'FORBIDDEN');
 
@@ -397,7 +422,7 @@ test('a plain customer cannot call any builds.author-gated mutation or query', a
 });
 
 test('a DEVELOPER (no contract verb, no money) can declare and publish builds, and reach the open queue', async () => {
-  const { itemId, phase } = await seedRatifiedFeedback();
+  const { itemId, phase } = await seedOpenFeedback();
   const queue = ok(
     await exec('query($p: ID!){ openFeedbackQueue(projectId: $p) { id status } }', {
       as: developer,
@@ -407,7 +432,7 @@ test('a DEVELOPER (no contract verb, no money) can declare and publish builds, a
   const items = queue.openFeedbackQueue as Array<{ id: string; status: string }>;
   assert.equal(items.length, 1);
   assert.equal(items[0].id, itemId);
-  assert.equal(items[0].status, 'RATIFIED');
+  assert.equal(items[0].status, 'OPEN');
 
   const phases = ok(await exec('query{ phasesForBuilds { id projectId } }', { as: developer }));
   assert.ok((phases.phasesForBuilds as Array<{ id: string }>).some((p) => p.id === phase.id));

@@ -38,6 +38,7 @@ import ReviewDocumentScreen from '@/desk/ReviewDocumentScreen';
 import ReviewAdmin from '@/desk/ReviewAdmin';
 import Builds from '@/desk/Builds';
 import Tickets from '@/desk/Tickets';
+import Approvals from '@/desk/Approvals';
 import DeskBilling from '@/desk/Billing';
 import DeskServices from '@/desk/Services';
 import ApiTokens from '@/desk/ApiTokens';
@@ -159,6 +160,7 @@ export default function App() {
           <Route path="reviewAdmin" element={<ReviewAdmin />} />
           <Route path="builds" element={<Builds />} />
           <Route path="tickets" element={<Tickets />} />
+          <Route path="approvals" element={<Approvals />} />
           <Route path="billing" element={<DeskBilling />} />
           <Route path="services" element={<DeskServices />} />
           <Route path="templates" element={<Templates />}>

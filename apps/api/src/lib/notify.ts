@@ -12,7 +12,9 @@ import {
   demoPublishedEmail,
   feedbackSubmittedEmail,
   buildPublishedEmail,
-  feedbackRatifiedEmail,
+  answerPendingEmail,
+  answerPublishedEmail,
+  answerDeclinedEmail,
   requestSubmittedEmail,
   requestMessageEmail,
   requestArchivedEmail,
@@ -24,7 +26,7 @@ import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms }
  * The notification router (journeys build plan J1). One call, `notify(user,
  * event)`, replaces every direct `sendMail(...)` call site the codebase had
  * before this stage: invite, reset, reviewer-invite, new-comment,
- * demo-published, feedback-submitted, build-published, feedback-ratified.
+ * demo-published, feedback-submitted, build-published, and (S2) the three answer events.
  * It renders whichever templates this event kind defines, sends to
  * whichever channels the user actually has, logs the SMS half, and **never
  * throws** — a failed notification must never fail the act that caused it
@@ -39,7 +41,8 @@ import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms }
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
- * `FEEDBACK_RATIFIED`) and `PASSWORD_RESET` keep going by email only: every
+ * `ANSWER_*` — S2's replacement for `FEEDBACK_RATIFIED`) and `PASSWORD_RESET`
+ * keep going by email only: every
  * recipient of those is either a reviewer (never has a phone, PD-20) or a
  * customer/staff member already reachable by email, and a one-segment SMS
  * for "new comment on a document" is cost with no delivery gap to close.
@@ -68,7 +71,7 @@ export type NotifyEvent =
     }
   | {
       kind: 'FEEDBACK_SUBMITTED';
-      params: { recipientName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string };
+      params: { recipientName: string; projectTitleFa: string; projectTitleEn: string; step: string; deskUrl: string };
     }
   | {
       kind: 'BUILD_PUBLISHED';
@@ -80,9 +83,26 @@ export type NotifyEvent =
         portalUrl: string;
       };
     }
+  // Journeys build plan S2 (PD-2 retired the ratification email): a staff
+  // answer waiting for sales, published to the customer, or sent back.
   | {
-      kind: 'FEEDBACK_RATIFIED';
-      params: { recipientName: string; projectTitleFa: string; projectTitleEn: string; count: number; deskUrl: string };
+      kind: 'ANSWER_PENDING';
+      params: { recipientName: string; projectTitleFa: string; projectTitleEn: string; step: string; deskUrl: string };
+    }
+  | {
+      kind: 'ANSWER_PUBLISHED';
+      params: { customerName: string; projectTitleFa: string; projectTitleEn: string; step: string; portalUrl: string };
+    }
+  | {
+      kind: 'ANSWER_DECLINED';
+      params: {
+        recipientName: string;
+        projectTitleFa: string;
+        projectTitleEn: string;
+        step: string;
+        reason: string;
+        deskUrl: string;
+      };
     }
   // Journeys build plan J2 — a customer's request.
   | {
@@ -115,8 +135,12 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return feedbackSubmittedEmail(locale, event.params);
     case 'BUILD_PUBLISHED':
       return buildPublishedEmail(locale, event.params);
-    case 'FEEDBACK_RATIFIED':
-      return feedbackRatifiedEmail(locale, event.params);
+    case 'ANSWER_PENDING':
+      return answerPendingEmail(locale, event.params);
+    case 'ANSWER_PUBLISHED':
+      return answerPublishedEmail(locale, event.params);
+    case 'ANSWER_DECLINED':
+      return answerDeclinedEmail(locale, event.params);
     case 'REQUEST_SUBMITTED':
       return requestSubmittedEmail(locale, event.params);
     case 'REQUEST_MESSAGE':

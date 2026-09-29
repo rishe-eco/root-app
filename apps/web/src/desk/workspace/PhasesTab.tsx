@@ -139,12 +139,15 @@ function DemoPageRow({
 }
 
 function DemoCard({
+  phaseId,
   demo,
   designOptions,
   editable,
   canConvertToTicket,
   onChanged,
 }: {
+  /** The phase this demo belongs to: feedback on a demo is approved (and locked) per phase. */
+  phaseId: string;
   demo: Demo;
   designOptions: PageDesignOption[];
   /** builds.author plus being this contract's developer (canAuthorBuild). */
@@ -154,7 +157,8 @@ function DemoCard({
 }) {
   const { t } = useTranslation();
   const locale = useLocale();
-  const { contract } = useOutletContext<WorkspaceContext>();
+  const { contract, me } = useOutletContext<WorkspaceContext>();
+  const demoLocked = !!contract.wizard?.some((s) => s.step === 'DEMO' && s.phaseId === phaseId && s.locked);
   const [stagingUrl, setStagingUrl] = useState(demo.stagingUrl);
   const [buildRef, setBuildRef] = useState(demo.buildRef ?? '');
   const [reviewWindowStart, setReviewWindowStart] = useState(demo.reviewWindowStart?.slice(0, 10) ?? '');
@@ -279,8 +283,13 @@ function DemoCard({
       <DemoFeedbackPanel
         demo={demo}
         contractId={contract.id}
+        phaseId={phaseId}
+        audience="staff"
         canAuthor={editable}
+        canAnswer={can(me, 'feedback.answer')}
+        answerDirect={can(me, 'answers.direct.demo')}
         canConvertToTicket={canConvertToTicket}
+        locked={demoLocked}
         onChanged={onChanged}
       />
 
@@ -540,6 +549,7 @@ function PhaseCard({
           phase.demos.map((d) => (
             <DemoCard
               key={d.id}
+              phaseId={phase.id}
               demo={d}
               designOptions={designOptions}
               editable={canBuild}

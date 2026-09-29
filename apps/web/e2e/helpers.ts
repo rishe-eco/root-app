@@ -143,6 +143,41 @@ export function insertOverdueCustomerCommitment() {
   });
 }
 
+/**
+ * A published demo on the seeded project, for the feedback spec (journeys build
+ * plan S2): one phase, one demo with a frame, and two declared pages — straight
+ * into the database, because the desk screens that author a demo are L2/L3's
+ * and have their own coverage.
+ *
+ * It also makes the new-road contract (`WIZARD_CONTRACT_REF`) the project's
+ * **first** contract: phases and demos belong to that one until J4 (`ownsProjectWork`),
+ * and the seed deliberately makes the legacy contract first so every older spec
+ * still finds it. Backdating the wizard contract here moves the demo — and the
+ * demo step's approval — onto the road this spec drives. The customer's list is
+ * ordered by `updatedAt`, which this does not touch.
+ */
+export const E2E_PHASE_ID = 'e2e-phase';
+export function insertPublishedDemo() {
+  if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
+    cwd: API_DIR,
+    input: `
+      UPDATE "Contract" SET "createdAt" = now() - interval '1 year' WHERE "ref" = '${WIZARD_CONTRACT_REF}';
+      INSERT INTO "Phase" ("id", "projectId", "number", "titleFa", "titleEn", "updatedAt")
+      VALUES ('${E2E_PHASE_ID}', 'seed-project-nahal', 1, 'فاز ۱', 'Phase 1', now());
+      INSERT INTO "Demo" ("id", "phaseId", "stagingUrl", "publishedAt", "updatedAt")
+      VALUES ('e2e-demo', '${E2E_PHASE_ID}', 'https://staging.example.com', now(), now());
+      INSERT INTO "DemoPage" ("id", "demoId", "key", "labelFa", "labelEn", "canonicalPath")
+      VALUES ('e2e-page-home', 'e2e-demo', 'home', 'خانه', 'Home page', '/'),
+             ('e2e-page-about', 'e2e-demo', 'about', 'درباره', 'About page', '/about');
+      INSERT INTO "DemoFrame" ("id", "demoId", "authoredById", "updatedAt")
+      SELECT 'e2e-frame', 'e2e-demo', u."id", now() FROM "User" u WHERE u."email" = 'admin@root.local';
+    `,
+    stdio: 'pipe',
+    timeout: 60_000,
+  });
+}
+
 /** The API port `playwright.config.ts`'s webServer runs on — duplicated here
  *  rather than imported, same reasoning as TEST_DATABASE_URL above. */
 const E2E_API_URL = `http://localhost:${process.env.E2E_API_PORT || 4101}`;

@@ -513,7 +513,18 @@ test('demo items addressed in a published build are the customer’s to accept �
   });
   for (const key of ['home', 'about']) {
     const p = await page(key);
-    await prisma.feedbackItem.create({ data: { demoId: demo.id, demoPageId: p.id, status: 'ADDRESSED', addressedInBuildId: build.id } });
+    await prisma.feedbackItem.create({
+      data: {
+        projectId: f.contract.projectId,
+        contractId: f.contract.id,
+        step: 'DEMO',
+        phaseId: phase.id,
+        demoId: demo.id,
+        demoPageId: p.id,
+        status: 'ADDRESSED',
+        addressedInBuildId: build.id,
+      },
+    });
   }
   // A declared but unpublished build has told the customer nothing.
   assert.deepEqual((await view(f.customer)).attention, []);
@@ -522,7 +533,7 @@ test('demo items addressed in a published build are the customer’s to accept �
   await prisma.build.update({ where: { id: build.id }, data: { publishedAt } });
   const v = await view(f.customer);
   assert.deepEqual(v.attention.map((a) => [a.kind, a.phaseId, a.waitingOn, a.params]), [
-    ['ANSWER_PUBLISHED', phase.id, 'CUSTOMER', [{ key: 'count', value: '2' }]],
+    ['ANSWER_PUBLISHED', phase.id, 'CUSTOMER', [{ key: 'count', value: '2' }, { key: 'step', value: 'DEMO' }]],
   ]);
   assert.equal(v.attention[0].since, publishedAt.toISOString());
   assert.ok(v.timeline.some((t) => t.kind === 'BUILD_PUBLISHED' && t.number === 1));
@@ -625,17 +636,16 @@ function everything(): string {
   const MAX_DEPTH = 7;
   /**
    * Edges the schema declares more of than any resolver path loads — found by
-   * this very generator. `FeedbackItem.addressedInBuild` is loaded by
-   * `feedbackItemInclude` as a bare `Build` row (no `declaredBy`, no
-   * `changes`), so selecting either fails for *everyone*, the customer's own
-   * read included ("Cannot return null for non-nullable field
-   * Build.declaredBy"). Nothing selects them (the web query takes the four
-   * scalars), so the edge is held to scalars here rather than fixed in this
-   * stage: the fix — putting the developer's `User` row on a build a customer
-   * can read — is a visibility decision, not J3's to take quietly. Recorded as a
-   * defect for the reviewer to place.
+   * this very generator. `FeedbackItem.addressedInBuild` used to be one: it is
+   * loaded as a bare `Build` row, so selecting `declaredBy` or `changes` failed
+   * for *everyone* ("Cannot return null for non-nullable field
+   * Build.declaredBy"), and the edge was held to scalars here. **S2 closed it**
+   * (`Build` in fields.ts resolves both lazily), so the set is empty: the edge
+   * is walked in full, and the parity test below compares what the customer
+   * reads through it with what staff-as-customer reads — a name, no contacts,
+   * no change list. Add an edge here only with the reason it cannot be walked.
    */
-  const SCALARS_ONLY = new Set(['FeedbackItem.addressedInBuild']);
+  const SCALARS_ONLY = new Set<string>();
   const walk = (type: GraphQLType, path: string[], scalarsOnly = false): string | null => {
     const named = getNamedType(type);
     if (isScalarType(named) || isEnumType(named)) return '';
@@ -721,7 +731,18 @@ async function enrich() {
     data: { phaseId: phase.id, projectId, number: 1, declaredById: staff.DEVELOPER.id, publishedAt: new Date('2026-09-15T00:00:00Z') },
   });
   const page = await prisma.demoPage.create({ data: { demoId: published.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' } });
-  await prisma.feedbackItem.create({ data: { demoId: published.id, demoPageId: page.id, status: 'ADDRESSED', addressedInBuildId: build.id } });
+  await prisma.feedbackItem.create({
+    data: {
+      projectId,
+      contractId: f.contract.id,
+      step: 'DEMO',
+      phaseId: phase.id,
+      demoId: published.id,
+      demoPageId: page.id,
+      status: 'ADDRESSED',
+      addressedInBuildId: build.id,
+    },
+  });
 
   // Planned dates, while still a proposal.
   await prisma.contract.update({ where: { id: f.contract.id }, data: { plannedStartAt: new Date('2026-10-01'), plannedEndAt: new Date('2026-12-01') } });

@@ -11,6 +11,10 @@ import {
   requestSubmittedEmail,
   requestMessageEmail,
   requestArchivedEmail,
+  feedbackSubmittedEmail,
+  answerPendingEmail,
+  answerPublishedEmail,
+  answerDeclinedEmail,
   type MailContent,
 } from './mailTemplates.js';
 
@@ -106,6 +110,28 @@ test('a name containing HTML-sensitive characters is escaped in html but left ve
   assert.ok(!content.html.includes('<b>&"\'>'));
   assert.ok(content.html.includes('&lt;b&gt;&amp;&quot;&#39;'));
   assert.ok(content.text.includes(raw));
+});
+
+test('the S2 feedback emails name the step in the reader’s language, carry the link, and escape what a person typed', () => {
+  const base = { projectTitleFa: 'فروشگاه', projectTitleEn: 'A <shop>', step: 'DESIGN' };
+  const cases: Array<[string, (l: string) => MailContent, string, string]> = [
+    ['submitted', (l) => feedbackSubmittedEmail(l, { ...base, recipientName: 'Sales', deskUrl: 'https://x.test/d' }), 'https://x.test/d', 'Design'],
+    ['pending', (l) => answerPendingEmail(l, { ...base, recipientName: 'Sales', deskUrl: 'https://x.test/a' }), 'https://x.test/a', 'Design'],
+    ['published', (l) => answerPublishedEmail(l, { ...base, customerName: 'Nahal', portalUrl: 'https://x.test/p' }), 'https://x.test/p', 'Design'],
+    ['declined', (l) => answerDeclinedEmail(l, { ...base, recipientName: 'Designer', reason: 'Not <ours>\nsay so', deskUrl: 'https://x.test/d2' }), 'https://x.test/d2', 'Design'],
+  ];
+  for (const [name, make, url, stepEn] of cases) {
+    const en = make('en');
+    const fa = make('fa');
+    assert.ok(en.text.includes(url) && fa.text.includes(url), `${name}: the link`);
+    assert.ok(en.text.includes(stepEn), `${name}: the English step name`);
+    assert.ok(fa.text.includes('طرح'), `${name}: the Persian step name`);
+    assert.ok(!en.html.includes('<shop>'), `${name}: a title is escaped in html`);
+    assert.ok(fa.html.includes('dir="rtl"'));
+  }
+  const declined = answerDeclinedEmail('en', { ...base, recipientName: 'D', reason: 'Not <ours>\nsay so', deskUrl: 'https://x.test/d2' });
+  assert.ok(declined.html.includes('Not &lt;ours&gt;<br>say so'));
+  assert.ok(declined.text.includes('Not <ours>\nsay so'));
 });
 
 test('a request\'s title and an archive reason are escaped in html, verbatim in text; the reason keeps its line breaks', () => {

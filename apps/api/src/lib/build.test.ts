@@ -43,23 +43,20 @@ test('hasAtMostOneOrigin: both set is not legal', () => {
   assert.equal(hasAtMostOneOrigin({ feedbackItemId: 'f1', scopeItemId: 's1' }), false);
 });
 
-// --- outcomeAllowedForStatus (D3's gate stays intact) -----------------------
+// --- outcomeAllowedForStatus (S2: the ratification branch is gone) ----------
 
-test('outcomeAllowedForStatus: CARRIED_FORWARD is legal for OPEN and RATIFIED', () => {
+test('outcomeAllowedForStatus: every outcome is legal for an OPEN item — a submission is its own ratification (PD-2)', () => {
   assert.equal(outcomeAllowedForStatus('CARRIED_FORWARD', 'OPEN'), true);
-  assert.equal(outcomeAllowedForStatus('CARRIED_FORWARD', 'RATIFIED'), true);
-});
-
-test('outcomeAllowedForStatus: ADDRESSED/DECLINED require RATIFIED, never a merely-OPEN item', () => {
-  assert.equal(outcomeAllowedForStatus('ADDRESSED', 'OPEN'), false);
-  assert.equal(outcomeAllowedForStatus('DECLINED', 'OPEN'), false);
-  assert.equal(outcomeAllowedForStatus('ADDRESSED', 'RATIFIED'), true);
-  assert.equal(outcomeAllowedForStatus('DECLINED', 'RATIFIED'), true);
+  assert.equal(outcomeAllowedForStatus('ADDRESSED', 'OPEN'), true);
+  assert.equal(outcomeAllowedForStatus('DECLINED', 'OPEN'), true);
 });
 
 test('outcomeAllowedForStatus: an already-resolved item never accepts a new disposition', () => {
-  assert.equal(outcomeAllowedForStatus('ADDRESSED', 'ADDRESSED'), false);
-  assert.equal(outcomeAllowedForStatus('CARRIED_FORWARD', 'ACCEPTED'), false);
+  for (const status of ['ADDRESSED', 'DECLINED', 'MOVED', 'ACCEPTED'] as const) {
+    for (const outcome of ['ADDRESSED', 'DECLINED', 'CARRIED_FORWARD'] as const) {
+      assert.equal(outcomeAllowedForStatus(outcome, status), false, `${outcome} on ${status}`);
+    }
+  }
 });
 
 // --- declinedRequiresNote (L3b.2's third rule) ------------------------------

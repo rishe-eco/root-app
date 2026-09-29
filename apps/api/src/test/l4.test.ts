@@ -4,7 +4,7 @@ import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
 import { exec, ok, stop } from './graphql.js';
 
 /**
- * L4: ratified item -> change ticket; the three channels (build plan §3
+ * L4: open item -> change ticket (S2: no ratification any more); the three channels (build plan §3
  * "L4"; spec §5, §6) — surfacing the as-built Ticket/TicketMessage models,
  * the ADMIN_REQUEST channel and its counter (spec §10.2), and moving a
  * ticket between channels as a first-class action.
@@ -26,10 +26,11 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-/** A phase, a published demo with a frame, and one RATIFIED feedback item on
- *  a declared page — the same shape L3b's own suite uses to get to a
- *  disposable item, since createTicketFromFeedback shares that precondition. */
-async function seedRatifiedFeedback(body = 'رنگِ دکمه اشتباه است') {
+/** A phase, a published demo with a frame, and one open feedback item on a
+ *  declared page — the same shape L3b's own suite uses to get to a
+ *  disposable item. (S2, PD-2: there is no ratification step any more, so
+ *  what this fixture used to ratify is simply open.) */
+async function seedOpenFeedback(body = 'رنگِ دکمه اشتباه است') {
   const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
@@ -40,20 +41,22 @@ async function seedRatifiedFeedback(body = 'رنگِ دکمه اشتباه اس�
   ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 
   const submitted = ok(
-    await exec(
-      'mutation($d: ID!, $p: ID!, $b: String!){ submitFeedback(demoId: $d, targetDemoPageId: $p, body: $b) { item { id } } }',
-      { as: f.customer, variables: { d: demo.id, p: page.id, b: body } },
-    ),
-  );
-  const itemId = (submitted.submitFeedback as { item: { id: string } }).item.id;
-  ok(
-    await exec('mutation($d: ID!, $ids: [ID!]!){ ratifyFeedback(demoId: $d, itemIds: $ids) { id } }', {
+    await exec(SUBMIT_ON_PAGE, {
       as: f.customer,
-      variables: { d: demo.id, ids: [itemId] },
+      variables: { c: f.contract.id, ph: phase.id, d: demo.id, p: page.id, b: body },
     }),
   );
+  const itemId = (submitted.submitFeedback as { item: { id: string } }).item.id;
   return { projectId, phase, demo, page, itemId };
 }
+
+const SUBMIT_ON_PAGE = `
+  mutation($c: ID!, $ph: ID!, $d: ID!, $p: ID!, $b: String!) {
+    submitFeedback(contractId: $c, step: DEMO, phaseId: $ph, target: { demoId: $d, demoPageId: $p }, body: $b) {
+      item { id }
+    }
+  }
+`;
 
 const CREATE_TICKET_FROM_FEEDBACK = `
   mutation($itemId: ID!, $currentState: String!, $desiredState: String!, $lang: String!) {
@@ -67,10 +70,10 @@ const CREATE_TICKET_FROM_FEEDBACK = `
   }
 `;
 
-// --- "A ratified item becomes a change ticket — it is the brief" -----------
+// --- "An open item becomes a change ticket — it is the brief" --------------
 
-test('createTicketFromFeedback converts a RATIFIED item into a CHANGE_REQUEST ticket, with the brief populated', async () => {
-  const { itemId } = await seedRatifiedFeedback('رنگِ دکمه اشتباه است');
+test('createTicketFromFeedback converts an OPEN item into a CHANGE_REQUEST ticket, with the brief populated — and the item is MOVED', async () => {
+  const { itemId } = await seedOpenFeedback('رنگِ دکمه اشتباه است');
 
   const result = ok(
     await exec(CREATE_TICKET_FROM_FEEDBACK, {
@@ -108,6 +111,8 @@ test('createTicketFromFeedback converts a RATIFIED item into a CHANGE_REQUEST ti
   assert.equal(ticket.briefCurrentState, 'دکمه آبی است');
   assert.equal(ticket.briefDesiredState, 'دکمه باید سبز باشد');
   assert.equal(ticket.briefLang, 'fa');
+  // S2: a resolution the customer sees ("moved to change request #…").
+  assert.equal((await prisma.feedbackItem.findUniqueOrThrow({ where: { id: itemId } })).status, 'MOVED');
 
   // Once converted, the item leaves the build-feedback queue — it is now
   // tracked through the ticket, and requiring a disposition for it forever
@@ -131,32 +136,21 @@ test('createTicketFromFeedback converts a RATIFIED item into a CHANGE_REQUEST ti
   assert.deepEqual(queue.openFeedbackQueue, [], 'a converted item is no longer in the build queue');
 });
 
-test('createTicketFromFeedback refuses (NOT_RATIFIED) an item that is merely OPEN', async () => {
-  const projectId = f.contract.projectId;
-  const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
-  const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
-  const page = await prisma.demoPage.create({
-    data: { demoId: demo.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' },
-  });
-  ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
-  ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
-  const submitted = ok(
-    await exec(
-      'mutation($d: ID!, $p: ID!, $b: String!){ submitFeedback(demoId: $d, targetDemoPageId: $p, body: $b) { item { id } } }',
-      { as: f.customer, variables: { d: demo.id, p: page.id, b: 'یک نظر' } },
-    ),
-  );
-  const itemId = (submitted.submitFeedback as { item: { id: string } }).item.id;
+test('createTicketFromFeedback refuses (NOT_OPEN) an item Root has already resolved — the customer reopens it first', async () => {
+  const { itemId } = await seedOpenFeedback('یک نظر');
+  // L4's version of this test refused a merely-OPEN item (NOT_RATIFIED). The
+  // gate moved with PD-2: open is what is convertible, and resolved is not.
+  await prisma.feedbackItem.update({ where: { id: itemId }, data: { status: 'ADDRESSED' } });
 
   const result = await exec(CREATE_TICKET_FROM_FEEDBACK, {
     as: f.admin,
     variables: { itemId, currentState: 'x', desiredState: 'y', lang: 'en' },
   });
-  assert.equal(result.code, 'NOT_RATIFIED');
+  assert.equal(result.code, 'NOT_OPEN');
 });
 
 test('createTicketFromFeedback refuses (ALREADY_CONVERTED) a second conversion of the same item', async () => {
-  const { itemId } = await seedRatifiedFeedback();
+  const { itemId } = await seedOpenFeedback();
   ok(
     await exec(CREATE_TICKET_FROM_FEEDBACK, {
       as: f.admin,
@@ -171,7 +165,7 @@ test('createTicketFromFeedback refuses (ALREADY_CONVERTED) a second conversion o
 });
 
 test('createTicketFromFeedback requires both currentState and desiredState, and a valid lang', async () => {
-  const { itemId } = await seedRatifiedFeedback();
+  const { itemId } = await seedOpenFeedback();
   const noCurrent = await exec(CREATE_TICKET_FROM_FEEDBACK, {
     as: f.admin,
     variables: { itemId, currentState: '   ', desiredState: 'y', lang: 'en' },
@@ -192,7 +186,7 @@ test('createTicketFromFeedback requires both currentState and desiredState, and 
 });
 
 test('createTicketFromFeedback is refused for a customer and a DEVELOPER — builds.author is not tickets.answer', async () => {
-  const { itemId } = await seedRatifiedFeedback();
+  const { itemId } = await seedOpenFeedback();
   const developer = await prisma.user.create({
     data: { email: 'dev2@test.local', name: 'Dev', roles: ['DEVELOPER'], state: 'ACTIVE' },
   });

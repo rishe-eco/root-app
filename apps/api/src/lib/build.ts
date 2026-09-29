@@ -5,7 +5,7 @@
  * that make this stage honest (L3b.2) are unit-testable without a database.
  */
 
-export type FeedbackStatusLike = 'OPEN' | 'RATIFIED' | 'ADDRESSED' | 'ACCEPTED' | 'DECLINED';
+export type FeedbackStatusLike = 'OPEN' | 'ADDRESSED' | 'DECLINED' | 'MOVED' | 'ACCEPTED';
 export type BuildChangeOutcomeLike = 'ADDRESSED' | 'DECLINED' | 'CARRIED_FORWARD';
 
 export type BuildChangeInputLike = {
@@ -44,16 +44,16 @@ export function hasAtMostOneOrigin(change: BuildChangeInputLike): boolean {
 }
 
 /**
- * D3's ratification gate stays intact through this stage: a merely-OPEN
- * (unratified) feedback item is still just an opinion, and the only honest
- * thing a build can say about it is "still open, carried forward." Letting a
- * developer ADDRESS or DECLINE an item nobody has ratified yet would let a
- * build bypass the decider entirely — the same shape of silent, Root-favoured
- * break L3b.2's first rule warns about, one gate earlier.
+ * Which items a disposition may be written for: an open one, whatever the
+ * outcome. L3b's ratification branch is gone with `RATIFIED` (S2, PD-2) — a
+ * customer's submission *is* their decision, so every open item is actionable
+ * and a developer may address, decline or carry any of them. What stays is the
+ * other half of that rule: an item already resolved (addressed, declined, moved
+ * or accepted) takes no new disposition, because a build cannot answer a
+ * question Root has already answered — the customer reopens it first.
  */
-export function outcomeAllowedForStatus(outcome: BuildChangeOutcomeLike, status: FeedbackStatusLike): boolean {
-  if (outcome === 'CARRIED_FORWARD') return status === 'OPEN' || status === 'RATIFIED';
-  return status === 'RATIFIED';
+export function outcomeAllowedForStatus(_outcome: BuildChangeOutcomeLike, status: FeedbackStatusLike): boolean {
+  return status === 'OPEN';
 }
 
 /**
