@@ -94,7 +94,8 @@ L8   wedge contract shape        ← not built, on purpose: owed when the
 P0    pre-flight: CSP, docs, DNS/TLS, same-site hardening, SMS slot   ✔ code half 2026-09-29 [P0.md]
 S1    roles, the capability split, visibility, assignment   ✔ 2026-09-29 [S1.md]
 J1    phone identity, SMS, the notify router, staff 2FA      ✔ 2026-09-29 [J1.md]
-S3    customer and staff management (and the Tools rename)
+S3    customer and staff management (and the Tools rename)  ✔ 2026-09-29 [S3.md]
+      ── M1 (S1 · J1 · T1 · S3) full suites green 2026-09-29: unit 472+38 · integration 476 · e2e 47
 J2    requests — a project before a contract
 J3    steps, sequence, the wizard shell, status area, attention
 S2    one feedback model, the §3.1 rule, answers, approval queue
@@ -146,6 +147,8 @@ placing it late was sound and is unchanged — email's only hard deadline is the
 Review Room — but its two call sites were already written and V2 had just made
 the invite reachable from a screen, so it was opportunity rather than need.
 Track C now inherits a built seam.
+
+**Tests are targeted per stage and full at milestones** (agreed 2026-09-29): a stage merges on typecheck, unit, its own integration and e2e files and the existing ones in its area; the full integration and e2e suites run at the end of each milestone — M1 S1·J1·T1·S3, M2 J2·J3·S2, M3 J4–J7·J13, M4 J8–J12 — and before any deploy. Only one checkout runs a heavy suite at a time: the shared Docker Postgres starves otherwise.
 
 **One stage per branch, and stages run in the plan's order — except the
 parallel lanes `root-studio-journeys-build-plan.md` §3 allows.** Two, once J7
@@ -380,6 +383,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`S1.md`](S1.md) | roles, the capability split, visibility, assignment | ✔ built |
 | [`J1.md`](J1.md) | phone identity, SMS, the notify router, the staff second factor | ✔ built · SMS provider owed |
 | [`T1.md`](T1.md) | template types, scope templates, `ScopeItem.kind` | ✔ built |
+| [`S3.md`](S3.md) | customer and staff management, the Users place's first slice, Tools | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |
