@@ -3,13 +3,18 @@ import { useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { isStaff } from '@/lib/access';
-import { ME, type User } from '@/lib/queries';
+import { ME, MY_TOOLS, type User } from '@/lib/queries';
 
 export default function PortalLayout() {
   const { t } = useTranslation();
   const locale = useLocale();
   const location = useLocation();
   const { data, loading } = useQuery<{ me: User | null }>(ME);
+  // Journeys build plan S3: the Tools item exists only while a tool has been
+  // granted. Skipped until we know someone is signed in — `myTools` needs a
+  // session, and the sign-in redirect below is the answer for anyone without.
+  const { data: toolsData } = useQuery<{ myTools: string[] }>(MY_TOOLS, { skip: !data?.me });
+  const hasTools = (toolsData?.myTools.length ?? 0) > 0;
 
   if (loading) {
     return (
@@ -81,14 +86,18 @@ export default function PortalLayout() {
             <span>{t('portal.navBilling')}</span>
           </NavLink>
 
-          {/* Build plan L7: services is live — a real link, no "soon" tag. Last of the four, and every rail item is now real. */}
-          <NavLink
-            className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
-            to={lp(locale, '/app/services')}
-          >
-            <span className="side-glyph" />
-            <span>{t('portal.navServices')}</span>
-          </NavLink>
+          {/* Journeys build plan S3: L7's Services item, renamed Tools and shown
+              only while a grant exists — for a customer with none there is
+              nothing behind it. */}
+          {hasTools ? (
+            <NavLink
+              className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
+              to={lp(locale, '/app/tools')}
+            >
+              <span className="side-glyph" />
+              <span>{t('portal.navTools')}</span>
+            </NavLink>
+          ) : null}
 
           {isStaff(me) ? (
             <NavLink

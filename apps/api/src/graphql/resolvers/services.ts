@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
 import { can } from '../../lib/capabilities.js';
+import { hasToolGrant } from '../../lib/toolGrants.js';
 import { storage } from '../../lib/storage.js';
 import { parseWorkbook, diffImportRows, type PreviousRow } from '../../lib/serviceImport.js';
 
@@ -14,6 +15,13 @@ import { parseWorkbook, diffImportRows, type PreviousRow } from '../../lib/servi
  * house rule 2), while staff read across every project (capability) and
  * author the billing edge. One file, because both halves are the same
  * concept.
+ *
+ * **Journeys build plan S3: the customer's half needs a `ToolGrant`.** A
+ * customer without an active `PRODUCT_IMPORT` grant meets `NOT_FOUND` on
+ * every query and mutation here — the tool does not exist for them (house
+ * rule 13), which is also what stops a revoked customer with a stale tab.
+ * Staff are unaffected: the grant is a fact about what the *customer* was
+ * given, and staff reading or acting on their behalf is a capability.
  */
 
 export const serviceRunInclude = {
@@ -33,7 +41,9 @@ async function loadServiceRunForActor(runId: string, user: { id: string; roles: 
   const run = await prisma.serviceRun.findUnique({ where: { id: runId }, include: serviceRunInclude });
   if (!run) throw notFound('service run');
   const staff = can(user as Parameters<typeof can>[0], 'customers.manage');
-  if (!staff && run.project.customerId !== user.id) throw notFound('service run');
+  if (!staff && (run.project.customerId !== user.id || !(await hasToolGrant(user.id, 'PRODUCT_IMPORT')))) {
+    throw notFound('service run');
+  }
   return run;
 }
 
@@ -41,7 +51,9 @@ async function loadProjectForActor(projectId: string, user: { id: string; roles:
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw notFound('project');
   const staff = can(user as Parameters<typeof can>[0], 'customers.manage');
-  if (!staff && project.customerId !== user.id) throw notFound('project');
+  if (!staff && (project.customerId !== user.id || !(await hasToolGrant(user.id, 'PRODUCT_IMPORT')))) {
+    throw notFound('project');
+  }
   return project;
 }
 
@@ -49,9 +61,16 @@ export const serviceQueries = {
   /** Build plan L7: the caller's own projects, so the portal's services
    *  panel can find its project without a contract in hand — a run
    *  attaches to a project directly, and not every screen that needs one
-   *  is reached from a contract. */
+   *  is reached from a contract.
+   *
+   *  S3: `NOT_FOUND` without the grant, though the projects are the caller's
+   *  own. The only consumer is the Tools page, and answering here for a
+   *  customer who has no tool would hand its rail item something to show. */
   myProjects: async (_p: unknown, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
+    if (!can(user, 'customers.manage') && !(await hasToolGrant(user.id, 'PRODUCT_IMPORT'))) {
+      throw notFound('project');
+    }
     return prisma.project.findMany({ where: { customerId: user.id }, orderBy: { createdAt: 'asc' } });
   },
 

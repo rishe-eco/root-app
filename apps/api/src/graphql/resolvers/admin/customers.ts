@@ -2,6 +2,7 @@ import { GraphQLError } from 'graphql';
 import { prisma } from '../../../lib/prisma.js';
 import { env } from '../../../lib/env.js';
 import { requireCapability, type Context } from '../../../context.js';
+import { can, hasStaffRole } from '../../../lib/capabilities.js';
 import { newLinkToken } from '../../../auth/tokens.js';
 import { notify } from '../../../lib/notify.js';
 import { resolveLocale } from '../../../lib/mailTemplates.js';
@@ -47,6 +48,14 @@ export const customerMutations = {
         extensions: { code: 'ALREADY_ACTIVE' },
       });
     }
+    // Journeys build plan S3: an invite is a way back in (accepting it sets
+    // the account ACTIVE), so a disabled account cannot be invited — it has
+    // to be restored on purpose first.
+    if (user.state === 'DISABLED') {
+      throw new GraphQLError('That account is disabled; restore it first.', {
+        extensions: { code: 'ACCOUNT_DISABLED' },
+      });
+    }
 
     const { raw, hash } = newLinkToken();
     const expiresAt = new Date(Date.now() + env.INVITE_DAYS * 24 * 60 * 60 * 1000);
@@ -63,7 +72,14 @@ export const customerMutations = {
   },
 
   revokeInvite: async (_p: unknown, args: { userId: string }, ctx: Context) => {
-    requireCapability(ctx, 'customers.manage');
+    const actor = requireCapability(ctx, 'customers.manage');
+    // Journeys build plan S3: a staff member's pending invite is staff
+    // administration, like disabling them (`setUserState`) — sales revokes
+    // customers' invites, not the team's.
+    const target = await prisma.user.findUnique({ where: { id: args.userId } });
+    if (target && hasStaffRole(target) && !can(actor, 'staff.manage')) {
+      throw new GraphQLError('You do not have access to that.', { extensions: { code: 'FORBIDDEN' } });
+    }
     await prisma.authToken.updateMany({
       where: { userId: args.userId, purpose: 'INVITE', usedAt: null, revokedAt: null },
       data: { revokedAt: new Date() },

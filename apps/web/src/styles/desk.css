@@ -363,3 +363,23 @@
 .review-thread-comment-author { color: var(--color-text-muted); }
 
 .review-thread-reply { display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* ---- People (journeys build plan S3) ------------------------------------ */
+
+/* A disabled account. Kit's `.badge-locked` is gold and reads as "caution";
+   this is the one state that means the person cannot get in. */
+.badge-danger { background: var(--color-error); color: var(--color-text-inverse); }
+
+.people-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+}
+.people-facts dt { color: var(--color-text-muted); }
+.people-facts dd { margin: 0; }
+
+.people-roles { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.people-role-option { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); }
+.people-you { margin-inline-start: var(--space-2); }
+.people-fieldset { border: 0; padding: 0; margin: 0; }

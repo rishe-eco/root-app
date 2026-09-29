@@ -134,6 +134,35 @@ export function reviewerInviteEmail(
   };
 }
 
+/** Journeys build plan S3. A member of the Root team, not a customer or an
+ *  outside reviewer — the copy says which door this link opens. */
+export function staffInviteEmail(
+  locale: string | null | undefined,
+  params: { name: string; inviteUrl: string },
+): MailContent {
+  const name = escapeHtml(params.name);
+  if (resolveLocale(locale) === 'en') {
+    return {
+      subject: 'You’re invited to join the Root team',
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>You’ve been invited to join the Root team. Use the link below to set your password and get started. This link expires soon.</p>
+        <p><a href="${params.inviteUrl}">${params.inviteUrl}</a></p>
+      `),
+      text: `Hi ${params.name},\n\nYou've been invited to join the Root team. Use the link below to set your password and get started. This link expires soon.\n\n${params.inviteUrl}`,
+    };
+  }
+  return {
+    subject: 'دعوت به تیم ریشه',
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>شما به تیمِ ریشه دعوت شده‌اید. برای تعیین رمز عبور و شروع کار از لینک زیر استفاده کنید. این لینک به‌زودی منقضی می‌شود.</p>
+      <p><a href="${params.inviteUrl}">${params.inviteUrl}</a></p>
+    `),
+    text: `${params.name} عزیز،\n\nشما به تیمِ ریشه دعوت شده‌اید. برای تعیین رمز عبور و شروع کار از لینک زیر استفاده کنید. این لینک به‌زودی منقضی می‌شود.\n\n${params.inviteUrl}`,
+  };
+}
+
 /**
  * C2 §6. One template, two directions: Root gets it when a reviewer opens a
  * thread, the reviewer gets it when Root replies in theirs. **Never sent for

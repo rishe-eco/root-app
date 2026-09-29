@@ -160,6 +160,12 @@ model User {
   /// count L6's deferred metered basis will want.
   smsLog SmsLog[]
 
+  /// Journeys build plan S3 — the tools a customer has been given, and (on
+  /// the staff side) the grants a person handed out or took back.
+  toolGrants        ToolGrant[] @relation("ToolGrantCustomer")
+  toolGrantsGiven   ToolGrant[] @relation("ToolGrantGrantedBy")
+  toolGrantsRevoked ToolGrant[] @relation("ToolGrantRevokedBy")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1964,6 +1970,43 @@ model ServiceRunRow {
   raw Json
 
   @@index([runId, rowNumber])
+}
+
+/// Journeys build plan S3 — the tools a customer can be given. One value
+/// today; a second tool is a value here and a panel in the portal.
+enum ToolKey {
+  PRODUCT_IMPORT
+}
+
+/// A customer's right to use one tool (journeys build plan S3). Revoking sets
+/// `revokedAt` rather than deleting, so "who gave this customer the import,
+/// and when was it taken back" is answerable, and a re-grant is a new row.
+///
+/// **Partial unique index `ToolGrant_one_active_per_tool`**, hand-written in
+/// the migration (Prisma cannot express `WHERE "revokedAt" IS NULL`): at most
+/// one *active* grant per (customer, tool). It is what makes `grantTool`
+/// safe under a double click — the second insert loses to the index instead
+/// of producing a second active row that one `revokeTool` would then leave
+/// half-revoked.
+model ToolGrant {
+  id         String  @id @default(cuid())
+  customerId String
+  customer   User    @relation("ToolGrantCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  tool       ToolKey
+
+  /// No cascade: the trail must not vanish with a staff account, and staff
+  /// accounts are disabled, never deleted.
+  grantedById String
+  grantedBy   User     @relation("ToolGrantGrantedBy", fields: [grantedById], references: [id])
+  grantedAt   DateTime @default(now())
+
+  revokedAt   DateTime?
+  /// Set with `revokedAt`, never alone. Not in the plan's column list; it
+  /// mirrors `grantedById` so the trail has both ends.
+  revokedById String?
+  revokedBy   User?     @relation("ToolGrantRevokedBy", fields: [revokedById], references: [id])
+
+  @@index([customerId])
 }
 
 // ---------------------------------------------------------------------------

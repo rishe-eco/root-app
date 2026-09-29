@@ -14,6 +14,7 @@ export type DeskSection = {
     | 'billing'
     | 'services'
     | 'templates'
+    | 'users'
     | 'apiTokens';
   /**
    * null means "any staff capability", which is what Overview needs. A list
@@ -65,6 +66,12 @@ export const DESK_SECTIONS: DeskSection[] = [
   // other's tab read-only, so the row shows for either. Each tab then decides
   // for itself what it lets its viewer edit (desk/Templates.tsx).
   { key: 'templates', capability: ['templates.types', 'templates.scope'] },
+  // Journeys build plan S3 (PD-12): the Users place's first slice — every
+  // account, inviting staff, changing roles, disabling. `staff.manage` is
+  // ADMIN's alone, so this is the one row that only ADMIN's nav gains. Kept
+  // beside the tokens row for the same reason: it hands out access rather
+  // than editing content.
+  { key: 'users', capability: 'staff.manage' },
   // Last, and it is not an ordering accident: this is the only section that
   // hands out a credential rather than editing content, so it sits at the end
   // of the nav where settings live rather than among the working surfaces.

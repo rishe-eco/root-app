@@ -5,6 +5,7 @@ import { sendSmsText } from './sms.js';
 import {
   inviteEmail,
   reviewerInviteEmail,
+  staffInviteEmail,
   resetEmail,
   newCommentEmail,
   demoPublishedEmail,
@@ -38,6 +39,10 @@ import { inviteSms } from './smsTemplates.js';
  * Adding an SMS body for one of these later is a `smsTemplates.ts` change
  * and one new case below — this router does not need to change shape.
  *
+ * `INVITE_STAFF` (journeys build plan S3) sends SMS like the customer invite:
+ * a staff member in a factor role always has a phone (PD-20), and may have no
+ * email.
+ *
  * `INVITE_REVIEWER` renders through `inviteEmail`-adjacent
  * `reviewerInviteEmail` and has no SMS counterpart for the same reason:
  * `REVIEWER` never carries a phone (PD-20; `prisma/seed.ts` leaves it
@@ -47,6 +52,7 @@ import { inviteSms } from './smsTemplates.js';
 export type NotifyEvent =
   | { kind: 'INVITE_CUSTOMER'; params: { name: string; inviteUrl: string } }
   | { kind: 'INVITE_REVIEWER'; params: { name: string; inviteUrl: string } }
+  | { kind: 'INVITE_STAFF'; params: { name: string; inviteUrl: string } }
   | { kind: 'PASSWORD_RESET'; params: { resetUrl: string } }
   | { kind: 'NEW_COMMENT'; params: { recipientName: string; documentTitle: string; threadUrl: string } }
   | {
@@ -80,6 +86,8 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return inviteEmail(locale, event.params);
     case 'INVITE_REVIEWER':
       return reviewerInviteEmail(locale, event.params);
+    case 'INVITE_STAFF':
+      return staffInviteEmail(locale, event.params);
     case 'PASSWORD_RESET':
       return resetEmail(locale, event.params);
     case 'NEW_COMMENT':
@@ -98,7 +106,11 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
 /** Only the kinds `smsTemplates.ts` actually renders a body for — see this
  *  file's own header for why the rest are `null` here. */
 function renderSms(locale: string | null | undefined, event: NotifyEvent): { text: string } | null {
-  if (event.kind === 'INVITE_CUSTOMER') return inviteSms(locale, event.params);
+  // S3: a staff invite reuses the customer invite's body — it carries the one
+  // placeholder (the URL) the provider's pre-approved pattern declares, and
+  // "you're invited to Root, set your password" is true of both. A third
+  // pattern to register for the same sentence would be cost with no gain.
+  if (event.kind === 'INVITE_CUSTOMER' || event.kind === 'INVITE_STAFF') return inviteSms(locale, event.params);
   return null;
 }
 
@@ -116,10 +128,10 @@ export async function notify(user: NotifyRecipient, event: NotifyEvent): Promise
   if (user.phone) {
     const sms = renderSms(user.locale, event);
     if (sms) {
-      // INVITE_CUSTOMER logs as SmsPurpose.INVITE — the same send AuthToken
+      // The invites log as SmsPurpose.INVITE — the same send AuthToken
       // already knows by that name — never NOTIFY, which is reserved for
       // events with no AuthToken row behind them at all.
-      const purpose = event.kind === 'INVITE_CUSTOMER' ? 'INVITE' : 'NOTIFY';
+      const purpose = event.kind === 'INVITE_CUSTOMER' || event.kind === 'INVITE_STAFF' ? 'INVITE' : 'NOTIFY';
       try {
         await sendSmsText(user.phone, sms.text);
         await prisma.smsLog.create({ data: { userId: user.id, toPhone: user.phone, purpose } }).catch(() => undefined);

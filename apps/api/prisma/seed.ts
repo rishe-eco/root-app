@@ -98,6 +98,19 @@ async function main() {
     },
   });
 
+  // Journeys build plan S3: the product-import tool is a grant now, and the
+  // seeded customer is the one whose Tools page e2e drives. Idempotent — the
+  // partial unique index would refuse a second active row anyway, so this
+  // looks first rather than relying on catching that.
+  const activeImportGrant = await prisma.toolGrant.findFirst({
+    where: { customerId: customer.id, tool: 'PRODUCT_IMPORT', revokedAt: null },
+  });
+  if (!activeImportGrant) {
+    await prisma.toolGrant.create({
+      data: { customerId: customer.id, tool: 'PRODUCT_IMPORT', grantedById: admin.id },
+    });
+  }
+
   await prisma.user.upsert({
     where: { email: REVIEWER_EMAIL },
     update: {},
