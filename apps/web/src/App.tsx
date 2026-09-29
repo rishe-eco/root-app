@@ -36,6 +36,9 @@ import Tickets from '@/desk/Tickets';
 import DeskBilling from '@/desk/Billing';
 import DeskServices from '@/desk/Services';
 import ApiTokens from '@/desk/ApiTokens';
+import Templates, { TemplatesIndex } from '@/desk/templates/Templates';
+import TemplateTypesTab from '@/desk/templates/TypesTab';
+import TemplateScopeTab from '@/desk/templates/ScopeTab';
 import ContractWorkspace from '@/desk/workspace/ContractWorkspace';
 import WorkspaceContractTab from '@/desk/workspace/ContractTab';
 import WorkspaceDesignTab from '@/desk/workspace/DesignTab';
@@ -134,6 +137,11 @@ export default function App() {
           <Route path="tickets" element={<Tickets />} />
           <Route path="billing" element={<DeskBilling />} />
           <Route path="services" element={<DeskServices />} />
+          <Route path="templates" element={<Templates />}>
+            <Route index element={<TemplatesIndex />} />
+            <Route path="types" element={<TemplateTypesTab />} />
+            <Route path="scope" element={<TemplateScopeTab />} />
+          </Route>
           <Route path="apiTokens" element={<ApiTokens />} />
         </Route>
 

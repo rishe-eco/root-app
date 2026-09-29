@@ -5,7 +5,7 @@ import { requireCapability, type Context } from '../../../context.js';
 import { can, type Capability } from '../../../lib/capabilities.js';
 import { draftState } from '../../../lib/revision.js';
 import { agreedScopeSnapshot } from '../../../lib/scope.js';
-import { ARTICLES, SCOPE, CHECKLIST } from '../../../lib/templates.js';
+import { ARTICLES, SCOPE, CHECKLIST, scopeKindForKey } from '../../../lib/templates.js';
 import { loadContract, log, nudgeStatus, reload } from '../contracts.js';
 import { asConcurrentPublish } from './shared.js';
 
@@ -90,7 +90,9 @@ export const contractAdminMutations = {
               labelFa,
               labelEn,
               position,
-              status: 'DECLINED',
+              // Always EXTRA: the checklist is the one thing this creates.
+              kind: 'EXTRA' as const,
+              status: 'DECLINED' as const,
             })),
           },
         },
@@ -108,6 +110,15 @@ export const contractAdminMutations = {
         designerId: input.designerId ?? null,
         developerId: input.developerId ?? null,
       },
+    });
+    // The checklist was written before its contract existed (the contract
+    // points at the project, so the project comes first), so it names its
+    // agreement now — the T1 backfill gave every existing checklist row its
+    // project's first contract, and this is the same rule for a row born
+    // after it.
+    await prisma.scopeItem.updateMany({
+      where: { projectId: project.id, contractId: null },
+      data: { contractId: contract.id },
     });
     await log(contract.id, admin.id, 'CREATED');
     return reload(contract.id);
@@ -176,6 +187,8 @@ export const contractAdminMutations = {
           labelFa,
           labelEn,
           position: existingCount + i,
+          kind: scopeKindForKey(key),
+          contractId: args.contractId,
           // Root typing this into the contract via the template is the
           // agreement act — see addScopeItem's own comment.
           status: 'AGREED' as const,

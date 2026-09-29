@@ -30,6 +30,7 @@ import { LibraryEntry, libraryMutations, libraryQueries, publicLibraryQueries } 
 import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
 import { apiTokenMutations, apiTokenQueries } from './apiTokens.js';
+import { templateMutations, templateQueries } from './templates.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -80,6 +81,9 @@ export const resolvers = {
     // build plan L7: myProjects/projectServiceRuns are ownership-gated,
     // allServiceRuns is contracts.manage — see resolvers/services.ts.
     ...serviceQueries,
+    // journeys build plan T1: templates.types / templates.scope write, any staff
+    // holding either (or contracts.author) reads — see resolvers/templates.ts.
+    ...templateQueries,
   },
 
   Mutation: {
@@ -107,5 +111,6 @@ export const resolvers = {
     ...reviewMutations,
     ...reviewThreadMutations,
     ...apiTokenMutations,
+    ...templateMutations,
   },
 };

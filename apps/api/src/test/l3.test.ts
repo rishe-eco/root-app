@@ -47,6 +47,7 @@ async function seedDemo(opts: { temporary?: boolean; decided?: boolean } = {}) {
     data: {
       projectId,
       key: 'sms-auth',
+      kind: 'FEATURE',
       labelFa: 'ورود بدون پیامک',
       labelEn: 'SMS-less auth',
       status: 'IN_DEMO',

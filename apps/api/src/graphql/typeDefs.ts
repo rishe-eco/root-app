@@ -104,6 +104,18 @@ export const typeDefs = /* GraphQL */ `
     TRADED
   }
 
+  """
+  What a registry row is (journeys build plan T1): a page, a feature, a
+  deliverable, or one of the completeness checklist's standard areas (EXTRA).
+  A template's own lists never hold EXTRA.
+  """
+  enum ScopeKind {
+    PAGE
+    FEATURE
+    DELIVERABLE
+    EXTRA
+  }
+
   enum ProjectStatus {
     ACTIVE
     ARCHIVED
@@ -127,6 +139,9 @@ export const typeDefs = /* GraphQL */ `
     labelFa: String!
     labelEn: String!
     position: Int!
+    kind: ScopeKind!
+    "The agreement that agreed this item (PD-5); null before any contract."
+    contractId: ID
     checked: Boolean!
     status: ScopeStatus!
     "A known stand-in that will change — never gates anything."
@@ -1455,6 +1470,41 @@ export const typeDefs = /* GraphQL */ `
     token: String!
   }
 
+  # ---------------------------------------------------------------------
+  # Template types and scope templates (journeys build plan T1)
+  # ---------------------------------------------------------------------
+
+  "A kind of site a designer manages as data, with the scope list its contracts start from."
+  type TemplateType {
+    id: ID!
+    "Latin, lowercase, hyphenated."
+    slug: String!
+    labelFa: String!
+    labelEn: String!
+    position: Int!
+    "Inactive types are hidden from pickers and kept for what already chose them. There is no delete."
+    active: Boolean!
+    items: [TemplateScopeItem!]!
+  }
+
+  type TemplateScopeItem {
+    id: ID!
+    key: String!
+    "PAGE, FEATURE or DELIVERABLE — never EXTRA."
+    kind: ScopeKind!
+    labelFa: String!
+    labelEn: String!
+    position: Int!
+  }
+
+  "One line of a type's scope list, as setTemplateScope replaces it. Position is the order given."
+  input TemplateScopeItemInput {
+    key: String!
+    kind: ScopeKind!
+    labelFa: String!
+    labelEn: String!
+  }
+
   type Query {
     me: User
     myContracts(status: ContractStatus): [Contract!]!
@@ -1467,6 +1517,12 @@ export const typeDefs = /* GraphQL */ `
 
     "Staff. Counts across every contract — not the caller's own, unlike contractStatusCounts."
     allContractStatusCounts: [StatusCount!]!
+    """
+    Staff holding templates.types, templates.scope or contracts.author (J4's
+    brief will pick a type). In position order, items in position order.
+    activeOnly: true is the picker's view; the desk's Types tab wants both.
+    """
+    templateTypes(activeOnly: Boolean = false): [TemplateType!]!
     "Staff (contracts.author). Journeys build plan S1: the active accounts assignContract would accept for this job."
     assignableUsers(job: AssignmentJob!): [User!]!
     "Staff. Contracts waiting on Root, longest-waiting first."
@@ -1626,8 +1682,12 @@ export const typeDefs = /* GraphQL */ `
     """
     setConceptImage(conceptId: ID!, fileId: ID): Contract!
     setPageImage(pageId: ID!, fileId: ID): Contract!
-    "Created AGREED — Root adding it here is the agreement act. See CHECKLIST for the DECLINED-by-default seed."
-    addScopeItem(contractId: ID!, key: String!, labelFa: String!, labelEn: String!): Contract!
+    """
+    Created AGREED — Root adding it here is the agreement act. See CHECKLIST for
+    the DECLINED-by-default seed. kind omitted: classified by its key, the way
+    the T1 migration classified the rows that already existed.
+    """
+    addScopeItem(contractId: ID!, key: String!, labelFa: String!, labelEn: String!, kind: ScopeKind): Contract!
     "Live to the customer the instant it is saved — ScopeItem is not versioned."
     updateScopeItem(scopeItemId: ID!, labelFa: String!, labelEn: String!): Contract!
     deleteScopeItem(scopeItemId: ID!): Contract!
@@ -1656,6 +1716,21 @@ export const typeDefs = /* GraphQL */ `
     confirmScopeTradeRoot(tradeId: ID!): Contract!
     "Refused until both rootConfirmedAt and customerConfirmedAt are set."
     executeScopeTrade(tradeId: ID!): Contract!
+
+    # --- Template types and scope templates (build plan T1) ---
+    "templates.types. Refused: INVALID_SLUG, LABEL_REQUIRED, TEMPLATE_SLUG_TAKEN."
+    createTemplateType(slug: String!, labelFa: String!, labelEn: String!): TemplateType!
+    "templates.types. Omitted fields are left alone. Refused: NOT_FOUND, INVALID_SLUG, LABEL_REQUIRED, TEMPLATE_SLUG_TAKEN. There is no delete — active: false."
+    updateTemplateType(id: ID!, slug: String, labelFa: String, labelEn: String, active: Boolean): TemplateType!
+    "templates.types. ids must name every type exactly once. Refused: REORDER_MISMATCH."
+    reorderTemplateTypes(ids: [ID!]!): [TemplateType!]!
+    """
+    templates.scope. Replaces the type's whole list, in one transaction, in the
+    order given. Refused: NOT_FOUND (typeId), INVALID_KEY, DUPLICATE_TEMPLATE_KEY,
+    INVALID_TEMPLATE_KIND, LABEL_REQUIRED — and a refused input leaves the old
+    list untouched.
+    """
+    setTemplateScope(typeId: ID!, items: [TemplateScopeItemInput!]!): TemplateType!
 
     # --- Phases and the live demo surface (build plan L2) ---
     "number is the project-scoped ordinal — @@unique([projectId, number])."

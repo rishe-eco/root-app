@@ -11,7 +11,15 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { buildContractSnapshot, contentHash } from '../src/lib/revision.js';
 import { agreedScopeSnapshot } from '../src/lib/scope.js';
-import { ARTICLES, SCOPE, PAGES, CHECKLIST } from '../src/lib/templates.js';
+import {
+  ARTICLES,
+  SCOPE,
+  PAGES,
+  CHECKLIST,
+  TEMPLATE_TYPES,
+  PLACEHOLDER_SCOPE,
+  scopeKindForKey,
+} from '../src/lib/templates.js';
 
 // Run directly by `npm run seed`, which is not the Prisma CLI and so does not
 // load .env for us. Same reason `src/lib/env.ts` does this.
@@ -171,7 +179,7 @@ async function main() {
     await prisma.scopeItem.upsert({
       where: { projectId_key: { projectId: project.id, key } },
       update: {},
-      create: { projectId: project.id, key, labelFa, labelEn, position: i, status: 'DECLINED' },
+      create: { projectId: project.id, key, labelFa, labelEn, position: i, kind: 'EXTRA', status: 'DECLINED' },
     });
   }
 
@@ -193,6 +201,14 @@ async function main() {
       designerId: designer.id,
       developerId: developer.id,
     },
+  });
+
+  // The checklist was seeded before its contract existed; name its agreement
+  // now, as createContract does. Only rows still unnamed, so a re-run leaves
+  // anything a later stage assigned alone.
+  await prisma.scopeItem.updateMany({
+    where: { projectId: project.id, contractId: null },
+    data: { contractId: contract.id },
   });
 
   // v1 of the design lineage: published, and the live one. Concepts and their
@@ -238,9 +254,30 @@ async function main() {
         labelFa,
         labelEn,
         position: CHECKLIST.length + i,
+        kind: scopeKindForKey(key),
+        contractId: contract.id,
         status: 'AGREED',
       },
     });
+  }
+
+  // Journeys build plan T1: the five site types, each with three placeholder
+  // scope items whose labels say so. `update: {}` — once a designer has edited
+  // a type, or sales has replaced its list, a re-seed must not put the
+  // placeholders back.
+  for (const [i, [slug, labelFa, labelEn]] of TEMPLATE_TYPES.entries()) {
+    const type = await prisma.templateType.upsert({
+      where: { slug },
+      update: {},
+      create: { slug, labelFa, labelEn, position: i },
+    });
+    for (const [j, [key, kind, itemFa, itemEn]] of PLACEHOLDER_SCOPE.entries()) {
+      await prisma.templateScopeItem.upsert({
+        where: { typeId_key: { typeId: type.id, key } },
+        update: {},
+        create: { typeId: type.id, key, kind, labelFa: itemFa, labelEn: itemEn, position: j },
+      });
+    }
   }
 
   for (const [number, titleFa, titleEn, bodyFa, bodyEn] of ARTICLES) {

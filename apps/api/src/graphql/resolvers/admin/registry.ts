@@ -1,5 +1,5 @@
 import { GraphQLError } from 'graphql';
-import type { ScopeStatus } from '@prisma/client';
+import type { ScopeKind, ScopeStatus } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { buildAmendmentSnapshot, contentHash } from '../../../lib/revision.js';
@@ -9,6 +9,7 @@ import {
   isAgreedOrBeyond,
   reorderTargetIndex,
 } from '../../../lib/scope.js';
+import { scopeKindForKey } from '../../../lib/templates.js';
 import { reload } from '../contracts.js';
 import { firstContractId } from './shared.js';
 
@@ -44,7 +45,7 @@ export const registryMutations = {
    */
   addScopeItem: async (
     _p: unknown,
-    args: { contractId: string; key: string; labelFa: string; labelEn: string },
+    args: { contractId: string; key: string; labelFa: string; labelEn: string; kind?: ScopeKind | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -66,6 +67,11 @@ export const registryMutations = {
         labelEn: args.labelEn,
         position: count,
         status: 'AGREED',
+        // T1: an explicit kind wins; without one the key decides, by the same
+        // rule the migration classified existing rows with.
+        kind: args.kind ?? scopeKindForKey(args.key),
+        // Agreed by this contract — it is the one the desk typed it into.
+        contractId: contract.id,
       },
     });
     return reload(args.contractId);
@@ -239,6 +245,9 @@ export const registryMutations = {
           labelEn: args.inLabelEn,
           position: count,
           status: 'PROPOSED',
+          kind: scopeKindForKey(args.inKey),
+          // No contractId yet: nothing has agreed this item. `executeScopeTrade`
+          // sets it when the trade is confirmed and the item becomes AGREED.
           originNote: `Proposed in trade for "${outItem.key}"`,
         },
       });
@@ -302,7 +311,13 @@ export const registryMutations = {
 
     await prisma.$transaction(async (tx) => {
       await tx.scopeItem.update({ where: { id: trade.outItem.id }, data: { status: 'TRADED' } });
-      await tx.scopeItem.update({ where: { id: trade.inItem.id }, data: { status: 'AGREED' } });
+      // The trade is what agrees the incoming item, so the contract it
+      // amends is the one that agreed it (T1). A project with no contract has
+      // none to name, and the column stays as it was.
+      await tx.scopeItem.update({
+        where: { id: trade.inItem.id },
+        data: { status: 'AGREED', ...(contract ? { contractId: contract.id } : {}) },
+      });
 
       let amendmentId: string | null = null;
       if (signedRevision) {

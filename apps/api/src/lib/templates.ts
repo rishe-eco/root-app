@@ -76,3 +76,56 @@ export const PAGES: Array<[string, string, string]> = [
   ['contracts', 'قراردادها', 'Contracts'],
   ['portal', 'ورود به پرتال', 'Portal login'],
 ];
+
+/** The kinds a registry row can have — mirrors the Prisma `ScopeKind` enum,
+ *  written out here so this file stays free of a Prisma import (the seed and
+ *  the pure tests both read it). */
+export type ScopeKindName = 'PAGE' | 'FEATURE' | 'DELIVERABLE' | 'EXTRA';
+
+/** What a template's own scope list may hold — never `EXTRA`, the
+ *  checklist's kind (see `TemplateScopeItem_kind_not_extra`). */
+export const TEMPLATE_KINDS = ['PAGE', 'FEATURE', 'DELIVERABLE'] as const;
+
+/**
+ * The kind of a registry row nobody has classified (journeys build plan T1):
+ * `checklist.*` are the completeness checklist's standard areas (`EXTRA`),
+ * a key in `PAGES` is a page, and anything else is a feature.
+ *
+ * **The one rule for the legacy creators** — `applyContractTemplate`,
+ * `addScopeItem` without a `kind`, a scope trade's incoming item and the seed
+ * all ask this, so a row created today is classified exactly as the T1
+ * migration classified the rows that existed. The migration cannot call
+ * TypeScript, so it states the same rule in SQL; `templates.test.ts` reads
+ * the migration as text and fails if its page list stops matching `PAGES`.
+ */
+export function scopeKindForKey(key: string): ScopeKindName {
+  if (key.startsWith('checklist.')) return 'EXTRA';
+  if (PAGES.some(([pageKey]) => pageKey === key)) return 'PAGE';
+  return 'FEATURE';
+}
+
+/**
+ * The five site types T1 seeds, with **placeholder** scope lists.
+ *
+ * Root's product catalogue — what a store or a portfolio really comes with —
+ * is Root's to write, and the build plan says this stage does not write it.
+ * So each type gets one page, one feature and one deliverable whose labels say
+ * outright that they are stand-ins, in both languages, for sales to replace
+ * on the Scope tab. The *types* are real; their contents are not.
+ *
+ * [slug, labelFa, labelEn]
+ */
+export const TEMPLATE_TYPES: Array<[string, string, string]> = [
+  ['store', 'فروشگاهی', 'Store'],
+  ['blog', 'وبلاگ', 'Blog'],
+  ['brand', 'وب‌سایت برند', 'Brand site'],
+  ['portfolio', 'نمونه‌کار', 'Portfolio'],
+  ['other', 'سایر', 'Other'],
+];
+
+/** [key, kind, labelFa, labelEn] — the same three stand-ins under every type. */
+export const PLACEHOLDER_SCOPE: Array<[string, (typeof TEMPLATE_KINDS)[number], string, string]> = [
+  ['placeholder-page', 'PAGE', 'صفحه — نمونه، جایگزین کنید', 'Page — placeholder, replace'],
+  ['placeholder-feature', 'FEATURE', 'ویژگی — نمونه، جایگزین کنید', 'Feature — placeholder, replace'],
+  ['placeholder-deliverable', 'DELIVERABLE', 'تحویلی — نمونه، جایگزین کنید', 'Deliverable — placeholder, replace'],
+];

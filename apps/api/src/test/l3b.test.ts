@@ -235,7 +235,7 @@ test('the database refuses a no-origin entry with no note — "the note is the e
 test('the database refuses an entry naming both a feedback item and a scope item', async () => {
   const { phase, itemId } = await seedRatifiedFeedback();
   const scopeItem = await prisma.scopeItem.create({
-    data: { projectId: f.contract.projectId!, key: 'x', labelFa: 'ایکس', labelEn: 'X', status: 'IN_BUILD', phaseId: phase.id },
+    data: { projectId: f.contract.projectId!, key: 'x', kind: 'FEATURE', labelFa: 'ایکس', labelEn: 'X', status: 'IN_BUILD', phaseId: phase.id },
   });
   const build = await prisma.build.create({
     data: { phaseId: phase.id, projectId: f.contract.projectId!, number: 1, declaredById: developer.id },
@@ -298,7 +298,7 @@ test('a scope-item-origin change entry moves the item to IN_DEMO', async () => {
   const projectId = f.contract.projectId!;
   const phase = await prisma.phase.create({ data: { projectId, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const scopeItem = await prisma.scopeItem.create({
-    data: { projectId, key: 'checkout', labelFa: 'پرداخت', labelEn: 'Checkout', status: 'IN_BUILD', phaseId: phase.id },
+    data: { projectId, key: 'checkout', kind: 'FEATURE', labelFa: 'پرداخت', labelEn: 'Checkout', status: 'IN_BUILD', phaseId: phase.id },
   });
 
   const declared = ok(
