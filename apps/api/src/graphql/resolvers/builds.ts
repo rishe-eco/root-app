@@ -14,8 +14,7 @@ import {
   type BuildChangeInputLike,
   type BuildChangeOutcomeLike,
 } from '../../lib/build.js';
-import { sendMail } from '../../lib/mail.js';
-import { buildPublishedEmail } from '../../lib/mailTemplates.js';
+import { notify } from '../../lib/notify.js';
 import { env } from '../../lib/env.js';
 import { feedbackItemInclude } from './feedback.js';
 import { firstContractId } from './admin/shared.js';
@@ -303,16 +302,16 @@ export const buildMutations = {
 
     const customer = build.project.customer;
     const contractId = await firstContractId(build.projectId);
-    await sendMail({
-      to: customer.email,
-      ...buildPublishedEmail(customer.locale, {
+    await notify(customer, {
+      kind: 'BUILD_PUBLISHED',
+      params: {
         customerName: customer.name,
         projectTitleFa: build.project.titleFa,
         projectTitleEn: build.project.titleEn,
         buildNumber: build.number,
         portalUrl: `${env.APP_ORIGIN}/${customer.locale === 'en' ? 'en' : 'fa'}/app/contracts/${contractId}`,
-      }),
-    }).catch((err) => console.error('[mail] build-published send failed', err));
+      },
+    });
 
     return prisma.build.findUniqueOrThrow({ where: { id: build.id }, include: buildInclude });
   },

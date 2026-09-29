@@ -89,6 +89,19 @@ export default defineConfig({
         // unset rather than blanked: env.ts only requires it in production,
         // and the stub takes precedence over a key in any case.
         ANTHROPIC_E2E_STUB: '1',
+        // J1's test-env pinning rule — blank whatever this checkout's .env
+        // holds, so e2e can never place a real SMS send (C2's Resend lesson).
+        SMS_PROVIDER: '',
+        SMS_API_KEY: '',
+        SMS_SENDER: '',
+        SMS_CODE_PATTERN: '',
+        SMS_INVITE_PATTERN: '',
+        // The e2e-only outbox route (routes/smsOutbox.ts) — every existing
+        // spec signs in as a factor-requiring staff account now that
+        // DevSmsTransport makes the factor live in this environment (see
+        // e2e/helpers.ts's signIn), so this has to be on for the *whole*
+        // suite, not opted into per spec.
+        SMS_E2E_OUTBOX: '1',
       },
     },
     {

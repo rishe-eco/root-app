@@ -16,6 +16,7 @@ export default function Customers() {
   });
   const [invite] = useMutation(INVITE_CUSTOMER, { refetchQueries: [{ query: ALL_CUSTOMERS }] });
 
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [clientName, setClientName] = useState('');
@@ -29,13 +30,18 @@ export default function Customers() {
     setError(null);
     setInviteUrl(null);
     try {
-      const res = await invite({ variables: { email, name, clientName: clientName || null } });
+      const res = await invite({
+        variables: { phone, name, clientName: clientName || null, email: email || null },
+      });
       setInviteUrl(res.data.inviteCustomer.inviteUrl);
+      setPhone('');
       setEmail('');
       setName('');
       setClientName('');
     } catch (err) {
-      setError((err as Error).message);
+      const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })
+        .graphQLErrors?.[0]?.extensions?.code;
+      setError(code === 'PHONE_INVALID' ? t('desk.invitePhoneInvalid') : (err as Error).message);
     }
   }
 
@@ -46,6 +52,20 @@ export default function Customers() {
       <section className="card">
         <form className="auth-form" onSubmit={onInvite}>
           <div className="field">
+            <label className="label" htmlFor="i-phone">
+              {t('desk.invitePhone')}
+            </label>
+            <input
+              id="i-phone"
+              className="input"
+              type="tel"
+              dir="ltr"
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+          <div className="field">
             <label className="label" htmlFor="i-email">
               {t('desk.inviteEmail')}
             </label>
@@ -54,7 +74,6 @@ export default function Customers() {
               className="input"
               type="email"
               dir="ltr"
-              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -104,6 +123,7 @@ export default function Customers() {
             <thead>
               <tr>
                 <th>{t('desk.inviteName')}</th>
+                <th>{t('desk.invitePhone')}</th>
                 <th>{t('desk.inviteEmail')}</th>
                 <th>{t('desk.inviteClient')}</th>
               </tr>
@@ -112,7 +132,8 @@ export default function Customers() {
               {(data?.allCustomers ?? []).map((c) => (
                 <tr key={c.id}>
                   <td>{c.name}</td>
-                  <td dir="ltr">{c.email}</td>
+                  <td dir="ltr">{c.phone ?? '—'}</td>
+                  <td dir="ltr">{c.email ?? '—'}</td>
                   <td>{c.clientName ?? '—'}</td>
                 </tr>
               ))}

@@ -22,7 +22,10 @@ import { prisma } from '../lib/prisma.js';
 import { storage } from '../lib/storage.js';
 import { publiclyVisible, foldPersian } from '../lib/library.js';
 import { getAnthropicClient } from '../lib/anthropicClient.js';
-import { checkRateLimit, estimateCostUsd, recordSpend, spendCeilingExceeded } from '../lib/askRateLimit.js';
+import { estimateCostUsd, recordSpend, spendCeilingExceeded } from '../lib/askRateLimit.js';
+// PD-15: the bucket itself is the general mechanism now — see lib/rateLimit.ts's
+// own comment for why /ask imports it directly rather than through askRateLimit.ts.
+import { askBucket } from '../lib/rateLimit.js';
 import {
   ASK_MAX_TOKENS,
   ASK_MODEL,
@@ -123,7 +126,7 @@ askRouter.post(
     // makes this the visitor's address rather than a proxy's, the same
     // reasoning Signature.ip already relies on.
     const ip = req.ip ?? 'unknown';
-    if (!checkRateLimit(ip)) {
+    if (!askBucket.check(ip)) {
       res.status(429).json({ error: 'RATE_LIMITED' });
       return;
     }
