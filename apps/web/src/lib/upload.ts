@@ -119,3 +119,32 @@ export async function uploadServiceImport(projectId: string, file: File): Promis
   }
   return body as unknown as UploadResult;
 }
+
+// ---------------------------------------------------------------------------
+// The theme catalogue (journeys build plan T2) — a preview image per theme.
+// ---------------------------------------------------------------------------
+
+/** T4: a hint for the file input, nothing more — the server sniffs the real
+ *  bytes (lib/files.ts). Same three raster types as a design image. */
+export const THEME_PREVIEW_ACCEPT = DESIGN_IMAGE_ACCEPT;
+
+/** Uploads a theme's preview. The upload route points the theme at the new
+ *  file in the same transaction and removes the one it replaces, so — unlike a
+ *  design image — there is no separate attach step. */
+export async function uploadThemePreview(themeId: string, file: File): Promise<UploadResult> {
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(`/upload?class=THEME_PREVIEW&themeId=${encodeURIComponent(themeId)}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  });
+  const body = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (!res.ok) {
+    // ERROR_KEYS words NOT_FOUND for a contract; this route means a theme.
+    const key = body?.error === 'NOT_FOUND' ? 'upload.errThemeNotFound' : ERROR_KEYS[body?.error ?? ''];
+    throw new UploadFailure(key ?? 'upload.errGeneric');
+  }
+  return body as unknown as UploadResult;
+}

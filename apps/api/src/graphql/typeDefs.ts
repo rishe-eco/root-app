@@ -1787,6 +1787,50 @@ export const typeDefs = /* GraphQL */ `
     labelEn: String!
   }
 
+  # ---------------------------------------------------------------------
+  # The theme catalogue (journeys build plan T2)
+  # ---------------------------------------------------------------------
+
+  "How well a theme handles right-to-left layout. UNKNOWN is a real answer: not tried yet."
+  enum RtlSupport {
+    FULL
+    PARTIAL
+    NONE
+    UNKNOWN
+  }
+
+  """
+  A ready-made site theme a designer can offer on a pre-made contract. Staff
+  only: nothing customer-facing returns one. There is no delete — active:
+  false — because a design round will snapshot the theme it showed.
+  """
+  type Theme {
+    id: ID!
+    name: String!
+    vendor: String
+    """
+    The vendor's live demo. https only, and never framed anywhere: render it as
+    a link that opens in a new tab (third-party demos refuse framing and the
+    portal's CSP does not allow them).
+    """
+    demoUrl: String
+    "The preview image, /files/<id> — private, staff only. Null until one is uploaded."
+    previewUrl: String
+    rtlSupport: RtlSupport!
+    """
+    What the licence costs Root, in Toman, as a decimal string. Root's cost, not
+    a customer's money, so money.read does not apply; whoever can read the
+    catalogue can read it.
+    """
+    licenseCost: String
+    notesFa: String
+    notesEn: String
+    active: Boolean!
+    "The template types this theme is offered for."
+    typeIds: [ID!]!
+    createdAt: DateTime!
+  }
+
   type Query {
     me: User
     myContracts(status: ContractStatus): [Contract!]!
@@ -1822,6 +1866,12 @@ export const typeDefs = /* GraphQL */ `
     activeOnly: true is the picker's view; the desk's Types tab wants both.
     """
     templateTypes(activeOnly: Boolean = false): [TemplateType!]!
+    """
+    Staff holding templates.types, templates.scope or contracts.author (T2).
+    Name order. activeOnly: true is the picker's view; the desk's Themes tab
+    wants both.
+    """
+    themes(activeOnly: Boolean = false): [Theme!]!
     "Staff (contracts.author). Journeys build plan S1: the active accounts assignContract would accept for this job."
     assignableUsers(job: AssignmentJob!): [User!]!
     "Staff. Contracts waiting on Root, longest-waiting first."
@@ -2103,6 +2153,27 @@ export const typeDefs = /* GraphQL */ `
     list untouched.
     """
     setTemplateScope(typeId: ID!, items: [TemplateScopeItemInput!]!): TemplateType!
+
+    # --- The theme catalogue (build plan T2) ---
+    """
+    templates.types. licenseCost is whole Toman as a string. Refused:
+    NAME_REQUIRED, INVALID_DEMO_URL, DEMO_URL_NOT_HTTPS, INVALID_AMOUNT.
+    An empty string means "none" for the optional fields.
+    """
+    createTheme(name: String!, vendor: String, demoUrl: String, rtlSupport: RtlSupport, licenseCost: String, notesFa: String, notesEn: String): Theme!
+    """
+    templates.types. Omitted (null) fields are left alone; an empty string clears
+    an optional one. There is no delete — active: false. Refused: NOT_FOUND,
+    NAME_REQUIRED, INVALID_DEMO_URL, DEMO_URL_NOT_HTTPS, INVALID_AMOUNT.
+    """
+    updateTheme(id: ID!, name: String, vendor: String, demoUrl: String, rtlSupport: RtlSupport, licenseCost: String, notesFa: String, notesEn: String, active: Boolean): Theme!
+    """
+    templates.types. Replaces the set of themes offered for one type, in one
+    transaction; returns the whole catalogue (the rows that changed are on both
+    sides of the replace). Refused: NOT_FOUND (typeId), DUPLICATE_THEME,
+    THEME_NOT_FOUND — and a refused input leaves the old set untouched.
+    """
+    setTemplateTypeThemes(typeId: ID!, themeIds: [ID!]!): [Theme!]!
 
     # --- Phases and the live demo surface (build plan L2) ---
     "number is the project-scoped ordinal — @@unique([projectId, number])."

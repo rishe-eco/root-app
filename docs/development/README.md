@@ -105,7 +105,7 @@ J5    step 2a — pages, features and deliverables
 J6    step 2b — the draft and its anchored notes
 J7    step 3 — approve and sign; the agreement gate; snapshot format 2
 J13   invoices — drafts, numbers, due dates, plan issuing, print
-T2+J8 step 4 — theme catalogue, wireframes and palette
+T2+J8 step 4 — theme catalogue, wireframes and palette      ◐ T2 catalogue ✔ 2026-09-29 [T2.md] · J8 after J7
 J9    step 5 — the mockup host, streamed bundle upload
 J10   step 6 — demo submission, readiness, per-phase approval
 J11   step 7 — the summary, handover, closing a contract
@@ -385,6 +385,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`T1.md`](T1.md) | template types, scope templates, `ScopeItem.kind` | ✔ built |
 | [`S3.md`](S3.md) | customer and staff management, the Users place's first slice, Tools | ✔ built |
 | [`J2.md`](J2.md) | requests; several contracts per project; `firstContractId` retired | ✔ built |
+| [`T2.md`](T2.md) | the theme catalogue (T2's half of T2+J8) | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |

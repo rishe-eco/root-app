@@ -749,6 +749,12 @@ enum FileClass {
   /// a Contract — the first file class this schema attaches to a project
   /// directly (StoredFile.projectId).
   SERVICE_IMPORT
+  /// Journeys build plan T2: a theme's preview image in the catalogue.
+  /// Private, owned by a Theme (StoredFile.themeId) — staff read it, no
+  /// customer ever does; J8 *copies* a preview into a contract-owned
+  /// DESIGN_IMAGE when a theme is proposed, so a customer's file access stays
+  /// on the contract edge.
+  THEME_PREVIEW
 }
 
 model StoredFile {
@@ -773,7 +779,8 @@ model StoredFile {
   /// be authorised to read. Build plan L7 widens the CHECK
   /// (`StoredFile_private_has_owner`) to accept `projectId` as an
   /// equally-valid owner, since SERVICE_IMPORT is the first class this
-  /// schema attaches to a project rather than a contract.
+  /// schema attaches to a project rather than a contract; T2 widens it again
+  /// for `themeId`.
   contractId String?
   contract   Contract? @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
@@ -782,6 +789,12 @@ model StoredFile {
   /// with RESEARCH_TEXT.
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Journeys build plan T2: the owning row for a THEME_PREVIEW upload — the
+  /// third owner the private-file CHECK accepts (the second widening after
+  /// L7's). Null for every other class.
+  themeId String?
+  theme   Theme?  @relation("ThemeFiles", fields: [themeId], references: [id], onDelete: Cascade)
 
   uploadedById String
   uploadedBy   User   @relation(fields: [uploadedById], references: [id])
@@ -797,6 +810,9 @@ model StoredFile {
   /// itself, matching the two-step shape POST /upload already has
   /// everywhere else in this codebase).
   serviceRun    ServiceRun?
+  /// Journeys build plan T2 — the theme this file is the preview *of*, when
+  /// it is the one the theme currently points at (Theme.previewFileId).
+  themePreviewOf Theme? @relation("ThemePreview")
 
   /// The Anthropic Files API id for this PDF's bytes (R4.md §2.3) — set the
   /// first time a `quotableFullText` entry is asked about, never re-uploaded
@@ -811,6 +827,7 @@ model StoredFile {
 
   @@index([contractId])
   @@index([projectId])
+  @@index([themeId])
   @@index([class, visibility])
 }
 
@@ -2430,7 +2447,10 @@ model TemplateType {
   position Int     @default(0)
   active   Boolean @default(true)
 
-  items TemplateScopeItem[]
+  items  TemplateScopeItem[]
+  /// Journeys build plan T2: the themes a designer offers for this kind of
+  /// site. Replaced wholesale by `setTemplateTypeThemes`.
+  themes TemplateTypeTheme[]
 }
 
 /// One line of a type's scope list: the page, feature or deliverable a new
@@ -2454,4 +2474,80 @@ model TemplateScopeItem {
   position Int       @default(0)
 
   @@unique([typeId, key])
+}
+
+// ---------------------------------------------------------------------------
+// The theme catalogue (journeys build plan T2; the first half of T2 + J8)
+// ---------------------------------------------------------------------------
+
+/// How well a theme handles right-to-left layout — the fact that decides
+/// whether a Persian customer can be shown it at all (plan Q-S18). `UNKNOWN`
+/// is a real answer, not a default to be tidied away: a designer adding a
+/// theme they have not yet tried in RTL should be able to say so.
+enum RtlSupport {
+  FULL
+  PARTIAL
+  NONE
+  UNKNOWN
+}
+
+/// A ready-made site theme a designer can offer a customer on a pre-made
+/// contract (plan PD-13). Staff-only data: no customer-facing resolver
+/// returns a `Theme`, and J8 will snapshot only `name`, `vendor` and `demoUrl`
+/// into a design round (never `licenseCost` or the notes), so editing or
+/// deactivating a theme never rewrites a round that already showed it.
+///
+/// **A theme is never deleted, only deactivated** — J8's `DesignConcept.themeId`
+/// will point here, and a past round must never lose its theme. There is
+/// deliberately no delete mutation (the same choice as `TemplateType`).
+model Theme {
+  id String @id @default(cuid())
+
+  name   String
+  vendor String?
+
+  /// The vendor's live demo. **https only** (checked on write) and **never
+  /// framed** anywhere: third-party demo sites refuse framing more often than
+  /// not, and the portal's CSP does not allow them (plan J8's `frame-src`
+  /// trap). Every surface shows it as a link that opens in a new tab.
+  demoUrl String?
+
+  /// The preview image, uploaded through `/upload?class=THEME_PREVIEW`. The
+  /// upload route sets this in the same transaction as the file row (the
+  /// Library's `fullTextFileId` shape). `Restrict`: the file cannot vanish
+  /// from under a theme that still points at it.
+  previewFileId String?     @unique
+  previewFile   StoredFile? @relation("ThemePreview", fields: [previewFileId], references: [id], onDelete: Restrict)
+
+  rtlSupport RtlSupport @default(UNKNOWN)
+
+  /// What the licence costs *Root*, in Toman — a procurement figure, not
+  /// customer money (PD-14's `money.read` protects what a customer pays or
+  /// owes). Design chooses by it, so anyone who can read the catalogue can
+  /// read this; see resolvers/themes.ts. Crosses the wire as a decimal string
+  /// (house rule 9).
+  licenseCost BigInt?
+
+  notesFa String?
+  notesEn String?
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  types TemplateTypeTheme[]
+  /// Every StoredFile that names this theme as its owner (THEME_PREVIEW).
+  files StoredFile[]        @relation("ThemeFiles")
+}
+
+/// A theme offered for a template type. Replaced per type by
+/// `setTemplateTypeThemes`; the composite key is the "unique pair".
+model TemplateTypeTheme {
+  typeId String
+  type   TemplateType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+
+  themeId String
+  theme   Theme  @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@id([typeId, themeId])
+  @@index([themeId])
 }

@@ -87,7 +87,7 @@ export type ClassPolicy = {
    * whether a file may exist at all live on that row, so an upload that names
    * nothing cannot be checked against them.
    */
-  owner: 'contract' | 'entry' | 'project';
+  owner: 'contract' | 'entry' | 'project' | 'theme';
 };
 
 /**
@@ -126,6 +126,18 @@ export const POLICY: Record<FileClass, ClassPolicy> = {
     accepted: [XLSX],
     uploader: 'projectOwner',
     owner: 'project',
+  },
+  THEME_PREVIEW: {
+    visibility: 'PRIVATE',
+    // A catalogue screenshot, not a contract's design: the same ceiling as
+    // DESIGN_IMAGE, and the same three raster types (no SVG — see above).
+    maxBytes: 2 * 1024 * 1024,
+    accepted: [PNG, JPEG, WEBP],
+    // The designer's catalogue verb (journeys build plan T2). Whether the
+    // theme exists is checked in routes/files.ts; there is no assignment edge
+    // here, because a theme belongs to no one contract.
+    uploader: 'templates.types',
+    owner: 'theme',
   },
 };
 

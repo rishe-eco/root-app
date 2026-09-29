@@ -19,13 +19,17 @@ import { DESK_SECTIONS, canSeeSection } from '../sections';
  * the types their lists hang from, because each half is meaningless without
  * the other in view.
  *
- * The tab is the route (`/desk/templates/types`, `…/scope`), so it survives a
+ * A third tab, **Themes** (T2), is the designer's catalogue of ready-made site
+ * themes — written with `templates.types`, read with either capability (or
+ * `contracts.author`) — and lets the designer say which types offer which.
+ *
+ * The tab is the route (`/desk/templates/types`, `…/scope`, `…/themes`), so it survives a
  * reload and a language switch and can be linked to.
  */
 
 export type TemplatesContext = { me: User };
 
-const TABS = ['types', 'scope'] as const;
+const TABS = ['types', 'scope', 'themes'] as const;
 
 export default function Templates() {
   const { t } = useTranslation();

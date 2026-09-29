@@ -289,7 +289,8 @@
       "lede": "Site types, and the pages, features and deliverables a contract of each type starts with.",
       "tab": {
         "types": "Types",
-        "scope": "Scope"
+        "scope": "Scope",
+        "themes": "Themes"
       },
       "typesHelp": "A designer keeps the types. Nothing is deleted — a type is deactivated, which takes it out of the picker and leaves everything that already chose it untouched.",
       "scopeHelp": "Sales keeps each type's list. Saving replaces the type's whole list with what is on screen.",
@@ -326,6 +327,44 @@
       "unsaved": "Unsaved changes",
       "saved": "No unsaved changes",
       "discardConfirm": "Discard this list's unsaved changes?",
+      "themes": {
+        "help": "A designer keeps the catalogue of ready-made themes. Nothing is deleted — a theme is deactivated, which takes it out of the picker and leaves any design round that already showed it untouched.",
+        "readOnly": "You can see this tab; the themes are edited by a designer.",
+        "newTheme": "New theme",
+        "add": "Add theme",
+        "name": "Name",
+        "vendor": "Vendor",
+        "demoUrl": "Demo link",
+        "demoHint": "https only. It opens in a new tab and is never shown inside a page.",
+        "openDemo": "Open the demo",
+        "rtl": "Right-to-left support",
+        "rtlValue": {
+          "FULL": "Full",
+          "PARTIAL": "Partial",
+          "NONE": "None",
+          "UNKNOWN": "Not checked yet"
+        },
+        "licenseCost": "Licence cost (Toman)",
+        "licenseCostHint": "What the licence costs Root — digits only. Leave empty if unknown.",
+        "cost": "{{amount}} Toman",
+        "noCost": "Cost not recorded",
+        "notesFa": "Notes (Persian)",
+        "notesEn": "Notes (English)",
+        "preview": "Preview image",
+        "noPreview": "No preview yet",
+        "uploadPreview": "Upload a preview",
+        "replacePreview": "Replace the preview",
+        "uploading": "Uploading…",
+        "types": "Offered for",
+        "noTypes": "No type yet",
+        "none": "No themes yet.",
+        "assignTitle": "Assign to a type",
+        "assignHelp": "Pick a type, tick the themes it offers, and save. Saving replaces that type's whole set with what is ticked.",
+        "assignSave": "Save the set",
+        "unsavedAssign": "Unsaved changes",
+        "savedAssign": "No unsaved changes",
+        "discardAssignConfirm": "Discard the unsaved ticks for this type?"
+      },
       "errors": {
         "INVALID_SLUG": "A slug is lowercase Latin letters, digits and hyphens only.",
         "LABEL_REQUIRED": "Both titles are required.",
@@ -334,7 +373,13 @@
         "INVALID_KEY": "Every key must be lowercase Latin letters, digits and hyphens only.",
         "DUPLICATE_TEMPLATE_KEY": "Two items in the list share a key.",
         "INVALID_TEMPLATE_KIND": "Every item must be a page, a feature or a deliverable.",
-        "NOT_FOUND": "That type no longer exists.",
+        "NOT_FOUND": "That type or theme no longer exists.",
+        "NAME_REQUIRED": "A theme needs a name.",
+        "INVALID_DEMO_URL": "That demo link is not a valid web address.",
+        "DEMO_URL_NOT_HTTPS": "The demo link must start with https://.",
+        "INVALID_AMOUNT": "The licence cost must be a whole number of Toman, digits only.",
+        "DUPLICATE_THEME": "A theme was ticked twice — reload the page.",
+        "THEME_NOT_FOUND": "One of those themes no longer exists — reload the page.",
         "FORBIDDEN": "You are not allowed to do that.",
         "UNKNOWN": "That did not work. Try again."
       }
@@ -775,6 +820,7 @@
   "upload": {
     "errAuth": "You do not have access to upload this.",
     "errNotFound": "No such contract.",
+    "errThemeNotFound": "No such theme.",
     "errTooLarge": "That file is too large.",
     "errType": "That file type is not accepted.",
     "errEmpty": "That file is empty.",

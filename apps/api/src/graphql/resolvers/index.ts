@@ -31,6 +31,7 @@ import { reviewMutations, reviewQueries } from './review.js';
 import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
 import { apiTokenMutations, apiTokenQueries } from './apiTokens.js';
 import { templateMutations, templateQueries } from './templates.js';
+import { Theme, themeMutations, themeQueries } from './themes.js';
 import { Request, requestMutations, requestQueries } from './requests.js';
 import { peopleMutations, peopleQueries } from './people.js';
 import { contractWizardFields, wizardMutations } from './wizard.js';
@@ -67,6 +68,7 @@ export const resolvers = {
   BillingReport,
   ServiceRun,
   ServiceRunRow,
+  Theme,
   User,
   Request,
   CustomerProfile: { id: (p: { user: { id: string } }) => p.user.id },
@@ -92,6 +94,8 @@ export const resolvers = {
     // journeys build plan T1: templates.types / templates.scope write, any staff
     // holding either (or contracts.author) reads — see resolvers/templates.ts.
     ...templateQueries,
+    // journeys build plan T2: the theme catalogue, same readers as the types.
+    ...themeQueries,
     // journeys build plan J2: myRequests is ownership-gated, allRequests is
     // contracts.readAll, request is both — see resolvers/requests.ts.
     ...requestQueries,
@@ -126,6 +130,8 @@ export const resolvers = {
     ...reviewThreadMutations,
     ...apiTokenMutations,
     ...templateMutations,
+    // journeys build plan T2: templates.types writes — see resolvers/themes.ts.
+    ...themeMutations,
     // journeys build plan J2: submitRequest/postRequestMessage are
     // ownership-gated, archiveRequest is contracts.author — the conversion
     // itself is createContract's, in admin/contracts.ts.

@@ -44,6 +44,7 @@ import ApiTokens from '@/desk/ApiTokens';
 import Templates, { TemplatesIndex } from '@/desk/templates/Templates';
 import TemplateTypesTab from '@/desk/templates/TypesTab';
 import TemplateScopeTab from '@/desk/templates/ScopeTab';
+import TemplateThemesTab from '@/desk/templates/ThemesTab';
 import ContractWorkspace, { WorkspaceIndex } from '@/desk/workspace/ContractWorkspace';
 import WorkspaceStepsTab from '@/desk/workspace/StepsTab';
 import WorkspaceNotesTab from '@/desk/workspace/NotesTab';
@@ -164,6 +165,7 @@ export default function App() {
             <Route index element={<TemplatesIndex />} />
             <Route path="types" element={<TemplateTypesTab />} />
             <Route path="scope" element={<TemplateScopeTab />} />
+            <Route path="themes" element={<TemplateThemesTab />} />
           </Route>
           <Route path="apiTokens" element={<ApiTokens />} />
         </Route>
