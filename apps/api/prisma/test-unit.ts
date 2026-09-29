@@ -24,6 +24,14 @@ const run = spawnSync('npx tsx --test src/lib/*.test.ts', {
     JWT_SECRET: process.env.JWT_SECRET || 'unit-only-secret-not-used-anywhere-else-0123456789',
     RESEND_API_KEY: '',
     MAIL_FROM: '',
+    // J1's test-env pinning rule (C2's Resend lesson, applied to the new
+    // outbound provider): blank whatever this checkout's .env holds, so no
+    // unit test can ever place a real SMS send.
+    SMS_PROVIDER: '',
+    SMS_API_KEY: '',
+    SMS_SENDER: '',
+    SMS_CODE_PATTERN: '',
+    SMS_INVITE_PATTERN: '',
   },
   stdio: 'inherit',
   // As in test-integration.ts: cmd.exe leaves the glob to Node's test runner.

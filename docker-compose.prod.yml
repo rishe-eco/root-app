@@ -81,6 +81,15 @@ services:
       # without it Compose never passes the variable in, so setting it in .env
       # would have no effect and the reason would be invisible.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # The SMS provider (journeys build plan J1). Deliberately left empty —
+      # see .env.production.example. Unset, invites keep showing their link,
+      # phone recovery refuses SMS_UNAVAILABLE, and the staff second factor
+      # goes unenforced (a boot warning and a desk banner both say so).
+      SMS_PROVIDER: ${SMS_PROVIDER}
+      SMS_API_KEY: ${SMS_API_KEY}
+      SMS_SENDER: ${SMS_SENDER}
+      SMS_CODE_PATTERN: ${SMS_CODE_PATTERN}
+      SMS_INVITE_PATTERN: ${SMS_INVITE_PATTERN}
     # Loopback only. Host Nginx proxies to it; nothing reaches it from outside.
     ports:
       - '127.0.0.1:${API_PORT:-4000}:4000'

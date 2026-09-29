@@ -3,7 +3,7 @@ import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { isStaff } from '@/lib/access';
-import { ME, SIGN_OUT, type User } from '@/lib/queries';
+import { ME, SIGN_OUT, SMS_CONFIGURED, type User } from '@/lib/queries';
 import { initialOf } from '@/lib/format';
 import LangSwitch from '@/components/LangSwitch';
 import { DESK_SECTIONS, visibleSections } from './sections';
@@ -22,6 +22,15 @@ export default function DeskLayout() {
   const { data, loading } = useQuery<{ me: User | null }>(ME);
   const [signOut] = useMutation(SIGN_OUT);
 
+  // PD-18's own gate on the query itself (staff.manage — ADMIN only), so no
+  // non-admin ever even asks and no FORBIDDEN ever reaches the console.
+  // `me?.capabilities` is cast past `lib/access.ts`'s `Capability` union
+  // (not this stage's file to widen — S1's own web lane owns that type)
+  // rather than calling `can()`, which the stale union would refuse to
+  // compile against for a capability it does not yet list.
+  const isAdmin = Boolean((data?.me?.capabilities as string[] | undefined)?.includes('staff.manage'));
+  const { data: smsData } = useQuery<{ smsConfigured: boolean }>(SMS_CONFIGURED, { skip: !isAdmin });
+
   if (loading) {
     return (
       <div className="root-ui desk-shell">
@@ -34,8 +43,14 @@ export default function DeskLayout() {
   if (!isStaff(me)) {
     return <Navigate to={lp(locale, '/portal')} replace />;
   }
+  // PD-10: forced to the one screen that can clear this, before any desk
+  // section renders — the same gate PortalLayout applies on its own side.
+  if (me!.passwordChangeRequired) {
+    return <Navigate to={lp(locale, '/portal/set-password')} replace />;
+  }
 
   const sections = visibleSections(me);
+  const showSmsBanner = isAdmin && smsData?.smsConfigured === false;
 
   async function onSignOut() {
     await signOut().catch(() => undefined);
@@ -88,6 +103,11 @@ export default function DeskLayout() {
             </button>
           </div>
         </header>
+        {showSmsBanner ? (
+          <p className="auth-notice" role="status">
+            {t('desk.smsNotConfigured')}
+          </p>
+        ) : null}
         <div className="desk-content">
           <Outlet context={me} />
         </div>

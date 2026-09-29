@@ -28,9 +28,17 @@ export function readSession(token: string): SessionClaims | null {
 /**
  * Invite and reset links. The raw token is returned once, for the link; only
  * its hash is stored, so a database leak cannot be replayed into an account.
+ *
+ * 16 bytes (128 bits), not 32 — journeys build plan J1's own trap: an invite
+ * link is now routinely sent by SMS, where every character is a fraction of
+ * a segment (Persian SMS is ~70 characters a segment), and 128 bits of
+ * entropy in a single-use, short-expiry token is not a number worth doubling
+ * at that cost. `bytes` stays a parameter rather than a second function,
+ * because every call site wants the same shape (`raw`, `hash`) and only the
+ * length differs.
  */
-export function newLinkToken() {
-  const raw = crypto.randomBytes(32).toString('base64url');
+export function newLinkToken(bytes: number = 16) {
+  const raw = crypto.randomBytes(bytes).toString('base64url');
   return { raw, hash: hashToken(raw) };
 }
 

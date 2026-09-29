@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Role } from '@prisma/client';
-import { CAPABILITIES, can, capabilitiesOf } from './capabilities.js';
+import { CAPABILITIES, can, capabilitiesOf, requiresSecondFactor } from './capabilities.js';
 
 const holding = (...roles: Role[]) => ({ roles });
 
@@ -145,6 +145,43 @@ test('money is visible to exactly the roles that sell', () => {
   assert.equal(can(holding('DESIGNER'), 'money.read'), false);
   assert.equal(can(holding('DEVELOPER'), 'money.read'), false);
   assert.equal(can(holding('SALES'), 'money.read'), true);
+});
+
+/**
+ * Journeys build plan J1, PD-20 — the second-factor table as a literal, the
+ * same shape as the grant table above: one row per role, read against the
+ * code rather than restated, so the set widening or narrowing later is a
+ * one-line diff a reviewer sees rather than a fact only inferred from other
+ * behaviour changing.
+ */
+const REQUIRES_SECOND_FACTOR: Record<Role, boolean> = {
+  CUSTOMER: false,
+  ADMIN: true,
+  CONTRIBUTOR: false,
+  REVIEWER: false,
+  DEVELOPER: true,
+  SALES: true,
+  DESIGNER: true,
+};
+
+for (const [role, expected] of Object.entries(REQUIRES_SECOND_FACTOR) as Array<[Role, boolean]>) {
+  test(`requiresSecondFactor(${role}) is ${expected}`, () => {
+    assert.equal(requiresSecondFactor(holding(role)), expected);
+  });
+}
+
+test('holding any second-factor role is enough, even alongside one that would not require it alone', () => {
+  // Union, never subtraction — the same rule `can` already applies to
+  // capabilities, applied here to the factor requirement itself.
+  assert.equal(requiresSecondFactor(holding('CONTRIBUTOR', 'SALES')), true);
+});
+
+test('holding only non-factor roles never requires one, however many are held', () => {
+  assert.equal(requiresSecondFactor(holding('CONTRIBUTOR', 'REVIEWER')), false);
+});
+
+test('the empty role set does not require a factor either — it fails closed the same way `can` does', () => {
+  assert.equal(requiresSecondFactor({ roles: [] as Role[] }), false);
 });
 
 test('contracts.manage is gone, not aliased', () => {

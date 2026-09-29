@@ -3,8 +3,7 @@ import type { DemoFrameLineKind } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { deriveFrameLines } from '../../../lib/demoFrame.js';
-import { sendMail } from '../../../lib/mail.js';
-import { demoPublishedEmail } from '../../../lib/mailTemplates.js';
+import { notify } from '../../../lib/notify.js';
 import { env } from '../../../lib/env.js';
 import { reload } from '../contracts.js';
 import { firstContractId } from './shared.js';
@@ -215,15 +214,15 @@ export const demoFrameMutations = {
     const project = demo.phase.project;
     const contractId = await firstContractId(project.id);
     const customer = project.customer;
-    await sendMail({
-      to: customer.email,
-      ...demoPublishedEmail(customer.locale, {
+    await notify(customer, {
+      kind: 'DEMO_PUBLISHED',
+      params: {
         customerName: customer.name,
         projectTitleFa: project.titleFa,
         projectTitleEn: project.titleEn,
         portalUrl: `${env.APP_ORIGIN}/${customer.locale === 'en' ? 'en' : 'fa'}/app/contracts/${contractId}`,
-      }),
-    }).catch((err) => console.error('[mail] demo-published send failed', err));
+      },
+    });
 
     return reload(contractId);
   },

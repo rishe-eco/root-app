@@ -143,6 +143,35 @@ const schema = z.object({
    * can never become a way to fake an answer for a real reader.
    */
   ANTHROPIC_E2E_STUB: z.preprocess(emptyToUndefined, z.enum(['1']).optional()),
+  /**
+   * The SMS provider slot (journeys build plan J1; P0-4, PD-18). All five
+   * optional, exactly like Resend above — the founder may legitimately not
+   * have chosen a provider yet (P0-4: on purpose, left empty), and an
+   * unconfigured one degrades rather than refuses to boot: invites still
+   * show their link on the desk, phone recovery refuses `SMS_UNAVAILABLE`,
+   * and the staff second factor goes unenforced in production only (see
+   * `lib/sms.ts`'s `smsAvailable`). `SMS_API_KEY`/`SMS_SENDER` are required
+   * together with `SMS_PROVIDER` below, the same pairing discipline as
+   * Resend's pair — a provider named with no key or no sender line cannot
+   * send regardless. `SMS_CODE_PATTERN`/`SMS_INVITE_PATTERN` stay optional
+   * even then: not every provider requires a pre-approved template, and the
+   * ones that do are named in `smsProvider.ts`'s own header.
+   */
+  SMS_PROVIDER: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  SMS_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  SMS_SENDER: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  SMS_CODE_PATTERN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  SMS_INVITE_PATTERN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  /**
+   * e2e-only, the same shape and the same production refusal as
+   * `ANTHROPIC_E2E_STUB` above: a test-only route (mounted only when this is
+   * set) that reads back what `DevSmsTransport` last sent to a phone, so
+   * Playwright can complete a phone-code or staff-factor challenge without
+   * a real SMS provider. `lib/sms.ts` never logs a message body outside
+   * `DevSmsTransport` in development, and this outbox is that same
+   * transport's own memory — nothing new is exposed by reading it.
+   */
+  SMS_E2E_OUTBOX: z.preprocess(emptyToUndefined, z.enum(['1']).optional()),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -177,6 +206,32 @@ if (parsed.data.NODE_ENV === 'production' && !parsed.data.ANTHROPIC_API_KEY) {
 
 if (parsed.data.NODE_ENV === 'production' && parsed.data.ANTHROPIC_E2E_STUB) {
   throw new Error('Invalid environment:\n  - ANTHROPIC_E2E_STUB must never be set in production');
+}
+
+if (parsed.data.NODE_ENV === 'production' && parsed.data.SMS_E2E_OUTBOX) {
+  throw new Error('Invalid environment:\n  - SMS_E2E_OUTBOX must never be set in production');
+}
+
+if (parsed.data.SMS_PROVIDER && !(parsed.data.SMS_API_KEY && parsed.data.SMS_SENDER)) {
+  throw new Error(
+    'Invalid environment:\n  - SMS_PROVIDER requires SMS_API_KEY and SMS_SENDER — a provider named with neither cannot send anything',
+  );
+}
+
+// PD-18, founder 2026-09-28: the slot is deliberately left empty until a
+// provider is chosen (P0-4) — this is a warning, not a boot refusal, for
+// exactly the reason ANTHROPIC_API_KEY's own comment gives above: the rest
+// of the product works without SMS, and a boot failure would take the
+// portal down with a feature nobody has wired yet. What actually changes
+// while this is unset is PD-18's own list — invites keep showing their link,
+// phone recovery refuses SMS_UNAVAILABLE, and the staff second factor goes
+// unenforced (see lib/sms.ts's smsAvailable and the desk banner it feeds).
+if (parsed.data.NODE_ENV === 'production' && !parsed.data.SMS_PROVIDER) {
+  console.warn(
+    '[env] no SMS_PROVIDER — the staff second factor is not enforced and phone ' +
+      'recovery is unavailable. Invites still show their link on the desk. ' +
+      'Set the five SMS_* variables to enable it (see .env.production.example).',
+  );
 }
 
 const cookieName = parsed.data.COOKIE_NAME ?? defaultCookieName(parsed.data.NODE_ENV);

@@ -52,7 +52,10 @@ export const typeDefs = /* GraphQL */ `
 
   type User {
     id: ID!
-    email: String!
+    "Journeys build plan J1: optional — a customer may be identified by phone alone. See phone below."
+    email: String
+    "E.164, normalized. Optional on the same terms as email — an account has at least one of the two, never neither (the User_has_identifier CHECK)."
+    phone: String
     name: String!
     roles: [Role!]!
     """
@@ -67,6 +70,8 @@ export const typeDefs = /* GraphQL */ `
     capabilities: [String!]!
     clientName: String
     locale: String!
+    "PD-10. While true, every mutation but setNewPassword (and reading me/signing out) refuses PASSWORD_CHANGE_REQUIRED."
+    passwordChangeRequired: Boolean!
   }
 
   type PageDesign {
@@ -1417,8 +1422,16 @@ export const typeDefs = /* GraphQL */ `
     comments: [ReviewComment!]!
   }
 
+  """
+  Journeys build plan J1: null user + a set factorChallengeId is what
+  "signed in, but the staff second factor must clear first" looks like —
+  signIn returns this instead of a session; pass factorChallengeId and the
+  code the factor SMS carried to verifySignInFactor to actually get one.
+  Every other auth mutation always sets user and never factorChallengeId.
+  """
   type AuthPayload {
-    user: User!
+    user: User
+    factorChallengeId: String
   }
 
   """
@@ -1427,7 +1440,8 @@ export const typeDefs = /* GraphQL */ `
   """
   type InviteResult {
     userId: ID!
-    email: String!
+    "Null for a phone-only invitee — the desk's own invite link is what gets handed over in that case."
+    email: String
     inviteUrl: String!
     expiresAt: DateTime!
   }
@@ -1613,6 +1627,14 @@ export const typeDefs = /* GraphQL */ `
     projectServiceRuns(projectId: ID!): [ServiceRun!]!
     "Staff (customers.manage). Every run, optionally narrowed to one project — spec §11's desk-side service-runs list."
     allServiceRuns(projectId: ID): [ServiceRun!]!
+
+    """
+    Staff (staff.manage — ADMIN only). Whether an SMS provider is configured
+    at all (PD-18) — never the provider's name or key. Feeds the desk's own
+    banner warning that the staff second factor is unenforced while this is
+    false in production.
+    """
+    smsConfigured: Boolean!
   }
 
   input CreateContractInput {
@@ -1628,7 +1650,16 @@ export const typeDefs = /* GraphQL */ `
 
   type Mutation {
     # --- auth ---
-    signIn(email: String!, password: String!): AuthPayload!
+    "identifier is a phone or an email — an @ decides which (journeys build plan J1). One failure message for every branch, as always."
+    signIn(identifier: String!, password: String!): AuthPayload!
+    "PD-20: the code signIn sent to the account's phone. One refusal, CODE_INVALID, for wrong/expired/used/exhausted alike."
+    verifySignInFactor(challengeId: String!, code: String!): AuthPayload!
+    "Phone recovery, step 1. Always true — whether that phone has an account is not this call's to leak. SMS_UNAVAILABLE when no provider is configured (PD-18)."
+    requestLoginCode(phone: String!): Boolean!
+    "Phone recovery, step 2. Sets passwordChangeRequired — the account must set a new password before anything else."
+    verifyLoginCode(phone: String!, code: String!): AuthPayload!
+    "Clears passwordChangeRequired. The one mutation an account may still call while it is set."
+    setNewPassword(password: String!): AuthPayload!
     signOut: Boolean!
     acceptInvite(token: String!, name: String!, password: String!): AuthPayload!
     requestPasswordReset(email: String!): Boolean!
@@ -1650,8 +1681,8 @@ export const typeDefs = /* GraphQL */ `
     signAmendment(amendmentId: ID!, typedName: String!): Contract!
 
     # --- minimal operational admin ---
-    "locale defaults to the inviting admin's own locale when omitted."
-    inviteCustomer(email: String!, name: String!, clientName: String, locale: String): InviteResult!
+    "locale defaults to the inviting admin's own locale when omitted. Journeys build plan J1: phone is now the required identifier, email optional — the SMS carries the link; email too if given, and the desk always shows the link either way."
+    inviteCustomer(phone: String!, name: String!, clientName: String, locale: String, email: String): InviteResult!
     revokeInvite(userId: ID!): Boolean!
     "review.admin, not customers.manage — inviting a specialist to read a corpus is not account administration (C2.md §5)."
     inviteReviewer(email: String!, name: String!, locale: String): InviteResult!

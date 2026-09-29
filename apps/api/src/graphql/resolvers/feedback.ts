@@ -5,8 +5,7 @@ import { requireUser, type Context } from '../../context.js';
 import { can } from '../../lib/capabilities.js';
 import { isContractReader } from '../../lib/visibility.js';
 import { checkInterception, reopensOnComment } from '../../lib/feedback.js';
-import { sendMail } from '../../lib/mail.js';
-import { feedbackSubmittedEmail, feedbackRatifiedEmail } from '../../lib/mailTemplates.js';
+import { notify } from '../../lib/notify.js';
 import { env } from '../../lib/env.js';
 import { loadDemoForActor } from './demo.js';
 import { reload } from './contracts.js';
@@ -178,15 +177,15 @@ export const feedbackMutations = {
       const recipients = await contractManagers();
       await Promise.all(
         recipients.map((r) =>
-          sendMail({
-            to: r.email,
-            ...feedbackSubmittedEmail(r.locale, {
+          notify(r, {
+            kind: 'FEEDBACK_SUBMITTED',
+            params: {
               recipientName: r.name,
               projectTitleFa: project.titleFa,
               projectTitleEn: project.titleEn,
               deskUrl: deskDemoUrl(r.locale, contractId),
-            }),
-          }).catch((err) => console.error('[mail] feedback-submitted send failed', err)),
+            },
+          }),
         ),
       );
     }
@@ -221,16 +220,16 @@ export const feedbackMutations = {
       const recipients = await contractManagers();
       await Promise.all(
         recipients.map((r) =>
-          sendMail({
-            to: r.email,
-            ...feedbackRatifiedEmail(r.locale, {
+          notify(r, {
+            kind: 'FEEDBACK_RATIFIED',
+            params: {
               recipientName: r.name,
               projectTitleFa: project.titleFa,
               projectTitleEn: project.titleEn,
               count,
               deskUrl: deskDemoUrl(r.locale, contractId),
-            }),
-          }).catch((err) => console.error('[mail] feedback-ratified send failed', err)),
+            },
+          }),
         ),
       );
     }

@@ -6,6 +6,7 @@ import { contractInclude, loadForActor } from './contracts.js';
 import { can } from '../../lib/capabilities.js';
 import { isActiveContract, projectVisibleToStaff } from '../../lib/visibility.js';
 import { ensureDueEntriesFor, computeBillingReport } from '../../lib/billing.js';
+import { smsProviderConfigured } from '../../lib/sms.js';
 
 /** Shared with resolvers/admin/billing.ts, whose mutations return the same
  *  shape — one include, imported both places, rather than two copies that
@@ -355,5 +356,17 @@ export const Query = {
       include: { customer: true, project: true },
       orderBy: { createdAt: 'desc' },
     });
+  },
+
+  /**
+   * PD-18 — feeds the desk's own banner. Gated on `staff.manage` (ADMIN
+   * only) rather than left open to every staff reader: nobody but the
+   * account that could actually do something about it (set the five
+   * `SMS_*` variables, or reach for the `set-phone` CLI) needs to know.
+   * Never the provider's name or key — a boolean, and nothing else.
+   */
+  smsConfigured: (_p: unknown, _a: unknown, ctx: Context) => {
+    requireCapability(ctx, 'staff.manage');
+    return smsProviderConfigured;
   },
 };

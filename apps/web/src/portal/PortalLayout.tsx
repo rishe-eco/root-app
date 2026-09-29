@@ -36,6 +36,13 @@ export default function PortalLayout() {
 
   const me = data.me;
 
+  // PD-10: an account with a forced password change reaches nothing else in
+  // the portal until it clears — checked here rather than per-screen, so no
+  // new route under /app has to remember to ask.
+  if (me.passwordChangeRequired) {
+    return <Navigate to={lp(locale, '/portal/set-password')} replace />;
+  }
+
   return (
     <div className="root-ui portal">
       <aside className="side">

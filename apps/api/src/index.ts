@@ -15,6 +15,7 @@ import { ensureStorageReady } from './lib/storage.js';
 import { originCheck } from './lib/originCheck.js';
 import { filesRouter, filesErrorHandler } from './routes/files.js';
 import { askRouter, askErrorHandler } from './routes/ask.js';
+import { smsOutboxRouter } from './routes/smsOutbox.js';
 
 const app = express();
 
@@ -47,6 +48,10 @@ app.use(filesRouter);
 // streamed SSE response is as far from Apollo's JSON contract as upload and
 // download are, so it stays a plain route rather than a GraphQL special case.
 app.use(askRouter);
+// e2e-only (SMS_E2E_OUTBOX; env.ts refuses it in production) — mounted here,
+// beside filesRouter/askRouter rather than ahead of them, on purpose: see
+// routes/smsOutbox.ts's own comment on why that placement matters for J9.
+if (env.SMS_E2E_OUTBOX) app.use(smsOutboxRouter);
 
 app.get('/health', async (_req, res) => {
   try {

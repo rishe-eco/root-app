@@ -92,8 +92,8 @@ L8   wedge contract shape        ← not built, on purpose: owed when the
                                     paid by the journeys plan's J7
 ──── the journeys build plan (P0 → J12), planned, not started ───────
 P0    pre-flight: CSP, docs, DNS/TLS, same-site hardening, SMS slot   ✔ code half 2026-09-29 [P0.md]
-S1    roles, the capability split, visibility, assignment
-J1    phone identity, SMS, the notify router, rate limits, staff 2FA
+S1    roles, the capability split, visibility, assignment   ✔ 2026-09-29 [S1.md]
+J1    phone identity, SMS, the notify router, staff 2FA      ✔ 2026-09-29 [J1.md]
 S3    customer and staff management (and the Tools rename)
 J2    requests — a project before a contract
 J3    steps, sequence, the wizard shell, status area, attention
@@ -377,6 +377,8 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`C2.md`](C2.md) | Review Room — comments, threads, corpus admin | ✔ built |
 | [`R4.md`](R4.md) | Library — the agent | ✔ built |
 | [`P0.md`](P0.md) | journeys pre-flight — test lanes, frame-src, the dev README, same-site hardening | ✔ code half · P0-4/P0-5 the founder's |
+| [`S1.md`](S1.md) | roles, the capability split, visibility, assignment | ✔ built |
+| [`J1.md`](J1.md) | phone identity, SMS, the notify router, the staff second factor | ✔ built · SMS provider owed |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |

@@ -31,10 +31,18 @@ try {
 
 const prisma = new PrismaClient();
 
+// Journeys build plan J1 (PD-20): the four second-factor roles and the
+// customer each get a phone — distinct, obviously fake Iranian mobiles, so
+// e2e can drive the factor and phone sign-in without touching a real number.
+// CONTRIBUTOR and REVIEWER stay without one on purpose (PD-20: neither
+// requires the factor, and the reviewer invite flow is meant to keep
+// working with only an email).
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@root.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'change-me-please';
+const ADMIN_PHONE = process.env.SEED_ADMIN_PHONE ?? '+989120000001';
 const CUSTOMER_EMAIL = process.env.SEED_CUSTOMER_EMAIL ?? 'nahal@example.com';
 const CUSTOMER_PASSWORD = process.env.SEED_CUSTOMER_PASSWORD ?? 'change-me-please';
+const CUSTOMER_PHONE = process.env.SEED_CUSTOMER_PHONE ?? '+989120000005';
 // F2's e2e suite is the first thing that can prove REVIEWER sees exactly one
 // desk section — the role F3 built had no surface to test until now.
 const REVIEWER_EMAIL = process.env.SEED_REVIEWER_EMAIL ?? 'reviewer@root.local';
@@ -52,12 +60,15 @@ const CONTRIBUTOR_PASSWORD = process.env.SEED_CONTRIBUTOR_PASSWORD ?? 'change-me
 // to give that role something to sign into and F3's CONTRIBUTOR before it.
 const DEVELOPER_EMAIL = process.env.SEED_DEVELOPER_EMAIL ?? 'developer@root.local';
 const DEVELOPER_PASSWORD = process.env.SEED_DEVELOPER_PASSWORD ?? 'change-me-please';
+const DEVELOPER_PHONE = process.env.SEED_DEVELOPER_PHONE ?? '+989120000004';
 // Journeys build plan S1 (P0-6): one account per new staff role, so S1's
 // e2e can sign into each desk and see the nav that role is meant to see.
 const SALES_EMAIL = process.env.SEED_SALES_EMAIL ?? 'sales@root.local';
 const SALES_PASSWORD = process.env.SEED_SALES_PASSWORD ?? 'change-me-please';
+const SALES_PHONE = process.env.SEED_SALES_PHONE ?? '+989120000002';
 const DESIGNER_EMAIL = process.env.SEED_DESIGNER_EMAIL ?? 'designer@root.local';
 const DESIGNER_PASSWORD = process.env.SEED_DESIGNER_PASSWORD ?? 'change-me-please';
+const DESIGNER_PHONE = process.env.SEED_DESIGNER_PHONE ?? '+989120000003';
 
 async function main() {
   const admin = await prisma.user.upsert({
@@ -65,6 +76,7 @@ async function main() {
     update: {},
     create: {
       email: ADMIN_EMAIL,
+      phone: ADMIN_PHONE,
       name: 'Root',
       roles: ['ADMIN'],
       state: 'ACTIVE',
@@ -77,6 +89,7 @@ async function main() {
     update: {},
     create: {
       email: CUSTOMER_EMAIL,
+      phone: CUSTOMER_PHONE,
       name: 'نهال رضایی',
       clientName: 'استودیو نهال',
       roles: ['CUSTOMER'],
@@ -126,6 +139,7 @@ async function main() {
     update: {},
     create: {
       email: DEVELOPER_EMAIL,
+      phone: DEVELOPER_PHONE,
       name: 'Developer',
       roles: ['DEVELOPER'],
       state: 'ACTIVE',
@@ -138,6 +152,7 @@ async function main() {
     update: {},
     create: {
       email: SALES_EMAIL,
+      phone: SALES_PHONE,
       name: 'Sales',
       roles: ['SALES'],
       state: 'ACTIVE',
@@ -150,6 +165,7 @@ async function main() {
     update: {},
     create: {
       email: DESIGNER_EMAIL,
+      phone: DESIGNER_PHONE,
       name: 'Designer',
       roles: ['DESIGNER'],
       state: 'ACTIVE',

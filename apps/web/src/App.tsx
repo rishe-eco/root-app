@@ -10,9 +10,11 @@ import LibraryList from '@/pages/library/LibraryList';
 import LibraryReader from '@/pages/library/LibraryReader';
 import { useLocale, lp } from '@/lib/locale';
 import SignIn from '@/portal/SignIn';
+import SignInFactor from '@/portal/SignInFactor';
 import AcceptInvite from '@/portal/AcceptInvite';
-import RequestReset from '@/portal/RequestReset';
+import ForgotPassword from '@/portal/ForgotPassword';
 import ResetPassword from '@/portal/ResetPassword';
+import SetNewPassword from '@/portal/SetNewPassword';
 import PortalLayout from '@/portal/PortalLayout';
 import Contracts from '@/portal/Contracts';
 import ContractDetail from '@/portal/ContractDetail';
@@ -89,9 +91,14 @@ export default function App() {
 
         {/* Auth — standalone pages, not modals */}
         <Route path="portal" element={<SignIn />} />
+        {/* PD-20: reached only from SignIn, with the challenge id it got back — not a bookmarkable step of its own. */}
+        <Route path="portal/factor" element={<SignInFactor />} />
         <Route path="portal/invite/:token" element={<AcceptInvite />} />
-        <Route path="portal/reset" element={<RequestReset />} />
+        {/* Journeys build plan J1: one identifier field dispatches to the emailed-link path or the phone-code path. */}
+        <Route path="portal/reset" element={<ForgotPassword />} />
         <Route path="portal/reset/:token" element={<ResetPassword />} />
+        {/* PD-10 — the forced route whenever me.passwordChangeRequired, and the phone-code flow's own destination. */}
+        <Route path="portal/set-password" element={<SetNewPassword />} />
 
         {/* Authenticated customer area */}
         <Route path="app" element={<PortalLayout />}>

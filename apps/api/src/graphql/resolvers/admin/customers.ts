@@ -3,28 +3,45 @@ import { prisma } from '../../../lib/prisma.js';
 import { env } from '../../../lib/env.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { newLinkToken } from '../../../auth/tokens.js';
-import { sendMail } from '../../../lib/mail.js';
-import { resolveLocale, inviteEmail, reviewerInviteEmail } from '../../../lib/mailTemplates.js';
+import { notify } from '../../../lib/notify.js';
+import { resolveLocale } from '../../../lib/mailTemplates.js';
+import { normalizePhone } from '../../../lib/phone.js';
 
 /** Invites and revocations — customers and reviewers. Part of the L1 split of
  *  the former `admin.ts`; see `index.ts`. */
 export const customerMutations = {
+  /**
+   * Journeys build plan J1: phone is now the required identifier, email
+   * optional (Q1) — the SMS carries the link, email too if given, and the
+   * desk always shows the link either way (today's fallback, kept, for when
+   * no provider is configured or a send bounces).
+   */
   inviteCustomer: async (
     _p: unknown,
-    args: { email: string; name: string; clientName?: string; locale?: string },
+    args: { phone: string; name: string; clientName?: string; locale?: string; email?: string },
     ctx: Context,
   ) => {
     const admin = requireCapability(ctx, 'customers.manage');
-    const email = args.email.trim().toLowerCase();
+    const phone = normalizePhone(args.phone);
+    if (!phone) {
+      throw new GraphQLError('That does not look like a phone number.', {
+        extensions: { code: 'PHONE_INVALID' },
+      });
+    }
+    const email = args.email?.trim().toLowerCase() || null;
     // D9: default to the *inviting* admin's own locale, a better guess than
     // the schema's hardcoded 'fa', when the caller doesn't say otherwise.
     const locale = resolveLocale(args.locale ?? admin.locale);
 
-    const user = await prisma.user.upsert({
-      where: { email },
-      create: { email, name: args.name.trim(), clientName: args.clientName ?? null, locale },
-      update: { name: args.name.trim(), clientName: args.clientName ?? null, locale },
-    });
+    const existing = await prisma.user.findUnique({ where: { phone } });
+    const user = existing
+      ? await prisma.user.update({
+          where: { id: existing.id },
+          data: { name: args.name.trim(), clientName: args.clientName ?? null, locale, email },
+        })
+      : await prisma.user.create({
+          data: { phone, name: args.name.trim(), clientName: args.clientName ?? null, locale, email },
+        });
     if (user.state === 'ACTIVE') {
       throw new GraphQLError('That account is already active.', {
         extensions: { code: 'ALREADY_ACTIVE' },
@@ -37,14 +54,11 @@ export const customerMutations = {
       data: { userId: user.id, purpose: 'INVITE', tokenHash: hash, expiresAt },
     });
 
-    // Still returned unconditionally: the fallback for when mail bounces or
-    // no provider is configured, not something mail makes redundant.
+    // Still returned unconditionally: the fallback for when every channel
+    // bounces or no SMS provider is configured, not something notify()
+    // makes redundant.
     const inviteUrl = `${env.APP_ORIGIN}/${user.locale}/portal/invite/${raw}`;
-    try {
-      await sendMail({ to: user.email, ...inviteEmail(user.locale, { name: user.name, inviteUrl }) });
-    } catch (err) {
-      console.error('[mail] invite send failed', err);
-    }
+    await notify(user, { kind: 'INVITE_CUSTOMER', params: { name: user.name, inviteUrl } });
     return { userId: user.id, email: user.email, inviteUrl, expiresAt };
   },
 
@@ -90,11 +104,9 @@ export const customerMutations = {
     });
 
     const inviteUrl = `${env.APP_ORIGIN}/${user.locale}/portal/invite/${raw}`;
-    try {
-      await sendMail({ to: user.email, ...reviewerInviteEmail(user.locale, { name: user.name, inviteUrl }) });
-    } catch (err) {
-      console.error('[mail] reviewer-invite send failed', err);
-    }
+    // A reviewer never carries a phone (PD-20) — notify() sends email only,
+    // which is exactly what this call site needs.
+    await notify(user, { kind: 'INVITE_REVIEWER', params: { name: user.name, inviteUrl } });
     return { userId: user.id, email: user.email, inviteUrl, expiresAt };
   },
 

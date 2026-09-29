@@ -57,6 +57,10 @@ test('an admin can issue an invite and gets a link back', async ({ page }) => {
   const stamp = Date.now();
   const email = `invitee-${stamp}@example.com`;
 
+  // Journeys build plan J1: phone is now the required identifier on this
+  // form, email optional — a minimal touch to this otherwise-untouched spec
+  // so it keeps passing against Customers.tsx's new required field.
+  await page.locator('#i-phone').fill(`+9891${String(stamp).slice(-8)}`);
   await page.locator('#i-email').fill(email);
   await page.locator('#i-name').fill('New Person');
   await page.locator('#i-client').fill('New Studio');

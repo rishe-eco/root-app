@@ -4,8 +4,7 @@ import { prisma } from '../../lib/prisma.js';
 import { env } from '../../lib/env.js';
 import { requireCapability, type Context } from '../../context.js';
 import { can } from '../../lib/capabilities.js';
-import { sendMail } from '../../lib/mail.js';
-import { newCommentEmail } from '../../lib/mailTemplates.js';
+import { notify } from '../../lib/notify.js';
 import type { Block } from '../../lib/revision.js';
 
 /**
@@ -71,14 +70,14 @@ async function notifyNewComment(
 ) {
   await Promise.all(
     recipients.map((u) =>
-      sendMail({
-        to: u.email,
-        ...newCommentEmail(u.locale, {
+      notify(u, {
+        kind: 'NEW_COMMENT',
+        params: {
           recipientName: u.name,
           documentTitle: doc.title,
           threadUrl: threadUrl(u.locale, doc.roundId, doc.id, threadId),
-        }),
-      }).catch((err) => console.error('[mail] new-comment send failed', err)),
+        },
+      }),
     ),
   );
 }
