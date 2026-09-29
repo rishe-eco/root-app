@@ -496,11 +496,75 @@ export type Request = {
   contractId: string | null;
 };
 
+/**
+ * The wizard (journeys build plan J3). These mirror the API's derived views
+ * (`lib/steps.ts`, `attention.ts`, `statusSummary.ts`, `timeline.ts`) — the
+ * client renders them and never recomputes one.
+ */
+export type ContractSequence = 'DESIGN_FIRST' | 'AGREEMENT_FIRST';
+export type StepKind = 'REQUIREMENTS' | 'SCOPE' | 'DRAFT' | 'AGREEMENT' | 'DESIGN' | 'MOCKUP' | 'DEMO' | 'SUMMARY';
+export type WaitingOn = 'CUSTOMER' | 'ROOT';
+
+export type WizardStep = {
+  step: StepKind;
+  phaseId: string | null;
+  phaseNumber: number | null;
+  status: 'DONE' | 'CURRENT' | 'UPCOMING';
+  locked: boolean;
+  lockedAt: string | null;
+  takesInput: boolean;
+  iterationsUsed: number | null;
+  allowance: number | null;
+  finishedAt: string | null;
+};
+
+export type AttentionItem = {
+  kind: string;
+  variant: string;
+  contractId: string;
+  phaseId: string | null;
+  waitingOn: WaitingOn;
+  role: 'SALES' | 'DESIGNER' | 'DEVELOPER' | null;
+  since: string;
+  params: Array<{ key: string; value: string }>;
+};
+
+export type StatusSummary = {
+  started: boolean;
+  startedAt: string | null;
+  currentStep: StepKind | null;
+  currentPhaseId: string | null;
+  currentPhaseNumber: number | null;
+  nextMoveOn: WaitingOn | null;
+  waitingOnRoot: number;
+  waitingOnCustomer: number;
+  /** Calendar days (PD-19) — format with `timeZone: 'UTC'`. */
+  plannedStartAt: string | null;
+  plannedEndAt: string | null;
+  overdueCount: number;
+  lastProgressAt: string | null;
+  daysSinceProgress: number | null;
+};
+
+export type TimelineItem = {
+  id: string;
+  at: string;
+  kind: string;
+  by: WaitingOn;
+  step: StepKind | null;
+  phaseNumber: number | null;
+  number: number | null;
+};
+
+export type InternalNote = { id: string; body: string; createdAt: string; author: { id: string; name: string } };
+
 export type Contract = {
   id: string;
   ref: string;
   titleFa: string;
   titleEn: string;
+  /** Journeys build plan J3, PD-7 — which road; the wizard renders both. */
+  sequence: ContractSequence;
   status: ContractStatus;
   amount: string | null;
   customer: Pick<User, 'id' | 'name' | 'clientName'>;
@@ -524,6 +588,15 @@ export type Contract = {
   contractRevisions: ContractRevisionSummary[];
   designRevisions: DesignRevisionSummary[];
   pending: PendingReview | null;
+  // Journeys build plan J3 — present only on queries that select
+  // `WizardFields` (the detail, the view-as-customer and the workspace); the
+  // desk list selects `statusSummary` alone.
+  wizard?: WizardStep[];
+  statusSummary?: StatusSummary;
+  attention?: AttentionItem[];
+  timeline?: TimelineItem[];
+  /** Staff only in effect: an empty list for a customer, and under view-as. */
+  internalNotes?: InternalNote[];
   /** J2: the request this contract's project began as — read-only from here.
    *  Present only on the detail query; null for a project that never was a
    *  request and for anyone but its customer and `contracts.readAll`. */
@@ -640,6 +713,69 @@ export const DEPENDENCY_FIELDS = gql`
 `;
 
 /** One shape for the detail screen, so every mutation can return it whole. */
+/**
+ * The wizard's derived views (journeys build plan J3), kept out of
+ * `ContractFields` because the list query and every mutation would otherwise
+ * pay for them on each row. Selected by the detail, view-as-customer and
+ * workspace queries, and by the mutations whose result those screens show, so
+ * the status area moves with each act instead of being refetched.
+ */
+export const WIZARD_FIELDS = gql`
+  fragment WizardFields on Contract {
+    id
+    sequence
+    wizard {
+      step
+      phaseId
+      phaseNumber
+      status
+      locked
+      lockedAt
+      takesInput
+      iterationsUsed
+      allowance
+      finishedAt
+    }
+    statusSummary {
+      started
+      startedAt
+      currentStep
+      currentPhaseId
+      currentPhaseNumber
+      nextMoveOn
+      waitingOnRoot
+      waitingOnCustomer
+      plannedStartAt
+      plannedEndAt
+      overdueCount
+      lastProgressAt
+      daysSinceProgress
+    }
+    attention {
+      kind
+      variant
+      contractId
+      phaseId
+      waitingOn
+      role
+      since
+      params {
+        key
+        value
+      }
+    }
+    timeline {
+      id
+      at
+      kind
+      by
+      step
+      phaseNumber
+      number
+    }
+  }
+`;
+
 export const CONTRACT_FIELDS = gql`
   ${FEEDBACK_ITEM_FIELDS}
   ${DEPENDENCY_FIELDS}
@@ -648,6 +784,7 @@ export const CONTRACT_FIELDS = gql`
     ref
     titleFa
     titleEn
+    sequence
     status
     amount
     publishedAt
@@ -947,8 +1084,19 @@ export const CONTRACT_FIELDS = gql`
  */
 export const CONTRACT_WORKSPACE_FIELDS = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   fragment ContractWorkspaceFields on Contract {
     ...ContractFields
+    ...WizardFields
+    internalNotes {
+      id
+      body
+      createdAt
+      author {
+        id
+        name
+      }
+    }
     request {
       id
       status
@@ -1067,13 +1215,46 @@ export const REQUEST_FIELDS = gql`
 
 export const CONTRACT = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   ${REQUEST_FIELDS}
   query Contract($id: ID!) {
     contract(id: $id) {
       ...ContractFields
+      ...WizardFields
       request {
         ...RequestFields
       }
+    }
+  }
+`;
+
+/**
+ * View as customer (journeys build plan J3): the same fragments as the
+ * portal's own detail query, with the one argument that changes who the API
+ * reads through. No field is added or dropped here — that is the point: the
+ * screen it feeds is the portal's, and this query is byte-for-byte what a
+ * customer's would be.
+ */
+export const CONTRACT_AS_CUSTOMER = gql`
+  ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
+  ${REQUEST_FIELDS}
+  query ContractAsCustomer($id: ID!) {
+    contract(id: $id, asCustomer: true) {
+      ...ContractFields
+      ...WizardFields
+      request {
+        ...RequestFields
+      }
+    }
+  }
+`;
+
+export const ADD_INTERNAL_NOTE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation AddInternalNote($contractId: ID!, $body: String!) {
+    addInternalNote(contractId: $contractId, body: $body) {
+      ...ContractWorkspaceFields
     }
   }
 `;
@@ -1165,54 +1346,66 @@ export const RESET_PASSWORD = gql`
 
 export const CHOOSE_CONCEPT = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   mutation ChooseConcept($contractId: ID!, $conceptId: ID!) {
     chooseConcept(contractId: $contractId, conceptId: $conceptId) {
       ...ContractFields
+      ...WizardFields
     }
   }
 `;
 
 export const SET_PAGE_APPROVAL = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   mutation SetPageApproval($pageDesignId: ID!, $approved: Boolean!) {
     setPageApproval(pageDesignId: $pageDesignId, approved: $approved) {
       ...ContractFields
+      ...WizardFields
     }
   }
 `;
 
 export const APPROVE_CONTRACT = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   mutation ApproveContract($contractId: ID!) {
     approveContract(contractId: $contractId) {
       ...ContractFields
+      ...WizardFields
     }
   }
 `;
 
 export const SET_SCOPE_ITEM = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   mutation SetScopeItem($scopeItemId: ID!, $checked: Boolean!, $contractId: ID) {
     setScopeItem(scopeItemId: $scopeItemId, checked: $checked, contractId: $contractId) {
       ...ContractFields
+      ...WizardFields
     }
   }
 `;
 
 export const SIGN_CONTRACT = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   mutation SignContract($contractId: ID!, $typedName: String!) {
     signContract(contractId: $contractId, typedName: $typedName) {
       ...ContractFields
+      ...WizardFields
     }
   }
 `;
 
 export const ADD_COMMENT = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   mutation AddComment($contractId: ID!, $body: String!, $target: CommentTarget) {
     addComment(contractId: $contractId, body: $body, target: $target) {
       ...ContractFields
+      ...WizardFields
     }
   }
 `;
@@ -1222,6 +1415,14 @@ export const ALL_CONTRACTS = gql`
   query AllContracts {
     allContracts {
       ...ContractFields
+      # J3: the list sales works from shows the current step and whose move it
+      # is beside the status. Only the three fields it prints — the cache merges
+      # this into the fuller StatusSummary the workspace fetches.
+      statusSummary {
+        currentStep
+        currentPhaseNumber
+        nextMoveOn
+      }
     }
   }
 `;
@@ -2854,18 +3055,22 @@ export const PUBLISH_AMENDMENT = gql`
 
 export const APPROVE_AMENDMENT = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   mutation ApproveAmendment($amendmentId: ID!) {
     approveAmendment(amendmentId: $amendmentId) {
       ...ContractFields
+      ...WizardFields
     }
   }
 `;
 
 export const SIGN_AMENDMENT = gql`
   ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
   mutation SignAmendment($amendmentId: ID!, $typedName: String!) {
     signAmendment(amendmentId: $amendmentId, typedName: $typedName) {
       ...ContractFields
+      ...WizardFields
     }
   }
 `;

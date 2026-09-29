@@ -44,7 +44,9 @@ import ApiTokens from '@/desk/ApiTokens';
 import Templates, { TemplatesIndex } from '@/desk/templates/Templates';
 import TemplateTypesTab from '@/desk/templates/TypesTab';
 import TemplateScopeTab from '@/desk/templates/ScopeTab';
-import ContractWorkspace from '@/desk/workspace/ContractWorkspace';
+import ContractWorkspace, { WorkspaceIndex } from '@/desk/workspace/ContractWorkspace';
+import WorkspaceStepsTab from '@/desk/workspace/StepsTab';
+import WorkspaceNotesTab from '@/desk/workspace/NotesTab';
 import WorkspaceContractTab from '@/desk/workspace/ContractTab';
 import WorkspaceDesignTab from '@/desk/workspace/DesignTab';
 import WorkspaceScopeTab from '@/desk/workspace/ScopeTab';
@@ -129,14 +131,19 @@ export default function App() {
           <Route path="overview" element={<Overview />} />
           <Route path="contracts" element={<DeskContracts />} />
           <Route path="contracts/:id" element={<ContractWorkspace />}>
-            <Route index element={<Navigate to="contract" replace />} />
+            <Route index element={<WorkspaceIndex />} />
+            <Route path="steps" element={<WorkspaceStepsTab />} />
             <Route path="contract" element={<WorkspaceContractTab />} />
             <Route path="design" element={<WorkspaceDesignTab />} />
             <Route path="scope" element={<WorkspaceScopeTab />} />
             <Route path="phases" element={<WorkspacePhasesTab />} />
             <Route path="dependencies" element={<WorkspaceDependenciesTab />} />
             <Route path="activity" element={<WorkspaceActivityTab />} />
+            <Route path="notes" element={<WorkspaceNotesTab />} />
           </Route>
+          {/* Journeys build plan J3, view as customer: the portal's own screen,
+              answered by the API as the customer would be, read-only. */}
+          <Route path="contracts/:id/as-customer" element={<ContractDetail asCustomer />} />
           <Route path="requests" element={<DeskRequests />} />
           <Route path="requests/:id" element={<DeskRequestDetail />} />
           <Route path="customers" element={<Customers />} />

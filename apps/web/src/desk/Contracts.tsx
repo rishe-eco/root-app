@@ -20,6 +20,7 @@ import {
 import { ALL_STATUSES, fullDateTime, pick } from '@/lib/format';
 import StatusBadge from '@/components/StatusBadge';
 import { requestErrorMessage } from '@/components/RequestThread';
+import { captionFor } from '@/lib/wizard';
 
 /**
  * Journeys build plan S1: the list itself answers both `contracts.readAll`
@@ -323,6 +324,13 @@ export default function DeskContracts() {
                     // sales's job (setContractStatus needs contracts.author).
                     <StatusBadge status={c.status} />
                   )}
+                  {/* J3: the derived road position, beside the hand-set status
+                      it does not replace — the current step and whose move it is. */}
+                  {c.statusSummary && captionFor(t, locale, c.statusSummary) ? (
+                    <div className="t-caption desk-muted" data-testid="contract-step">
+                      {captionFor(t, locale, c.statusSummary)}
+                    </div>
+                  ) : null}
                 </td>
                 <td>{fullDateTime(c.updatedAt, locale)}</td>
                 <td>{c.publishedAt ? fullDateTime(c.publishedAt, locale) : '—'}</td>

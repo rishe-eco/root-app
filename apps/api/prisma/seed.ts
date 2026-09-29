@@ -229,6 +229,35 @@ async function main() {
       // fresh seed — the acceptance check "the seeded developer opens a demo".
       designerId: designer.id,
       developerId: developer.id,
+      // Journeys build plan J3, PD-7: this is the contract every legacy spec
+      // drives to signature, so it is on the legacy road — exactly what the
+      // migration makes of an existing row. The column's default is the new road.
+      sequence: 'DESIGN_FIRST',
+    },
+  });
+
+  // Journeys build plan J3: one contract on the new road, on the same customer's
+  // project (J2 lets a project hold several contracts) — what the wizard's e2e
+  // reads. **Created after RC-2026-014 and stamped older**: the project's
+  // primary contract is its earliest (`primaryContractId`), so this one must
+  // not come first by `createdAt`; and the customer's list is newest-updated
+  // first, so every spec that opens "the first contract" (02-contract-flow)
+  // still finds RC-2026-014, which the seed keeps touching below.
+  await prisma.contract.upsert({
+    where: { ref: 'RC-2026-021' },
+    update: {},
+    create: {
+      ref: 'RC-2026-021',
+      titleFa: 'فروشگاه آنلاین نهال',
+      titleEn: 'Nahal online shop',
+      customerId: customer.id,
+      projectId: project.id,
+      status: 'WAITING_ON_ROOT',
+      publishedAt: new Date(),
+      sequence: 'AGREEMENT_FIRST',
+      designerId: designer.id,
+      developerId: developer.id,
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
     },
   });
 

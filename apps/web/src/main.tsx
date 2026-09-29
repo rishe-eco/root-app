@@ -14,6 +14,7 @@ import './styles/base.css';
 import './styles/public.css';
 import './styles/portal.css';
 import './styles/desk.css';
+import './styles/wizard.css';
 // Last, so its @media print rules override the app's screen layout.
 import './styles/print.css';
 

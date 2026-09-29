@@ -1328,7 +1328,10 @@
     "REVISION_APPROVED": "Contract text v{{number}} approved",
     "CONTRACT_SIGNED": "Contract signed (v{{number}})",
     "DESIGN_PUBLISHED": "Design v{{number}} published",
-    "BUILD_PUBLISHED": "Build {{number}} published on the demo"
+    "BUILD_PUBLISHED": "Build {{number}} published on the demo",
+    "byCustomer": "Customer",
+    "byRoot": "Root",
+    "empty": "Nothing has happened yet."
   },
   "notes": {
     "title": "Internal notes",

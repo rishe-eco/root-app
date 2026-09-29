@@ -1,0 +1,149 @@
+/* The wizard (journeys build plan J3) — the step list, the status area, a
+   step's panel, the view-as-customer frame. One file for the pieces the
+   portal and the desk both render (components/StepList, StatusArea,
+   StepPanels, ViewAsBanner). Every value is a token; every offset is a
+   logical property, so Persian mirrors without a second sheet. */
+
+/* ---- the step list ------------------------------------------------------ */
+.stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.stepper-item {
+  flex: 1 1 9rem;
+  min-inline-size: 0;
+}
+
+.stepper-hit {
+  inline-size: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-raised);
+  color: var(--color-text-muted);
+  font: inherit;
+  text-align: start;
+}
+button.stepper-hit { cursor: pointer; transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease); }
+button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(--color-text); }
+
+.stepper-dot {
+  flex: none;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  background: var(--color-panel);
+  color: var(--color-text-subtle);
+}
+.stepper-text { display: flex; flex-direction: column; min-inline-size: 0; }
+.stepper-label { font-size: var(--text-small); font-weight: var(--weight-medium); color: var(--color-text); }
+.stepper-state { font-size: var(--text-caption); color: var(--color-text-subtle); }
+
+.stepper-done .stepper-dot { background: var(--color-secondary); color: var(--color-text-inverse); }
+.stepper-current .stepper-hit { border-color: var(--color-accent); }
+.stepper-current .stepper-dot { background: transparent; border: 2px solid var(--color-accent); color: var(--color-accent); }
+.stepper-upcoming .stepper-label { color: var(--color-text-muted); font-weight: var(--weight-regular); }
+.stepper-selected .stepper-hit { background: var(--color-panel); border-color: var(--color-border-strong); }
+.stepper-selected.stepper-current .stepper-hit { border-color: var(--color-accent); }
+
+/* ---- the status area ---------------------------------------------------- */
+.status-area {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-raised);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.status-area h2, .status-area h3 { margin: 0; }
+
+.status-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-4);
+}
+.status-fact { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; }
+.status-fact dt { font-size: var(--text-caption); color: var(--color-text-subtle); }
+.status-fact dd { margin: 0; font-size: var(--text-body); font-weight: var(--weight-medium); color: var(--color-text); overflow-wrap: anywhere; }
+.status-fact-alert dd { color: var(--color-error); }
+
+.attention { display: flex; flex-direction: column; gap: var(--space-2); }
+.attention-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.attention-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-inline-start: var(--space-4);
+  border-inline-start: 3px solid var(--color-border-strong);
+}
+.attention-customer { border-inline-start-color: var(--gold-600); }
+.attention-root { border-inline-start-color: var(--color-secondary); }
+.attention-text { font-size: var(--text-small); color: var(--color-text); }
+.attention-since { font-size: var(--text-caption); color: var(--color-text-subtle); }
+
+/* ---- a step's panel ------------------------------------------------------ */
+.step-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-raised);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.step-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.step-panel-head h2 { margin: 0; }
+.step-chip {
+  font-size: var(--text-caption);
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-panel);
+  color: var(--color-text-muted);
+}
+.step-chip-done { background: var(--color-secondary); color: var(--color-text-inverse); }
+.step-chip-current { background: var(--color-accent-soft); color: var(--color-accent); }
+
+.step-notyet { display: flex; align-items: flex-start; gap: var(--space-3); }
+.step-notyet-title { margin: 0; font-weight: var(--weight-medium); }
+.step-notyet .t-small { margin: 0; }
+
+/* ---- the desk's workspace header, and internal notes --------------------- */
+.workspace-head-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.notes { display: flex; flex-direction: column; gap: var(--space-4); }
+.notes h3, .notes p { margin: 0; }
+
+/* ---- view as customer ------------------------------------------------------ */
+.view-as-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-8);
+  background: var(--color-inverse);
+  color: var(--color-text-inverse);
+}
+.view-as-banner p { margin: 0; font-size: var(--text-small); }
+
+/* A disabled fieldset with no frame: it exists only to disable what is inside. */
+.view-as-scope { border: 0; margin: 0; padding: 0; min-inline-size: 0; }
+
+@media (max-width: 640px) {
+  .stepper-item { flex-basis: 100%; }
+  .view-as-banner { padding-inline: var(--space-6); }
+}

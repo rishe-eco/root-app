@@ -1328,7 +1328,10 @@
     "REVISION_APPROVED": "نسخه‌ی v{{number}} متن قرارداد تأیید شد",
     "CONTRACT_SIGNED": "قرارداد امضا شد (v{{number}})",
     "DESIGN_PUBLISHED": "نسخه‌ی v{{number}} طرح منتشر شد",
-    "BUILD_PUBLISHED": "بیلد {{number}} روی دمو منتشر شد"
+    "BUILD_PUBLISHED": "بیلد {{number}} روی دمو منتشر شد",
+    "byCustomer": "مشتری",
+    "byRoot": "ریشه",
+    "empty": "هنوز اتفاقی نیفتاده."
   },
   "notes": {
     "title": "یادداشت‌های داخلی",
