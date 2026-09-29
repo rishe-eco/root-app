@@ -98,7 +98,8 @@ S3    customer and staff management (and the Tools rename)  ✔ 2026-09-29 [S3.m
       ── M1 (S1 · J1 · T1 · S3) full suites green 2026-09-29: unit 472+38 · integration 476 · e2e 47
 J2    requests — a project before a contract                ✔ 2026-09-29 [J2.md]
 J3    steps, the wizard shell, status area, attention       ✔ 2026-09-29 [J3.md]
-S2    one feedback model, the §3.1 rule, answers, approval queue
+S2    one feedback model, the §3.1 rule, answers, approvals   ✔ 2026-09-30 [S2.md]
+      ── M2 (J2 · J3 · S2) full suites green 2026-09-30: unit 594+46 · integration 595 · e2e 67
 T1    template types, scope templates, ScopeItem.kind      ✔ 2026-09-29 [T1.md]
 J4    step 1 — requirements
 J5    step 2a — pages, features and deliverables
@@ -387,6 +388,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`J2.md`](J2.md) | requests; several contracts per project; `firstContractId` retired | ✔ built |
 | [`T2.md`](T2.md) | the theme catalogue (T2's half of T2+J8) | ✔ built |
 | [`J3.md`](J3.md) | steps, the wizard shell, status area, attention, notes, view-as-customer | ✔ built |
+| [`S2.md`](S2.md) | one feedback model, answers and the approval queue, `approveStepTx` | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |
