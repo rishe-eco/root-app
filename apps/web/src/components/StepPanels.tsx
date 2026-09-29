@@ -5,6 +5,9 @@ import type { Contract, StepKind, User, WizardStep } from '@/lib/queries';
 import { relativeTime } from '@/lib/format';
 import { stepLabel, type Audience } from '@/lib/wizard';
 import Lock from '@/components/Lock';
+import DemoViewport from '@/components/DemoViewport';
+import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
+import { can } from '@/lib/access';
 
 /**
  * One panel per wizard step (journeys build plan J3) — the portal's wizard and
@@ -43,7 +46,37 @@ export type StepPanelProps = {
   me: User;
 };
 
-const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {};
+/**
+ * S2: the demo step, per phase — the live site and its feedback. The customer
+ * comments and approves the step from here (`approveStep`, refused with a
+ * sentence while anything is open); staff see the same thread and answer it.
+ * Authoring the demo stays in the desk's Phases tab. J10 extends this panel
+ * with submission, readiness and its own approval preconditions.
+ */
+function DemoStepPanel({ contract, step, audience, me }: StepPanelProps) {
+  const phase = contract.project?.phases.find((p) => p.id === step.phaseId);
+  const demo = phase?.demos[0];
+  if (!phase || !demo) return <NotYet step={step} audience={audience} />;
+  return (
+    <>
+      <DemoViewport demo={demo} />
+      <DemoFeedbackPanel
+        demo={demo}
+        contractId={contract.id}
+        phaseId={phase.id}
+        audience={audience}
+        canAuthor={false}
+        canAnswer={audience === 'staff' && can(me, 'feedback.answer')}
+        answerDirect={can(me, 'answers.direct.demo')}
+        locked={step.locked}
+        canApprove={audience === 'customer'}
+        onChanged={() => undefined}
+      />
+    </>
+  );
+}
+
+const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = { DEMO: DemoStepPanel };
 
 function NotYet({ step, audience }: Pick<StepPanelProps, 'step' | 'audience'>) {
   const { t } = useTranslation();

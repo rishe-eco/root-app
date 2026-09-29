@@ -419,7 +419,7 @@
         "MISSING_DISPOSITION": "Someone submitted new feedback since this list loaded — reload and try again.",
         "CONCURRENT_BUILD": "Someone else declared a build at the same moment — try again.",
         "ALREADY_PUBLISHED": "This build is already published.",
-        "NOT_RATIFIED": "An item nobody has ratified yet can only be carried forward.",
+        "NOT_OPEN": "That item is no longer open — reload the queue.",
         "SCOPE_ITEM_NOT_IN_BUILD": "That item is no longer in build.",
         "DUPLICATE_DISPOSITION": "That item already has a disposition in this build.",
         "DECLINE_REASON_REQUIRED": "Say why it was declined.",
@@ -605,6 +605,29 @@
       "revokeConfirm": "Revoke {{name}}? Anything using it stops working immediately."
     },
     "navTickets": "Tickets",
+    "navApprovals": "Approvals",
+    "approvals": {
+      "title": "Answers waiting for approval",
+      "lede": "Answers from design and development outside their own step wait here. The customer sees nothing until you approve one, and the step cannot be approved while any is waiting.",
+      "empty": "Nothing is waiting for approval.",
+      "where": "{{ref}} · {{step}}",
+      "author": "Written by {{name}}",
+      "resolves": "Would mark the comment as: {{resolution}}",
+      "customerSaid": "The customer’s comments",
+      "approve": "Approve",
+      "editAndApprove": "Edit and approve",
+      "saveApprove": "Approve with these words",
+      "decline": "Send back…",
+      "reasonLabel": "Why (its author will read this)",
+      "confirmDecline": "Send it back",
+      "cancel": "Cancel",
+      "error": {
+        "ANSWER_NOT_PENDING": "Someone already decided this answer.",
+        "STEP_LOCKED": "The customer has approved this step, so nothing on it can change.",
+        "REASON_REQUIRED": "Say why — its author will read it.",
+        "EMPTY_COMMENT": "An answer needs some words."
+      }
+    },
     "tickets": {
       "title": "Support desk",
       "lede": "Every ticket, moving between channels, and the admin-request count.",
@@ -1028,24 +1051,65 @@
     "published": "Published",
     "publishNoFrame": "Author a review frame before publishing this demo.",
     "pagesTitle": "Pages",
+    "generalTitle": "The step as a whole",
+    "generalHelp": "Anything that is not about one page or line above.",
+    "generalCollapse": "Everything you write here is added to one shared conversation about this step — a new comment goes under the earlier ones, not into a new thread.",
     "addComment": "Add feedback",
+    "replyAction": "Add a comment",
+    "reopenAction": "Reply and reopen",
+    "reopenHint": {
+      "ADDRESSED": "Root marked this addressed. Replying reopens it.",
+      "DECLINED": "Root declined this. Replying reopens it, and Root will answer again.",
+      "MOVED": "This was moved to a change request. Replying reopens it here."
+    },
     "commentPlaceholder": "What did you notice?",
     "submit": "Submit",
     "cancel": "Cancel",
     "status": {
       "OPEN": "Open",
-      "RATIFIED": "Ratified",
       "ADDRESSED": "Addressed",
-      "ACCEPTED": "Accepted",
+      "DECLINED": "Declined",
+      "MOVED": "Moved to a change request",
+      "ACCEPTED": "Accepted"
+    },
+    "resolution": {
+      "ADDRESSED": "Addressed",
       "DECLINED": "Declined"
     },
+    "approval": {
+      "PENDING": "Waiting for sales to approve — the customer cannot see this yet.",
+      "DECLINED": "Sent back. Reason: {{reason}}",
+      "APPROVED": "Approved by {{name}} on {{date}}",
+      "editedFrom": "Edited by sales. Written as: {{text}}"
+    },
+    "answer": {
+      "action": "Answer",
+      "directHint": "The customer sees your answer at once.",
+      "pendingHint": "In this step your answer waits for sales to approve it. The customer will not see it until then.",
+      "placeholder": "Your answer",
+      "resolutionLabel": "Resolution",
+      "resolutionNone": "Just reply — leave it open",
+      "resolutionDeclined": "Declined (say why in the answer)",
+      "submit": "Send answer"
+    },
     "reopened": "Formally reopened",
-    "ratifiedLine": "Ratified by {{name}} on {{date}}",
-    "selectForRatify": "Select for ratification",
-    "ratifySelected": "Ratify {{n}} selected",
-    "addressedInBuild": "Addressed in build {{number}}",
-    "accept": "Confirm resolved",
+    "movedNote": "Moved to a change request.",
+    "addressedInBuild": "Addressed in build {{number}} by {{name}}",
     "acceptedLine": "Accepted by {{name}} on {{date}}",
+    "approveStep": "Approve this step",
+    "approveHelp": "Approving accepts every answer at once and locks this step. Afterwards, anything you want changed is a change request.",
+    "openCount_one": "{{n}} comment is still waiting for Root’s answer.",
+    "openCount_other": "{{n}} comments are still waiting for Root’s answer.",
+    "lockedNote": "This step is approved. To change anything now, open a change request.",
+    "error": {
+      "STEP_LOCKED": "This step is approved — open a change request instead.",
+      "STEP_HAS_OPEN_FEEDBACK": "Some of your comments are still waiting for Root’s answer. Once each has one, you can approve.",
+      "STEP_HAS_PENDING_ANSWERS": "Root is still finishing its answers on this step. Try again shortly.",
+      "DEMO_NOT_PUBLISHED": "This demo has not been published yet.",
+      "EMPTY_COMMENT": "Write something first.",
+      "INVALID_TARGET": "That is not something this step takes comments about.",
+      "NOT_FOUND": "That no longer exists — reload the page."
+    },
     "unpromptedTitle": "Unprompted changes — not yet in this frame",
     "writeUp": "Write up as a frame line",
     "intercept": {

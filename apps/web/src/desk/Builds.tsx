@@ -40,7 +40,7 @@ const KNOWN_ERROR_CODES = new Set([
   'MISSING_DISPOSITION',
   'CONCURRENT_BUILD',
   'ALREADY_PUBLISHED',
-  'NOT_RATIFIED',
+  'NOT_OPEN',
   'SCOPE_ITEM_NOT_IN_BUILD',
   'DUPLICATE_DISPOSITION',
 ]);
@@ -58,10 +58,9 @@ const DEFAULT_DISPOSITION: Disposition = { outcome: 'CARRIED_FORWARD', note: '',
 
 /**
  * One open feedback item, with the disposition the developer is about to
- * submit for it. D3's ratification gate stays visible here: a merely-OPEN
- * item may only be carried forward — the select below simply never offers
- * the other two options for one, rather than accepting a choice the server
- * would refuse as NOT_RATIFIED.
+ * submit for it. Since S2 a submission is its own ratification (PD-2), so every
+ * open item takes any disposition — and the disposition is the developer's
+ * answer, which the customer reads.
  */
 function DispositionRow({
   item,
@@ -76,7 +75,6 @@ function DispositionRow({
   value: Disposition;
   onChange: (d: Disposition) => void;
 }) {
-  const canAddressOrDecline = item.status === 'RATIFIED';
   const target = item.demoPage
     ? pick(item.demoPage, 'label', locale)
     : item.frameLine
@@ -103,12 +101,9 @@ function DispositionRow({
             onChange={(e) => onChange({ ...value, outcome: e.target.value as BuildChangeOutcome })}
           >
             <option value="CARRIED_FORWARD">{t('desk.builds.outcome.CARRIED_FORWARD')}</option>
-            {canAddressOrDecline ? (
-              <>
-                <option value="ADDRESSED">{t('desk.builds.outcome.ADDRESSED')}</option>
-                <option value="DECLINED">{t('desk.builds.outcome.DECLINED')}</option>
-              </>
-            ) : null}
+            <option value="ADDRESSED">{t('desk.builds.outcome.ADDRESSED')}</option>
+            <option value="DECLINED">{t('desk.builds.outcome.DECLINED')}</option>
+
           </select>
         </div>
         {value.outcome !== 'CARRIED_FORWARD' ? (
@@ -148,8 +143,10 @@ function BuildWorkspace({ phase }: { phase: BuildPhase }) {
   const { t } = useTranslation();
   const locale = useLocale();
 
+  // The demo step's open items on *this phase* — the same `where` declareBuild
+  // checks, so the list the developer sees is the list they owe.
   const queueQuery = useQuery<{ openFeedbackQueue: FeedbackItem[] }>(OPEN_FEEDBACK_QUEUE, {
-    variables: { projectId: phase.projectId },
+    variables: { projectId: phase.projectId, phaseId: phase.id },
   });
   const scopeQuery = useQuery<{ scopeItemsAwaitingBuild: ScopeItemAwaitingBuild[] }>(SCOPE_ITEMS_AWAITING_BUILD, {
     variables: { projectId: phase.projectId },

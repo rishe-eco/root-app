@@ -364,7 +364,15 @@ export default function ContractDetail({ asCustomer = false }: { asCustomer?: bo
                 return demo ? (
                   <>
                     <DemoViewport demo={demo} />
-                    <DemoFeedbackPanel demo={demo} contractId={contract.id} canAuthor={false} onChanged={() => void refetch()} />
+                    <DemoFeedbackPanel
+                      demo={demo}
+                      contractId={contract.id}
+                      phaseId={currentPhase!.id}
+                      audience="customer"
+                      canAuthor={false}
+                      asCustomer={asCustomer}
+                      onChanged={() => void refetch()}
+                    />
                   </>
                 ) : (
                   <p className="t-small muted">{t('detail.demoNone')}</p>

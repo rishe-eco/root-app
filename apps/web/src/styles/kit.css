@@ -503,11 +503,15 @@
 .feedback-comment { margin: 0; font-size: var(--text-small); }
 .feedback-comment-form { display: flex; flex-direction: column; gap: var(--space-2); }
 .feedback-intercept { display: flex; flex-direction: column; gap: var(--space-2); background: var(--color-panel); padding: var(--space-3); border-radius: var(--radius-md); }
-.feedback-ratify-check { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); }
 .feedback-status-open { background: var(--color-secondary-soft); color: var(--cyan-700); }
-.feedback-status-ratified { background: var(--gold-100); color: var(--gold-600); }
 .feedback-status-addressed, .feedback-status-accepted { background: var(--color-panel); color: var(--color-text-muted); }
-.feedback-status-declined { background: var(--color-panel); color: var(--color-text-muted); }
+.feedback-status-declined, .feedback-status-moved { background: var(--color-panel); color: var(--color-text-muted); }
+.feedback-panel { display: flex; flex-direction: column; gap: var(--space-3); }
+.feedback-resolution { margin-inline-start: var(--space-2); }
+/* A staff answer still waiting for sales, or sent back: visible to staff only, and visibly not yet the customer's. */
+.feedback-comment-pending, .feedback-comment-declined { border-inline-start: 2px solid var(--color-border); padding-inline-start: var(--space-2); opacity: 0.85; }
+.feedback-reopen-hint { margin: 0; }
+.feedback-approve { display: flex; flex-direction: column; gap: var(--space-2); padding-block-start: var(--space-3); border-block-start: 1px solid var(--color-border); }
 
 /* Tickets and the three channels (build plan L4) — same shape as the
    feedback-status badges above, over TicketStatus's own four values. */

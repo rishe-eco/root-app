@@ -6,6 +6,7 @@ export type DeskSection = {
     | 'overview'
     | 'contracts'
     | 'requests'
+    | 'approvals'
     | 'customers'
     | 'library'
     | 'review'
@@ -45,6 +46,10 @@ export const DESK_SECTIONS: DeskSection[] = [
   // (`contracts.readActive` only) never see. `contracts.readAll`, the same
   // capability the API's `allRequests` checks.
   { key: 'requests', capability: 'contracts.readAll' },
+  // Journeys build plan S2: the answer approval queue — answers written outside
+  // their author's own step wait here for sales. `feedback.approveAnswers`, the
+  // capability the API's `pendingAnswers` checks.
+  { key: 'approvals', capability: 'feedback.approveAnswers' },
   { key: 'customers', capability: 'customers.manage' },
   { key: 'library', capability: 'library.write' },
   { key: 'review', capability: 'review.participate' },
