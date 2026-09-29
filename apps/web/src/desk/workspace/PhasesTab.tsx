@@ -139,12 +139,15 @@ function DemoPageRow({
 }
 
 function DemoCard({
+  phaseId,
   demo,
   designOptions,
   editable,
   canConvertToTicket,
   onChanged,
 }: {
+  /** The phase this demo belongs to: feedback on a demo is approved (and locked) per phase. */
+  phaseId: string;
   demo: Demo;
   designOptions: PageDesignOption[];
   /** builds.author plus being this contract's developer (canAuthorBuild). */

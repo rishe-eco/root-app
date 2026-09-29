@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { useMutation } from '@apollo/client';
+import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
-import { pick, fullDateTime, formatCount } from '@/lib/format';
+import { pick, fullDateTime } from '@/lib/format';
 import {
   GENERATE_DEMO_FRAME,
   UPDATE_DEMO_FRAME_SUMMARY,
@@ -10,200 +10,38 @@ import {
   UPDATE_DEMO_FRAME_LINE,
   DELETE_DEMO_FRAME_LINE,
   PUBLISH_DEMO,
-  SUBMIT_FEEDBACK,
-  RATIFY_FEEDBACK,
-  ACCEPT_FEEDBACK,
-  CREATE_TICKET_FROM_FEEDBACK,
+  CONTRACT_FEEDBACK,
   type Demo,
   type DemoFrameLine,
   type DemoFrameLineKind,
   type FeedbackItem,
 } from '@/lib/queries';
+import FeedbackPanel, { errorCode, type FeedbackTarget } from '@/components/FeedbackPanel';
 
 /**
- * The review frame and feedback intake surface (build plan L3; spec §6),
- * shared by the desk phase board and the portal contract detail — the same
- * component `DemoViewport` already is for the live site itself. Named
- * without the bare word "review" — see schema.prisma's `DemoFrame` comment.
+ * The review frame and the demo step's feedback (build plan L3; spec §6),
+ * shared by the desk phase board, the portal contract detail and the wizard's
+ * demo step — the same component `DemoViewport` already is for the live site
+ * itself. Named without the bare word "review" — see schema.prisma's
+ * `DemoFrame` comment.
  *
- * Two modes over one shape: `canAuthor` (staff, `builds.author` and the
- * project's own developer — journeys build plan S1's `canAuthorBuild`)
- * reveals generation, hand-authored lines and the publish gate; everyone who
- * can see a published demo at all may comment and, per D3, ratify (the
- * decider is the project's own customer or staff — an ownership edge, never
- * a role, checked server-side; this component does not attempt to guess who
- * "the decider" is beyond offering the control to whoever is looking).
+ * **Since S2 this is a thin wrapper.** Everything about *feedback* — the
+ * threads, commenting and reopening, Root's answers, the interception prompt,
+ * the step's approval — is the generic `FeedbackPanel`; what stays here is what
+ * is particular to a demo: generating and authoring the frame (`canAuthor`,
+ * `builds.author` and the project's own developer, journeys build plan S1),
+ * publishing it, and turning the demo's pages and frame lines into the
+ * panel's `targets`.
  *
- * A ratified item becoming a change ticket is a third, separate capability
- * (`tickets.answer` — sales's job, not the developer authoring this frame),
- * so it is its own prop, `canConvertToTicket`, rather than folded into
- * `canAuthor`.
+ * The items come from the contract's own `feedbackItems` (one model for every
+ * step) rather than from the demo tree, because a demo's `general` comments
+ * belong to the step, not to any page — and asking for them the same way the
+ * other steps will keeps this panel from knowing two ways to read feedback.
  */
 
 const KIND_ORDER: DemoFrameLineKind[] = ['NEW', 'KNOWN_MISSING', 'TEMPORARY', 'DECIDED'];
 
 type T = (key: string, opts?: Record<string, unknown>) => string;
-
-/** House rule 6: the API returns a code and parameters; this is the one
- *  place that turns them into a sentence. */
-function interceptionSentence(
-  t: T,
-  locale: 'fa' | 'en',
-  reason: 'DECIDED' | 'TEMPORARY',
-  scopeItem: { labelFa: string; labelEn: string; decidedAt: string | null; decidedNote: string | null },
-): string {
-  const label = pick(scopeItem, 'label', locale);
-  if (reason === 'DECIDED') {
-    const date = scopeItem.decidedAt ? fullDateTime(scopeItem.decidedAt, locale) : '';
-    return t('feedback.intercept.decided', { label, date, note: scopeItem.decidedNote ?? '' });
-  }
-  return t('feedback.intercept.temporary', { label });
-}
-
-/**
- * The customer's own half of L3b.2's first rule: an ADDRESSED item shows a
- * button, never an automatic transition — acceptFeedback is a distinct
- * mutation call, at a distinct moment, from whoever is looking. Available
- * to staff too (the same ownership-or-staff shape every mutation in this
- * panel already uses).
- */
-function AcceptButton({ itemId, t }: { itemId: string; t: T }) {
-  const [accept, { loading }] = useMutation(ACCEPT_FEEDBACK);
-  return (
-    <button
-      type="button"
-      className="btn btn-secondary btn-sm"
-      disabled={loading}
-      onClick={() => accept({ variables: { itemId } })}
-    >
-      {t('feedback.accept')}
-    </button>
-  );
-}
-
-/**
- * Build plan L4: "a ratified item becomes a change ticket — it is the
- * brief." Staff-only, and only while the item is RATIFIED and has not
- * already been converted (`item.ticket`) — the unique `sourceFeedbackItemId`
- * on the server is the real backstop; this is only what keeps the form from
- * being offered a second time. currentState/desiredState are written here,
- * by hand — see docs/development/L4.md for why this stage does not
- * auto-generate them from the comment thread.
- */
-function ConvertToTicketForm({ itemId, t }: { itemId: string; t: T }) {
-  const [open, setOpen] = useState(false);
-  const [currentState, setCurrentState] = useState('');
-  const [desiredState, setDesiredState] = useState('');
-  const [lang, setLang] = useState<'fa' | 'en'>('en');
-  const [error, setError] = useState<string | null>(null);
-  const [convert, { loading, data }] = useMutation(CREATE_TICKET_FROM_FEEDBACK);
-
-  if (data) {
-    return <span className="badge">{t('feedback.convertedToTicket')}</span>;
-  }
-
-  if (!open) {
-    return (
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>
-        {t('feedback.convertToTicket')}
-      </button>
-    );
-  }
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!currentState.trim() || !desiredState.trim()) return;
-    try {
-      await convert({ variables: { itemId, currentState: currentState.trim(), desiredState: desiredState.trim(), lang } });
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  return (
-    <form className="card editor-card auth-form" onSubmit={submit}>
-      <div className="field">
-        <label className="label">{t('feedback.briefCurrentState')}</label>
-        <textarea className="input" rows={2} value={currentState} onChange={(e) => setCurrentState(e.target.value)} />
-      </div>
-      <div className="field">
-        <label className="label">{t('feedback.briefDesiredState')}</label>
-        <textarea className="input" rows={2} value={desiredState} onChange={(e) => setDesiredState(e.target.value)} />
-      </div>
-      <div className="field">
-        <label className="label">{t('desk.builds.noteLangLabel')}</label>
-        <select className="input" value={lang} onChange={(e) => setLang(e.target.value as 'fa' | 'en')}>
-          <option value="en">{t('desk.builds.lang.en')}</option>
-          <option value="fa">{t('desk.builds.lang.fa')}</option>
-        </select>
-      </div>
-      {error ? <p className="error">{error}</p> : null}
-      <div className="workspace-row">
-        <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
-          {t('feedback.convertToTicket')}
-        </button>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => setOpen(false)}>
-          {t('feedback.cancel')}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function FeedbackThread({
-  item,
-  t,
-  locale,
-  canConvertToTicket,
-}: {
-  item: FeedbackItem;
-  t: T;
-  locale: 'fa' | 'en';
-  canConvertToTicket: boolean;
-}) {
-  return (
-    <div className="feedback-thread">
-      <div className="feedback-thread-head">
-        <span className={`badge feedback-status-${item.status.toLowerCase()}`}>
-          {t(`feedback.status.${item.status}`)}
-        </span>
-        {item.reopenedScopeItem ? <span className="t-caption">{t('feedback.reopened')}</span> : null}
-      </div>
-      {item.comments.map((c) => (
-        <p className="feedback-comment" key={c.id}>
-          <span className="t-eyebrow">{c.author.name}</span> — {c.body}
-        </p>
-      ))}
-      {item.ratifiedAt ? (
-        <p className="t-caption">
-          {t('feedback.ratifiedLine', { name: item.ratifiedBy?.name ?? '', date: fullDateTime(item.ratifiedAt, locale) })}
-        </p>
-      ) : null}
-      {/* Build plan L3b.2's first rule, shown as two separate facts — the
-          developer's claim, never presented as the customer's acceptance. */}
-      {item.addressedInBuild ? (
-        <p className="t-caption">
-          {t('feedback.addressedInBuild', { number: item.addressedInBuild.number })}
-        </p>
-      ) : null}
-      {item.status === 'ADDRESSED' ? <AcceptButton itemId={item.id} t={t} /> : null}
-      {item.acceptedAt ? (
-        <p className="t-caption">
-          {t('feedback.acceptedLine', { name: item.acceptedBy?.name ?? '', date: fullDateTime(item.acceptedAt, locale) })}
-        </p>
-      ) : null}
-      {/* Build plan L4: a ratified item may become a change ticket — the
-          brief. `tickets.answer` (sales), not `canAuthor` (the frame's own
-          builds.author) — never offered for an item already converted. */}
-      {canConvertToTicket && item.status === 'RATIFIED' && !item.ticket ? (
-        <ConvertToTicketForm itemId={item.id} t={t} />
-      ) : item.ticket ? (
-        <span className="badge">{t('feedback.convertedToTicket')}</span>
-      ) : null}
-    </div>
-  );
-}
 
 /**
  * Editing a line in place — an inline form, the same convention every other
@@ -252,76 +90,49 @@ function FrameLineEditor({
   );
 }
 
-function CommentForm({
-  t,
-  onSubmit,
-  loading,
-}: {
-  t: T;
-  onSubmit: (body: string) => void;
-  loading: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [body, setBody] = useState('');
-
-  if (!open) {
-    return (
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>
-        {t('feedback.addComment')}
-      </button>
-    );
-  }
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!body.trim()) return;
-    onSubmit(body.trim());
-    setBody('');
-    setOpen(false);
-  }
-
-  return (
-    <form className="feedback-comment-form" onSubmit={submit}>
-      <textarea
-        className="input"
-        rows={2}
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder={t('feedback.commentPlaceholder')}
-      />
-      <div className="workspace-row">
-        <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
-          {t('feedback.submit')}
-        </button>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => setOpen(false)}>
-          {t('feedback.cancel')}
-        </button>
-      </div>
-    </form>
-  );
-}
-
 export default function DemoFeedbackPanel({
   demo,
   contractId,
+  phaseId,
+  audience,
   canAuthor,
+  canAnswer = false,
+  answerDirect = false,
   canConvertToTicket = false,
+  locked = false,
+  canApprove = false,
+  asCustomer = false,
   onChanged,
 }: {
   demo: Demo;
-  /** The contract this panel is shown on. The frame, publish and ratify
-   *  mutations return `Contract!`, and a project can hold two contracts
-   *  (J2), so each is told which one to hand back — the one on screen. */
+  /** The contract this panel is shown on. The frame and publish mutations
+   *  return `Contract!`, and a project can hold two contracts (J2), so each is
+   *  told which one to hand back — the one on screen. */
   contractId: string;
+  /** The phase this demo belongs to — a demo is approved once per phase, and
+   *  its feedback is keyed on it. */
+  phaseId: string;
+  /** Who is looking. The customer raises feedback; staff answer it. */
+  audience: 'customer' | 'staff';
   canAuthor: boolean;
-  /** tickets.answer — a ratified item may become a change ticket. A
-   *  distinct capability from the frame's own `canAuthor`; see the module
-   *  comment above. Optional (default false): the portal's own call site
-   *  never offers this, matching its canAuthor={false}. */
+  /** `feedback.answer`, and whether that answer is direct in the demo step
+   *  (`answers.direct.demo`) — the answer box says which. */
+  canAnswer?: boolean;
+  answerDirect?: boolean;
+  /** tickets.answer — an open item may become a change request. Optional
+   *  (default false): the portal's call sites never offer it. */
   canConvertToTicket?: boolean;
-  /** Called after a comment is written for the first time against a target
-   *  (submitFeedback does not return Contract! — see queries.ts's own note
-   *  — so the caller's query needs an explicit nudge to see the new item). */
+  /** This phase's demo is approved (a `StepApproval` exists): no comment, no
+   *  answer. Legacy contracts never lock. */
+  locked?: boolean;
+  /** The customer may approve the demo step from here (the wizard's panel). */
+  canApprove?: boolean;
+  /** Reading through view-as-customer: ask the API as the customer would be
+   *  asked, so a pending answer is as invisible here as on the customer's own
+   *  screen. */
+  asCustomer?: boolean;
+  /** Called after something changed that the nudged query cannot see on its
+   *  own (the parent's contract query). */
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
@@ -334,15 +145,21 @@ export default function DemoFeedbackPanel({
   const [updateLine] = useMutation(UPDATE_DEMO_FRAME_LINE, named);
   const [deleteLine] = useMutation(DELETE_DEMO_FRAME_LINE, named);
   const [publish, { loading: publishing }] = useMutation(PUBLISH_DEMO, named);
-  const [submitFeedback, { loading: submitting }] = useMutation(SUBMIT_FEEDBACK);
-  const [ratify, { loading: ratifying }] = useMutation(RATIFY_FEEDBACK, named);
+
+  // One model for every step: the demo's feedback is this contract's DEMO
+  // feedback for this phase. `cache-and-network` because a first comment on a
+  // target creates an item the cache has never seen.
+  const { data, refetch } = useQuery<{ contract: { id: string; feedbackItems: FeedbackItem[] } }>(CONTRACT_FEEDBACK, {
+    variables: { id: contractId, step: 'DEMO', phaseId, asCustomer: asCustomer || null },
+    fetchPolicy: 'cache-and-network',
+  });
+  const items = data?.contract.feedbackItems ?? [];
+  const changed = () => {
+    void refetch();
+    onChanged();
+  };
 
   const [publishError, setPublishError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [pending, setPending] = useState<
-    Record<string, { reason: 'DECIDED' | 'TEMPORARY'; item: { labelFa: string; labelEn: string; decidedAt: string | null; decidedNote: string | null }; body: string }>
-  >({});
-
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [addingLineOpen, setAddingLineOpen] = useState(false);
   const [newLineKind, setNewLineKind] = useState<DemoFrameLineKind>('NEW');
@@ -366,71 +183,67 @@ export default function DemoFeedbackPanel({
     setWriteUpEn(entry.noteLang === 'en' ? (entry.note ?? '') : '');
   }
 
-  async function onSubmitTarget(
-    target: { targetDemoPageId?: string; targetFrameLineId?: string },
-    body: string,
-    confirmReopen = false,
-  ) {
-    const key = target.targetDemoPageId ?? target.targetFrameLineId!;
-    const res = await submitFeedback({
-      variables: { demoId: demo.id, body, confirmReopen, ...target },
-    });
-    const result = res.data?.submitFeedback as
-      | { item: unknown; intercepted: boolean; interceptionReason: 'DECIDED' | 'TEMPORARY' | null; interceptionScopeItem: { labelFa: string; labelEn: string; decidedAt: string | null; decidedNote: string | null } | null }
-      | undefined;
-    if (!result) return;
-    if (result.intercepted && !confirmReopen && result.interceptionReason && result.interceptionScopeItem) {
-      setPending((p) => ({ ...p, [key]: { reason: result.interceptionReason!, item: result.interceptionScopeItem!, body } }));
-      return;
-    }
-    setPending((p) => {
-      const next = { ...p };
-      delete next[key];
-      return next;
-    });
-    onChanged();
-  }
-
-  function toggle(id: string) {
-    setSelected((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  async function onRatify() {
-    if (selected.size === 0) return;
-    await ratify({ variables: { demoId: demo.id, itemIds: [...selected] } });
-    setSelected(new Set());
-  }
-
   async function onPublish() {
     setPublishError(null);
     try {
       await publish({ variables: { demoId: demo.id } });
     } catch (err) {
-      const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })?.graphQLErrors?.[0]?.extensions?.code;
-      setPublishError(code === 'NO_FRAME' ? t('feedback.publishNoFrame') : (err as Error).message);
+      setPublishError(errorCode(err) === 'NO_FRAME' ? t('feedback.publishNoFrame') : (err as Error).message);
     }
   }
 
   const lines = [...(demo.frame?.lines ?? [])].sort(
     (a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.position - b.position,
   );
-  const linesByKind = new Map<DemoFrameLineKind, DemoFrameLine[]>();
-  for (const line of lines) {
-    const bucket = linesByKind.get(line.kind) ?? [];
-    bucket.push(line);
-    linesByKind.set(line.kind, bucket);
-  }
 
-  const allItems: FeedbackItem[] = [
-    ...demo.feedbackItems,
-    ...lines.map((l) => l.feedbackItem).filter((i): i is FeedbackItem => i !== null),
-  ];
-  const openCount = allItems.filter((i) => i.status === 'OPEN').length;
+  // The panel's targets: the frame's lines (by bucket), then the declared
+  // pages — both only once the demo is published, the same gate the API holds.
+  const targets: FeedbackTarget[] = [];
+  for (const line of lines) {
+    targets.push({
+      key: `line:${line.id}`,
+      group: t(`feedback.kind.${line.kind}`),
+      label: pick(line, 'text', locale),
+      caption: line.scopeItem?.decidedAt
+        ? t('feedback.decidedOn', { date: fullDateTime(line.scopeItem.decidedAt, locale) })
+        : undefined,
+      actions: canAuthor ? (
+        <span className="workspace-row" style={{ gap: '0.25rem' }}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditingLineId(line.id)}>
+            {t('workspace.edit')}
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => deleteLine({ variables: { lineId: line.id } })}>
+            {t('workspace.delete')}
+          </button>
+        </span>
+      ) : undefined,
+      editor:
+        editingLineId === line.id ? (
+          <FrameLineEditor
+            line={line}
+            t={t}
+            onCancel={() => setEditingLineId(null)}
+            onSave={(textFa, textEn) => {
+              updateLine({ variables: { lineId: line.id, textFa, textEn } });
+              setEditingLineId(null);
+            }}
+          />
+        ) : undefined,
+      input: { demoId: demo.id, frameLineId: line.id },
+      item: items.find((i) => i.frameLine?.id === line.id) ?? null,
+    });
+  }
+  if (demo.publishedAt) {
+    demo.pages.forEach((page, index) => {
+      targets.push({
+        key: `page:${page.id}`,
+        group: index === 0 ? t('feedback.pagesTitle') : undefined,
+        label: pick(page, 'label', locale),
+        input: { demoId: demo.id, demoPageId: page.id },
+        item: items.find((i) => i.demoPage?.id === page.id) ?? null,
+      });
+    });
+  }
 
   return (
     <div className="demo-frame-panel">
@@ -574,128 +387,25 @@ export default function DemoFeedbackPanel({
         </div>
       ) : null}
 
-      {demo.frame ? (
-        <div className="demo-frame-lines">
-          {(demo.frame.summaryFa || demo.frame.summaryEn) ? (
-            <p className="t-small">{pick({ textFa: demo.frame.summaryFa ?? '', textEn: demo.frame.summaryEn ?? '' }, 'text', locale)}</p>
-          ) : null}
-          {KIND_ORDER.filter((k) => (linesByKind.get(k) ?? []).length > 0).map((kind) => (
-            <div key={kind} className="demo-frame-bucket">
-              <p className="t-eyebrow">{t(`feedback.kind.${kind}`)}</p>
-              {(linesByKind.get(kind) ?? []).map((line) => (
-                <div className="demo-frame-line" key={line.id}>
-                  {editingLineId === line.id ? (
-                    <FrameLineEditor
-                      line={line}
-                      t={t}
-                      onCancel={() => setEditingLineId(null)}
-                      onSave={(textFa, textEn) => {
-                        updateLine({ variables: { lineId: line.id, textFa, textEn } });
-                        setEditingLineId(null);
-                      }}
-                    />
-                  ) : (
-                    <div className="demo-frame-line-head">
-                      <span>{pick(line, 'text', locale)}</span>
-                      {line.scopeItem?.decidedAt ? (
-                        <span className="t-caption">
-                          {t('feedback.decidedOn', { date: fullDateTime(line.scopeItem.decidedAt, locale) })}
-                        </span>
-                      ) : null}
-                      {canAuthor ? (
-                        <span className="workspace-row" style={{ gap: '0.25rem' }}>
-                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditingLineId(line.id)}>
-                            {t('workspace.edit')}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => deleteLine({ variables: { lineId: line.id } })}
-                          >
-                            {t('workspace.delete')}
-                          </button>
-                        </span>
-                      ) : null}
-                    </div>
-                  )}
-
-                  {line.feedbackItem ? (
-                    <>
-                      <FeedbackThread item={line.feedbackItem} t={t} locale={locale} canConvertToTicket={canConvertToTicket} />
-                      {line.feedbackItem.status === 'OPEN' ? (
-                        <label className="feedback-ratify-check">
-                          <input type="checkbox" checked={selected.has(line.feedbackItem.id)} onChange={() => toggle(line.feedbackItem!.id)} />
-                          {t('feedback.selectForRatify')}
-                        </label>
-                      ) : null}
-                    </>
-                  ) : pending[line.id] ? (
-                    <div className="feedback-intercept">
-                      <p className="t-small">{interceptionSentence(t, locale, pending[line.id].reason, pending[line.id].item)}</p>
-                      <div className="workspace-row">
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={submitting}
-                          onClick={() => onSubmitTarget({ targetFrameLineId: line.id }, pending[line.id].body, true)}
-                        >
-                          {t('feedback.confirmReopen')}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setPending((p) => { const n = { ...p }; delete n[line.id]; return n; })}
-                        >
-                          {t('feedback.cancel')}
-                        </button>
-                      </div>
-                    </div>
-                  ) : demo.publishedAt ? (
-                    <CommentForm t={t} loading={submitting} onSubmit={(body) => onSubmitTarget({ targetFrameLineId: line.id }, body)} />
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
+      {demo.frame && (demo.frame.summaryFa || demo.frame.summaryEn) ? (
+        <p className="t-small">{pick({ textFa: demo.frame.summaryFa ?? '', textEn: demo.frame.summaryEn ?? '' }, 'text', locale)}</p>
       ) : null}
 
-      {demo.publishedAt && demo.pages.length > 0 ? (
-        <div className="demo-frame-pages">
-          <p className="t-eyebrow">{t('feedback.pagesTitle')}</p>
-          {demo.pages.map((page) => {
-            const item = demo.feedbackItems.find((i) => i.demoPage?.id === page.id) ?? null;
-            return (
-              <div className="demo-frame-line" key={page.id}>
-                <div className="demo-frame-line-head">
-                  <span>{pick(page, 'label', locale)}</span>
-                </div>
-                {item ? (
-                  <>
-                    <FeedbackThread item={item} t={t} locale={locale} canConvertToTicket={canConvertToTicket} />
-                    {item.status === 'OPEN' ? (
-                      <label className="feedback-ratify-check">
-                        <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggle(item.id)} />
-                        {t('feedback.selectForRatify')}
-                      </label>
-                    ) : null}
-                  </>
-                ) : (
-                  <CommentForm t={t} loading={submitting} onSubmit={(body) => onSubmitTarget({ targetDemoPageId: page.id }, body)} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {openCount > 0 ? (
-        <div className="workspace-row">
-          <button className="btn btn-primary btn-sm" type="button" onClick={onRatify} disabled={ratifying || selected.size === 0}>
-            {t('feedback.ratifySelected', { n: formatCount(selected.size, locale) })}
-          </button>
-        </div>
-      ) : null}
+      <FeedbackPanel
+        contractId={contractId}
+        step="DEMO"
+        phaseId={phaseId}
+        targets={targets}
+        generalItem={items.find((i) => i.general) ?? null}
+        showGeneral={!!demo.publishedAt || audience === 'staff'}
+        canRaise={audience === 'customer' && !!demo.publishedAt}
+        canAnswer={canAnswer}
+        answerDirect={answerDirect}
+        canConvertToTicket={canConvertToTicket}
+        locked={locked}
+        canApprove={canApprove}
+        onChanged={changed}
+      />
     </div>
   );
 }
