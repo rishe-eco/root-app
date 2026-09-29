@@ -741,10 +741,14 @@ export default function RequirementsEditor({ contract, me }: { contract: Contrac
   const { t } = useTranslation();
   return (
     <div className="req-editor" data-testid="requirements-editor">
-      <BriefForm key={contract.brief?.updatedAt ?? 'new'} contract={contract} me={me} />
+      {/* No `key` on the forms: after a save the form already holds what the server
+          now holds, and remounting would drop the "saved" line the person is
+          reading. (A change made elsewhere — a due date edited on the dependency
+          board — shows on the next visit, not live.) */}
+      <BriefForm contract={contract} me={me} />
       <ExtrasEditor contract={contract} />
       <PhasesEditor contract={contract} />
-      {can(me, 'money.read') ? <PlanEditor key={contract.paymentPlan?.id ?? 'no-plan'} contract={contract} /> : null}
+      {can(me, 'money.read') ? <PlanEditor contract={contract} /> : null}
       <HandOver contract={contract} />
       <p className="t-caption desk-muted">{t('brief.form.savedSeparately')}</p>
     </div>

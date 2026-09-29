@@ -179,7 +179,9 @@ export default function RequirementsPanel({ contract, step, audience, me, asCust
       add(dep.briefKey!, group, commitmentTitle(dep, brief, locale), <CommitmentValue dep={dep} locale={locale} t={t} />);
     }
   };
-  provided(customerRows, staff ? t('brief.group.customerProvidesStaff') : t('brief.group.customerProvides'));
+  // The customer's own group is titled exactly as the portal's rail card is
+  // (`detail.commitmentsCap`) — the same words for the same list.
+  provided(customerRows, staff ? t('brief.group.customerProvidesStaff') : t('detail.commitmentsCap'));
   provided(rootRows, t('brief.group.rootProvides'));
 
   if (brief) {

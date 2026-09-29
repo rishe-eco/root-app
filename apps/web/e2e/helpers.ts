@@ -149,12 +149,10 @@ export function insertOverdueCustomerCommitment() {
  * into the database, because the desk screens that author a demo are L2/L3's
  * and have their own coverage.
  *
- * It also makes the new-road contract (`WIZARD_CONTRACT_REF`) the project's
- * **first** contract: phases and demos belong to that one until J4 (`ownsProjectWork`),
- * and the seed deliberately makes the legacy contract first so every older spec
- * still finds it. Backdating the wizard contract here moves the demo — and the
- * demo step's approval — onto the road this spec drives. The customer's list is
- * ordered by `updatedAt`, which this does not touch.
+ * The phase names the new-road contract (`WIZARD_CONTRACT_REF`) since J4 —
+ * `Phase.contractId` — so the demo, and the demo step's approval, are on the
+ * road this spec drives. (Before J4 the project's *first* contract owned every
+ * phase, and this helper had to backdate the wizard contract to make it one.)
  */
 export const E2E_PHASE_ID = 'e2e-phase';
 export function insertPublishedDemo() {
@@ -162,9 +160,9 @@ export function insertPublishedDemo() {
   execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
     cwd: API_DIR,
     input: `
-      UPDATE "Contract" SET "createdAt" = now() - interval '1 year' WHERE "ref" = '${WIZARD_CONTRACT_REF}';
-      INSERT INTO "Phase" ("id", "projectId", "number", "titleFa", "titleEn", "updatedAt")
-      VALUES ('${E2E_PHASE_ID}', 'seed-project-nahal', 1, 'فاز ۱', 'Phase 1', now());
+      INSERT INTO "Phase" ("id", "projectId", "contractId", "number", "titleFa", "titleEn", "updatedAt")
+      SELECT '${E2E_PHASE_ID}', 'seed-project-nahal', c."id", 1, 'فاز ۱', 'Phase 1', now()
+      FROM "Contract" c WHERE c."ref" = '${WIZARD_CONTRACT_REF}';
       INSERT INTO "Demo" ("id", "phaseId", "stagingUrl", "publishedAt", "updatedAt")
       VALUES ('e2e-demo', '${E2E_PHASE_ID}', 'https://staging.example.com', now(), now());
       INSERT INTO "DemoPage" ("id", "demoId", "key", "labelFa", "labelEn", "canonicalPath")
@@ -172,6 +170,30 @@ export function insertPublishedDemo() {
              ('e2e-page-about', 'e2e-demo', 'about', 'درباره', 'About page', '/about');
       INSERT INTO "DemoFrame" ("id", "demoId", "authoredById", "updatedAt")
       SELECT 'e2e-frame', 'e2e-demo', u."id", now() FROM "User" u WHERE u."email" = 'admin@root.local';
+    `,
+    stdio: 'pipe',
+    timeout: 60_000,
+  });
+}
+
+/**
+ * A new-road contract sales has *not* handed over yet (journeys build plan J4):
+ * `AGREEMENT_FIRST`, unpublished, no brief, on the seeded customer's project.
+ * `createContract` still makes legacy contracts (J7 flips that), and the seeded
+ * wizard contract is already published — so the hand-over, and the
+ * `BRIEF_MISSING` refusal in front of it, need one put in the database.
+ */
+export const DRAFT_CONTRACT_REF = 'RC-2026-022';
+export const DRAFT_CONTRACT_TITLE = 'Nahal mobile app';
+export function insertDraftNewRoadContract() {
+  if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
+    cwd: API_DIR,
+    input: `
+      INSERT INTO "Contract" ("id", "ref", "titleFa", "titleEn", "customerId", "projectId", "sequence", "status", "updatedAt")
+      SELECT 'e2e-draft-contract', '${DRAFT_CONTRACT_REF}', 'اپلیکیشن موبایل نهال', '${DRAFT_CONTRACT_TITLE}',
+             c."customerId", c."projectId", 'AGREEMENT_FIRST'::"ContractSequence", 'DRAFT'::"ContractStatus", now()
+      FROM "Contract" c WHERE c."ref" = '${WIZARD_CONTRACT_REF}';
     `,
     stdio: 'pipe',
     timeout: 60_000,

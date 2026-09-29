@@ -20,7 +20,11 @@ import type { WorkspaceContext } from './ContractWorkspace';
 export default function StepsTab() {
   const { contract, me } = useOutletContext<WorkspaceContext>();
   const wizard: WizardStep[] = contract.wizard ?? [];
-  const [picked, setPicked] = useState<WizardStep | null>(null);
+  // Pinned to the step the tab opened on (J4): a step that becomes done while its
+  // form is on screen — the brief, once nothing is missing — must not swap the
+  // panel out from under the person still using it. The road still moves on
+  // (the list marks the new current step); the panel follows the click.
+  const [picked, setPicked] = useState<WizardStep | null>(() => defaultStep(wizard));
   const selected = wizard.find((s) => sameStep(s, picked)) ?? defaultStep(wizard);
 
   return (

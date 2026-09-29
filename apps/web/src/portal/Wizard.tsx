@@ -28,7 +28,10 @@ export default function Wizard({ contract, me, asCustomer }: { contract: Contrac
   const { t } = useTranslation();
   const locale = useLocale();
   const wizard: WizardStep[] = contract.wizard ?? [];
-  const [picked, setPicked] = useState<WizardStep | null>(null);
+  // Pinned to the step the page opened on (J4), for the same reason as the desk's
+  // Steps tab: a panel that swaps itself when its step is finished is a panel
+  // the reader loses. Opening still lands on the current step.
+  const [picked, setPicked] = useState<WizardStep | null>(() => defaultStep(wizard));
   // Re-resolved against the live wizard on every render, so a step that just
   // changed state (an approval landed) shows its new state, not a stale copy.
   const selected = wizard.find((s) => sameStep(s, picked)) ?? defaultStep(wizard);

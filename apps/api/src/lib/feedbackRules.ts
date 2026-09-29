@@ -286,15 +286,16 @@ export function anchorMatchesStep(step: StepKind, a: FeedbackAnchor): boolean {
 
 // --- money (PD-21) ---------------------------------------------------------
 
-/** The brief fields that are about money. The names are J4's; the rule is
+/** The brief fields that are about money (J4's `budgetCap` and `paymentPlan`); the rule is
  *  here so the queue, the step panel and attention all ask the same place. */
 export const MONEY_BRIEF_FIELDS: readonly string[] = ['budgetCap', 'paymentPlan'];
 
 /**
  * PD-21: "feedback about money is visible only to money readers". An item is
  * about money when it is anchored to the budget or the payment plan, or to an
- * article marked `sensitive` (J4 adds `Article.sensitive`; until then no
- * article is, and the loader passes `false`).
+ * article marked `sensitive` (J4's `Article.sensitive`) — the flag is the
+ * caller's to supply, from `resolvers/articleSensitivity.ts`, because whether
+ * *this* article is sensitive is a fact about the contract's own row.
  */
 export function isMoneyAnchored(item: { briefField: string | null; articleSensitive?: boolean }): boolean {
   return (item.briefField !== null && MONEY_BRIEF_FIELDS.includes(item.briefField)) || item.articleSensitive === true;

@@ -62,12 +62,13 @@ test('the customer sees the new road: seven steps, the status area, an honest "n
   await expect(status.locator('[data-fact="move"] dd')).toHaveText("Root's");
   await expect(status.locator('[data-fact="started"] dt')).toHaveText('Not started yet');
 
-  // The current step opens by default, and says it is not available yet.
+  // The current step opens by default. Step 1 is built (J4) — with no brief yet it says
+  // Root has not written one, rather than "not available".
   const panel = page.getByTestId('step-panel');
   await expect(panel).toHaveAttribute('data-step', 'REQUIREMENTS');
-  await expect(panel.getByText('Not available yet')).toBeVisible();
+  await expect(panel.getByTestId('brief-empty')).toHaveText('Root has not written the requirements yet.');
 
-  // Any step can be looked at; none pretends to have content.
+  // Any step can be looked at; the ones not built yet do not pretend to have content.
   await page.locator('.stepper-item[data-step="DRAFT"] button').click();
   await expect(panel).toHaveAttribute('data-step', 'DRAFT');
   await expect(panel.getByRole('heading', { name: 'The draft' })).toBeVisible();
@@ -93,7 +94,7 @@ test('the same contract in Persian: right-to-left, every label translated, nothi
   await expect(status.getByRole('heading', { name: 'وضعیت کار' })).toBeVisible();
   await expect(status.locator('[data-fact="current"] dd')).toHaveText('نیازمندی‌ها');
   await expect(status.locator('[data-fact="move"] dd')).toHaveText('با ریشه');
-  await expect(page.getByTestId('step-panel').getByText('هنوز در دسترس نیست')).toBeVisible();
+  await expect(page.getByTestId('step-panel').getByTestId('brief-empty')).toHaveText('ریشه هنوز نیازمندی‌ها را ننوشته است.');
 
   // A missing key would render as the key itself.
   const text = await page.locator('main, .work, body').first().innerText();
@@ -165,7 +166,9 @@ test('sales reads the same steps in the workspace, writes a note, and "view as c
   // Written for staff: it is not "waiting on you".
   await expect(status.locator('[data-fact="waiting-customer"] dt')).toHaveText('Waiting on the customer');
   await expect(status.locator('[data-fact="move"] dd')).toHaveText("Root's");
-  await expect(page.getByTestId('step-panel').getByText('Not available yet')).toBeVisible();
+  // Staff get the step-1 form (J4) where the customer gets the cards.
+  await expect(page.getByTestId('requirements-editor')).toBeVisible();
+  await expect(page.getByTestId('brief-empty')).toHaveText('Nothing is written yet — fill in the form above.');
   // The overdue commitment reads as the customer's lateness, to Root.
   await expect(page.getByTestId('attention-item')).toContainText('The customer is late on “Send the brand assets”.');
 

@@ -27,8 +27,8 @@ const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extens
  * Who may verify (or un-verify) this row — the capability the row's flag names,
  * and for a technical row the ownership edge too (house rule 2, kept separate):
  * being *a* developer is the capability, being *this project's* developer — of
- * a live contract on it — is the edge, `NOT_ASSIGNED` if not. `assignments
- * .override` (ADMIN) is both.
+ * a live contract on it — is the edge, `NOT_ASSIGNED` if not.
+ * `assignments.override` (ADMIN) is both.
  *
  * The capability is checked before the row is loaded, so someone who holds
  * neither verb learns nothing about which ids exist; the second check needs the

@@ -122,8 +122,7 @@ export type Finished = { step: StepKind; phaseId: string | null; at: Date | null
 export type WizardState = {
   sequence: ContractSequence;
   designPath: DesignPath | null;
-  /** This contract's phases. Until J4 puts `Phase.contractId` on phases the
-   *  loader gives them to the project's first contract only. */
+  /** This contract's phases — the ones whose `Phase.contractId` names it (J4). */
   phases: PhaseRef[];
   /** Ignored for `DESIGN_FIRST`, which is never locked. */
   approvals: Approval[];
@@ -160,8 +159,9 @@ const sameSlot = (a: { step: StepKind; phaseId: string | null }, b: { step: Step
  * - A step is **done** when it is locked, or when something else says its work
  *   is complete (`state.finished`).
  * - **Current is the first step that is not done.** For a new-road contract
- *   whose steps have no data yet (REQUIREMENTS … DRAFT until J4–J6) that is
- *   simply the first step without a `StepApproval`, and its panel says the
+ *   whose steps have no data yet (SCOPE and DRAFT until J5–J6; REQUIREMENTS
+ *   is done once `briefCompleteness` is empty, J4) that is simply the first
+ *   step without a `StepApproval` or a done signal, and its panel says the
  *   step is not yet available. Later steps stay `UPCOMING` even if a stray row
  *   marks one done — the road is walked in order, and "done" is never
  *   promoted into "current".
