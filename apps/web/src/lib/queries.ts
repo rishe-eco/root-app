@@ -60,6 +60,11 @@ export type PageDesign = {
   approved: boolean;
 };
 
+/** What a pre-made round remembers of a theme (journeys build plan J8): name,
+ *  vendor and demo URL as they were when it was proposed. Never a licence cost.
+ *  The demo opens in a new tab and is never framed. */
+export type ThemeSnapshot = { name: string; vendor: string | null; demoUrl: string | null };
+
 export type DesignConcept = {
   id: string;
   key: string;
@@ -68,6 +73,36 @@ export type DesignConcept = {
   imageUrl: string | null;
   chosen: boolean;
   pages: PageDesign[];
+  /** J8: set for a pre-made round's theme; null for a concept that is not one. Selected by `WizardFields`. */
+  themeSnapshot?: ThemeSnapshot | null;
+  /** J8: the catalogue row (staff only; null for a customer). Workspace only. */
+  themeId?: string | null;
+};
+
+export type PaletteKind = 'COLOR' | 'FONT' | 'LOGO_USAGE';
+
+/** J8: one entry of a custom design's palette. A COLOR's value is `#rrggbb`. */
+export type DesignPaletteItem = {
+  id: string;
+  kind: PaletteKind;
+  role: string;
+  value: string;
+  labelFa: string;
+  labelEn: string;
+  imageUrl: string | null;
+  position?: number;
+};
+
+/** J8: rounds sales granted beyond the brief. Staff only; `charge` is money (null without `money.read`). */
+export type AllowanceExtension = {
+  id: string;
+  step: StepKind;
+  phaseId: string | null;
+  extra: number;
+  reason: string;
+  approvedBy: Pick<User, 'id' | 'name'>;
+  charge: string | null;
+  createdAt: string;
 };
 
 export type ScopeKind = 'PAGE' | 'FEATURE' | 'DELIVERABLE' | 'EXTRA';
@@ -280,6 +315,8 @@ export type FeedbackItem = {
   conceptId: string | null;
   pageDesignId: string | null;
   paletteItemId: string | null;
+  /** J8: set while a "show me other options" request waits for the next round. */
+  otherOptionsAskedAt: string | null;
   anchorScopeItem: FrameLineScopeItemRef | null;
   status: FeedbackStatus;
   createdAt: string;
@@ -551,6 +588,7 @@ export type DesignDraft = {
   id: string;
   version: number;
   concepts: DesignConcept[];
+  palette: DesignPaletteItem[];
   carryForward: CarryForwardPreview;
 };
 
@@ -753,6 +791,14 @@ export type Contract = {
   brief?: ContractBrief | null;
   /** What step 1 still lacks, as codes. Empty means the step is done. */
   briefCompleteness?: BriefMissing[];
+  /** Journeys build plan J8 — step 4, selected by `WizardFields`: the current
+   *  round's palette (a custom design's), and what the design still lacks
+   *  (`CONCEPT_NOT_CHOSEN`, `NO_PAGES`, `PAGE_NOT_APPROVED`, `PALETTE_EMPTY`,
+   *  `NO_ROUND`) — empty means it can be approved. */
+  palette?: DesignPaletteItem[];
+  designMissing?: string[];
+  /** Staff only, workspace only. */
+  allowanceExtensions?: AllowanceExtension[];
   /** Money (PD-14): null for staff without `money.read` who are not the customer. */
   paymentPlan?: PaymentPlan | null;
   /** This contract's own phases (`project.phases` is every phase of the project). */
@@ -848,6 +894,7 @@ export const FEEDBACK_ITEM_FIELDS = gql`
     conceptId
     pageDesignId
     paletteItemId
+    otherOptionsAskedAt
     status
     createdAt
     addressedInBuild {
@@ -1036,6 +1083,25 @@ export const WIZARD_FIELDS = gql`
       code
       key
     }
+    concepts {
+      id
+      themeSnapshot {
+        name
+        vendor
+        demoUrl
+      }
+    }
+    palette {
+      id
+      kind
+      role
+      value
+      labelFa
+      labelEn
+      imageUrl
+      position
+    }
+    designMissing
     scopeProposals {
       id
       kind
@@ -1502,6 +1568,19 @@ export const CONTRACT_WORKSPACE_FIELDS = gql`
         sensitive
       }
     }
+    allowanceExtensions {
+      id
+      step
+      phaseId
+      extra
+      reason
+      charge
+      createdAt
+      approvedBy {
+        id
+        name
+      }
+    }
     designDraft {
       id
       version
@@ -1512,6 +1591,12 @@ export const CONTRACT_WORKSPACE_FIELDS = gql`
         labelEn
         imageUrl
         chosen
+        themeId
+        themeSnapshot {
+          name
+          vendor
+          demoUrl
+        }
         pages {
           id
           key
@@ -1520,6 +1605,16 @@ export const CONTRACT_WORKSPACE_FIELDS = gql`
           imageUrl
           approved
         }
+      }
+      palette {
+        id
+        kind
+        role
+        value
+        labelFa
+        labelEn
+        imageUrl
+        position
       }
       carryForward {
         chosenConceptKey
@@ -2306,6 +2401,100 @@ export const PUBLISH_DESIGN_REVISION = gql`
   mutation PublishDesignRevision($contractId: ID!) {
     publishDesignRevision(contractId: $contractId) {
       ...ContractWorkspaceFields
+    }
+  }
+`;
+
+// --- Step 4, design (journeys build plan J8) --------------------------------------
+//
+// The designer's writes return the whole workspace contract (T9), so the step
+// panel — which reads `designDraft`, `concepts`, `palette`, `wizard` — moves
+// with each act. The customer's return the customer's fields.
+
+export const START_DESIGN_DRAFT = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation StartDesignDraft($contractId: ID!) {
+    startDesignDraft(contractId: $contractId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const PROPOSE_THEMES = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation ProposeThemes($contractId: ID!, $themeIds: [ID!]!) {
+    proposeThemes(contractId: $contractId, themeIds: $themeIds) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const ADD_PALETTE_ITEM = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation AddPaletteItem($contractId: ID!, $kind: PaletteKind!, $role: String!, $value: String!, $labelFa: String!, $labelEn: String!) {
+    addPaletteItem(contractId: $contractId, kind: $kind, role: $role, value: $value, labelFa: $labelFa, labelEn: $labelEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const UPDATE_PALETTE_ITEM = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation UpdatePaletteItem($itemId: ID!, $value: String!, $labelFa: String!, $labelEn: String!) {
+    updatePaletteItem(itemId: $itemId, value: $value, labelFa: $labelFa, labelEn: $labelEn) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SET_PALETTE_ITEM_IMAGE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetPaletteItemImage($itemId: ID!, $fileId: ID) {
+    setPaletteItemImage(itemId: $itemId, fileId: $fileId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DELETE_PALETTE_ITEM = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DeletePaletteItem($itemId: ID!) {
+    deletePaletteItem(itemId: $itemId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+/** Sales admits more rounds (journeys Q-S5), optionally billed as a draft invoice. */
+export const EXTEND_ALLOWANCE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation ExtendAllowance($contractId: ID!, $step: StepKind!, $extra: Int!, $reason: String!, $charge: String) {
+    extendAllowance(contractId: $contractId, step: $step, extra: $extra, reason: $reason, charge: $charge) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+/** The customer asks to see other options (pre-made). */
+export const REQUEST_OTHER_OPTIONS = gql`
+  ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
+  mutation RequestOtherOptions($contractId: ID!, $note: String) {
+    requestOtherOptions(contractId: $contractId, note: $note) {
+      ...ContractFields
+      ...WizardFields
+    }
+  }
+`;
+
+/** The customer approves the design — `approveStepTx(DESIGN)` with the path's completeness. */
+export const APPROVE_DESIGN = gql`
+  ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
+  mutation ApproveDesign($contractId: ID!) {
+    approveDesign(contractId: $contractId) {
+      ...ContractFields
+      ...WizardFields
     }
   }
 `;

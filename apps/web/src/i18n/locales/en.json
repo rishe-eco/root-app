@@ -2084,5 +2084,168 @@
       "FORBIDDEN": "You do not have access to that.",
       "NOT_FOUND": "Not found."
     }
+  },
+  "design": {
+    "lede": {
+      "customerPremade": "Root has picked some ready-made themes for your site. Open each demo, choose the one you like — or ask to see other options — and approve the design when you are happy with it.",
+      "customerCustom": "This is the design of your site: a wireframe for each page, and its colours, typefaces and logo rules. Approve each page that is right, leave a note on anything that is not, and approve the design when it is complete.",
+      "staffPremade": "Propose themes from the catalogue for this kind of site. The customer chooses one, or asks for other options; each round you publish uses one of the rounds in the brief.",
+      "staffCustom": "Upload a wireframe for each page and set the palette. Each version you publish is one round of the wireframe allowance."
+    },
+    "round": "Round {{n}} of {{total}}",
+    "roundOpen": "Round {{n}}",
+    "noRound": "No round yet",
+    "notOpen": "The design opens once the agreement is signed.",
+    "readOnly": "You can read this step and answer its notes; the assigned designer authors it.",
+    "empty": {
+      "customer": "Root has not shown any design yet. You will be told when the first round is ready.",
+      "staff": "Nothing has been published to the customer yet."
+    },
+    "gallery": {
+      "title": "Themes",
+      "vendor": "By {{vendor}}",
+      "noPreview": "No preview image",
+      "openDemo": "Open the demo (new tab)",
+      "choose": "Choose this theme",
+      "chosen": "Your choice",
+      "noneChosen": "You have not chosen a theme yet.",
+      "note": "Each demo opens in a new tab, on the vendor’s own site. What you see here is a preview image."
+    },
+    "other": {
+      "help": "Not what you are after? Ask for a new set — Root proposes different themes in the next round.",
+      "action": "Show me other options",
+      "noteLabel": "Anything you would like to add? (optional)",
+      "send": "Ask for other options",
+      "waiting": "You asked for other options. The designer answers with the next round."
+    },
+    "page": {
+      "title": "Page wireframes",
+      "noImage": "The wireframe has not been uploaded yet.",
+      "approve": "Approve this page",
+      "approved": "Approved",
+      "unapprove": "Take back my approval"
+    },
+    "palette": {
+      "title": "Palette and type",
+      "empty": "There is no palette yet.",
+      "colors": "Colours",
+      "fonts": "Typefaces",
+      "logo": "Logo usage",
+      "specimenNote": "Every specimen is set in Persian as well as Latin: a typeface picked from Latin letters alone can lack every Persian glyph."
+    },
+    "approve": {
+      "action": "Approve the design",
+      "help": "Approving accepts every answer at once and locks the design. Afterwards, anything you want changed is a change request.",
+      "done": "The design is approved.",
+      "blocked": {
+        "CONCEPT_NOT_CHOSEN": "Choose a theme first.",
+        "NO_ROUND": "Root has not published a round yet.",
+        "BRIEF_MISSING": "Root has not finished the requirements yet.",
+        "NO_PAGES": "Root has not uploaded a page yet.",
+        "PAGE_NOT_APPROVED": "Approve every page first.",
+        "PALETTE_EMPTY": "Root has not set the palette yet."
+      }
+    },
+    "draft": {
+      "title": "Next round",
+      "none": "No round is in preparation.",
+      "start": "Start a round",
+      "publish": "Publish this round",
+      "publishHelp": "Publishing shows it to the customer and uses one round ({{used}} of {{total}} used so far).",
+      "publishHelpOpen": "Publishing shows it to the customer and uses one round.",
+      "discard": "Discard the draft"
+    },
+    "propose": {
+      "title": "Themes for this round",
+      "help": "Themes offered for {{type}}. Tick the ones to show; they appear in the order you tick them.",
+      "none": "No active theme is offered for this kind of site — add some under Templates → Themes.",
+      "action": "Save the themes",
+      "demo": "Demo",
+      "noPreview": "No preview"
+    },
+    "custom": {
+      "pagesTitle": "Wireframe pages",
+      "noPages": "No wireframe pages yet.",
+      "addPage": "Add a page",
+      "pageSelect": "Choose a page from the scope",
+      "noPagesLeft": "Every page of the scope has a wireframe.",
+      "remove": "Remove"
+    },
+    "paletteEdit": {
+      "title": "Palette",
+      "kind": {
+        "COLOR": "Colour",
+        "FONT": "Typeface",
+        "LOGO_USAGE": "Logo usage"
+      },
+      "role": "Role",
+      "roleHelp": "Lowercase Latin letters, digits and hyphens, starting with a letter.",
+      "value": "Value",
+      "valueHelp": {
+        "COLOR": "A hex colour.",
+        "FONT": "The family name, as it is installed.",
+        "LOGO_USAGE": "One short sentence."
+      },
+      "labelFa": "Persian label",
+      "labelEn": "English label",
+      "add": "Add to the palette",
+      "save": "Save",
+      "delete": "Remove"
+    },
+    "allowance": {
+      "title": "Rounds",
+      "used": "{{used}} of {{total}} rounds used",
+      "usedOpen": "{{used}} rounds used",
+      "exhausted": "All the rounds in the brief are used. To publish another, sales has to extend the allowance.",
+      "extend": {
+        "action": "Extend the allowance",
+        "extra": "Extra rounds",
+        "reason": "Why",
+        "charge": "Charge in Toman (optional)",
+        "chargeHelp": "Creates a draft invoice. Nothing reaches the customer until it is issued.",
+        "submit": "Extend",
+        "history": "Extended so far",
+        "line": "+{{n}} — {{reason}} — {{who}}",
+        "lineCharged": "+{{n}} — {{reason}} — {{who}} — charge {{amount}}"
+      }
+    },
+    "error": {
+      "DESIGN_INCOMPLETE": "The design is not complete yet.",
+      "STEP_HAS_OPEN_FEEDBACK": "Some of your comments are still waiting for Root’s answer. Once each has one, you can approve.",
+      "STEP_HAS_PENDING_ANSWERS": "Root is still finishing its answers on this step. Try again shortly.",
+      "STEP_LOCKED": "The design is approved and locked — open a change request instead.",
+      "AGREEMENT_NOT_SIGNED": "The design opens once the agreement is signed.",
+      "ALLOWANCE_EXHAUSTED": "All the rounds in the brief are used. Ask sales to extend the allowance.",
+      "NO_CHANGES": "Nothing has changed since the last round.",
+      "NO_DRAFT": "There is no draft to publish.",
+      "NO_ROUND": "Nothing has been proposed yet.",
+      "NOT_PREMADE": "That belongs to a pre-made design.",
+      "NOT_CUSTOM": "That belongs to a custom design.",
+      "NOT_APPLICABLE": "There is nothing to choose between on this design.",
+      "THEME_NOT_FOUND": "One of those themes does not exist.",
+      "THEME_INACTIVE": "A deactivated theme cannot be proposed.",
+      "THEME_NOT_OFFERED": "That theme is not offered for this kind of site.",
+      "DUPLICATE_THEME": "A theme can be named only once in a round.",
+      "PAGE_KEY_UNKNOWN": "That is not a page of this contract’s scope.",
+      "INVALID_COLOR": "A colour is a hex value like the ones on the swatches.",
+      "INVALID_FONT": "A font is a family name — letters, digits, spaces, hyphens and dots.",
+      "INVALID_LOGO_NOTE": "A logo note is one short sentence.",
+      "INVALID_ROLE": "A role is lowercase Latin letters, digits and hyphens, starting with a letter.",
+      "LABEL_REQUIRED": "Both labels are required.",
+      "LABEL_TOO_LONG": "A label is at most 80 characters.",
+      "ROLE_TAKEN": "The palette already has an item with that role.",
+      "PALETTE_FULL": "A palette holds at most 24 items.",
+      "INVALID_EXTRA": "An extension is a whole number of rounds above zero.",
+      "REASON_REQUIRED": "Say why the allowance is being extended.",
+      "INVALID_AMOUNT": "A charge is a whole number of Toman — no sign, no decimal point.",
+      "NO_ALLOWANCE_SET": "This step has no allowance to extend.",
+      "STEP_NOT_BUILT": "Only the design’s rounds can be extended yet.",
+      "NOT_ASSIGNED": "You are not the designer of this contract.",
+      "FORBIDDEN": "You do not have access to that.",
+      "NOT_FOUND": "That no longer exists — reload the page.",
+      "REVISION_PUBLISHED": "That round is published and cannot be edited.",
+      "REVISION_NOT_CURRENT": "That belongs to an older round.",
+      "CONCEPT_NOT_CHOSEN": "Choose a theme first."
+    }
   }
 }

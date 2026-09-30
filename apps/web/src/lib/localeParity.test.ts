@@ -102,6 +102,10 @@ const ROLE_PAIRS: Record<string, string> = {
   // verb «تخصیص نیافته» (a sentence: "no one has been assigned yet") /
   // adjective «تخصیص‌نیافته» (a picker option's label: "Unassigned")
   'تخصیصنیافته': 'compound verb vs. participial adjective (workspace.designerUnassigned vs. workspace.unassigned)',
+  // «دورهای مجاز» — the plural «دورها» ("rounds", J8's allowance) in the genitive —
+  // vs. «دوره‌ای» ("periodic", the billing subscriptions): two different words
+  // that share their letters, not one word spelled two ways.
+  'دورهای': 'the plural «rounds» (design.allowance) vs. the adjective «periodic» (billing.period)',
 };
 
 const PERSIAN_RUN = /[؀-ۿ‌]+/g;

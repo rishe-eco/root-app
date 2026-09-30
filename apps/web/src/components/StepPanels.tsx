@@ -11,6 +11,7 @@ import RequirementsPanel from '@/components/RequirementsPanel';
 import ScopePanel from '@/components/ScopePanel';
 import DraftPanel from '@/components/DraftPanel';
 import AgreementPanel from '@/components/AgreementPanel';
+import DesignPanel from '@/components/DesignPanel';
 import { can } from '@/lib/access';
 
 /**
@@ -36,7 +37,9 @@ import { can } from '@/lib/access';
  *   anchored notes and where each note's article is now (`DraftPanel`)
  * - J7  `AGREEMENT`    — ✔ built: the snapshot as a document, then Approve and Sign on one
  *   screen (`AgreementPanel`); approval locks steps 1–3
- * - J8  `DESIGN`       — the theme catalogue, rounds, wireframes and palette
+ * - J8  `DESIGN`       — ✔ built: a gallery of themes (pre-made) or wireframes and a
+ *   palette (custom), the round counter, and approving the design (`DesignPanel`,
+ *   the designer's half in `DesignAuthor`)
  * - J9  `MOCKUP`       — the mockup host, iterations
  * - J10 `DEMO`         — per phase: submission, readiness, approval
  * - J11 `SUMMARY`      — the summary, handover, closing
@@ -95,6 +98,7 @@ const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {
   SCOPE: ScopePanel,
   DRAFT: DraftPanel,
   AGREEMENT: AgreementPanel,
+  DESIGN: DesignPanel,
   DEMO: DemoStepPanel,
 };
 

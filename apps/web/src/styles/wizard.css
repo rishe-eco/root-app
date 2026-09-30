@@ -260,6 +260,63 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 .agreement { display: flex; flex-direction: column; gap: var(--space-4); }
 .agreement-actions { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
 
+/* Step 4 — the design (journeys build plan J8): a gallery of themes or a
+   wireframe per page, the palette as swatches and type specimens, the round
+   counter and the designer's controls. Tokens and logical properties only; the
+   one raw value is a palette colour, which is the customer's data, not ours. */
+.design-step { display: flex; flex-direction: column; gap: var(--space-4); }
+.design-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.design-round { background: var(--color-accent-soft); color: var(--color-accent); }
+.design-subtitle { margin: 0; font-size: var(--text-body); }
+.design-card { display: flex; flex-direction: column; gap: var(--space-3); inline-size: 100%; min-inline-size: 0; }
+.design-card-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 10;
+  max-inline-size: 28rem;
+  inline-size: 100%;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel);
+}
+.design-card-image img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.design-card-wide { aspect-ratio: 4 / 3; max-inline-size: 36rem; }
+.design-card-body { display: flex; flex-direction: column; gap: var(--space-2); min-inline-size: 0; }
+.design-theme-name { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.design-chosen { background: var(--color-secondary-soft); color: var(--color-secondary); }
+.design-other, .design-allowance, .design-round-controls { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+.design-missing, .design-extension-list, .design-theme-pick, .design-page-list, .design-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.design-theme-option { display: flex; align-items: center; gap: var(--space-3); }
+.design-theme-option .thumb { flex: none; inline-size: 7rem; }
+.design-theme-text { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.design-author { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-sm); }
+.design-palette-row, .design-page-row, .design-palette-add { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
+.design-palette-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.design-palette-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-2); align-items: end; }
+.design-palette-form .workspace-row { grid-column: 1 / -1; }
+
+/* Palette: a swatch is a chip and its hex; a specimen is both scripts, always. */
+.palette-swatch { display: flex; align-items: center; gap: var(--space-3); }
+.palette-chip { flex: none; inline-size: 3.5rem; block-size: 3.5rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border-strong); }
+.palette-meta { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.palette-label { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.palette-value { font-size: var(--text-caption); color: var(--color-text-muted); }
+.palette-specimen { display: flex; flex-direction: column; gap: var(--space-2); }
+.palette-specimen-line { margin: 0; font-size: var(--text-body-lg); line-height: 1.6; overflow-wrap: anywhere; }
+.palette-logo { display: flex; flex-direction: column; gap: var(--space-2); }
+.palette-note { overflow-wrap: anywhere; }
+.palette-image { max-inline-size: 16rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+.palette-kind { margin: 0; }
+
 @media (max-width: 640px) {
   .doc-inline { padding: var(--space-4); }
   .stepper-item { flex-basis: 100%; }

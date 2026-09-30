@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -18,7 +18,7 @@ import {
   type DesignConcept,
   type PageDesign,
 } from '@/lib/queries';
-import { uploadDesignImage, DESIGN_IMAGE_ACCEPT, UploadFailure } from '@/lib/upload';
+import ImageUploader, { errorMessage } from '@/components/ImageUploader';
 import { formatCount, pick } from '@/lib/format';
 import type { WorkspaceContext } from './ContractWorkspace';
 
@@ -26,84 +26,6 @@ import type { WorkspaceContext } from './ContractWorkspace';
  *  not a constraint the server enforces. Reuses the existing pages.* i18n
  *  namespace rather than inventing a client-side copy of templates.ts. */
 const SUGGESTED_PAGE_KEYS = ['home', 'about', 'contracts', 'portal'];
-
-function errorMessage(err: unknown): string {
-  if (err instanceof UploadFailure) return err.i18nKey;
-  return (err as { message?: string })?.message ?? String(err);
-}
-
-function ImageUploader({
-  contractId,
-  currentUrl,
-  onAttach,
-}: {
-  contractId: string;
-  currentUrl: string | null;
-  onAttach: (fileId: string) => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [pendingFileId, setPendingFileId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function attach(fileId: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      await onAttach(fileId);
-      setPendingFileId(null);
-    } catch (err) {
-      // T3: the file is already uploaded — keep its id so a retry does not
-      // re-upload. Only the attach step is retried.
-      setPendingFileId(fileId);
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const uploaded = await uploadDesignImage(contractId, file);
-      await attach(uploaded.id);
-    } catch (err) {
-      setError(errorMessage(err));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="editor-card">
-      <div className="thumb">
-        {currentUrl ? <img src={currentUrl} alt="" /> : <span className="t-caption">{t('workspace.noImage')}</span>}
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={DESIGN_IMAGE_ACCEPT}
-        style={{ display: 'none' }}
-        onChange={onPick}
-      />
-      <div className="editor-card-actions">
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => inputRef.current?.click()} disabled={busy}>
-          {t('workspace.uploadImage')}
-        </button>
-        {pendingFileId ? (
-          <button className="btn btn-secondary btn-sm" type="button" onClick={() => attach(pendingFileId)} disabled={busy}>
-            {t('workspace.retryAttach')}
-          </button>
-        ) : null}
-      </div>
-      {error ? <p className="error">{t(error)}</p> : null}
-    </div>
-  );
-}
 
 function PageRow({
   contractId,
