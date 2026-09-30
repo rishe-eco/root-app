@@ -42,6 +42,7 @@ const input = (over: Partial<StatusSummaryInput> = {}): StatusSummaryInput => ({
   wizard: wizardOf(),
   attention: [],
   signedAt: null,
+  invoicePlan: null,
   plannedStartAt: null,
   plannedEndAt: null,
   progressAt: [],
@@ -67,10 +68,40 @@ test('a fresh new-road contract: at the first step, Root’s move, not started, 
   });
 });
 
-test('started is signed: the date is the signature (or the agreement approval), until J13 adds the first paid invoice', () => {
-  const s = computeStatusSummary(input({ signedAt: ago(3) }));
+test('a contract with no payment plan — every legacy contract — is started when signed, exactly as before J13', () => {
+  const s = computeStatusSummary(input({ signedAt: ago(3), invoicePlan: null }));
   assert.equal(s.started, true);
   assert.deepEqual(s.startedAt, ago(3));
+  const unsigned = computeStatusSummary(input({ signedAt: null, invoicePlan: null }));
+  assert.equal(unsigned.started, false);
+  assert.equal(unsigned.startedAt, null);
+});
+
+test('with a payment plan, started is signed and the first invoice paid (Q11); the date is the later of the two', () => {
+  const table: Array<{ name: string; signedAt: Date | null; firstPaidAt: Date | null; started: boolean; at: Date | null }> = [
+    { name: 'signed, first invoice unpaid or unissued', signedAt: ago(3), firstPaidAt: null, started: false, at: null },
+    { name: 'signed, first invoice paid', signedAt: ago(3), firstPaidAt: ago(1), started: true, at: ago(1) },
+    { name: 'paid before the signature (a deposit taken first) starts at the signature', signedAt: ago(1), firstPaidAt: ago(3), started: true, at: ago(1) },
+    { name: 'paid but not signed is not started', signedAt: null, firstPaidAt: ago(1), started: false, at: null },
+    { name: 'neither', signedAt: null, firstPaidAt: null, started: false, at: null },
+  ];
+  for (const row of table) {
+    const s = computeStatusSummary(input({ signedAt: row.signedAt, invoicePlan: { firstPaidAt: row.firstPaidAt } }));
+    assert.equal(s.started, row.started, row.name);
+    assert.deepEqual(s.startedAt, row.at, row.name);
+  }
+});
+
+test('overdueCount adds overdue invoices — the INVOICE_OVERDUE line carries how many — to overdue commitments', () => {
+  const s = computeStatusSummary(
+    input({
+      attention: [
+        item({ kind: 'COMMITMENT_OVERDUE', variant: 'customer' }),
+        item({ kind: 'INVOICE_OVERDUE', variant: 'default', params: { count: 3 } }),
+      ],
+    }),
+  );
+  assert.equal(s.overdueCount, 4);
 });
 
 test('daysSinceProgress: whole days from the latest of every source; null when there is none', () => {

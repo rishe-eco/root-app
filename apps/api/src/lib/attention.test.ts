@@ -32,6 +32,7 @@ const empty = (over: Partial<AttentionInput> = {}): AttentionInput => ({
   pending: null,
   dependencies: [],
   feedback: { unresolved: [], pendingApproval: [], answered: [] },
+  invoices: [],
   ...over,
 });
 
@@ -169,6 +170,33 @@ test('feedback about money is its own line, and only money readers see it (PD-21
   assert.equal(attentionFor(input, CUSTOMER).length, 2, 'the customer’s own feedback about money is theirs to see');
 });
 
+test('overdue invoices (J13): one line with the count, since the earliest due day; paid, drafted and not-yet-due ones are no part of it', () => {
+  const inv = (dueOffset: number | null, paid = false, issued = true) => ({
+    issuedAt: issued ? day(-30) : null,
+    dueAt: dueOffset === null ? null : day(dueOffset),
+    paidAt: paid ? day(-1) : null,
+  });
+  const input = empty({
+    invoices: [inv(-10), inv(-3), inv(-20, true), inv(4), inv(null, false, false)],
+  });
+  const items = attentionFor(input, CUSTOMER);
+  assert.deepEqual(summary(items), ['INVOICE_OVERDUE/default/CUSTOMER']);
+  assert.deepEqual(items[0].params, { count: 2 });
+  // The earliest due *day* is when the wait began (a `date` column: midnight UTC).
+  assert.equal(items[0].since.getTime(), day(-10).getTime());
+  assert.equal(items[0].money, true);
+  assert.equal(items[0].internal, false);
+  assert.deepEqual(attentionFor(empty({ invoices: [inv(4), inv(-20, true)] }), CUSTOMER), []);
+});
+
+test('an overdue invoice is money: the customer and sales see it, a designer does not (PD-21)', () => {
+  const input = empty({ invoices: [{ issuedAt: day(-30), dueAt: day(-2), paidAt: null }] });
+  assert.equal(attentionFor(input, CUSTOMER).length, 1);
+  assert.equal(attentionFor(input, SALES).length, 1);
+  assert.deepEqual(attentionFor(input, DESIGNER), []);
+  assert.deepEqual(attentionFor(input, OTHER_CUSTOMER), []);
+});
+
 test('longest-waiting first; equal times fall back to the catalogue order, so the list is total', () => {
   const items = attentionFor(
     empty({
@@ -270,9 +298,11 @@ test('every item the module can emit names a sentence that exists in the table',
         pendingApproval: [fact('DEMO', 'p', day(-1))],
         answered: [fact('DEMO', 'p', day(-1))],
       },
+      invoices: [{ issuedAt: day(-9), dueAt: day(-2), paidAt: null }],
     }),
     SALES,
   );
+  assert.ok(emitted.some((i) => i.kind === 'INVOICE_OVERDUE'));
   for (const item of emitted) {
     const audiences = ATTENTION_SENTENCES[item.kind]?.[item.variant];
     assert.ok(audiences, `${item.kind}/${item.variant} has no ATTENTION_SENTENCES entry`);

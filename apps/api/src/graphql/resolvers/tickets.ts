@@ -26,6 +26,8 @@ export const ticketInclude = {
   customer: true,
   project: true,
   sourceFeedbackItem: { include: feedbackItemInclude },
+  // L6's edge; a draft is hidden by `Ticket.billingEntry` (fields.ts), not here.
+  billingEntry: true,
   messages: { orderBy: { createdAt: 'asc' as const }, include: { author: true } },
 } satisfies Prisma.TicketInclude;
 

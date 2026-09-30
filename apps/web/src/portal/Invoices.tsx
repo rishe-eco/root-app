@@ -1,9 +1,9 @@
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
-import { useLocale } from '@/lib/locale';
+import { useLocale, lp } from '@/lib/locale';
 import {
-  MY_BILLING_ENTRIES,
+  MY_INVOICES,
   MY_BILLING_REPORT,
   MY_SUBSCRIPTIONS,
   type BillingEntry,
@@ -11,35 +11,47 @@ import {
   type Subscription,
   type User,
 } from '@/lib/queries';
-import { formatAmount, fullDateTime, pick } from '@/lib/format';
+import { calendarDate, formatAmount, pick } from '@/lib/format';
 import Topbar from './Topbar';
 
 /**
- * The portal's `billing` rail item, going live (build plan L6; spec §8).
- * `myBillingEntries`/`myBillingReport` both lazily catch up the caller's own
- * subscriptions before returning (lib/billing.ts) — opening this screen is
- * itself "billing being opened," the trigger the scheduler decision (L6.md
- * §0) turns on.
+ * The portal's invoices (build plan L6, grown by journeys build plan J13 from
+ * «Billing» into «Invoices»; `/app/billing` redirects here). `myInvoices` is
+ * **issued invoices only** — a draft is not filtered out of this list, it is
+ * never selected by the API — and `myInvoices`/`myBillingReport` both lazily
+ * catch up the caller's own subscriptions first (lib/billing.ts), so opening
+ * this screen is itself "billing being opened", the trigger the scheduler
+ * decision (L6.md §0) turns on.
+ *
+ * Each row opens the single invoice (`InvoiceDetail`), the printable one.
+ * There is no pay button: Root is paid outside the portal, and the invoice says
+ * how in words (the no-gateway boundary).
  */
 
-function originLabel(entry: BillingEntry, locale: string): string | null {
-  if (entry.subscription) return pick(entry.subscription, 'label', locale as 'fa' | 'en');
+export function originLabel(entry: BillingEntry, locale: 'fa' | 'en'): string | null {
+  if (entry.subscription) return pick(entry.subscription, 'label', locale);
   if (entry.ticket) return entry.ticket.subject;
   if (entry.phase?.milestoneLabel) return entry.phase.milestoneLabel;
   if (entry.contract) return entry.contract.ref;
   return null;
 }
 
-export default function Billing() {
+/** Paid, overdue or still to pay — the customer's three, from the API's own
+ *  derived `overdue` (never re-derived from the clock here). */
+export function invoiceStanding(entry: Pick<BillingEntry, 'paidAt' | 'overdue'>): 'paid' | 'overdue' | 'due' {
+  return entry.paidAt ? 'paid' : entry.overdue ? 'overdue' : 'due';
+}
+
+export default function Invoices() {
   const { t } = useTranslation();
   const locale = useLocale();
   const me = useOutletContext<User>();
 
-  const { data, loading, error, refetch } = useQuery<{ myBillingEntries: BillingEntry[] }>(MY_BILLING_ENTRIES);
+  const { data, loading, error, refetch } = useQuery<{ myInvoices: BillingEntry[] }>(MY_INVOICES);
   const { data: reportData } = useQuery<{ myBillingReport: BillingReport }>(MY_BILLING_REPORT);
   const { data: subsData } = useQuery<{ mySubscriptions: Subscription[] }>(MY_SUBSCRIPTIONS);
 
-  const entries = data?.myBillingEntries ?? [];
+  const entries = data?.myInvoices ?? [];
   const report = reportData?.myBillingReport ?? null;
   const subscriptions = subsData?.mySubscriptions ?? [];
 
@@ -49,8 +61,8 @@ export default function Billing() {
       <div className="content">
         <div className="content-head">
           <div>
-            <h1 className="t-h2">{t('billing.pageTitle')}</h1>
-            <p className="t-lead">{t('billing.pageLede')}</p>
+            <h1 className="t-h2">{t('invoices.title')}</h1>
+            <p className="t-lead">{t('invoices.lede')}</p>
           </div>
         </div>
 
@@ -92,7 +104,6 @@ export default function Billing() {
           </>
         ) : null}
 
-        <h2 className="t-h3">{t('billing.entriesTitle')}</h2>
         {error ? (
           <div className="empty">
             <p className="t-small">{t('portal.errorTitle')}</p>
@@ -103,31 +114,45 @@ export default function Billing() {
         ) : loading && entries.length === 0 ? (
           <div className="empty">{t('portal.loading')}</div>
         ) : entries.length === 0 ? (
-          <div className="empty">{t('billing.empty')}</div>
+          <div className="empty" data-testid="invoices-empty">
+            {t('invoices.empty')}
+          </div>
         ) : (
-          <div className="editor-list">
+          <div className="editor-list" data-testid="invoice-list">
             {entries.map((entry) => {
               const origin = originLabel(entry, locale);
+              const standing = invoiceStanding(entry);
               return (
-                <div className="card editor-card" key={entry.id}>
+                <div className="card editor-card" key={entry.id} data-testid="invoice-row">
                   <div className="workspace-row">
-                    <span className="badge">{t(`billing.source.${entry.source}`)}</span>
+                    <span className="badge num-latin" data-testid="invoice-number">
+                      {entry.invoiceNumber}
+                    </span>
                     <span className="t-small" style={{ flex: 1 }}>
                       {pick(entry, 'description', locale)}
                       {origin ? ` — ${origin}` : ''}
                     </span>
                     <span className="t-small">{t('billing.toman', { amount: formatAmount(entry.amount, locale) })}</span>
-                    <span className={`badge ${entry.paidAt ? 'ticket-status-resolved' : 'ticket-status-open'}`}>
-                      {entry.paidAt ? t('billing.paid') : t('billing.outstanding')}
+                    <span
+                      className={`badge ${standing === 'paid' ? 'ticket-status-resolved' : standing === 'overdue' ? 'dependency-overdue-badge' : 'ticket-status-open'}`}
+                      data-testid="invoice-status"
+                      data-standing={standing}
+                    >
+                      {t(`invoices.status.${standing}`)}
                     </span>
+                    <Link className="btn btn-secondary btn-sm" to={lp(locale, `/app/invoices/${entry.id}`)}>
+                      {t('invoices.open')}
+                    </Link>
                   </div>
                   <p className="t-caption muted">
                     {entry.periodStart && entry.periodEnd
                       ? t('billing.period.range', {
-                          start: fullDateTime(entry.periodStart, locale),
-                          end: fullDateTime(entry.periodEnd, locale),
+                          start: calendarDate(entry.periodStart, locale),
+                          end: calendarDate(entry.periodEnd, locale),
                         })
-                      : fullDateTime(entry.issuedAt, locale)}
+                      : null}
+                    {entry.periodStart && entry.periodEnd && entry.dueAt ? ' · ' : null}
+                    {entry.dueAt ? t('invoices.dueOn', { date: calendarDate(entry.dueAt, locale) }) : null}
                   </p>
                 </div>
               );

@@ -862,6 +862,13 @@ export const typeDefs = /* GraphQL */ `
     flag yet.
     """
     billable: Boolean!
+    """
+    The charge this billable ticket produced, if any (build plan L6). Null while
+    it is still a draft to anyone but billing (journeys build plan J13). **This
+    field was queried by the web from L6 on and never declared here**, so every
+    ticket query failed validation until J13 found it.
+    """
+    billingEntry: BillingEntry
     "The feedback item this ticket was converted from, if any (build plan L4) — which is then MOVED."
     sourceFeedbackItem: FeedbackItem
     "The page or frame line this concerns, snapshotted at conversion time — never a live view."
@@ -1252,6 +1259,30 @@ export const typeDefs = /* GraphQL */ `
     amount: String!
     phaseId: ID
     paymentTermDays: Int!
+    """
+    Journeys build plan J13. Where this row stands: issued (and how it is
+    doing), or issuable now, or waiting on something (blockedBy).
+    """
+    state: PlannedInvoiceState!
+    "What an unissued row is waiting on; null once it can be issued or has been."
+    blockedBy: IssueBlock
+    "The invoice issued from this row. Null until then."
+    invoice: BillingEntry
+  }
+
+  enum PlannedInvoiceState {
+    NOT_YET_ISSUABLE
+    ISSUABLE
+    ISSUED
+    PAID
+    OVERDUE
+  }
+
+  "What keeps a planned invoice from being issued (lib/invoice.ts's canIssuePlanned)."
+  enum IssueBlock {
+    NOT_SIGNED
+    PREVIOUS_UNPAID
+    PHASE_NOT_ACCEPTED
   }
 
   input CommitmentInput {
@@ -1553,9 +1584,23 @@ export const typeDefs = /* GraphQL */ `
     descriptionEn: String!
     "Toman. A string — BigInt does not survive JSON."
     amount: String!
-    issuedAt: DateTime!
+    """
+    Null means a **draft** (journeys build plan J13): invisible to the customer
+    everywhere, with no number and no due day.
+    """
+    issuedAt: DateTime
     "Null means outstanding."
     paidAt: DateTime
+    "INV-000123 — Latin digits in every language. Null on a draft."
+    invoiceNumber: String
+    "A calendar day (PD-19): render it in UTC. Null on a draft."
+    dueAt: DateTime
+    "The term this invoice was issued with, or the draft's own; null on a draft without one."
+    paymentTermDays: Int
+    "The planned-invoice row this issued, if it came from a payment plan — what it waited on."
+    plannedInvoice: PlannedInvoice
+    "Issued, not paid, and past its due day. Derived on every read."
+    overdue: Boolean!
   }
 
   "One row of the report's per-source breakdown."
@@ -2223,14 +2268,26 @@ export const typeDefs = /* GraphQL */ `
     myOverdueDependencies: [Dependency!]!
 
     # --- Billing (build plan L6) ---
-    "The caller's own billing entries, newest first — lazily generates any newly-due subscription periods first (lib/billing.ts)."
-    myBillingEntries: [BillingEntry!]!
+    """
+    The caller's own **issued** invoices, newest first — lazily generates any
+    newly-due subscription periods first (lib/billing.ts). A draft is never
+    here (journeys build plan J13).
+    """
+    myInvoices: [BillingEntry!]!
+    "One of the caller's own issued invoices. NOT_FOUND for anything else — a draft, someone else's, a missing id alike."
+    invoice(id: ID!): BillingEntry!
     "The caller's own spend report (spec §8)."
     myBillingReport: BillingReport!
     "The caller's own subscriptions."
     mySubscriptions: [Subscription!]!
-    "Staff (billing.manage). Every billing entry, optionally narrowed to one customer or one project, newest first."
+    "Staff (billing.manage). Every billing entry — drafts included — optionally narrowed to one customer or one project, newest first."
     allBillingEntries(customerId: ID, projectId: ID): [BillingEntry!]!
+    """
+    Staff (billing.manage). The contracts that have a payment plan, optionally
+    one customer's — the desk's billing screen shows each plan with its
+    Issue-next action (journeys build plan J13).
+    """
+    contractsWithPaymentPlan(customerId: ID): [Contract!]!
     "Staff (billing.manage). The report across one customer, or across every customer when customerId is omitted."
     billingReport(customerId: ID): BillingReport!
     "Staff (billing.manage). Every subscription, optionally narrowed to one customer."
@@ -2635,16 +2692,37 @@ export const typeDefs = /* GraphQL */ `
 
     # --- Billing (build plan L6) ---
     """
-    Staff (billing.manage). Authors a one-off entry — a contract milestone,
+    Staff (billing.manage). Authors a one-off **draft** — a contract milestone,
     a service run not billed through its own edge, or a manual ticket
-    charge. source may not be SUBSCRIPTION here (INVALID_SOURCE) — those are
-    only ever generated lazily from a Subscription's own periods (build plan
-    L6's first banked trap: this mutation is not the scheduler).
+    charge (journeys build plan J13: this was createBillingEntry, and issued
+    the moment it was created). A draft is invisible to the customer until
+    issueInvoice. source may not be SUBSCRIPTION here (INVALID_SOURCE) — those
+    are only ever generated lazily from a Subscription's own periods (build
+    plan L6's first banked trap: this mutation is not the scheduler).
+    paymentTermDays omitted takes the default when the draft is issued.
     """
-    createBillingEntry(customerId: ID!, contractId: ID, phaseId: ID, source: BillingSource!, descriptionFa: String!, descriptionEn: String!, amount: String!): BillingEntry!
-    "Staff (billing.manage)."
+    createInvoiceDraft(customerId: ID!, contractId: ID, phaseId: ID, source: BillingSource!, descriptionFa: String!, descriptionEn: String!, amount: String!, paymentTermDays: Int): BillingEntry!
+    "Staff (billing.manage). Edits a draft (NOT_A_DRAFT once it is issued). A replace: an omitted paymentTermDays is cleared."
+    updateInvoiceDraft(entryId: ID!, descriptionFa: String!, descriptionEn: String!, amount: String!, paymentTermDays: Int): BillingEntry!
+    "Staff (billing.manage). Deletes a draft (NOT_A_DRAFT once it is issued — an issued invoice is never deleted)."
+    deleteInvoiceDraft(entryId: ID!): Boolean!
+    """
+    Staff (billing.manage). Draft to issued: takes the next number from the
+    sequence, dates it now, and is due paymentTermDays later (the draft's own,
+    else DEFAULT_PAYMENT_TERM_DAYS). Tells the customer. ALREADY_ISSUED if it is.
+    """
+    issueInvoice(entryId: ID!): BillingEntry!
+    """
+    Staff (billing.manage). Issues one row of a contract's payment plan
+    (journeys build plan J13, Q18): refused NOT_SIGNED until the agreement is
+    signed, PREVIOUS_UNPAID until the row before it is paid,
+    PHASE_NOT_ACCEPTED while its phase's demo is not approved. A second press
+    is ALREADY_ISSUED. Returns the contract, whose plan now shows the invoice.
+    """
+    issuePlannedInvoice(plannedInvoiceId: ID!): Contract!
+    "Staff (billing.manage). NOT_ISSUED on a draft — there is nothing to pay yet."
     markBillingEntryPaid(entryId: ID!): BillingEntry!
-    "Staff (billing.manage). Reverses a mark-paid made in error."
+    "Staff (billing.manage). Reverses a mark-paid made in error. SUCCESSOR_ISSUED if the next row of its payment plan has been issued since."
     unmarkBillingEntryPaid(entryId: ID!): BillingEntry!
     """
     Staff (billing.manage). Build plan L4's second banked trap, built here:

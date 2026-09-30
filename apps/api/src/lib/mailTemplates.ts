@@ -596,3 +596,61 @@ export function briefSharedEmail(
     text: `${params.customerName} عزیز،\n\nریشه آنچه را برای «${params.projectTitleFa}» خواسته‌اید نوشته است. لطفاً بخوانید و هر جا درست نیست نظر بگذارید.\n\n${params.portalUrl}`,
   };
 }
+
+/** A Toman amount (a decimal string) in the locale's own digits. */
+function tomanText(amount: string, locale: Locale): string {
+  const n = new Intl.NumberFormat(locale === 'fa' ? 'fa-IR' : 'en-US').format(Number(amount));
+  return locale === 'fa' ? `${n} تومان` : `${n} Toman`;
+}
+
+/** A calendar day (`YYYY-MM-DD`, PD-19) in UTC — the Jalali date, for `fa-IR`. */
+function dayText(dueOn: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale === 'fa' ? 'fa-IR' : 'en-US', { dateStyle: 'long', timeZone: 'UTC' }).format(
+    new Date(`${dueOn.slice(0, 10)}T00:00:00Z`),
+  );
+}
+
+/**
+ * Journeys build plan J13: an invoice was issued — the customer's first word
+ * that they owe something, so it carries the three facts they will look for
+ * (the number, the amount, the day it is due) and says how Root is paid, which
+ * is *not* in the portal (the no-gateway boundary: record-keeping only).
+ *
+ * **House rule 14, both halves at once:** the amount and the due date go
+ * through the locale's own digits (`Intl`), the invoice number stays Latin — it
+ * is an identifier the customer will quote or find on a bank slip.
+ */
+export function invoiceIssuedEmail(
+  locale: string | null | undefined,
+  params: { customerName: string; invoiceNumber: string; amount: string; dueOn: string; portalUrl: string },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const amount = tomanText(params.amount, 'en');
+    const due = dayText(params.dueOn, 'en');
+    return {
+      subject: `Invoice ${params.invoiceNumber} from Root`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Root has issued invoice <strong>${params.invoiceNumber}</strong> for <strong>${amount}</strong>. It is due on <strong>${due}</strong>.</p>
+        <p>You can read it, and print it, here:</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+        <p>The portal does not take payment. Pay Root directly, and Root marks the invoice paid here once it has arrived. If you need Root’s payment details, ask your contact at Root.</p>
+      `),
+      text: `Hi ${params.customerName},\n\nRoot has issued invoice ${params.invoiceNumber} for ${amount}. It is due on ${due}.\n\nYou can read it, and print it, here:\n${params.portalUrl}\n\nThe portal does not take payment. Pay Root directly, and Root marks the invoice paid here once it has arrived. If you need Root's payment details, ask your contact at Root.`,
+    };
+  }
+  const amount = tomanText(params.amount, 'fa');
+  const due = dayText(params.dueOn, 'fa');
+  return {
+    subject: `صورت‌حساب ${params.invoiceNumber} از ریشه`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>ریشه صورت‌حساب <strong dir="ltr">${params.invoiceNumber}</strong> را به مبلغ <strong>${amount}</strong> صادر کرد. سررسید آن <strong>${due}</strong> است.</p>
+      <p>می‌توانید آن را همین‌جا ببینید و چاپ کنید:</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      <p>پرداخت از راه پرتال انجام نمی‌شود. مبلغ را مستقیماً به ریشه بپردازید؛ پس از رسیدنِ آن، ریشه صورت‌حساب را همین‌جا «پرداخت‌شده» علامت می‌زند. اگر به مشخصات پرداخت ریشه نیاز دارید، از رابطِ خود در ریشه بپرسید.</p>
+    `),
+    text: `${params.customerName} عزیز،\n\nریشه صورت‌حساب ${params.invoiceNumber} را به مبلغ ${amount} صادر کرد. سررسید آن ${due} است.\n\nمی‌توانید آن را همین‌جا ببینید و چاپ کنید:\n${params.portalUrl}\n\nپرداخت از راه پرتال انجام نمی‌شود. مبلغ را مستقیماً به ریشه بپردازید؛ پس از رسیدنِ آن، ریشه صورت‌حساب را همین‌جا «پرداخت‌شده» علامت می‌زند. اگر به مشخصات پرداخت ریشه نیاز دارید، از رابطِ خود در ریشه بپرسید.`,
+  };
+}

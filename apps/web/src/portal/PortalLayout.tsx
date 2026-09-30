@@ -77,10 +77,11 @@ export default function PortalLayout() {
             <span>{t('portal.navSupport')}</span>
           </NavLink>
 
-          {/* Build plan L6: billing is live — a real link, no "soon" tag. */}
+          {/* Build plan L6: billing is live — a real link, no "soon" tag. J13
+              renamed it Invoices and moved it to /app/invoices. */}
           <NavLink
             className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
-            to={lp(locale, '/app/billing')}
+            to={lp(locale, '/app/invoices')}
           >
             <span className="side-glyph" />
             <span>{t('portal.navBilling')}</span>

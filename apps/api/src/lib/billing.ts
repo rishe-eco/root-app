@@ -22,7 +22,10 @@
  * recurring probe"), and one the plan itself calls "almost certainly right."
  */
 
-import type { BillingSource, SubscriptionPeriod, Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { BillingSource, SubscriptionPeriod, PrismaClient } from '@prisma/client';
+import { env } from './env.js';
+import { issuedFields, takeInvoiceNumber } from './invoice.js';
 
 export type SubscriptionLike = {
   id: string;
@@ -85,7 +88,7 @@ export function duePeriods(sub: SubscriptionLike, asOf: Date = new Date()): DueP
   return periods;
 }
 
-type PrismaLike = Pick<PrismaClient, 'subscription' | 'billingEntry'>;
+type PrismaLike = Pick<PrismaClient, 'subscription' | 'billingEntry' | '$transaction'>;
 
 /**
  * Writes every due-and-not-yet-billed period for one subscription. Called
@@ -93,45 +96,78 @@ type PrismaLike = Pick<PrismaClient, 'subscription' | 'billingEntry'>;
  * top comment).
  *
  * **The idempotency guarantee is the database's, not this function's.**
- * `createMany({ skipDuplicates: true })` is a single statement backed by
  * `BillingEntry_subscriptionId_periodStart_key` (the migration's unique
- * index) — two concurrent calls computing the same due period each attempt
- * the insert, and Postgres silently drops the second rather than raising a
- * constraint violation this function would have to catch. This is build
- * plan L6's own banked trap named directly: "a lazy generator that
+ * index) refuses a second entry for a period — two concurrent calls computing
+ * the same due period each attempt the insert, and the loser's unique
+ * violation is swallowed below, which is the whole of "skip duplicates". This
+ * is build plan L6's own banked trap named directly: "a lazy generator that
  * double-charges on a refresh is the worst bug in this stage," and it is
  * structurally impossible here rather than merely tested against.
+ *
+ * **These entries are issued, not drafted (J13).** A subscription's charge is
+ * not a decision a person makes each period — the subscription was the
+ * decision — so each due period becomes a numbered invoice at once, dated its
+ * period start (as it always was), due `termDays` later
+ * (`env.DEFAULT_PAYMENT_TERM_DAYS`; a subscription has no term of its own).
+ * Periods are written oldest first, so numbers follow `issuedAt`. Each is its
+ * own transaction: the number is taken inside it (PD-11), and a loser of the
+ * race above burns one number, which the invoice screen says may happen. A
+ * period that already has an entry is skipped *before* a number is taken, so a
+ * page refresh that finds nothing new burns nothing.
+ *
+ * **No notification.** This runs because someone opened billing (or the
+ * customer's own page): the invoice is on the screen that triggered it, and
+ * a backdated subscription would otherwise mail a year of invoices at once.
+ * `issueInvoice` and `issuePlannedInvoice` — acts of a person — do notify.
  */
 export async function ensureSubscriptionEntries(
   prisma: PrismaLike,
   subscriptionId: string,
   asOf: Date = new Date(),
+  termDays: number = env.DEFAULT_PAYMENT_TERM_DAYS,
 ): Promise<void> {
   const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
   if (!sub) return;
   const periods = duePeriods(sub, asOf);
   if (periods.length === 0) return;
 
-  await prisma.billingEntry.createMany({
-    data: periods.map((p) => ({
-      customerId: sub.customerId,
-      source: 'SUBSCRIPTION' as const,
-      // The subscription's own bilingual label already says what this charge
-      // is for ("SMS API" / "پیامک"); the period itself is carried on
-      // periodStart/periodEnd as real DateTime columns rather than baked into
-      // this string, so the web renders it through the locale-aware date
-      // helpers (house rule 14) instead of a server-authored Latin-digit date
-      // sitting inside translated prose.
-      descriptionFa: sub.labelFa,
-      descriptionEn: sub.labelEn,
-      amount: sub.amount,
-      subscriptionId: sub.id,
-      periodStart: p.start,
-      periodEnd: p.end,
-      issuedAt: p.start,
-    })),
-    skipDuplicates: true,
+  const existing = await prisma.billingEntry.findMany({
+    where: { subscriptionId: sub.id, periodStart: { in: periods.map((p) => p.start) } },
+    select: { periodStart: true },
   });
+  const billed = new Set(existing.map((e) => e.periodStart!.getTime()));
+
+  for (const p of periods) {
+    if (billed.has(p.start.getTime())) continue;
+    try {
+      await prisma.$transaction(async (tx) => {
+        const number = await takeInvoiceNumber(tx);
+        await tx.billingEntry.create({
+          data: {
+            customerId: sub.customerId,
+            source: 'SUBSCRIPTION',
+            // The subscription's own bilingual label already says what this
+            // charge is for ("SMS API" / "پیامک"); the period itself is
+            // carried on periodStart/periodEnd as real DateTime columns rather
+            // than baked into this string, so the web renders it through the
+            // locale-aware date helpers (house rule 14) instead of a
+            // server-authored Latin-digit date sitting inside translated prose.
+            descriptionFa: sub.labelFa,
+            descriptionEn: sub.labelEn,
+            amount: sub.amount,
+            subscriptionId: sub.id,
+            periodStart: p.start,
+            periodEnd: p.end,
+            ...issuedFields({ number, issuedAt: p.start, termDays }),
+          },
+        });
+      });
+    } catch (err) {
+      // Another reader generated this period first; the index did its job.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue;
+      throw err;
+    }
+  }
 }
 
 /** Ensures every subscription matching `where` is caught up before its
@@ -158,7 +194,7 @@ export function isValidTomanAmount(input: string): boolean {
   return /^\d+$/.test(input.trim());
 }
 
-export type BillingEntryLike = { source: BillingSource; amount: bigint; paidAt: Date | null };
+export type BillingEntryLike = { source: BillingSource; amount: bigint; issuedAt: Date | null; paidAt: Date | null };
 export type BillingSourceTotal = {
   source: BillingSource;
   totalIssued: bigint;
@@ -176,10 +212,16 @@ export type BillingReport = {
  * The report (spec §8): totals over time, split by source, outstanding
  * balance. Pure — the resolver supplies whichever entries are in scope (one
  * customer's, or every customer's), and this never re-queries.
+ *
+ * **Drafts are not in it** (J13): a draft is not issued, so it is in neither
+ * "issued" nor "outstanding" — and skipping them here, not in each caller, is
+ * what stops a fourth caller from counting money nobody has been billed. The
+ * report is also a way a draft's amount could reach a customer.
  */
 export function computeBillingReport(entries: readonly BillingEntryLike[]): BillingReport {
   const bySourceMap = new Map<BillingSource, { issued: bigint; paid: bigint }>();
   for (const e of entries) {
+    if (e.issuedAt === null) continue;
     const cur = bySourceMap.get(e.source) ?? { issued: 0n, paid: 0n };
     cur.issued += e.amount;
     if (e.paidAt) cur.paid += e.amount;

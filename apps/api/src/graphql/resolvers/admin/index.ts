@@ -7,6 +7,7 @@ import { phaseMutations } from './phases.js';
 import { demoFrameMutations } from './demoFrame.js';
 import { dependencyMutations } from './dependencies.js';
 import { billingMutations } from './billing.js';
+import { invoiceMutations } from './invoices.js';
 
 /**
  * Everything only Root may do: invites, authoring a contract's draft,
@@ -46,7 +47,10 @@ export const adminMutations = {
   // gated instead, and lives in query.ts, not here — see that file's comment.
   ...dependencyMutations,
   // Billing (build plan L6) — `billing.manage` (S1; see billing.ts).
-  // `myBillingEntries`/`myBillingReport`/`mySubscriptions` are
-  // ownership-gated instead, and live in query.ts, not here.
+  // `myInvoices`/`myBillingReport`/`mySubscriptions` are
+  // ownership-gated instead, and live in query.ts / invoices.ts, not here.
   ...billingMutations,
+  // Invoices after they are drafts (journeys build plan J13) — the same
+  // capability; see invoices.ts.
+  ...invoiceMutations,
 };

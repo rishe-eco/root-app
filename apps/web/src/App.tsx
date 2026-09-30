@@ -20,7 +20,8 @@ import Contracts from '@/portal/Contracts';
 import ContractDetail from '@/portal/ContractDetail';
 import ContractPrint from '@/portal/ContractPrint';
 import Support from '@/portal/Support';
-import PortalBilling from '@/portal/Billing';
+import PortalInvoices from '@/portal/Invoices';
+import PortalInvoiceDetail from '@/portal/InvoiceDetail';
 import PortalTools from '@/portal/Tools';
 import DeskLayout from '@/desk/DeskLayout';
 import DeskHome from '@/desk/DeskHome';
@@ -122,8 +123,13 @@ export default function App() {
           <Route path="services" element={<Navigate to="../tools" replace />} />
           {/* Build plan L4: the support rail goes live — see Support.tsx. */}
           <Route path="support" element={<Support />} />
-          {/* Build plan L6: the billing rail goes live — see portal/Billing.tsx. */}
-          <Route path="billing" element={<PortalBilling />} />
+          {/* Build plan L6 made the billing rail live; journeys build plan J13 grew
+              it into Invoices (a list and one printable invoice — see
+              portal/Invoices.tsx), and the old address keeps working, as
+              Services → Tools did in S3. */}
+          <Route path="invoices" element={<PortalInvoices />} />
+          <Route path="invoices/:id" element={<PortalInvoiceDetail />} />
+          <Route path="billing" element={<Navigate to="../invoices" replace />} />
         </Route>
 
         {/* Staff shell — /admin never redirected here; that route was never

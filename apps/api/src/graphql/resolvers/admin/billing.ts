@@ -3,6 +3,8 @@ import type { BillingSource } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { isValidTomanAmount } from '../../../lib/billing.js';
+import { isValidPaymentTerm } from '../../../lib/invoice.js';
+import { lockContract } from '../../../lib/stepApproval.js';
 import { billingEntryInclude } from '../query.js';
 import { serviceRunInclude } from '../services.js';
 
@@ -15,14 +17,19 @@ import { serviceRunInclude } from '../services.js';
  * and marks them paid; a customer never writes one (spec §8: "created and
  * marked paid by Root" — the schema comment this stage surfaces).
  *
- * Reading one's own billing (`myBillingEntries`/`myBillingReport`/
+ * Journeys build plan J13: every creator in this file **writes a draft** —
+ * `createInvoiceDraft`, `createTicketBillingEntry`, `createServiceRunBillingEntry`
+ * — and only `issueInvoice` / `issuePlannedInvoice` (`invoices.ts`) make an
+ * invoice the customer can see. The rest of an invoice's life is in that file.
+ *
+ * Reading one's own billing (`myInvoices`/`myBillingReport`/
  * `mySubscriptions`) is ownership-gated instead, and lives in `query.ts`,
  * not here — the same split L5 established for dependencies.
  */
 
-const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extensions: { code: 'NOT_FOUND' } });
+export const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extensions: { code: 'NOT_FOUND' } });
 
-function parseAmountOrThrow(input: string): bigint {
+export function parseAmountOrThrow(input: string): bigint {
   if (!isValidTomanAmount(input)) {
     throw new GraphQLError('Amount must be a whole number of Toman — no sign, no decimal point.', {
       extensions: { code: 'INVALID_AMOUNT' },
@@ -31,15 +38,33 @@ function parseAmountOrThrow(input: string): bigint {
   return BigInt(input.trim());
 }
 
+/** A draft's own term, if it was given one: a whole number of days from 0 to
+ *  365 (the payment plan's bound), or null for "the default at issue". */
+export function parseTermOrThrow(days: number | null | undefined): number | null {
+  if (days === null || days === undefined) return null;
+  if (!isValidPaymentTerm(days)) {
+    throw new GraphQLError('A payment term is a whole number of days from 0 to 365.', {
+      extensions: { code: 'INVALID_TERM' },
+    });
+  }
+  return days;
+}
+
 export const billingMutations = {
   /**
+   * **Creates a draft** (journeys build plan J13, D-7): `issuedAt` is null, so
+   * the customer sees nothing until `issueInvoice` numbers and dates it. This
+   * was `createBillingEntry`, and the entry was an issued invoice the instant
+   * it existed; the same is true of the two creators below, which write a
+   * draft simply by not naming an `issuedAt` — the column has no default now.
+   *
    * source may not be SUBSCRIPTION (INVALID_SOURCE) — those rows are only
    * ever written by `ensureSubscriptionEntries` (lib/billing.ts), from a
    * Subscription's own periods. Letting this mutation create one too would
    * open a second door onto the exact row the unique
    * (subscriptionId, periodStart) index exists to keep singular.
    */
-  createBillingEntry: async (
+  createInvoiceDraft: async (
     _p: unknown,
     args: {
       customerId: string;
@@ -49,6 +74,7 @@ export const billingMutations = {
       descriptionFa: string;
       descriptionEn: string;
       amount: string;
+      paymentTermDays?: number | null;
     },
     ctx: Context,
   ) => {
@@ -69,6 +95,7 @@ export const billingMutations = {
       if (!phase) throw notFound('phase');
     }
     const amount = parseAmountOrThrow(args.amount);
+    const paymentTermDays = parseTermOrThrow(args.paymentTermDays);
 
     return prisma.billingEntry.create({
       data: {
@@ -79,25 +106,76 @@ export const billingMutations = {
         descriptionFa: args.descriptionFa,
         descriptionEn: args.descriptionEn,
         amount,
+        paymentTermDays,
       },
       include: billingEntryInclude,
     });
   },
 
+  /**
+   * Marks an issued invoice paid. A draft has nothing to pay (`NOT_ISSUED`) —
+   * before J13 every entry was issued, so this is new — and the entry is read
+   * *inside* the transaction that writes, under the row's lock, so a mark-paid
+   * cannot interleave with `issueInvoice` deciding the same row is still a draft.
+   */
   markBillingEntryPaid: async (_p: unknown, args: { entryId: string }, ctx: Context) => {
     requireCapability(ctx, 'billing.manage');
-    const entry = await prisma.billingEntry.findUnique({ where: { id: args.entryId } });
-    if (!entry) throw notFound('billing entry');
-    return prisma.billingEntry.update({ where: { id: entry.id }, data: { paidAt: new Date() }, include: billingEntryInclude });
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "BillingEntry" WHERE "id" = ${args.entryId} FOR UPDATE`;
+      const entry = await tx.billingEntry.findUnique({ where: { id: args.entryId } });
+      if (!entry) throw notFound('billing entry');
+      if (entry.issuedAt === null) {
+        throw new GraphQLError('A draft has not been issued, so there is nothing to mark paid.', {
+          extensions: { code: 'NOT_ISSUED' },
+        });
+      }
+      await tx.billingEntry.update({ where: { id: entry.id }, data: { paidAt: new Date() } });
+    });
+    return prisma.billingEntry.findUniqueOrThrow({ where: { id: args.entryId }, include: billingEntryInclude });
   },
 
-  /** Clears a mark-paid made in error — the same decide/undecide shape
-   *  `unverifyDependency` already uses. */
+  /**
+   * Clears a mark-paid made in error — the same decide/undecide shape
+   * `unverifyDependency` already uses. **Refused (`SUCCESSOR_ISSUED`) when the
+   * entry is a payment plan's and the plan's next row has been issued since**:
+   * that row was issued *because* this one was paid, and un-paying it would
+   * leave an invoice standing whose own condition is false — the state
+   * `canIssuePlanned` exists to make unreachable. Reversal is possible again
+   * only once nothing was issued on the strength of it (there is no way to
+   * un-issue; an invoice is never deleted).
+   */
   unmarkBillingEntryPaid: async (_p: unknown, args: { entryId: string }, ctx: Context) => {
     requireCapability(ctx, 'billing.manage');
-    const entry = await prisma.billingEntry.findUnique({ where: { id: args.entryId } });
-    if (!entry) throw notFound('billing entry');
-    return prisma.billingEntry.update({ where: { id: entry.id }, data: { paidAt: null }, include: billingEntryInclude });
+    await prisma.$transaction(async (tx) => {
+      // A plan's entries are ordered by the contract's lock, the same one
+      // `issuePlannedInvoice` takes: without it, an unmark could pass its
+      // "nothing issued after me" check while the next row is being issued on
+      // the strength of this payment, and both would commit.
+      const contractId = (await tx.billingEntry.findUnique({ where: { id: args.entryId }, select: { contractId: true } }))
+        ?.contractId;
+      if (contractId) await lockContract(tx, contractId);
+      await tx.$queryRaw`SELECT "id" FROM "BillingEntry" WHERE "id" = ${args.entryId} FOR UPDATE`;
+      const entry = await tx.billingEntry.findUnique({
+        where: { id: args.entryId },
+        include: { plannedInvoice: true },
+      });
+      if (!entry) throw notFound('billing entry');
+      if (entry.plannedInvoice) {
+        const successor = await tx.billingEntry.findFirst({
+          where: {
+            plannedInvoice: { planId: entry.plannedInvoice.planId, ordinal: { gt: entry.plannedInvoice.ordinal } },
+          },
+          select: { id: true },
+        });
+        if (successor) {
+          throw new GraphQLError('The next invoice of this payment plan has already been issued.', {
+            extensions: { code: 'SUCCESSOR_ISSUED' },
+          });
+        }
+      }
+      await tx.billingEntry.update({ where: { id: entry.id }, data: { paidAt: null } });
+    });
+    return prisma.billingEntry.findUniqueOrThrow({ where: { id: args.entryId }, include: billingEntryInclude });
   },
 
   /**

@@ -18,6 +18,7 @@ import {
   BillingReport,
   ServiceRun,
   ServiceRunRow,
+  Ticket,
   User,
 } from './fields.js';
 import { Query } from './query.js';
@@ -39,6 +40,7 @@ import { Request, requestMutations, requestQueries } from './requests.js';
 import { peopleMutations, peopleQueries } from './people.js';
 import { contractWizardFields, wizardMutations } from './wizard.js';
 import { briefMutations, contractBriefFields } from './brief.js';
+import { PlannedInvoice, invoiceQueries } from './invoices.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -72,11 +74,14 @@ export const resolvers = {
   Build,
   Dependency,
   BillingEntry,
+  // Journeys build plan J13: where each row of a payment plan stands.
+  PlannedInvoice,
   Subscription,
   BillingSourceTotal,
   BillingReport,
   ServiceRun,
   ServiceRunRow,
+  Ticket,
   Theme,
   User,
   Request,
@@ -114,6 +119,10 @@ export const resolvers = {
     // journeys build plan S3: customer (customers.manage) and allUsers
     // (staff.manage) — see resolvers/people.ts.
     ...peopleQueries,
+    // journeys build plan J13: myInvoices and invoice are the customer's own
+    // (issued only), contractsWithPaymentPlan is billing.manage — see
+    // resolvers/invoices.ts.
+    ...invoiceQueries,
   },
 
   Mutation: {

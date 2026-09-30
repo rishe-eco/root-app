@@ -1,5 +1,6 @@
 import type { StepKind, User } from '@prisma/client';
 import { isOverdue } from './dependency.js';
+import { isOverdue as isInvoiceOverdue, type InvoiceLike } from './invoice.js';
 import { attentionVisibleTo } from './visibility.js';
 
 /**
@@ -35,6 +36,14 @@ import { attentionVisibleTo } from './visibility.js';
  * Shipped in J3, the ones whose data exists already: the pending banner
  * (`DRAFT_TO_REVIEW`, `ROUND_PUBLISHED`), overdue dependencies
  * (`COMMITMENT_OVERDUE`) and demo items addressed (`ANSWER_PUBLISHED`).
+ * J13 adds `INVOICE_OVERDUE`: one line per contract, "N invoices are past
+ * their due day", the customer's move and about money (`money`, PD-21: shown
+ * to the customer and to those who may read money, no one else). There is no
+ * reminder — no scheduler — so this is the only place an overdue invoice is
+ * said out loud, and it is said on read. `INVOICE_DUE` (coming due) and
+ * `INVOICE_ISSUABLE` (the desk's *Issue next* is enabled) are still declared
+ * and unemitted: the brief asked for overdue, and the button already says the
+ * second on the plan itself.
  * S2 makes the three feedback kinds real for every step: Root owes an answer
  * (`FEEDBACK_UNRESOLVED`), an answer waits for sales (`ANSWER_PENDING_APPROVAL`,
  * Root's housekeeping — staff only), Root has answered and the customer's
@@ -109,6 +118,7 @@ export const ATTENTION_SENTENCES: Partial<Record<AttentionKind, Record<string, r
   FEEDBACK_UNRESOLVED: { default: BOTH },
   ANSWER_PENDING_APPROVAL: { default: ['staff'] },
   COMMITMENT_OVERDUE: { customer: BOTH, root: ['staff'] },
+  INVOICE_OVERDUE: { default: BOTH },
 };
 
 /** What `Contract.pending` (fields.ts) says, reduced to the facts attention
@@ -137,6 +147,9 @@ export type AttentionInput = {
   /** Feedback on every step (S2), reduced to three lists of facts — the loader
    *  decides membership, this file only groups and words them. */
   feedback: FeedbackFacts;
+  /** The contract's issued, unpaid invoices (J13) — this file decides which of
+   *  them are overdue (`isOverdue`, lib/invoice.ts), like the dependencies. */
+  invoices: InvoiceLike[];
 };
 
 /** One item's worth of a feedback fact. `money` is PD-21's flag (the item is
@@ -224,6 +237,23 @@ function allItems(input: AttentionInput): AttentionItem[] {
       internal: root,
       since: d.dueAt,
       params: { dependencyId: d.id, titleFa: d.titleFa, titleEn: d.titleEn },
+    });
+  }
+
+  // One line for all of a contract's overdue invoices, longest-overdue first
+  // (`since` is the earliest due day): the count is the fact, and three lines
+  // for three invoices would say the same thing three times. Hidden from
+  // anyone who may not read money (PD-21) by `attentionVisibleTo`.
+  const overdueInvoices = input.invoices.filter((i) => isInvoiceOverdue(i, input.now));
+  if (overdueInvoices.length > 0) {
+    items.push({
+      ...base,
+      kind: 'INVOICE_OVERDUE',
+      variant: 'default',
+      waitingOn: 'CUSTOMER',
+      money: true,
+      since: overdueInvoices.reduce((a, i) => (i.dueAt!.getTime() < a.getTime() ? i.dueAt! : a), overdueInvoices[0].dueAt!),
+      params: { count: overdueInvoices.length },
     });
   }
 

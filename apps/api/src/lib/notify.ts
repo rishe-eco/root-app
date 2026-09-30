@@ -19,9 +19,17 @@ import {
   requestMessageEmail,
   requestArchivedEmail,
   briefSharedEmail,
+  invoiceIssuedEmail,
   type MailContent,
 } from './mailTemplates.js';
-import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms, briefSharedSms } from './smsTemplates.js';
+import {
+  inviteSms,
+  requestSubmittedSms,
+  requestMessageSms,
+  requestArchivedSms,
+  briefSharedSms,
+  invoiceIssuedSms,
+} from './smsTemplates.js';
 
 /**
  * The notification router (journeys build plan J1). One call, `notify(user,
@@ -39,7 +47,7 @@ import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms, 
  * all, so SMS is not an enhancement there, it can be the *only* way the
  * invite reaches them — and, since J2, for the three request events
  * (`REQUEST_SUBMITTED`, `REQUEST_MESSAGE`, `REQUEST_ARCHIVED`) and, since J4,
- * `BRIEF_SHARED` (step 1 handed over): a customer who
+ * `BRIEF_SHARED` (step 1 handed over) and, since J13, `INVOICE_ISSUED`: a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
@@ -120,6 +128,11 @@ export type NotifyEvent =
   | {
       kind: 'BRIEF_SHARED';
       params: { customerName: string; projectTitleFa: string; projectTitleEn: string; portalUrl: string };
+    }
+  // Journeys build plan J13 — an invoice was issued to the customer.
+  | {
+      kind: 'INVOICE_ISSUED';
+      params: { customerName: string; invoiceNumber: string; amount: string; dueOn: string; portalUrl: string };
     };
 
 /** Every event's email rendering — always defined, since every event this
@@ -156,6 +169,8 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return requestArchivedEmail(locale, event.params);
     case 'BRIEF_SHARED':
       return briefSharedEmail(locale, event.params);
+    case 'INVOICE_ISSUED':
+      return invoiceIssuedEmail(locale, event.params);
   }
 }
 
@@ -181,6 +196,11 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
     // step 1 is theirs to read — the same reason the request events have one.
     case 'BRIEF_SHARED':
       return briefSharedSms(locale, event.params);
+    // J13: an invoice is money owed, and a customer who signs in by phone
+    // alone must be able to learn it exists — the same reason as above. The SMS
+    // carries only the link; the amount and the due day are the email's.
+    case 'INVOICE_ISSUED':
+      return invoiceIssuedSms(locale, event.params);
     default:
       return null;
   }

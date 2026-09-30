@@ -66,6 +66,9 @@ services:
       SESSION_DAYS: ${SESSION_DAYS:-14}
       INVITE_DAYS: ${INVITE_DAYS:-14}
       RESET_HOURS: ${RESET_HOURS:-2}
+      # J13: days from an invoice's issue to its due day, where nothing else
+      # says. A placeholder until the founder sets it.
+      DEFAULT_PAYMENT_TERM_DAYS: ${DEFAULT_PAYMENT_TERM_DAYS:-7}
       # No default, deliberately: the API refuses to boot in production without
       # it. See .env.production.example.
       STORAGE_DIR: ${STORAGE_DIR}

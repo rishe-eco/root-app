@@ -31,7 +31,12 @@ function BillForm({ run }: { run: ServiceRun }) {
       <p className="t-small">
         {t('desk.services.billedAmount', { amount: formatAmount(run.billingEntry.amount, locale) })}
         {' — '}
-        {run.billingEntry.paidAt ? t('billing.paid') : t('billing.outstanding')}
+        {/* J13: the charge is a draft until it is issued from Billing. */}
+        {run.billingEntry.issuedAt === null
+          ? t('desk.billing.draft')
+          : run.billingEntry.paidAt
+            ? t('billing.paid')
+            : t('billing.outstanding')}
       </p>
     );
   }

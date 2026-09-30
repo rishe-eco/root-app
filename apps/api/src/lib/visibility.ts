@@ -237,6 +237,27 @@ export function mayReadMoney(user: Viewer, c: { customerId: string }): boolean {
 }
 
 /**
+ * **Whether a viewer may see a billing entry at all** (journeys build plan
+ * J13, D-7) — the one rule every edge that can return a `BillingEntry` asks,
+ * so a draft cannot reach a customer through the edge somebody forgot. A draft
+ * (`issuedAt` null) is Root's working row: only whoever manages billing
+ * (`billing.manage`) may see it. An issued invoice is its customer's, and
+ * whoever may read money (`money.read`) — the same set that reads the payment
+ * plan it may have come from. Nobody else, and a refusal to a customer says
+ * "no such thing" (rule 13), which is why this answers a boolean and lets the
+ * caller choose between `null` and `NOT_FOUND`.
+ *
+ * **It includes `mayReadMoney`**, so an entry is either wholly visible or not
+ * there: `BillingEntry.amount` is a non-null string (a nullable one would let
+ * one withheld field take down a whole list), and an entry whose amount cannot
+ * be shown is better absent than half-shown.
+ */
+export function invoiceVisibleTo(user: Viewer, entry: { customerId: string; issuedAt: Date | null }): boolean {
+  if (!mayReadMoney(user, entry)) return false;
+  return entry.issuedAt !== null || can(user, 'billing.manage');
+}
+
+/**
  * An article's body (PD-14, J4): withheld when the article is `sensitive` — its
  * prose is about money — and the viewer may not read the contract's money. The
  * title and number are never withheld: that the article exists is not the
