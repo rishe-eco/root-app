@@ -186,6 +186,11 @@ model User {
   /// row is a subdomain that stops working when the row expires or goes.
   mockupViewGrants MockupViewGrant[]
 
+  /// Journeys build plan J11 — the contracts this person closed, and the
+  /// deliverables they handed over. Disabled, never deleted, like the rest.
+  deliveredContracts Contract[]  @relation("ContractDeliveredBy")
+  handedOverItems    ScopeItem[] @relation("ScopeItemHandedOverBy")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -440,6 +445,20 @@ model Contract {
   /// with `timeZone: 'UTC'` so 1 Aban never becomes 30 Mehr at 20:30.
   plannedStartAt DateTime? @db.Date
   plannedEndAt   DateTime? @db.Date
+
+  /// Journeys build plan J11, PD-6: **delivery belongs to the contract** — not a
+  /// `DELIVERED` project status, because a project can hold several contracts
+  /// over time (a feature for an existing site is a new contract on the same
+  /// project) and one of them closing says nothing about the others. Set once,
+  /// by `closeContract` (sales), in the same transaction that moves `status` to
+  /// `DONE`, so the legacy status stays truthful. **This is the third clause of
+  /// `isActiveContract`** (lib/visibility.ts): a delivered contract leaves every
+  /// `contracts.readActive` view, while sales (`readAll`) and the customer keep
+  /// it. An instant, not a calendar day — it is an event, like an approval — and
+  /// rendered as a day in UTC (PD-19). The support period counts from it.
+  deliveredAt   DateTime?
+  deliveredById String?
+  deliveredBy   User?     @relation("ContractDeliveredBy", fields: [deliveredById], references: [id], onDelete: SetNull)
 
   /// The live published pair. The two lineages advance on separate clocks —
   /// publishing a design revision never touches the contract's approval or
@@ -1220,6 +1239,20 @@ model ScopeItem {
   /// not force an assignment just to be editable.
   phaseId String?
   phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+
+  /// Journeys build plan J11 — **the handover** of a deliverable: the moment
+  /// Root gave the customer the thing (the repository, the access, the export)
+  /// and a note saying what was given and how. Set by `markHandedOver`, cleared
+  /// only by `unmarkHandedOver` before the contract closes. A CHECK added by hand
+  /// in the migration (`ScopeItem_handover_is_a_deliverable`) says an item can be
+  /// handed over only if it is a `DELIVERABLE` and carries a note that is more
+  /// than whitespace — a handover with nothing written is a tick, and the
+  /// summary's whole point is that the record says *what*. The note is read by
+  /// the customer and printed: it must never hold a credential (the form says so).
+  handedOverAt   DateTime?
+  handedOverById String?
+  handedOverBy   User?     @relation("ScopeItemHandedOverBy", fields: [handedOverById], references: [id], onDelete: SetNull)
+  handoverNote   String?
 
   /// Frame lines generated from this item (build plan L3) — a snapshot of its
   /// label at generation time, not a live view (see DemoFrameLine's own
