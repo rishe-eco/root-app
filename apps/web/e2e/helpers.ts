@@ -1,4 +1,7 @@
 import { execSync } from 'node:child_process';
+// The zip flavour of CRC-32 — node:zlib has had `crc32` since 22.2, which every
+// Node this repository runs on satisfies.
+import { crc32 } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type { APIRequestContext, Page } from '@playwright/test';
@@ -163,14 +166,124 @@ export function insertPublishedDemo() {
       INSERT INTO "Phase" ("id", "projectId", "contractId", "number", "titleFa", "titleEn", "updatedAt")
       SELECT '${E2E_PHASE_ID}', 'seed-project-nahal', c."id", 1, 'فاز ۱', 'Phase 1', now()
       FROM "Contract" c WHERE c."ref" = '${WIZARD_CONTRACT_REF}';
-      INSERT INTO "Demo" ("id", "phaseId", "stagingUrl", "publishedAt", "updatedAt")
-      VALUES ('e2e-demo', '${E2E_PHASE_ID}', 'https://staging.example.com', now(), now());
+      INSERT INTO "Demo" ("id", "phaseId", "stagingUrl", "projectId", "publishedAt", "updatedAt")
+      VALUES ('e2e-demo', '${E2E_PHASE_ID}', 'https://staging.example.com', 'seed-project-nahal', now(), now());
       INSERT INTO "DemoPage" ("id", "demoId", "key", "labelFa", "labelEn", "canonicalPath")
       VALUES ('e2e-page-home', 'e2e-demo', 'home', 'خانه', 'Home page', '/'),
              ('e2e-page-about', 'e2e-demo', 'about', 'درباره', 'About page', '/about');
       INSERT INTO "DemoFrame" ("id", "demoId", "authoredById", "updatedAt")
       SELECT 'e2e-frame', 'e2e-demo', u."id", now() FROM "User" u WHERE u."email" = 'admin@root.local';
     `,
+    stdio: 'pipe',
+    timeout: 60_000,
+  });
+}
+
+/**
+ * A store-only (uncompressed) zip, written by hand — the e2e specs have no zip
+ * library and need none: a mockup bundle in a spec is a handful of small text
+ * files, and a stored entry is the simplest thing the API's `validateBundle`
+ * accepts (its compression-ratio check treats equal sizes as 1:1).
+ */
+export function storeZip(files: Record<string, string>): Buffer {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const data = Buffer.from(content);
+    const nameBytes = Buffer.from(name);
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4); // version needed
+    local.writeUInt16LE(0x0800, 6); // UTF-8 names
+    local.writeUInt16LE(0, 8); // stored
+    local.writeUInt16LE(0, 10); // time
+    local.writeUInt16LE(33, 12); // date: 1980-01-01
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    local.writeUInt16LE(0, 28);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4); // version made by (DOS, 2.0)
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(0, 12);
+    central.writeUInt16LE(33, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBytes.length, 28);
+    central.writeUInt32LE(offset, 42);
+    locals.push(local, nameBytes, data);
+    centrals.push(central, nameBytes);
+    offset += local.length + nameBytes.length + data.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(Object.keys(files).length, 8);
+  end.writeUInt16LE(Object.keys(files).length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory, end]);
+}
+
+/**
+ * Uploads a mockup bundle over the real `POST /upload?class=MOCKUP_BUNDLE` as
+ * the seeded designer (assigned to the wizard contract), and returns the stored
+ * file's id. The API's streamed path (journeys build plan D-9) is exercised for
+ * real; only the demo and build rows that point at the file are inserted
+ * directly (`insertPublishedMockup`), because the mutations that make them are
+ * J9b's.
+ */
+export async function uploadMockupBundle(request: APIRequestContext, zip: Buffer, ref = WIZARD_CONTRACT_REF): Promise<string> {
+  await apiSignIn(request, ADMIN);
+  const { allContracts } = await gql<{ allContracts: Array<{ id: string; ref: string }> }>(request, '{ allContracts { id ref } }');
+  const contract = allContracts.find((c) => c.ref === ref);
+  if (!contract) throw new Error(`uploadMockupBundle: no contract ${ref}`);
+  await apiSignIn(request, DESIGNER);
+  const res = await request.post(`${E2E_API_URL}/upload?class=MOCKUP_BUNDLE&contractId=${contract.id}`, {
+    multipart: { file: { name: 'mockup.zip', mimeType: 'application/zip', buffer: zip } },
+  });
+  const body = await res.json();
+  if (res.status() !== 201) throw new Error(`uploadMockupBundle: ${res.status()} ${JSON.stringify(body)}`);
+  return body.id as string;
+}
+
+/**
+ * A MOCKUP demo on the wizard contract with one published MOCKUP build serving
+ * the given bundle — straight into the database (J9b owns `createMockupDemo`
+ * and `declareMockupBuild`). The demo's id is what the customer's
+ * `mockupViewUrl` takes.
+ */
+export const E2E_MOCKUP_DEMO_ID = 'e2e-mockup-demo';
+export function insertPublishedMockup(bundleFileId: string) {
+  if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
+    cwd: API_DIR,
+    input: `
+      INSERT INTO "Demo" ("id", "kind", "projectId", "contractId", "publishedAt", "updatedAt")
+      SELECT '${E2E_MOCKUP_DEMO_ID}', 'MOCKUP'::"DemoKind", c."projectId", c."id", now(), now()
+      FROM "Contract" c WHERE c."ref" = '${WIZARD_CONTRACT_REF}';
+      INSERT INTO "Build" ("id", "kind", "projectId", "demoId", "bundleFileId", "number", "declaredById", "publishedAt")
+      SELECT 'e2e-mockup-build', 'MOCKUP'::"BuildKind", c."projectId", '${E2E_MOCKUP_DEMO_ID}', '${bundleFileId.replace(/'/g, "''")}', 1, u."id", now()
+      FROM "Contract" c, "User" u WHERE c."ref" = '${WIZARD_CONTRACT_REF}' AND u."email" = 'designer@root.local';
+    `,
+    stdio: 'pipe',
+    timeout: 60_000,
+  });
+}
+
+/** Every view grant expires a minute ago — the clock cannot be moved in a browser test, the row can. */
+export function expireMockupGrants() {
+  if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
+    cwd: API_DIR,
+    input: `UPDATE "MockupViewGrant" SET "expiresAt" = now() - interval '1 minute';`,
     stdio: 'pipe',
     timeout: 60_000,
   });
