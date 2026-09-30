@@ -78,7 +78,8 @@ test('the customer sees the new road: seven steps, the status area, an honest "n
   await page.locator('.stepper-item[data-step="AGREEMENT"] button').click();
   await expect(panel.getByTestId('agreement-unpublished')).toContainText('Root has not published the contract yet');
   await page.locator('.stepper-item[data-step="DESIGN"] button').click();
-  await expect(panel.getByText('Not available yet')).toBeVisible();
+  // J8: the design is built, and before the agreement is signed it says when it opens.
+  await expect(panel.getByTestId('design-not-open')).toContainText('opens once the agreement is signed');
 
   // The legacy sections are not on this road.
   await expect(page.getByText('Design selection & approval')).toHaveCount(0);
