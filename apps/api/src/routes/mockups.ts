@@ -190,7 +190,8 @@ async function servableBuild(grantId: string): Promise<ServableBuild | null> {
   const grant = await prisma.mockupViewGrant.findUnique({
     where: { id: grantId },
     include: {
-      viewer: true,
+      // Only what the checks below read — not the password hash.
+      viewer: { select: { id: true, roles: true, state: true } },
       build: {
         include: {
           bundleFile: { select: { key: true } },
