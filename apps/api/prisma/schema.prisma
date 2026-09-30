@@ -177,8 +177,10 @@ model User {
   /// Journeys build plan J3 — the approvals this person gave (steps), and the
   /// staff-only notes they wrote. Staff accounts are disabled, never deleted,
   /// so neither relation cascades.
-  stepApprovals StepApproval[] @relation("StepApprovedBy")
-  internalNotes InternalNote[] @relation("InternalNoteAuthor")
+  stepApprovals       StepApproval[]       @relation("StepApprovedBy")
+  /// Journeys build plan J8 — allowance extensions this user approved.
+  allowanceExtensions AllowanceExtension[] @relation("AllowanceApprovedBy")
+  internalNotes       InternalNote[]       @relation("InternalNoteAuthor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -459,6 +461,9 @@ model Contract {
   stepApprovals StepApproval[]
   internalNotes InternalNote[]
 
+  /// Journeys build plan J8 — rounds granted beyond the brief's allowance.
+  allowanceExtensions AllowanceExtension[]
+
   /// Journeys build plan S2: every step's feedback hangs off the contract it
   /// is about (PD-1, PD-5).
   feedbackItems FeedbackItem[]
@@ -622,7 +627,12 @@ model DesignRevision {
   supersededAt DateTime?
 
   concepts   DesignConcept[]
-  currentFor Contract?       @relation("CurrentDesignRevision")
+  /// Journeys build plan J8: the custom path's palette — colours, fonts and
+  /// logo usage. Copied into the next draft with the concepts
+  /// (`draftDesignRevision`), so a round that changes only a colour is still
+  /// a round.
+  palette    DesignPaletteItem[]
+  currentFor Contract?           @relation("CurrentDesignRevision")
   feedback   FeedbackItem[]
 
   createdAt DateTime @default(now())
@@ -701,6 +711,19 @@ model DesignConcept {
   imageFile   StoredFile? @relation("ConceptImage", fields: [imageFileId], references: [id], onDelete: Restrict)
   position    Int         @default(0)
 
+  /// Journeys build plan J8 — a pre-made round's concept *is* a theme. The
+  /// pointer is `SetNull` and the round never reads through it: everything the
+  /// customer sees is `themeSnapshot` (name, vendor, demo URL — **never the
+  /// licence cost**, which is Root's, T2) and the copied `DESIGN_IMAGE` above,
+  /// both taken when the theme was proposed, so editing or deactivating a
+  /// catalogue entry afterwards cannot rewrite a round already shown. The
+  /// pointer is only for the designer ("which theme is this") and for not
+  /// proposing the same one twice in a draft (`@@unique` below — a NULL is
+  /// distinct, so plain concepts are unaffected).
+  themeId       String?
+  theme         Theme?  @relation(fields: [themeId], references: [id], onDelete: SetNull)
+  themeSnapshot Json?
+
   chosenAt DateTime?
 
   pages PageDesign[]
@@ -708,6 +731,7 @@ model DesignConcept {
   feedbackItem FeedbackItem?
 
   @@unique([designRevisionId, key])
+  @@unique([designRevisionId, themeId])
 }
 
 /// One page's design under a concept (Landing, About, Contracts, Portal login).
@@ -749,6 +773,86 @@ model PageDesign {
   feedbackItem FeedbackItem?
 
   @@unique([conceptId, key])
+}
+
+/// What a palette item is (journeys build plan J8). A colour is a hex; a font is
+/// a family name; logo usage is a short note with an optional picture — the
+/// rules are `lib/palette.ts`, and the colour's is also a CHECK.
+enum PaletteKind {
+  COLOR
+  FONT
+  LOGO_USAGE
+}
+
+/// One entry of a custom design's palette (journeys build plan J8): the brand
+/// colours, the typefaces and how the logo is used, on the revision they were
+/// shown in. Like a concept it is copied into the next draft and frozen in a
+/// published revision; unlike a page it has no approval of its own — the
+/// customer approves the design as a whole (`approveDesign`), and may leave a
+/// note on any item (`FeedbackItem.paletteItemId`).
+///
+/// `role` is the item's job in the design ("primary", "heading"), a Latin
+/// identifier and unique per kind within a revision; `value` is what the kind
+/// says it is (`lib/palette.ts`). The image is optional — a rendered specimen
+/// for a font, the logo on a background — and `Restrict`, like a page's: a
+/// published revision's picture cannot be deleted out from under it.
+///
+/// **One hand-written CHECK**, proven by direct insert in `j8.test.ts`:
+/// `DesignPaletteItem_color_is_hex` — a COLOR's value is `#` and six lowercase
+/// hex digits, whatever wrote the row.
+model DesignPaletteItem {
+  id               String         @id @default(cuid())
+  designRevisionId String
+  designRevision   DesignRevision @relation(fields: [designRevisionId], references: [id], onDelete: Cascade)
+
+  kind    PaletteKind
+  role    String
+  value   String
+  labelFa String
+  labelEn String
+
+  imageFileId String?
+  imageFile   StoredFile? @relation("PaletteImage", fields: [imageFileId], references: [id], onDelete: Restrict)
+
+  position Int @default(0)
+
+  feedbackItem FeedbackItem?
+
+  @@unique([designRevisionId, kind, role])
+  @@index([designRevisionId, position])
+}
+
+/// More rounds than the brief allowed (journeys build plan J8, journeys Q-S5:
+/// "a sales approval, with an optional charge"). The allowance in the brief is
+/// frozen with step 1; an extension is the only thing that raises it, and it
+/// is a row of its own — who approved, why, and the draft invoice if it was
+/// charged — never an edit of the brief. `step` is the step the rounds are
+/// for; `phaseId` is set only for a DEMO (allowances are per phase, Q-S6).
+///
+/// **CHECK `AllowanceExtension_extra_positive`** (`extra > 0`), hand-written,
+/// proven by direct insert. The invoice edge is `SetNull`: a draft can be
+/// deleted, and the extension still stands — the rounds were granted.
+model AllowanceExtension {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  step    StepKind
+  phaseId String?
+  phase   Phase?   @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  extra  Int
+  reason String
+
+  approvedById String
+  approvedBy   User   @relation("AllowanceApprovedBy", fields: [approvedById], references: [id])
+
+  billingEntryId String?       @unique
+  billingEntry   BillingEntry? @relation(fields: [billingEntryId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([contractId, step])
 }
 
 // ---------------------------------------------------------------------------
@@ -836,12 +940,15 @@ model StoredFile {
   uploadedById String
   uploadedBy   User   @relation(fields: [uploadedById], references: [id])
 
-  conceptImages  DesignConcept[] @relation("ConceptImage")
-  pageImages     PageDesign[]    @relation("PageImage")
+  conceptImages  DesignConcept[]     @relation("ConceptImage")
+  pageImages     PageDesign[]        @relation("PageImage")
+  /// Journeys build plan J8 — a palette item's picture (a font specimen, the
+  /// logo on a background).
+  paletteImages  DesignPaletteItem[] @relation("PaletteImage")
   /// The other asymmetry to `contractId`: an entry has *one* full text and
   /// the edge lives on the entry (§1.1), so this side is a nullable scalar,
   /// not an array — a contract has many files, an entry's hosted text is one.
-  entryFullText  LibraryEntry?   @relation("EntryFullText")
+  entryFullText  LibraryEntry?       @relation("EntryFullText")
   /// Build plan L7 — the run this upload belongs to, if it has been turned
   /// into one yet (createServiceRun is a separate act from the upload
   /// itself, matching the two-step shape POST /upload already has
@@ -849,7 +956,7 @@ model StoredFile {
   serviceRun     ServiceRun?
   /// Journeys build plan T2 — the theme this file is the preview *of*, when
   /// it is the one the theme currently points at (Theme.previewFileId).
-  themePreviewOf Theme?          @relation("ThemePreview")
+  themePreviewOf Theme?              @relation("ThemePreview")
 
   /// The Anthropic Files API id for this PDF's bytes (R4.md §2.3) — set the
   /// first time a `quotableFullText` entry is asked about, never re-uploaded
@@ -1277,19 +1384,21 @@ model Phase {
   /// meaning before a right one (R1's own reasoning, reapplied).
   milestoneLabel String?
 
-  scopeItems      ScopeItem[]
-  demos           Demo[]
-  builds          Build[]
+  scopeItems          ScopeItem[]
+  demos               Demo[]
+  builds              Build[]
   /// Build plan L6, spec §8's milestone linkage — every charge gated on this
   /// phase's acceptance. See BillingEntry.phaseId's own comment for why this
   /// reuses the phase rather than a separate Milestone model.
-  billingEntries  BillingEntry[]
+  billingEntries      BillingEntry[]
   /// Journeys build plan J3 — the demo approvals (one per phase, J10).
-  stepApprovals   StepApproval[]
-  feedbackItems   FeedbackItem[]
+  stepApprovals       StepApproval[]
+  feedbackItems       FeedbackItem[]
   /// Journeys build plan J4 — the payment plan's invoices that fall due at
   /// this phase's acceptance.
-  plannedInvoices PlannedInvoice[]
+  plannedInvoices     PlannedInvoice[]
+  /// Journeys build plan J8 — extra demo rounds granted for this phase (J10).
+  allowanceExtensions AllowanceExtension[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1603,17 +1712,25 @@ model FeedbackItem {
   articleNumber      Int?
 
   designRevisionId String?
-  designRevision   DesignRevision? @relation(fields: [designRevisionId], references: [id], onDelete: Cascade)
-  conceptId        String?         @unique
-  concept          DesignConcept?  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
-  pageDesignId     String?         @unique
-  pageDesign       PageDesign?     @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
-  /// The palette (J8) does not exist yet: the column lands now so the CHECK
-  /// is written once, and J8 adds the foreign key.
-  paletteItemId    String?         @unique
+  designRevision   DesignRevision?    @relation(fields: [designRevisionId], references: [id], onDelete: Cascade)
+  conceptId        String?            @unique
+  concept          DesignConcept?     @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  pageDesignId     String?            @unique
+  pageDesign       PageDesign?        @relation(fields: [pageDesignId], references: [id], onDelete: Cascade)
+  /// A palette item (J8). S2 landed the column before the palette existed so
+  /// the anchor CHECK was written once; J8 adds the foreign key.
+  paletteItemId    String?            @unique
+  paletteItem      DesignPaletteItem? @relation(fields: [paletteItemId], references: [id], onDelete: Cascade)
 
   /// "About the step as a whole" — the one anchor every step has.
   general Boolean @default(false)
+
+  /// Journeys build plan J8: set on the DESIGN `general` item when the customer
+  /// presses "show me other options" and cleared when the next round publishes
+  /// and answers it. The general thread is one per step, so this marker is what
+  /// tells *that* comment from any other one in it — without it, publishing a
+  /// round would either resolve every general comment or none.
+  otherOptionsAskedAt DateTime?
 
   status FeedbackStatus @default(OPEN)
 
@@ -2069,8 +2186,8 @@ model BillingEntry {
   /// `BillingEntry_issued_is_complete` (hand-written in the migration, proven
   /// by direct insert) is what makes "issued" mean *numbered and dated*
   /// whatever wrote the row.
-  issuedAt      DateTime?
-  paidAt        DateTime?
+  issuedAt DateTime?
+  paidAt   DateTime?
 
   /// `INV-000123`, Latin (house rule 14), taken from the Postgres sequence
   /// `invoice_number_seq` inside the issuing transaction (PD-11). Unique;
@@ -2094,6 +2211,10 @@ model BillingEntry {
   /// and this is what it could not be talked around.
   plannedInvoiceId String?         @unique
   plannedInvoice   PlannedInvoice? @relation(fields: [plannedInvoiceId], references: [id], onDelete: Restrict)
+
+  /// Journeys build plan J8: the allowance extension this draft charges for,
+  /// if it came from one (`extendAllowance` with a charge).
+  allowanceExtension AllowanceExtension?
 
   @@unique([subscriptionId, periodStart])
   @@index([customerId, paidAt])
@@ -3003,9 +3124,12 @@ model Theme {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  types TemplateTypeTheme[]
+  types    TemplateTypeTheme[]
   /// Every StoredFile that names this theme as its owner (THEME_PREVIEW).
-  files StoredFile[]        @relation("ThemeFiles")
+  files    StoredFile[]        @relation("ThemeFiles")
+  /// Journeys build plan J8 — the design concepts that were proposed from this
+  /// theme. `SetNull` on their side; a round reads its own snapshot.
+  concepts DesignConcept[]
 }
 
 /// A theme offered for a template type. Replaced per type by
