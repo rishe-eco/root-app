@@ -32,21 +32,28 @@ import {
 const person = (id: string, ...roles: Role[]) => ({ id, roles });
 
 const contract = (
-  over: Partial<{ customerId: string; publishedAt: Date | null; status: ContractStatus; project: { status: ProjectStatus } }> = {},
+  over: Partial<{ customerId: string; publishedAt: Date | null; status: ContractStatus; deliveredAt: Date | null; project: { status: ProjectStatus } }> = {},
 ) => ({
   customerId: 'cust',
   publishedAt: new Date('2026-09-01T00:00:00Z'),
   status: 'IN_PROGRESS' as ContractStatus,
+  deliveredAt: null as Date | null,
   project: { status: 'ACTIVE' as ProjectStatus },
   ...over,
 });
 
-test('isActiveContract: discarded and archived-project contracts are not active', () => {
+const DELIVERED = new Date('2026-10-01T09:00:00Z');
+
+test('isActiveContract: discarded, delivered and archived-project contracts are not active', () => {
   assert.equal(isActiveContract(contract()), true);
   assert.equal(isActiveContract(contract({ status: 'DISCARDED' })), false);
   assert.equal(isActiveContract(contract({ project: { status: 'ARCHIVED' } })), false);
-  // DONE is still active until J11's deliveredAt exists — the clause is
-  // absent, not false (plan S1).
+  // J11: the third clause. A delivered contract (closeContract wrote
+  // `deliveredAt`) is no longer being worked, whatever its status says …
+  assert.equal(isActiveContract(contract({ status: 'DONE', deliveredAt: DELIVERED })), false);
+  assert.equal(isActiveContract(contract({ deliveredAt: DELIVERED })), false);
+  // … and it is `deliveredAt`, not `DONE`: status is permissive and sales can set
+  // it by hand, which must not hide a contract nobody has closed.
   assert.equal(isActiveContract(contract({ status: 'DONE' })), true);
   assert.equal(isActiveContract(contract({ status: 'DRAFT' })), true);
   // J2: a request is not a project being worked. A contract can never sit on
@@ -84,6 +91,29 @@ test('contractVisibleTo: readAll sees everything, readActive only what is active
   }
 });
 
+test('contractVisibleTo: a delivered contract leaves design and development, and stays with sales and its customer (J11)', () => {
+  const delivered = contract({ status: 'DONE', deliveredAt: DELIVERED });
+  for (const role of ['DESIGNER', 'DEVELOPER'] as Role[]) {
+    assert.equal(contractVisibleTo(person('d', role), delivered), false, role);
+    assert.equal(contractVisibleToStaff(person('d', role), delivered), false, role);
+  }
+  for (const role of ['ADMIN', 'SALES'] as Role[]) {
+    assert.equal(contractVisibleTo(person('s', role), delivered), true, role);
+  }
+  assert.equal(contractVisibleTo(person('cust', 'CUSTOMER'), delivered), true);
+  // The developer who built it is out too — as a build author of its phases,
+  // and as a project reader when it was the project's only live contract.
+  const dev = person('dev', 'DEVELOPER');
+  assert.equal(canAuthorBuildOnPhase(dev, { developerId: 'dev', status: 'DONE', deliveredAt: DELIVERED, project: { status: 'ACTIVE' } }), false);
+  assert.equal(canAuthorBuildOnAnyPhase(dev, [{ developerId: 'dev', status: 'DONE', deliveredAt: DELIVERED }]), false);
+  assert.equal(projectVisibleToStaff(dev, { status: 'ACTIVE', contracts: [{ status: 'DONE', deliveredAt: DELIVERED }] }), false);
+  assert.equal(
+    projectVisibleToStaff(dev, { status: 'ACTIVE', contracts: [{ status: 'DONE', deliveredAt: DELIVERED }, { status: 'IN_PROGRESS', deliveredAt: null }] }),
+    true,
+    'a sibling contract still being worked keeps the project',
+  );
+});
+
 test('isContractReader: the lifecycle staff, and nobody else', () => {
   for (const role of ['ADMIN', 'SALES', 'DESIGNER', 'DEVELOPER'] as Role[]) {
     assert.equal(isContractReader(person('s', role)), true, role);
@@ -114,7 +144,7 @@ test('canAuthorBuild, and its phase forms (J4)', () => {
   assert.equal(canAuthorBuild(person('des', 'DESIGNER'), { developerId: 'des' }), false);
   assert.equal(canAuthorBuild(person('a', 'ADMIN'), { developerId: null }), true);
 
-  const live = (developerId: string | null) => ({ developerId, status: 'IN_PROGRESS' as ContractStatus });
+  const live = (developerId: string | null) => ({ developerId, status: 'IN_PROGRESS' as ContractStatus, deliveredAt: null as Date | null });
   assert.equal(canAuthorBuildOnAnyPhase(dev, [live('x'), live('dev')]), true);
   assert.equal(canAuthorBuildOnAnyPhase(dev, [live('x')]), false);
   assert.equal(canAuthorBuildOnAnyPhase(dev, []), false);
@@ -127,6 +157,7 @@ test('canAuthorBuildOnPhase: the claim on a phase is its own contract\'s develop
   const phaseOf = (developerId: string | null, status: ContractStatus = 'IN_PROGRESS') => ({
     developerId,
     status,
+    deliveredAt: null as Date | null,
     project: { status: 'ACTIVE' as ProjectStatus },
   });
   // Two contracts on one project, two developers: each holds only their own
@@ -168,14 +199,14 @@ test('mayReadArticleBody: a sensitive body needs the contract\'s money; an ordin
 
 test('canAuthorBuildOnAnyPhase: the contracts that own phases on a project — a discarded one\'s developer never holds the keys', () => {
   const dev = person('dev', 'DEVELOPER');
-  const first = { developerId: 'dev', status: 'DISCARDED' as ContractStatus };
-  const second = { developerId: 'other', status: 'IN_PROGRESS' as ContractStatus };
+  const first = { developerId: 'dev', status: 'DISCARDED' as ContractStatus, deliveredAt: null as Date | null };
+  const second = { developerId: 'other', status: 'IN_PROGRESS' as ContractStatus, deliveredAt: null as Date | null };
   // The project moved on to a second contract with a different developer: the
   // first developer's discarded contract no longer holds the keys.
   assert.equal(canAuthorBuildOnAnyPhase(dev, [first, second]), false);
   assert.equal(canAuthorBuildOnAnyPhase(person('other', 'DEVELOPER'), [first, second]), true);
   // Two live contracts, two developers, each owning phases: each is in.
-  const live = { developerId: 'dev', status: 'WAITING_ON_CUSTOMER' as ContractStatus };
+  const live = { developerId: 'dev', status: 'WAITING_ON_CUSTOMER' as ContractStatus, deliveredAt: null as Date | null };
   assert.equal(canAuthorBuildOnAnyPhase(dev, [live, second]), true);
   assert.equal(canAuthorBuildOnAnyPhase(person('other', 'DEVELOPER'), [live, second]), true);
 });
@@ -184,7 +215,7 @@ test('projectVisibleTo: the customer edge, or any active contract for readActive
   const p = (status: ProjectStatus, statuses: ContractStatus[]) => ({
     customerId: 'cust',
     status,
-    contracts: statuses.map((s) => ({ status: s })),
+    contracts: statuses.map((s) => ({ status: s, deliveredAt: null as Date | null })),
   });
   assert.equal(projectVisibleTo(person('cust', 'CUSTOMER'), p('ACTIVE', [])), true);
   assert.equal(projectVisibleTo(person('other', 'CUSTOMER'), p('ACTIVE', ['IN_PROGRESS'])), false);
@@ -242,7 +273,7 @@ test('a REQUESTED project: sales and its own customer see it; design, developmen
   assert.equal(projectVisibleTo(person('other', 'CUSTOMER'), requested), false);
   assert.equal(projectVisibleTo(person('c', 'CONTRIBUTOR'), requested), false);
   // Not even a contract that somehow named it would make it visible to them.
-  const withContract = { ...requested, contracts: [{ status: 'IN_PROGRESS' as ContractStatus }] };
+  const withContract = { ...requested, contracts: [{ status: 'IN_PROGRESS' as ContractStatus, deliveredAt: null as Date | null }] };
   assert.equal(projectVisibleToStaff(person('d', 'DESIGNER'), withContract), false);
   assert.equal(projectVisibleToStaff(person('v', 'DEVELOPER'), withContract), false);
 });

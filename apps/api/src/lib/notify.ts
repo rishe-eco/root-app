@@ -30,6 +30,7 @@ import {
   designOtherOptionsEmail,
   designApprovedEmail,
   allowanceExhaustedEmail,
+  contractClosedEmail,
   type MailContent,
 } from './mailTemplates.js';
 import {
@@ -49,6 +50,7 @@ import {
   designOtherOptionsSms,
   designApprovedSms,
   allowanceExhaustedSms,
+  contractClosedSms,
 } from './smsTemplates.js';
 
 /**
@@ -72,7 +74,7 @@ import {
  * `INVOICE_ISSUED`, and since J7 `AGREEMENT_APPROVED` and `AGREEMENT_SIGNED` (to
  * sales — the moments an agreement moves), and since J8 the design step's five
  * (`DESIGN_ROUND_PUBLISHED`, `DESIGN_CONCEPT_CHOSEN`, `DESIGN_OTHER_OPTIONS_ASKED`,
- * `DESIGN_APPROVED`, `ALLOWANCE_EXHAUSTED`): a customer who
+ * `DESIGN_APPROVED`, `ALLOWANCE_EXHAUSTED`), and since J11 `CONTRACT_CLOSED`: a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
@@ -229,6 +231,20 @@ export type NotifyEvent =
         allowance: number;
         deskUrl: string;
       };
+    }
+  // Journeys build plan J11 — step 7: sales closed the contract. To the customer.
+  // `supportUntil` is a calendar day (`YYYY-MM-DD`, PD-19), null when the brief
+  // promised no support.
+  | {
+      kind: 'CONTRACT_CLOSED';
+      params: {
+        customerName: string;
+        projectTitleFa: string;
+        projectTitleEn: string;
+        supportMonths: number | null;
+        supportUntil: string | null;
+        portalUrl: string;
+      };
     };
 
 /** Every event's email rendering — always defined, since every event this
@@ -287,6 +303,8 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return designApprovedEmail(locale, event.params);
     case 'ALLOWANCE_EXHAUSTED':
       return allowanceExhaustedEmail(locale, event.params);
+    case 'CONTRACT_CLOSED':
+      return contractClosedEmail(locale, event.params);
   }
 }
 
@@ -343,6 +361,10 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
       return designApprovedSms(locale, { deskUrl: event.params.deskUrl });
     case 'ALLOWANCE_EXHAUSTED':
       return allowanceExhaustedSms(locale, { deskUrl: event.params.deskUrl });
+    // J11: the delivery is the one moment a phone-only customer must not miss —
+    // the support period starts running with it.
+    case 'CONTRACT_CLOSED':
+      return contractClosedSms(locale, { portalUrl: event.params.portalUrl });
     default:
       return null;
   }

@@ -20,6 +20,7 @@ import {
   designOtherOptionsSms,
   designApprovedSms,
   allowanceExhaustedSms,
+  contractClosedSms,
   type SmsContent,
 } from './smsTemplates.js';
 
@@ -56,6 +57,8 @@ const builders: Array<{ name: string; build: (locale: string) => SmsContent; mus
   { name: 'design-other-options', build: (l) => designOtherOptionsSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
   { name: 'design-approved', build: (l) => designApprovedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
   { name: 'allowance-exhausted', build: (l) => allowanceExhaustedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  // Journeys build plan J11 — a contract closed, to the customer; one placeholder, the URL.
+  { name: 'contract-closed', build: (l) => contractClosedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
 ];
 
 for (const { name, build, mustInclude } of builders) {
@@ -113,6 +116,7 @@ test('the request SMS bodies carry no free text — only fixed words and the URL
     (l: string) => designOtherOptionsSms(l, { deskUrl: REQUEST_URL }),
     (l: string) => designApprovedSms(l, { deskUrl: REQUEST_URL }),
     (l: string) => allowanceExhaustedSms(l, { deskUrl: REQUEST_URL }),
+    (l: string) => contractClosedSms(l, { portalUrl: REQUEST_URL }),
   ]) {
     for (const locale of LOCALES) {
       const words = build(locale).text.replace(REQUEST_URL, '');

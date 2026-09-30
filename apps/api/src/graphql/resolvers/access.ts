@@ -32,7 +32,7 @@ export async function requireDesignAuthorOn(ctx: Context, contractId: string): P
   const user = requireCapability(ctx, 'design.author');
   const contract = await prisma.contract.findUnique({
     where: { id: contractId },
-    select: { customerId: true, publishedAt: true, status: true, designerId: true, project: { select: { status: true } } },
+    select: { customerId: true, publishedAt: true, status: true, deliveredAt: true, designerId: true, project: { select: { status: true } } },
   });
   if (!contract || !contractVisibleTo(user, contract)) {
     throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -82,7 +82,7 @@ export async function requireBuildAuthorOnPhase(ctx: Context, phaseId: string): 
   const user = requireCapability(ctx, 'builds.author');
   const phase = await prisma.phase.findUnique({
     where: { id: phaseId },
-    select: { contract: { select: { status: true, developerId: true, project: { select: { status: true } } } } },
+    select: { contract: { select: { status: true, deliveredAt: true, developerId: true, project: { select: { status: true } } } } },
   });
   if (!phase || !contractVisibleToStaff(user, phase.contract)) {
     throw new GraphQLError('No such phase.', { extensions: { code: 'NOT_FOUND' } });
@@ -108,8 +108,8 @@ export async function requireBuildAuthorOnProject(ctx: Context, projectId: strin
     where: { id: projectId },
     select: {
       status: true,
-      contracts: { select: { status: true } },
-      phases: { select: { contract: { select: { status: true, developerId: true } } } },
+      contracts: { select: { status: true, deliveredAt: true } },
+      phases: { select: { contract: { select: { status: true, deliveredAt: true, developerId: true } } } },
     },
   });
   // The staff half only: a customer is never a build author, so the
@@ -133,5 +133,5 @@ export async function requireBuildAuthorOnProject(ctx: Context, projectId: strin
  */
 export function buildPhaseScope(user: User): Prisma.PhaseWhereInput {
   if (can(user, 'assignments.override')) return {};
-  return { contract: { developerId: user.id, status: { not: 'DISCARDED' } } };
+  return { contract: { developerId: user.id, status: { not: 'DISCARDED' }, deliveredAt: null } };
 }

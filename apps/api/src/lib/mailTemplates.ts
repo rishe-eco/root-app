@@ -1065,3 +1065,59 @@ export function allowanceExhaustedEmail(
     text: `${params.recipientName} عزیز،\n\nمرحله‌ی «${step}» در «${params.projectTitleFa}» هر ${allowance} دورِ مجاز را مصرف کرده و طراح به دورِ دیگری نیاز دارد. افزایش سهمیه — با هزینه یا بی‌هزینه — با تأیید شماست.\n\n${params.deskUrl}`,
   };
 }
+
+/**
+ * Journeys build plan J11 — **a contract was closed**, to the customer: the
+ * work is delivered, and the summary is theirs to keep. It says three things in
+ * order of how much they matter: that it is finished (every phase accepted,
+ * everything agreed handed over), where the record is, and — because the
+ * support promise is the one thing still running — how long it runs. The
+ * support end is a calendar day (PD-19), rendered in the locale's own digits;
+ * the months are a count, in the locale's digits too (house rule 14).
+ * `supportUntil` is null when the brief promised none, and then that sentence
+ * is simply not there: a line saying "0 months" would be a claim.
+ */
+export function contractClosedEmail(
+  locale: string | null | undefined,
+  params: {
+    customerName: string;
+    projectTitleFa: string;
+    projectTitleEn: string;
+    supportMonths: number | null;
+    supportUntil: string | null;
+    portalUrl: string;
+  },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  const supported = params.supportMonths !== null && params.supportUntil !== null;
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    const support = supported
+      ? ` Your support period is ${params.supportMonths} ${params.supportMonths === 1 ? 'month' : 'months'}, until ${dayText(params.supportUntil!, 'en')}.`
+      : '';
+    return {
+      subject: `Delivered — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Root has delivered <strong>${title}</strong>: every phase is accepted and everything agreed has been handed over.${support}</p>
+        <p>The summary — what was agreed, what became of each item, the hand-over notes and the dates — is here, and you can print it:</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\nRoot has delivered "${params.projectTitleEn}": every phase is accepted and everything agreed has been handed over.${support}\n\nThe summary — what was agreed, what became of each item, the hand-over notes and the dates — is here, and you can print it:\n${params.portalUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const support = supported
+    ? ` دوره‌ی پشتیبانی‌ات ${countText(params.supportMonths!, 'fa')} ماه است، تا ${dayText(params.supportUntil!, 'fa')}.`
+    : '';
+  return {
+    subject: `تحویل شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>ریشه «${title}» را تحویل داد: همه‌ی مرحله‌ها پذیرفته شده و هرچه توافق شده بود تحویل داده شده است.${support}</p>
+      <p>خلاصه‌ی کار — آنچه توافق شد، سرانجام هر مورد، یادداشت‌های تحویل و تاریخ‌ها — همین‌جاست و می‌توانی چاپش کنی:</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\nریشه «${params.projectTitleFa}» را تحویل داد: همه‌ی مرحله‌ها پذیرفته شده و هرچه توافق شده بود تحویل داده شده است.${support}\n\nخلاصه‌ی کار — آنچه توافق شد، سرانجام هر مورد، یادداشت‌های تحویل و تاریخ‌ها — همین‌جاست و می‌توانی چاپش کنی:\n${params.portalUrl}`,
+  };
+}

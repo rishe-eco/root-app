@@ -23,6 +23,7 @@ import {
   designOtherOptionsEmail,
   designApprovedEmail,
   allowanceExhaustedEmail,
+  contractClosedEmail,
   feedbackSubmittedEmail,
   answerPendingEmail,
   answerPublishedEmail,
@@ -243,6 +244,20 @@ const builders: Array<{ name: string; build: (locale: string) => MailContent; li
         deskUrl: DESK_STEPS_URL,
       }),
     link: DESK_STEPS_URL,
+  },
+  // Journeys build plan J11 — a contract closed, to the customer.
+  {
+    name: 'contract-closed',
+    build: (l) =>
+      contractClosedEmail(l, {
+        customerName: 'نهال',
+        projectTitleFa: 'فروشگاه نهال',
+        projectTitleEn: 'Nahal shop',
+        supportMonths: 3,
+        supportUntil: '2027-01-01',
+        portalUrl: PORTAL_CONTRACT_URL,
+      }),
+    link: PORTAL_CONTRACT_URL,
   },
 ];
 
@@ -533,4 +548,42 @@ test('J8: the exhausted-allowance email names the step and how many rounds it ha
   const params = { recipientName: 'Sara', projectTitleFa: 'فروشگاه نهال', projectTitleEn: 'Nahal shop', step: 'DESIGN', used: 3, allowance: 3, deskUrl: DESK_STEPS_URL };
   assert.match(allowanceExhaustedEmail('en', params).text, /"Design" step .*all 3 of its rounds/s);
   assert.match(allowanceExhaustedEmail('fa', params).text, /هر ۳ دورِ مجاز/);
+});
+
+const closedParams = {
+  customerName: 'Nahal & Co',
+  projectTitleFa: 'فروشگاه نهال',
+  projectTitleEn: 'Nahal <shop>',
+  supportMonths: 3 as number | null,
+  supportUntil: '2027-01-01' as string | null,
+  portalUrl: PORTAL_CONTRACT_URL,
+};
+
+test('J11: a closed contract says it is delivered, where the summary is, and when support ends — a calendar day in the locale’s own digits', () => {
+  const en = contractClosedEmail('en', closedParams);
+  assert.match(en.subject, /Delivered/);
+  assert.match(en.text, /every phase is accepted and everything agreed has been handed over/);
+  assert.match(en.text, /support period is 3 months, until January 1, 2027/);
+  assert.ok(en.html.includes('Nahal &amp; Co') && en.html.includes('Nahal &lt;shop&gt;'), 'a name is text, not markup');
+
+  const fa = contractClosedEmail('fa', closedParams);
+  // House rule 14: a month count and a date are prose numbers — Persian digits,
+  // and the Jalali calendar (PD-19's Intl rendering in UTC). 1 January 2027 is
+  // 11 Dey 1405, and must not slip a day across a time zone.
+  assert.match(fa.text, /دوره‌ی پشتیبانی‌ات ۳ ماه است، تا ۱۱ دی ۱۴۰۵/);
+  assert.ok(!/[0-9]/.test(fa.subject.replace('Nahal', '')), 'no Latin digit in the Persian subject');
+  // The customer's Persian is «تو»: «پشتیبانی‌ات», «می‌توانی», never the desk's plural.
+  assert.match(fa.text, /می‌توانی چاپش کنی/);
+  assert.ok(!/می‌توانید|پشتیبانی‌تان/.test(fa.text), 'the customer is not addressed formally');
+});
+
+test('J11: a contract whose brief promised no support does not mention any — no "0 months" claim', () => {
+  for (const params of [
+    { ...closedParams, supportMonths: null, supportUntil: null },
+    { ...closedParams, supportMonths: 3, supportUntil: null },
+  ]) {
+    assert.ok(!/support period/.test(contractClosedEmail('en', params).text));
+    assert.ok(!/پشتیبانی/.test(contractClosedEmail('fa', params).text));
+  }
+  assert.match(contractClosedEmail('en', { ...closedParams, supportMonths: 1 }).text, /1 month,/, 'singular');
 });

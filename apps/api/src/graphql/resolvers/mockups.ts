@@ -40,7 +40,7 @@ export const mockupQueries = {
     const demo = await prisma.demo.findUnique({
       where: { id: args.demoId },
       include: {
-        contract: { select: { customerId: true, publishedAt: true, status: true, project: { select: { status: true } } } },
+        contract: { select: { customerId: true, publishedAt: true, status: true, deliveredAt: true, project: { select: { status: true } } } },
       },
     });
     // A SITE demo has no mockup to open, and a MOCKUP demo without a contract

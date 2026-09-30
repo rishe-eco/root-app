@@ -50,7 +50,7 @@ async function assertMayVerify(user: User, dep: Pick<Dependency, 'projectId' | '
   }
   if (dep.technical && !can(user, 'assignments.override')) {
     const theirs = await prisma.contract.count({
-      where: { projectId: dep.projectId, developerId: user.id, status: { not: 'DISCARDED' } },
+      where: { projectId: dep.projectId, developerId: user.id, status: { not: 'DISCARDED' }, deliveredAt: null },
     });
     if (theirs === 0) {
       throw new GraphQLError('You are not the developer of this project.', { extensions: { code: 'NOT_ASSIGNED' } });

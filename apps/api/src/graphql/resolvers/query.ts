@@ -258,7 +258,7 @@ export const Query = {
     if (!can(user, 'contracts.readAll')) requireCapability(ctx, 'contracts.readActive');
     const project = await prisma.project.findUnique({
       where: { id: args.id },
-      include: { scopeItems: { orderBy: { position: 'asc' } }, contracts: { select: { status: true } } },
+      include: { scopeItems: { orderBy: { position: 'asc' } }, contracts: { select: { status: true, deliveredAt: true } } },
     });
     // Null for a project this reader cannot see — the field is nullable and
     // already answers null for an id that does not exist (house rule 13).

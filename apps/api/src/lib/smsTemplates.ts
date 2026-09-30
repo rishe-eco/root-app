@@ -43,6 +43,8 @@ export { LOCALES, resolveLocale };
  *   - `designRoundPublishedSms`, `designConceptChosenSms`, `designOtherOptionsSms`,
  *     `designApprovedSms`, `allowanceExhaustedSms` (journeys build plan J8): **one
  *     placeholder** each, the URL — the round count and the names are the email's.
+ *   - `contractClosedSms` (journeys build plan J11): **one placeholder**, the URL —
+ *     the title and the support period's end are the email's.
  *
  * Codes are printed in Latin digits in both languages, never through
  * `toPersianDigits` — house rule 14's own exception for an identifier
@@ -193,4 +195,13 @@ export function allowanceExhaustedSms(locale: string | null | undefined, params:
     return { text: `A step has used up its rounds on Root — extend it? ${params.deskUrl}` };
   }
   return { text: `یک مرحله در ریشه دورهای مجازش را مصرف کرد؛ افزایش می‌دهید؟ ${params.deskUrl}` };
+}
+
+/** J11 — to the customer, when their contract is closed. The support end and the
+ *  title are the email's; the SMS points at the summary. */
+export function contractClosedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `Your project was delivered. The summary is on Root: ${params.portalUrl}` };
+  }
+  return { text: `پروژه‌ات تحویل شد. خلاصه‌اش در ریشه است: ${params.portalUrl}` };
 }

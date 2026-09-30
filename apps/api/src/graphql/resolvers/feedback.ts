@@ -86,6 +86,7 @@ const contractForItem = {
     customerId: true,
     publishedAt: true,
     status: true,
+    deliveredAt: true,
     designerId: true,
     developerId: true,
     sequence: true,

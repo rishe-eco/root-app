@@ -26,6 +26,10 @@ type ContractForVisibility = {
   customerId: string;
   publishedAt: Date | null;
   status: ContractStatus;
+  /** Required since J11, for the same reason as `project` below: every caller's
+   *  query must select it, and a caller that forgets is a type error rather than
+   *  a delivered contract silently read as still being worked. */
+  deliveredAt: Date | null;
   /** Required since J2 made `Contract.projectId` NOT NULL: every caller's
    *  query must select the project's status, and a caller that forgets is a
    *  type error rather than a contract silently read as active. */
@@ -33,9 +37,17 @@ type ContractForVisibility = {
 };
 
 /**
- * Still being worked: not discarded, on an active project. The plan's third
- * clause — not yet delivered — arrives with `Contract.deliveredAt` in J11;
- * until then it is absent, not false, so every undelivered contract passes.
+ * Still being worked: not discarded, not delivered, on an active project.
+ *
+ * **Not delivered is the plan's third clause, and J11 is what makes it true.**
+ * `Contract.deliveredAt` is written once, by `closeContract`, and from then on
+ * the contract leaves every view this function gates — a designer's list and
+ * their direct link, a developer's queue, the project's readers — while sales
+ * (`contracts.readAll`) and the customer keep it: the record of what was
+ * delivered is exactly what they return to. **It is `deliveredAt`, not
+ * `status === 'DONE'`**: status is permissive and hand-overridable (v3 §8), so
+ * a contract sales marked DONE by hand stays in the designer's list until it is
+ * actually closed — the same reason the status area never reads the enum.
  *
  * "On an active project" is the whole answer to what the request statuses
  * mean here. A `REQUESTED` project has no contract yet, so there is nothing
@@ -45,8 +57,9 @@ type ContractForVisibility = {
  * `contracts.readAll`) must not see it. Sales sees requests through
  * `contracts.readAll`, and the customer through `requestVisibleTo` below.
  */
-export function isActiveContract(c: Pick<ContractForVisibility, 'status' | 'project'>): boolean {
+export function isActiveContract(c: Pick<ContractForVisibility, 'status' | 'deliveredAt' | 'project'>): boolean {
   if (c.status === 'DISCARDED') return false;
+  if (c.deliveredAt !== null) return false;
   return c.project.status === 'ACTIVE';
 }
 
@@ -64,7 +77,7 @@ export function contractVisibleTo(user: Viewer, c: ContractForVisibility): boole
 
 /** The staff half alone — for authoring guards, where the customer's own edge
  *  must not count (a customer is never a build author; S1's fourth finding). */
-export function contractVisibleToStaff(user: Viewer, c: Pick<ContractForVisibility, 'status' | 'project'>): boolean {
+export function contractVisibleToStaff(user: Viewer, c: Pick<ContractForVisibility, 'status' | 'deliveredAt' | 'project'>): boolean {
   if (can(user, 'contracts.readAll')) return true;
   return can(user, 'contracts.readActive') && isActiveContract(c);
 }
@@ -112,7 +125,7 @@ export function canAuthorBuild(user: Viewer, c: { developerId: string | null }):
  */
 export function canAuthorBuildOnPhase(
   user: Viewer,
-  phaseContract: Pick<ContractForVisibility, 'status' | 'project'> & { developerId: string | null },
+  phaseContract: Pick<ContractForVisibility, 'status' | 'deliveredAt' | 'project'> & { developerId: string | null },
 ): boolean {
   return contractVisibleToStaff(user, phaseContract) && canAuthorBuild(user, phaseContract);
 }
@@ -128,11 +141,11 @@ export function canAuthorBuildOnPhase(
  */
 export function canAuthorBuildOnAnyPhase(
   user: Viewer,
-  phaseContracts: Array<{ developerId: string | null; status: ContractStatus }>,
+  phaseContracts: Array<{ developerId: string | null; status: ContractStatus; deliveredAt: Date | null }>,
 ): boolean {
   if (!can(user, 'builds.author')) return false;
   if (can(user, 'assignments.override')) return true;
-  return phaseContracts.some((c) => c.status !== 'DISCARDED' && c.developerId === user.id);
+  return phaseContracts.some((c) => c.status !== 'DISCARDED' && c.deliveredAt === null && c.developerId === user.id);
 }
 
 /**
@@ -142,7 +155,7 @@ export function canAuthorBuildOnAnyPhase(
  */
 export function projectVisibleTo(
   user: Viewer,
-  p: { customerId: string; status: ProjectStatus; contracts: Array<Pick<ContractForVisibility, 'status'>> },
+  p: { customerId: string; status: ProjectStatus; contracts: Array<Pick<ContractForVisibility, 'status' | 'deliveredAt'>> },
 ): boolean {
   return p.customerId === user.id || projectVisibleToStaff(user, p);
 }
@@ -168,11 +181,11 @@ export function requestVisibleTo(user: Viewer, p: { customerId: string; requeste
  *  edge must not count (a customer is never a build author). */
 export function projectVisibleToStaff(
   user: Viewer,
-  p: { status: ProjectStatus; contracts: Array<Pick<ContractForVisibility, 'status'>> },
+  p: { status: ProjectStatus; contracts: Array<Pick<ContractForVisibility, 'status' | 'deliveredAt'>> },
 ): boolean {
   if (can(user, 'contracts.readAll')) return true;
   if (!can(user, 'contracts.readActive')) return false;
-  return p.contracts.some((c) => isActiveContract({ status: c.status, project: { status: p.status } }));
+  return p.contracts.some((c) => isActiveContract({ status: c.status, deliveredAt: c.deliveredAt, project: { status: p.status } }));
 }
 
 /**

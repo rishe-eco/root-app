@@ -446,7 +446,7 @@ filesRouter.get(
       where: { id: req.params.id },
       include: {
         contract: {
-          select: { customerId: true, publishedAt: true, status: true, project: { select: { status: true } } },
+          select: { customerId: true, publishedAt: true, status: true, deliveredAt: true, project: { select: { status: true } } },
         },
         // Build plan L7 — a SERVICE_IMPORT file has no contract at all;
         // ownership runs through the project instead.

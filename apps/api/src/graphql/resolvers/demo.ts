@@ -30,7 +30,7 @@ export async function loadDemoForActor(demoId: string, user: { id: string; roles
       pages: true,
       // The demo's own project (J9): a MOCKUP demo has no phase to reach it
       // through, and `Demo.projectId` is the phase's project for a SITE one.
-      project: { include: { customer: true, contracts: { select: { status: true } } } },
+      project: { include: { customer: true, contracts: { select: { status: true, deliveredAt: true } } } },
     },
   });
   if (!demo) {

@@ -198,7 +198,7 @@ async function servableBuild(grantId: string): Promise<ServableBuild | null> {
           demo: {
             include: {
               contract: {
-                select: { customerId: true, publishedAt: true, status: true, project: { select: { status: true } } },
+                select: { customerId: true, publishedAt: true, status: true, deliveredAt: true, project: { select: { status: true } } },
               },
             },
           },
