@@ -74,7 +74,10 @@ test('the customer sees the new road: seven steps, the status area, an honest "n
   await expect(panel).toHaveAttribute('data-step', 'DRAFT');
   await expect(panel.getByRole('heading', { name: 'The draft' })).toBeVisible();
   await expect(panel.getByTestId('draft-empty')).toHaveText('Root has not published the draft yet.');
+  // The agreement is built (J7): before Root publishes the draft it says there is nothing to approve yet.
   await page.locator('.stepper-item[data-step="AGREEMENT"] button').click();
+  await expect(panel.getByTestId('agreement-unpublished')).toContainText('Root has not published the contract yet');
+  await page.locator('.stepper-item[data-step="DESIGN"] button').click();
   await expect(panel.getByText('Not available yet')).toBeVisible();
 
   // The legacy sections are not on this road.

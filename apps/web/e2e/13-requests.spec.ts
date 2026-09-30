@@ -124,7 +124,8 @@ test('sales converts the request: the contract form opens prefilled, and the thr
   await page.locator('#nc-ref').fill('RC-2026-J2A');
   await page.getByRole('button', { name: 'Create contract' }).click();
 
-  await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
+  // The converted contract is a new-road one since J7, which lands on its steps.
+  await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/(contract|steps)$/);
   // "Linked from the contract": the header points back at the request.
   const link = page.getByRole('link', { name: 'View the original request' });
   await expect(link).toBeVisible();

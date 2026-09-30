@@ -27,7 +27,8 @@ test('a contract goes from nothing to signed, then an amendment to signature', a
   await page.locator('#nc-en').fill('Workspace test contract');
   await page.getByRole('button', { name: 'Create contract' }).click();
 
-  await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
+  // A new-road contract lands on its steps; the legacy one on its contract tab.
+  await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/(contract|steps)$/);
   const contractId = page.url().match(/contracts\/([^/]+)\//)![1];
 
   // This spec is the legacy (design-first) flow, driven from nothing through the
@@ -36,7 +37,7 @@ test('a contract goes from nothing to signed, then an amendment to signature', a
   // this spec is about: nothing is published or approved yet, which is the one
   // moment that is not a migration. (`20-agreement` is the new road's spec.)
   makeContractLegacy(contractId);
-  await page.reload();
+  await page.goto(`/en/desk/contracts/${contractId}/contract`);
 
   // --- fill in articles via the template, publish the revision --------------
   await page.getByRole('button', { name: 'Apply standard template' }).click();
