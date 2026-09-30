@@ -48,6 +48,7 @@ import { PlannedInvoice, invoiceQueries } from './invoices.js';
 import { contractDesignFields, designCustomerMutations } from './design.js';
 import { allowanceMutations } from './allowance.js';
 import { mockupQueries } from './mockups.js';
+import { contractDeliveryFields, deliveryMutations } from './delivery.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -79,6 +80,9 @@ export const resolvers = {
     // Journeys build plan J8: the palette, what the design still lacks, and the
     // allowance extensions (staff only) — see design.ts.
     ...contractDesignFields,
+    // Journeys build plan J11: the close, as the desk needs it (`delivery`), and the
+    // summary — a record derived on read. See delivery.ts.
+    ...contractDeliveryFields,
   },
   Amendment,
   ContractRevision,
@@ -200,5 +204,8 @@ export const resolvers = {
     // allowance (contracts.author). The designer's half is admin/design.ts.
     ...designCustomerMutations,
     ...allowanceMutations,
+    // Journeys build plan J11: markHandedOver (contracts.author, or builds.author and
+    // the developer), unmarkHandedOver and closeContract (contracts.author).
+    ...deliveryMutations,
   },
 };

@@ -19,6 +19,7 @@ const empty = (over: Partial<TimelineInput> = {}): TimelineInput => ({
   contractRevisions: [],
   designRevisions: [],
   builds: [],
+  deliveredAt: null,
   ...over,
 });
 
@@ -38,11 +39,13 @@ test('every source becomes one item, newest first, each naming the side that act
       contractRevisions: [{ id: 'r1', version: 1, publishedAt: d(3), approvedAt: d(7), signedAt: d(8) }],
       designRevisions: [{ id: 'dr1', version: 1, publishedAt: d(4) }],
       builds: [{ id: 'b1', number: 3, publishedAt: d(11) }],
+      deliveredAt: d(13),
     }),
   );
   assert.deepEqual(
     items.map((i) => [i.kind, i.by, i.step, i.phaseNumber, i.number]),
     [
+      ['CONTRACT_DELIVERED', 'ROOT', null, null, null],
       ['STEP_APPROVED', 'ROOT', 'DEMO', 2, null],
       ['BUILD_PUBLISHED', 'ROOT', null, null, 3],
       ['STEP_APPROVED', 'CUSTOMER', 'AGREEMENT', null, null],

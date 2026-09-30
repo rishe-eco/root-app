@@ -36,6 +36,7 @@ export const TIMELINE_KINDS = [
   'CONTRACT_SIGNED',
   'DESIGN_PUBLISHED',
   'BUILD_PUBLISHED',
+  'CONTRACT_DELIVERED',
 ] as const;
 
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
@@ -69,6 +70,8 @@ export type TimelineInput = {
   }>;
   designRevisions: Array<{ id: string; version: number; publishedAt: Date }>;
   builds: Array<{ id: string; number: number; publishedAt: Date }>;
+  /** J11: when sales closed the contract (`Contract.deliveredAt`). */
+  deliveredAt: Date | null;
 };
 
 /** Newest first — a rail reads from the top. Ties by kind order, then id, so
@@ -108,6 +111,9 @@ export function timelineFor(input: TimelineInput): TimelineItem[] {
   }
   for (const b of input.builds) {
     item(`build-${b.id}`, b.publishedAt, 'BUILD_PUBLISHED', 'ROOT', { number: b.number });
+  }
+  if (input.deliveredAt) {
+    item('delivered', input.deliveredAt, 'CONTRACT_DELIVERED', 'ROOT');
   }
 
   return items.sort(

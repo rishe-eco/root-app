@@ -491,6 +491,11 @@ export const PageDesign = {
 
 export const ScopeItem = {
   checked: (s: { checkedAt: Date | null }) => s.checkedAt !== null,
+  /** J11: who handed a deliverable over. The name goes to whoever reads the item;
+   *  their contacts go through `mayReadContactOf` on the `User` fields, as for
+   *  every other edge that returns one. */
+  handedOverBy: (s: { handedOverById: string | null }) =>
+    s.handedOverById ? prisma.user.findUnique({ where: { id: s.handedOverById } }) : null,
 };
 
 /**

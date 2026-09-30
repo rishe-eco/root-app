@@ -275,6 +275,15 @@ export const typeDefs = /* GraphQL */ `
     meaningful e2e verification of this stage's own new surface.
     """
     phaseId: ID
+    """
+    Journeys build plan J11: when a deliverable was handed over, by whom, and the
+    note saying what was given and how. Null until then, and always null for a
+    page or a feature (a CHECK holds it). The note is read by the customer and
+    printed — it never holds a credential.
+    """
+    handedOverAt: DateTime
+    handedOverBy: User
+    handoverNote: String
   }
 
   """
@@ -1422,6 +1431,185 @@ export const typeDefs = /* GraphQL */ `
     """
     plannedStartAt: DateTime
     plannedEndAt: DateTime
+
+    """
+    Journeys build plan J11, PD-6: when sales closed this contract — the work
+    delivered. Null until then. From it the contract leaves every
+    contracts.readActive view (a designer's and a developer's); sales and the
+    customer keep it.
+    """
+    deliveredAt: DateTime
+    "What stands between this contract and being closed, and whether it has been."
+    delivery: Delivery!
+    """
+    Journeys build plan J11 — step 7, a record and not a review: what was agreed,
+    what became of each item, the rounds each step took, planned against actual
+    dates, the money, the support period. Derived on read, never stored. Carries
+    no feedback (Q-S8). Null until the agreement is signed — there is nothing
+    agreed to record.
+    """
+    summary: ContractSummary
+  }
+
+  """
+  Journeys build plan J11: the close, as the desk needs it. closable is the one
+  answer closeContract enforces — every phase accepted and every agreed
+  deliverable handed over — asked without closing anything.
+  """
+  type Delivery {
+    deliveredAt: DateTime
+    closable: Boolean!
+    "The contract has no phase at all: nothing was built, so nothing can be accepted."
+    noPhases: Boolean!
+    "Numbers of the phases whose demo the customer has not yet approved."
+    phasesNotAccepted: [Int!]!
+    "Ids of this contract's agreed deliverables not yet handed over."
+    deliverablesPending: [ID!]!
+  }
+
+  enum SummaryTradeDirection {
+    "This item was traded away, for the partner."
+    OUT
+    "This item came in by a trade, replacing the partner."
+    IN
+  }
+
+  type SummaryTradeItem {
+    key: String!
+    labelFa: String!
+    labelEn: String!
+  }
+
+  type SummaryTradePartner {
+    direction: SummaryTradeDirection!
+    key: String!
+    labelFa: String!
+    labelEn: String!
+    executedAt: DateTime!
+  }
+
+  "An executed scope trade: one item out, one in."
+  type SummaryTrade {
+    executedAt: DateTime!
+    out: SummaryTradeItem!
+    in: SummaryTradeItem!
+  }
+
+  "What was agreed: the signed revision, steps 1 and 2 as frozen into it, and every change that took effect after."
+  type SummaryAgreed {
+    version: Int!
+    contentHash: String
+    signedAt: DateTime!
+    "Appendix 1 as signed."
+    scopeItems: [ScopeSnapshotItem!]!
+    "A format-2 (new road) revision's brief, allowances, plan, phases and planned dates; null for a legacy contract. Money follows the viewer, as on ContractRevision."
+    agreement: AgreementSnapshot
+    "Published amendments that took effect — signed, or a trade's pair. Bodies follow the viewer (J7)."
+    amendments: [Amendment!]!
+    trades: [SummaryTrade!]!
+  }
+
+  "What became of one item of the agreement."
+  type SummaryItem {
+    id: ID!
+    key: String!
+    labelFa: String!
+    labelEn: String!
+    kind: ScopeKind!
+    "Where it ended: ACCEPTED, DECLINED, TRADED — or still AGREED, IN_BUILD or IN_DEMO if nobody moved it."
+    status: ScopeStatus!
+    phaseNumber: Int
+    "The signed agreement listed it. False for an item that came in afterwards."
+    inAgreement: Boolean!
+    declinedReason: String
+    tradePartner: SummaryTradePartner
+    handedOverAt: DateTime
+    "The name of whoever handed it over."
+    handedOverBy: String
+    handoverNote: String
+  }
+
+  """
+  A change to a published build that nobody asked for (L3b's third source). A
+  customer is told only of those a person has written up in both languages
+  (textFa and textEn); staff also see the rest, with the raw note and its
+  language, writtenUp false.
+  """
+  type SummaryUnprompted {
+    id: ID!
+    "DEMO for a site build, MOCKUP for a mockup iteration."
+    step: StepKind!
+    buildNumber: Int!
+    publishedAt: DateTime!
+    textFa: String
+    textEn: String
+    note: String
+    noteLang: String
+    writtenUp: Boolean!
+  }
+
+  type SummaryStep {
+    step: StepKind!
+    phaseId: ID
+    phaseNumber: Int
+    "Null means nobody counts this step's rounds yet — not zero."
+    iterationsUsed: Int
+    allowance: Int
+    "Rounds sales granted beyond the brief."
+    extensions: Int!
+    finishedAt: DateTime
+  }
+
+  type SummaryPhaseDates {
+    number: Int!
+    titleFa: String!
+    titleEn: String!
+    "A calendar day (PD-19)."
+    plannedEndAt: DateTime
+    "When the customer approved the phase's demo; null on the legacy road."
+    acceptedAt: DateTime
+  }
+
+  """
+  Planned against actual. plannedStartAt, plannedEndAt and a phase's plannedEndAt
+  are calendar days; the rest are instants. Render every one in UTC (PD-19).
+  """
+  type SummaryDates {
+    plannedStartAt: DateTime
+    plannedEndAt: DateTime
+    signedAt: DateTime
+    startedAt: DateTime
+    deliveredAt: DateTime
+    phases: [SummaryPhaseDates!]!
+  }
+
+  "Issued invoices only. Toman, decimal strings. Null to anyone who may not read the contract's money."
+  type SummaryInvoices {
+    count: Int!
+    paidCount: Int!
+    issued: String!
+    paid: String!
+    outstanding: String!
+  }
+
+  "The brief's support promise. from and until are calendar days (PD-19), null until the contract is delivered."
+  type SummarySupport {
+    months: Int!
+    from: DateTime
+    until: DateTime
+  }
+
+  type ContractSummary {
+    deliveredAt: DateTime
+    "The name of whoever closed it."
+    deliveredBy: String
+    agreed: SummaryAgreed!
+    items: [SummaryItem!]!
+    unpromptedChanges: [SummaryUnprompted!]!
+    steps: [SummaryStep!]!
+    dates: SummaryDates!
+    invoices: SummaryInvoices
+    support: SummarySupport
   }
 
   enum BriefKind {
@@ -1636,6 +1824,7 @@ export const typeDefs = /* GraphQL */ `
     CONTRACT_SIGNED
     DESIGN_PUBLISHED
     BUILD_PUBLISHED
+    CONTRACT_DELIVERED
   }
 
   "One step of the road. A demo is one entry per phase; a new-road contract with no phase yet has one with phaseId null."
@@ -2789,6 +2978,21 @@ export const typeDefs = /* GraphQL */ `
     NO_ALLOWANCE_SET.
     """
     extendAllowance(contractId: ID!, step: StepKind!, phaseId: ID, extra: Int!, reason: String!, charge: String): Contract!
+    """
+    Journeys build plan J11: hand a deliverable over, with a note saying what and
+    how (never a credential). contracts.author, or builds.author and the contract's
+    developer. An agreed deliverable of a signed, not-yet-delivered contract.
+    """
+    markHandedOver(scopeItemId: ID!, note: String!): Contract!
+    "Journeys build plan J11: take a handover back before the contract closes. contracts.author."
+    unmarkHandedOver(scopeItemId: ID!): Contract!
+    """
+    Journeys build plan J11 (contracts.author): every phase accepted
+    (PHASES_NOT_ACCEPTED) and every agreed deliverable handed over
+    (DELIVERABLES_PENDING); sets deliveredAt, moves the status to DONE, tells the
+    customer, and takes the contract out of every readActive view.
+    """
+    closeContract(contractId: ID!): Contract!
 
     """
     Attach a file already uploaded through POST /upload, or pass fileId: null

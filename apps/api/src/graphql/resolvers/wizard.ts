@@ -285,6 +285,11 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
     // current, and the status area says so.
     const signedAt = agreementSignedAt({ signatureSignedAt: c.currentContractRevision?.signature?.signedAt ?? null });
     if (signedAt) finished.push({ step: 'AGREEMENT', phaseId: null, at: signedAt });
+    // SUMMARY (J11) is done when sales has closed the contract — `deliveredAt`,
+    // which `closeContract` writes and nothing else does. It is never *locked*
+    // (it takes no input: `takesInput` is false), so this is its only signal, and
+    // until then it is the current step only once every step before it is done.
+    if (c.deliveredAt) finished.push({ step: 'SUMMARY', phaseId: null, at: c.deliveredAt });
   }
   // The design path is the brief's tier through `designPathOf` (J8, PD-13); the
   // legacy road has none. The design step's rounds are the published design
@@ -513,6 +518,7 @@ export const contractWizardFields = {
       })),
       designRevisions: facts.designRevisions.map((r) => ({ id: r.id, version: r.version, publishedAt: r.publishedAt! })),
       builds: facts.builds.map((b) => ({ id: b.id, number: b.number, publishedAt: b.publishedAt! })),
+      deliveredAt: c.deliveredAt,
     });
   },
 
