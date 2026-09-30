@@ -33,7 +33,7 @@ before(async () => {
 
 beforeEach(async () => {
   await resetDatabase();
-  f = await seedFixture();
+  f = await seedFixture({ sequence: 'DESIGN_FIRST' }); // these suites drive the legacy road to a signature (J5, J6 changed the new one)
 });
 
 after(async () => {

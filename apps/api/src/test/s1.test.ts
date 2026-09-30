@@ -23,7 +23,14 @@ import { startFileServer, upload } from './http.js';
  * upload guard (the plan's "files.ts reads capabilities too" trap).
  */
 
-type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED';
+/**
+ * `NOT_FOUND` is the customer's edge (house rules 2 and 13): a staff member who
+ * can see the contract is still not *its customer*, and hears what a stranger
+ * hears. `SCOPE_UNCONFIRMED` is a row whose capability check passed and whose
+ * first refusal is the step's own — the fixture has no scope, so publishing the
+ * draft gets exactly that far (J6) for whoever holds `contracts.author`.
+ */
+type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED';
 
 let f: Fixture;
 const staff: Record<string, User> = {};
@@ -31,6 +38,8 @@ let phaseId: string;
 let demoId: string;
 let dependencyId: string;
 let technicalDependencyId: string;
+let proposalId: string;
+let tradeId: string;
 
 before(async () => {
   await resetDatabase();
@@ -87,6 +96,43 @@ beforeEach(async () => {
     },
   });
   technicalDependencyId = technical.id;
+
+  // J5 and J6: what the new road's operations act on — a site type with a scope
+  // list and a brief that names it (`applyScopeTemplate`), a customer's proposal
+  // waiting for a decision, and a scope trade waiting for its customer half.
+  const type = await prisma.templateType.create({ data: { slug: 'store', labelFa: 'فروشگاهی', labelEn: 'Store' } });
+  await prisma.templateScopeItem.create({
+    data: { typeId: type.id, key: 'home', kind: 'PAGE', labelFa: 'صفحه', labelEn: 'Home', position: 0 },
+  });
+  await prisma.contractBrief.create({
+    data: { contractId: f.contract.id, kind: 'NEW_SITE', templateTypeId: type.id, designTier: 'THEME_PICK' },
+  });
+  proposalId = (
+    await prisma.scopeProposal.create({
+      data: { contractId: f.contract.id, kind: 'ADD', requestedKind: 'PAGE', text: 'یک صفحه‌ی وبلاگ', lang: 'fa', proposedById: f.customer.id },
+    })
+  ).id;
+  const [outItem, inItem] = await Promise.all(
+    ['out-item', 'in-item'].map((key, position) =>
+      prisma.scopeItem.create({
+        data: {
+          projectId,
+          key,
+          labelFa: key,
+          labelEn: key,
+          position,
+          kind: 'FEATURE',
+          status: key === 'out-item' ? 'AGREED' : 'PROPOSED',
+          contractId: key === 'out-item' ? f.contract.id : null,
+        },
+      }),
+    ),
+  );
+  tradeId = (
+    await prisma.scopeTrade.create({
+      data: { projectId, outItemId: outItem.id, inItemId: inItem.id, proposedById: f.admin.id, rootConfirmedAt: new Date() },
+    })
+  ).id;
 });
 
 after(async () => {
@@ -156,10 +202,35 @@ const OPS: Record<string, (as: User) => ReturnType<typeof exec>> = {
       as,
       variables: { c: f.contract.id, d: staff.DESIGNER.id },
     }),
+  // --- J5: step 2a ---
+  'contracts.author · apply scope template': (as) =>
+    exec('mutation($c: ID!){ applyScopeTemplate(contractId: $c) { id } }', { as, variables: { c: f.contract.id } }),
+  'contracts.author · decide scope proposal': (as) =>
+    exec(
+      'mutation($p: ID!){ decideScopeProposal(id: $p, decision: ACCEPTED, labelFa: "وبلاگ", labelEn: "Blog") { id } }',
+      { as, variables: { p: proposalId } },
+    ),
+  'customer · propose scope addition': (as) =>
+    exec('mutation($c: ID!){ proposeScopeAddition(contractId: $c, kind: PAGE, text: "a news page", lang: "en") { id } }', {
+      as,
+      variables: { c: f.contract.id },
+    }),
+  'customer · confirm scope trade': (as) =>
+    exec('mutation($t: ID!){ confirmScopeTradeCustomer(tradeId: $t) { id } }', { as, variables: { t: tradeId } }),
+  // --- J6: step 2b ---
+  'contracts.author · planned dates': (as) =>
+    exec('mutation($c: ID!){ setPlannedDates(contractId: $c, plannedStartAt: "2026-11-01", plannedEndAt: "2027-01-15") { id } }', {
+      as,
+      variables: { c: f.contract.id },
+    }),
+  'contracts.author · publish the draft': (as) =>
+    exec('mutation($c: ID!){ publishContractRevision(contractId: $c) { id } }', { as, variables: { c: f.contract.id } }),
 };
 
 const F = 'FORBIDDEN' as const;
 const N = 'NOT_ASSIGNED' as const;
+const NF = 'NOT_FOUND' as const;
+const U = 'SCOPE_UNCONFIRMED' as const;
 
 /**
  * The matrix. Columns: ADMIN, SALES, DESIGNER, DESIGNER_UNASSIGNED,
@@ -193,6 +264,14 @@ const MATRIX: Record<keyof typeof OPS, Outcome[]> = {
   'tickets.answer · desk queue':          ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'customers.manage · service runs':      ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'contracts.author · assign':            ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
+  // J5 and J6. The customer's operations are an ownership edge, not a
+  // capability: every staff role hears NOT_FOUND, sales and ADMIN included.
+  'contracts.author · apply scope template': ['OK', 'OK', F,  F,    F,    F,    F,   F,   F],
+  'contracts.author · decide scope proposal': ['OK', 'OK', F, F,    F,    F,    F,   F,   F],
+  'customer · propose scope addition':    [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  'OK'],
+  'customer · confirm scope trade':       [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  'OK'],
+  'contracts.author · planned dates':     ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
+  'contracts.author · publish the draft': [U,    U,    F,    F,    F,    F,    F,   F,   F],
 };
 
 for (const [op, row] of Object.entries(MATRIX)) {

@@ -19,7 +19,7 @@ before(async () => {
 
 beforeEach(async () => {
   await resetDatabase();
-  f = await seedFixture();
+  f = await seedFixture({ sequence: 'DESIGN_FIRST' }); // V3's revised-banner is the legacy road's; J6 gates publishing on the new one
 });
 
 after(async () => {

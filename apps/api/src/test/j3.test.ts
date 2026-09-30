@@ -273,7 +273,11 @@ test('an AGREEMENT_FIRST contract starts at requirements, is Root’s move, and 
   assert.deepEqual(steps(v), [
     'REQUIREMENTS=CURRENT',
     'SCOPE=UPCOMING',
-    'DRAFT=UPCOMING',
+    // The fixture has a published revision and no note waiting, which is J6's
+    // DONE for the draft — in a state the real road cannot reach (publishing is
+    // gated on the two steps before it). The road is walked in order, so the
+    // current step is still the first that is not done.
+    'DRAFT=DONE',
     'AGREEMENT=UPCOMING',
     'DESIGN=UPCOMING',
     'DEMO=UPCOMING',
@@ -573,20 +577,40 @@ test('the timeline is derived from dated rows: revisions, approvals; the request
   assert.equal(times.length, new Set(times).size);
 });
 
-test('planned dates: staff read them from the start; the customer once the agreement is approved (PD-19: calendar days)', async () => {
+test('planned dates: staff read them from the start; the customer once a draft is published (J6) or the agreement is approved (PD-19: calendar days)', async () => {
+  // J3 said "once the agreement is approved"; J6's step 2b shows the *proposed*
+  // dates beside the draft (Q12: Root proposes them in the draft), so a customer
+  // reads them from the moment a revision is published. Before that — a contract
+  // handed over for step 1 that has no draft yet — they are staff's.
   await prisma.contract.update({
     where: { id: f.contract.id },
-    data: { sequence: 'AGREEMENT_FIRST', plannedStartAt: new Date('2026-10-01'), plannedEndAt: new Date('2026-12-15') },
+    data: {
+      sequence: 'AGREEMENT_FIRST',
+      plannedStartAt: new Date('2026-10-01'),
+      plannedEndAt: new Date('2026-12-15'),
+      currentContractRevisionId: null,
+    },
   });
+  await prisma.contractRevision.deleteMany({ where: { contractId: f.contract.id } });
   const staffView = await view(staff.DESIGNER);
   assert.equal(staffView.statusSummary.plannedStartAt, '2026-10-01T00:00:00.000Z');
   assert.equal(staffView.statusSummary.plannedEndAt, '2026-12-15T00:00:00.000Z');
   const before = await view(f.customer);
   assert.deepEqual([before.statusSummary.plannedStartAt, before.statusSummary.plannedEndAt], [null, null]);
-  // A draft's proposal is not a promise: "view as customer" hides them too.
+  // "View as customer" hides them too — it is the customer's own answer.
   const asCustomer = await view(staff.SALES, { asCustomer: true });
   assert.deepEqual([asCustomer.statusSummary.plannedStartAt, asCustomer.statusSummary.plannedEndAt], [null, null]);
 
+  // A draft in front of the customer: the proposal is theirs to read and comment on.
+  const revision = await prisma.contractRevision.create({
+    data: { contractId: f.contract.id, version: 1, publishedAt: new Date() },
+  });
+  await prisma.contract.update({ where: { id: f.contract.id }, data: { currentContractRevisionId: revision.id } });
+  const shown = await view(f.customer);
+  assert.equal(shown.statusSummary.plannedStartAt, '2026-10-01T00:00:00.000Z');
+  assert.equal((await view(staff.SALES, { asCustomer: true })).statusSummary.plannedEndAt, '2026-12-15T00:00:00.000Z');
+
+  // ...and the approval keeps them shown (nothing un-publishes a draft).
   await prisma.stepApproval.create({ data: { contractId: f.contract.id, step: 'AGREEMENT', approvedById: f.admin.id } });
   const after = await view(f.customer);
   assert.equal(after.statusSummary.plannedStartAt, '2026-10-01T00:00:00.000Z');

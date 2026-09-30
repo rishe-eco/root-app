@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Prisma, Role, User } from '@prisma/client';
-import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
+import { prisma, publishDraftDirect, resetDatabase, seedFixture, type Fixture } from './db.js';
 import { exec, ok, stop } from './graphql.js';
 import { __setMailTransportForTests, __resetMailTransportForTests, type MailMessage } from '../lib/mail.js';
 import { __setSmsTransportForTests, __resetSmsTransportForTests } from '../lib/sms.js';
@@ -822,7 +822,10 @@ async function sensitiveArticles() {
       data: { contractId: f.contract.id, number, titleFa: `ماده ${number}`, titleEn, bodyFa: `بدنه ${number}`, bodyEn: `Body ${number}`, sensitive },
     });
   }
-  ok(await exec('mutation($c: ID!){ publishContractRevision(contractId: $c) { id } }', { as: staff.SALES, variables: { c: f.contract.id } }));
+  // Not through `publishContractRevision`: since J6 that has gates on this road
+  // (a scope, a complete brief), and these tests are about what a published
+  // article reveals, not about being allowed to publish one.
+  await publishDraftDirect(f.contract.id);
 }
 const ARTICLES = `query($c: ID!, $as: Boolean){ contract(id: $c, asCustomer: $as) { articles { number titleEn sensitive bodyFa bodyEn } draft { articles { number bodyEn sensitive } } } }`;
 type Articles = { articles: Array<{ number: number; titleEn: string; sensitive: boolean; bodyFa: string | null; bodyEn: string | null }>; draft: { articles: Array<{ number: number; bodyEn: string | null }> } | null };

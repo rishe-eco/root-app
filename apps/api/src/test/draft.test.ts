@@ -18,7 +18,7 @@ before(async () => {
 
 beforeEach(async () => {
   await resetDatabase();
-  f = await seedFixture();
+  f = await seedFixture({ sequence: 'DESIGN_FIRST' }); // the draft's own mechanics, on the legacy road (J6 gates the new one)
 });
 
 after(async () => {

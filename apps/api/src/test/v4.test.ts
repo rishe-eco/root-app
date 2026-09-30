@@ -16,7 +16,7 @@ before(async () => {
 
 beforeEach(async () => {
   await resetDatabase();
-  f = await seedFixture();
+  f = await seedFixture({ sequence: 'DESIGN_FIRST' }); // the feed's customer actions (comments, ticks) are the legacy road's (J5, J6)
 });
 
 after(async () => {

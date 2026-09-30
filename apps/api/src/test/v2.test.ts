@@ -18,7 +18,7 @@ before(async () => {
 
 beforeEach(async () => {
   await resetDatabase();
-  f = await seedFixture();
+  f = await seedFixture({ sequence: 'DESIGN_FIRST' }); // V2's workspace is the legacy road's; J6 gates publishing on the new one
 });
 
 after(async () => {
@@ -450,6 +450,10 @@ test('applyContractTemplate refuses a contract that already has articles, and fi
       titleEn: 'Empty',
       customerId: f.customer.id,
       projectId: emptyProject.id,
+      // The legacy template fills the articles *and* the fixed six scope items;
+      // on the new road it writes the articles only (J5 — its scope comes from
+      // `applyScopeTemplate`), which `j5.test.ts` proves.
+      sequence: 'DESIGN_FIRST',
     },
   });
   const data = ok(

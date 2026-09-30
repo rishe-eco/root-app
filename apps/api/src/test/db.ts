@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
-import { buildContractSnapshot, contentHash } from '../lib/revision.js';
+import { buildContractSnapshot, contentHash, draftState } from '../lib/revision.js';
+import { agreedScopeSnapshot } from '../lib/scope.js';
 // The same singleton the resolvers use, deliberately — a second client would
 // be a second connection pool and a second chance to be looking at a different
 // database than the code under test.
@@ -57,7 +58,7 @@ export type Fixture = Awaited<ReturnType<typeof seedFixture>>;
  * sealed, neither approved nor signed. That is the state a customer opens the
  * portal to, so it is the state most tests want to start from.
  */
-export async function seedFixture() {
+export async function seedFixture(opts: { sequence?: 'DESIGN_FIRST' | 'AGREEMENT_FIRST' } = {}) {
   const passwordHash = await bcrypt.hash('a-long-enough-password', 4); // cost 4: tests, not production
   const publishedAt = new Date('2026-07-01T09:00:00Z');
 
@@ -114,6 +115,13 @@ export async function seedFixture() {
       amount: BigInt(180_000_000),
       status: 'WAITING_ON_CUSTOMER',
       publishedAt,
+      // Unset takes the column's default, the new road (J3). The suites written
+      // before J3 — the draft, both lineages' revisions, the gate — drive the
+      // *legacy* road, and say so: since J5 and J6 the two roads differ in what
+      // a customer may do (`setScopeItem`, `addComment`) and what publishing a
+      // revision requires, so a legacy test that ran on the new road by
+      // default would be testing something else.
+      ...(opts.sequence ? { sequence: opts.sequence } : {}),
     },
   });
 
@@ -203,4 +211,35 @@ export async function approveContract(fixture: Fixture) {
     where: { id: fixture.contractRevision.id },
     data: { approvedAt: new Date() },
   });
+}
+
+/**
+ * Publishes the contract's draft as its next revision **without going through
+ * `publishContractRevision`** — the same snapshot, hash and lineage writes, none
+ * of the checks. For a test whose subject is something *else* about a published
+ * revision (a sensitive article's body, a note anchored to an article) and which
+ * must not have to satisfy the new road's gates (J6: `SCOPE_UNCONFIRMED`,
+ * `BRIEF_INCOMPLETE`) to get one. A test about the gates uses the mutation.
+ */
+export async function publishDraftDirect(contractId: string) {
+  const contract = await prisma.contract.findUniqueOrThrow({
+    where: { id: contractId },
+    include: { articles: true, project: { include: { scopeItems: true } }, currentContractRevision: true },
+  });
+  const { snapshot, hash } = draftState(
+    contract,
+    contract.articles,
+    contract.currentContractRevision,
+    agreedScopeSnapshot(contract.project.scopeItems),
+  );
+  const latest = await prisma.contractRevision.findFirst({ where: { contractId }, orderBy: { version: 'desc' } });
+  const now = new Date();
+  const revision = await prisma.contractRevision.create({
+    data: { contractId, version: (latest?.version ?? 0) + 1, snapshot, contentHash: hash, publishedAt: now },
+  });
+  if (contract.currentContractRevision) {
+    await prisma.contractRevision.update({ where: { id: contract.currentContractRevision.id }, data: { supersededAt: now } });
+  }
+  await prisma.contract.update({ where: { id: contractId }, data: { currentContractRevisionId: revision.id } });
+  return revision;
 }
