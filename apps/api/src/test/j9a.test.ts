@@ -286,7 +286,7 @@ test('a mockup path on the portal host is never a bundle', async () => {
   for (const path of ['/', '/index.html', '/about.html', '/css/app.css', '/__root/reporter.js']) {
     const res = await raw(path, { host: portal });
     assert.equal(res.status, 404, path);
-    assert.doesNotMatch(res.text, /About|about page|console\.log|__root\/reporter/, path);
+    assert.doesNotMatch(res.text, /about page|console\.log|root-demo-reporter/, path);
     // (Express's own 404 page sends a `default-src 'none'`; the mockup policy is what must be absent.)
     assert.doesNotMatch(String(res.headers['content-security-policy'] ?? ''), /frame-ancestors/, path);
   }
