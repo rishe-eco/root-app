@@ -200,6 +200,39 @@ export function insertDraftNewRoadContract() {
   });
 }
 
+/**
+ * A signed new-road contract with a two-row payment plan (journeys build plan
+ * J13): the seeded wizard contract (`WIZARD_CONTRACT_REF`), an AGREEMENT
+ * `StepApproval`, and a plan of a deposit and a delivery payment — neither tied
+ * to a phase, so the second is issuable the moment the first is paid.
+ *
+ * **Signing is a direct insert, and says so.** An `AGREEMENT_FIRST` contract
+ * cannot be approved or signed through the API until J7 builds the agreement
+ * gate, so this writes the row J7 will write (`agreementSignedAt`,
+ * lib/steps.ts, reads it). The plan is inserted too because `setPaymentPlan` is
+ * the desk's step-1 form and `17-requirements` already drives that; this spec
+ * is about what happens *after* it.
+ */
+export function insertSignedPaymentPlan() {
+  if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
+    cwd: API_DIR,
+    input: `
+      INSERT INTO "StepApproval" ("id", "contractId", "step", "approvedById")
+      SELECT 'e2e-agreement', c."id", 'AGREEMENT'::"StepKind", c."customerId"
+      FROM "Contract" c WHERE c."ref" = '${WIZARD_CONTRACT_REF}';
+      INSERT INTO "PaymentPlan" ("id", "contractId", "split", "updatedAt")
+      SELECT 'e2e-plan', c."id", 'INSTALLMENTS'::"PaymentSplit", now()
+      FROM "Contract" c WHERE c."ref" = '${WIZARD_CONTRACT_REF}';
+      INSERT INTO "PlannedInvoice" ("id", "planId", "ordinal", "labelFa", "labelEn", "amount", "paymentTermDays")
+      VALUES ('e2e-pi-1', 'e2e-plan', 1, 'پیش‌پرداخت', 'Deposit', 50000000, 5),
+             ('e2e-pi-2', 'e2e-plan', 2, 'تحویل', 'On delivery', 100000000, 10);
+    `,
+    stdio: 'pipe',
+    timeout: 60_000,
+  });
+}
+
 /** The API port `playwright.config.ts`'s webServer runs on — duplicated here
  *  rather than imported, same reasoning as TEST_DATABASE_URL above. */
 const E2E_API_URL = `http://localhost:${process.env.E2E_API_PORT || 4101}`;

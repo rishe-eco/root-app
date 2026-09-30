@@ -41,9 +41,14 @@ FROM (
 ) AS n
 WHERE b."id" = n."id";
 
--- The next issued invoice continues after the backfilled ones. `setval`'s third
--- argument is "is_called": with nothing backfilled the first number is 1.
-SELECT setval('invoice_number_seq', GREATEST((SELECT count(*) FROM "BillingEntry"), 1), (SELECT count(*) FROM "BillingEntry") > 0);
+-- The next issued invoice continues after the backfilled ones (a draft, which
+-- has no number, is not among them). `setval`'s third argument is "is_called":
+-- with nothing backfilled the first number is 1.
+SELECT setval(
+  'invoice_number_seq',
+  GREATEST((SELECT count(*) FROM "BillingEntry" WHERE "invoiceNumber" IS NOT NULL), 1),
+  (SELECT count(*) FROM "BillingEntry" WHERE "invoiceNumber" IS NOT NULL) > 0
+);
 -- BACKFILL:END
 
 -- A row that says it was issued must carry the number and the day it is due —

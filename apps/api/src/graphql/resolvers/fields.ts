@@ -739,7 +739,7 @@ export const ServiceRun = {
    * billed for. `invoiceVisibleTo` is the one rule (and `mayReadMoney` inside it
    * is why a staff reader without `money.read` sees no amount either).
    */
-  billingEntry: (r: { billingEntry: { customerId: string; issuedAt: Date | null } | null }, _a: unknown, ctx: Context) =>
+  billingEntry: <E extends { customerId: string; issuedAt: Date | null }>(r: { billingEntry: E | null }, _a: unknown, ctx: Context): E | null =>
     r.billingEntry && invoiceVisibleTo(viewerOf(ctx), r.billingEntry) ? r.billingEntry : null,
 };
 

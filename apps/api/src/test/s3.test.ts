@@ -604,6 +604,9 @@ test('a customer who was never granted the tool meets the same NOT_FOUND', async
 // --- customer(id) ----------------------------------------------------------------
 
 test('customer(id): the profile — user, grants, contracts, tickets and the invoices summary', async () => {
+  // J13: an entry inserted with no `issuedAt` is a draft and is in no total, so
+  // this is an issued invoice (numbered and dated, as the CHECK requires) — and
+  // a draft beside it, which the summary must not count.
   await prisma.billingEntry.create({
     data: {
       customerId: f.customer.id,
@@ -611,7 +614,14 @@ test('customer(id): the profile — user, grants, contracts, tickets and the inv
       descriptionFa: 'مرحله اول',
       descriptionEn: 'First instalment',
       amount: 5_000_000n,
+      issuedAt: new Date('2026-09-01T00:00:00Z'),
+      invoiceNumber: 'INV-000001',
+      dueAt: new Date('2026-09-08T00:00:00Z'),
+      paymentTermDays: 7,
     },
+  });
+  await prisma.billingEntry.create({
+    data: { customerId: f.customer.id, source: 'CONTRACT', descriptionFa: 'پیش‌نویس', descriptionEn: 'A draft', amount: 999n },
   });
   const data = ok(await exec(CUSTOMER, { as: await sales(), variables: { id: f.customer.id } })).customer as {
     user: { id: string; state: string };

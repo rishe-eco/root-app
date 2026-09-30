@@ -36,9 +36,9 @@ const CREATE_SUBSCRIPTION = `
   }
 `;
 
-const MY_BILLING_ENTRIES = `
+const MY_INVOICES = `
   query {
-    myBillingEntries { id source amount descriptionFa descriptionEn periodStart periodEnd paidAt subscription { id } }
+    myInvoices { id source amount descriptionFa descriptionEn periodStart periodEnd paidAt subscription { id } }
   }
 `;
 
@@ -65,8 +65,8 @@ test('a subscription generates exactly one entry per due period, and re-reading 
   // directly, since duePeriods reads real wall-clock time by default and
   // the test must not depend on when it happens to run relative to
   // 2026-01-01. Three months should be due by the time this test runs.
-  const firstRead = ok(await exec(MY_BILLING_ENTRIES, { as: f.customer }));
-  const entriesFirst = (firstRead.myBillingEntries as Array<{ id: string; subscription: { id: string } | null }>).filter(
+  const firstRead = ok(await exec(MY_INVOICES, { as: f.customer }));
+  const entriesFirst = (firstRead.myInvoices as Array<{ id: string; subscription: { id: string } | null }>).filter(
     (e) => e.subscription?.id === subscriptionId,
   );
   assert.ok(entriesFirst.length >= 1, 'at least the first period should be due immediately');
@@ -75,8 +75,8 @@ test('a subscription generates exactly one entry per due period, and re-reading 
   // Re-reading immediately after must not create a second entry for any
   // period already generated — this is the idempotency guarantee the
   // unique (subscriptionId, periodStart) index backs.
-  const secondRead = ok(await exec(MY_BILLING_ENTRIES, { as: f.customer }));
-  const entriesSecond = (secondRead.myBillingEntries as Array<{ id: string; subscription: { id: string } | null }>).filter(
+  const secondRead = ok(await exec(MY_INVOICES, { as: f.customer }));
+  const entriesSecond = (secondRead.myInvoices as Array<{ id: string; subscription: { id: string } | null }>).filter(
     (e) => e.subscription?.id === subscriptionId,
   );
   assert.equal(entriesSecond.length, countAfterFirstRead, 'a repeated read must not create duplicate entries');
@@ -106,7 +106,7 @@ test('lazy generation survives a concurrent-looking double read without a race c
 
   // Two reads "at once" — the database's own unique index is what makes
   // this safe, not any ordering guarantee in the resolver.
-  await Promise.all([exec(MY_BILLING_ENTRIES, { as: f.customer }), exec(MY_BILLING_ENTRIES, { as: f.customer })]);
+  await Promise.all([exec(MY_INVOICES, { as: f.customer }), exec(MY_INVOICES, { as: f.customer })]);
 
   const rows = await prisma.billingEntry.findMany({ where: { subscriptionId } });
   const periodStarts = rows.map((r) => r.periodStart?.toISOString());
@@ -137,20 +137,20 @@ test('BigInt amounts survive the GraphQL round trip as strings, not numbers', as
   assert.equal(sub.amount, '9999999999');
 });
 
-test('createBillingEntry refuses a non-integer amount (INVALID_AMOUNT) — no float ever touches a charge', async () => {
+test('createInvoiceDraft refuses a non-integer amount (INVALID_AMOUNT) — no float ever touches a charge', async () => {
   const result = await exec(
     `mutation($customerId: ID!, $amount: String!) {
-      createBillingEntry(customerId: $customerId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: $amount) { id }
+      createInvoiceDraft(customerId: $customerId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: $amount) { id }
     }`,
     { as: f.admin, variables: { customerId: f.customer.id, amount: '100.50' } },
   );
   assert.equal(result.code, 'INVALID_AMOUNT');
 });
 
-test('createBillingEntry refuses source SUBSCRIPTION — those are only ever generated lazily', async () => {
+test('createInvoiceDraft refuses source SUBSCRIPTION — those are only ever generated lazily', async () => {
   const result = await exec(
     `mutation($customerId: ID!) {
-      createBillingEntry(customerId: $customerId, source: SUBSCRIPTION, descriptionFa: "x", descriptionEn: "x", amount: "1000") { id }
+      createInvoiceDraft(customerId: $customerId, source: SUBSCRIPTION, descriptionFa: "x", descriptionEn: "x", amount: "1000") { id }
     }`,
     { as: f.admin, variables: { customerId: f.customer.id } },
   );
@@ -211,11 +211,24 @@ test('createTicketBillingEntry creates a TICKET-sourced entry once billable, and
 test('markBillingEntryPaid / unmarkBillingEntryPaid toggle paidAt, and the report moves between issued and outstanding', async () => {
   const entry = ok(
     await exec(
-      `mutation($customerId: ID!) { createBillingEntry(customerId: $customerId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: "300000") { id } }`,
+      `mutation($customerId: ID!) { createInvoiceDraft(customerId: $customerId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: "300000") { id } }`,
       { as: f.admin, variables: { customerId: f.customer.id } },
     ),
   );
-  const entryId = (entry.createBillingEntry as { id: string }).id;
+  const entryId = (entry.createInvoiceDraft as { id: string }).id;
+
+  // J13: what the entry became is a draft, which is in no total — nothing has
+  // been billed. Issuing it is what makes it "issued" (this test used to read
+  // 300000 straight after creating it, when every entry was issued on creation).
+  const reportDraft = ok(await exec(`query($c: ID){ billingReport(customerId: $c) { totalIssued totalPaid totalOutstanding } }`, {
+    as: f.admin,
+    variables: { c: f.customer.id },
+  }));
+  const draft = reportDraft.billingReport as { totalIssued: string; totalPaid: string; totalOutstanding: string };
+  assert.equal(draft.totalIssued, '0');
+  assert.equal(draft.totalOutstanding, '0');
+
+  ok(await exec(`mutation($id: ID!){ issueInvoice(entryId: $id) { id } }`, { as: f.admin, variables: { id: entryId } }));
 
   const reportBefore = ok(await exec(`query($c: ID){ billingReport(customerId: $c) { totalIssued totalPaid totalOutstanding } }`, {
     as: f.admin,
@@ -248,7 +261,7 @@ test('markBillingEntryPaid / unmarkBillingEntryPaid toggle paidAt, and the repor
 
 // --- Milestone linkage ----------------------------------------------------
 
-test('createBillingEntry accepts phaseId — the portal can show what a payment is gated on', async () => {
+test('createInvoiceDraft accepts phaseId — the portal can show what a payment is gated on', async () => {
   const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({
     data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1', milestoneLabel: 'Payment 1 of 4' },
@@ -257,14 +270,14 @@ test('createBillingEntry accepts phaseId — the portal can show what a payment 
   const entry = ok(
     await exec(
       `mutation($customerId: ID!, $phaseId: ID!) {
-        createBillingEntry(customerId: $customerId, phaseId: $phaseId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: "1000000") {
+        createInvoiceDraft(customerId: $customerId, phaseId: $phaseId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: "1000000") {
           id phase { id milestoneLabel }
         }
       }`,
       { as: f.admin, variables: { customerId: f.customer.id, phaseId: phase.id } },
     ),
   );
-  const created = entry.createBillingEntry as { phase: { id: string; milestoneLabel: string | null } };
+  const created = entry.createInvoiceDraft as { phase: { id: string; milestoneLabel: string | null } };
   assert.equal(created.phase.id, phase.id);
   assert.equal(created.phase.milestoneLabel, 'Payment 1 of 4');
 });
@@ -272,23 +285,27 @@ test('createBillingEntry accepts phaseId — the portal can show what a payment 
 // --- Ownership and capability boundaries (house rule 2) --------------------
 
 test('a customer cannot read another customer\'s billing entries, and cannot call staff mutations', async () => {
-  ok(
+  const draft = ok(
     await exec(
-      `mutation($customerId: ID!) { createBillingEntry(customerId: $customerId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: "10000") { id } }`,
+      `mutation($customerId: ID!) { createInvoiceDraft(customerId: $customerId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: "10000") { id } }`,
       { as: f.admin, variables: { customerId: f.customer.id } },
     ),
   );
+  // Issued, so it is really somebody's invoice the stranger is not shown (a
+  // draft would be invisible to *everyone* and prove nothing about ownership).
+  ok(await exec(`mutation($id: ID!){ issueInvoice(entryId: $id) { id } }`, { as: f.admin, variables: { id: (draft.createInvoiceDraft as { id: string }).id } }));
+  assert.equal(((ok(await exec(MY_INVOICES, { as: f.customer })).myInvoices) as unknown[]).length, 1);
 
-  const strangerRead = ok(await exec(MY_BILLING_ENTRIES, { as: f.stranger }));
-  assert.equal((strangerRead.myBillingEntries as unknown[]).length, 0);
+  const strangerRead = ok(await exec(MY_INVOICES, { as: f.stranger }));
+  assert.equal((strangerRead.myInvoices as unknown[]).length, 0);
 
   const forbidden = await exec(
-    `mutation($customerId: ID!) { createBillingEntry(customerId: $customerId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: "1") { id } }`,
+    `mutation($customerId: ID!) { createInvoiceDraft(customerId: $customerId, source: CONTRACT, descriptionFa: "x", descriptionEn: "x", amount: "1") { id } }`,
     { as: f.customer, variables: { customerId: f.customer.id } },
   );
   assert.equal(forbidden.code, 'FORBIDDEN');
 
-  const anonymous = await exec(MY_BILLING_ENTRIES, { as: null });
+  const anonymous = await exec(MY_INVOICES, { as: null });
   assert.equal(anonymous.code, 'UNAUTHENTICATED');
 });
 
@@ -311,7 +328,7 @@ test('endSubscription stops future periods and refuses a second end (ALREADY_END
   const subscriptionId = (created.createSubscription as { id: string }).id;
 
   // Read once so periods up to "now" are generated under the still-open subscription.
-  ok(await exec(MY_BILLING_ENTRIES, { as: f.customer }));
+  ok(await exec(MY_INVOICES, { as: f.customer }));
   const beforeEnd = await prisma.billingEntry.count({ where: { subscriptionId } });
   assert.ok(beforeEnd > 1, 'several years of monthly periods should already be due');
 
@@ -326,7 +343,7 @@ test('endSubscription stops future periods and refuses a second end (ALREADY_END
   // Every entry generated from now on is capped at the end date — resetting
   // and re-reading must not create anything past it.
   await prisma.billingEntry.deleteMany({ where: { subscriptionId } });
-  ok(await exec(MY_BILLING_ENTRIES, { as: f.customer }));
+  ok(await exec(MY_INVOICES, { as: f.customer }));
   const afterEnd = await prisma.billingEntry.findMany({ where: { subscriptionId } });
   assert.equal(afterEnd.length, 2, 'only the Jan and Feb 2020 periods are within range');
 

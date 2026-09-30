@@ -47,6 +47,12 @@ export async function resetDatabase() {
   if (tables.length === 0) return;
   const list = tables.map((t) => `"public"."${t.tablename}"`).join(', ');
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  // J13: `RESTART IDENTITY` restarts only sequences a column owns, and
+  // `invoice_number_seq` is not one — so without this the first invoice of a
+  // test would be numbered by however many earlier tests issued, and no test
+  // could say "INV-000001". (Nothing in production ever does this: an invoice
+  // number is never reused.)
+  await prisma.$executeRawUnsafe(`ALTER SEQUENCE "invoice_number_seq" RESTART`);
 }
 
 export type Fixture = Awaited<ReturnType<typeof seedFixture>>;
