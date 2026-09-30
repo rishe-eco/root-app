@@ -430,6 +430,8 @@ test('every resolver that can return a BillingEntry is accounted for — a new e
   // return billing entries and is not in this table fails this test on purpose.
   const accounted: Record<string, string> = {
     'admin/billing.ts': 'staff mutations (billing.manage); every creator writes a draft',
+    'allowance.ts': 'extendAllowance (J8): a charged extension creates a DRAFT (contracts.author + billing.manage) — never issued here',
+    'design.ts': 'Contract.allowanceExtensions (J8): staff readers only, and the amount only where mayReadMoney; a customer gets an empty list',
     'admin/invoices.ts': 'staff mutations (billing.manage)',
     'brief.ts': 'counts issued entries to refuse replacing a plan (PLAN_HAS_ISSUED_INVOICES)',
     'fields.ts': 'the field resolvers: ServiceRun.billingEntry and Ticket.billingEntry ask invoiceVisibleTo',

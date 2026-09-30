@@ -466,8 +466,10 @@ test('approveStep: only the contract’s customer, only the steps that are appro
   assert.equal((await go(sales, 'DEMO', phase.id)).code, 'NOT_FOUND');
   assert.equal((await go(f.stranger, 'DEMO', phase.id)).code, 'NOT_FOUND');
 
-  // The agreement is J7's gate; the steps it seals are approved with it.
-  for (const step of ['AGREEMENT', 'REQUIREMENTS', 'SCOPE', 'DRAFT', 'SUMMARY'] as const) {
+  // The agreement is J7's gate; the steps it seals are approved with it. The design
+  // has its own door since J8 (`approveDesign`, with the path's completeness as its
+  // precondition), so it is not approved here either — one way to approve it.
+  for (const step of ['AGREEMENT', 'REQUIREMENTS', 'SCOPE', 'DRAFT', 'DESIGN', 'SUMMARY'] as const) {
     assert.equal((await go(f.customer, step)).code, 'STEP_NOT_APPROVABLE', step);
   }
   assert.equal((await prisma.stepApproval.count()), 0, 'nothing was written by a refusal');
@@ -475,7 +477,7 @@ test('approveStep: only the contract’s customer, only the steps that are appro
   // A demo needs its phase — the placeholder demo (no phase) can never take an approval.
   assert.equal((await go(f.customer, 'DEMO', null)).code, 'STEP_NOT_ON_ROAD');
   assert.equal((await go(f.customer, 'DEMO', 'not-a-phase')).code, 'STEP_NOT_ON_ROAD');
-  assert.equal((await go(f.customer, 'DESIGN', phase.id)).code, 'INVALID_TARGET', 'only a demo has a phase');
+  assert.equal((await go(f.customer, 'MOCKUP', phase.id)).code, 'INVALID_TARGET', 'only a demo has a phase');
 
   // The legacy road approves through its own gate.
   await prisma.contract.update({ where: { id: f.contract.id }, data: { sequence: 'DESIGN_FIRST' } });
@@ -487,7 +489,12 @@ test('approving DESIGN accepts and locks design feedback and no other step’s',
   const requirements = await submitOk('REQUIREMENTS', { general: true }, 'One more thing');
   ok(await answer(sales, design.id, 'Warmer palette coming', 'ADDRESSED'));
 
-  ok(await exec(APPROVE_STEP, { as: f.customer, variables: { c: f.contract.id, s: 'DESIGN', p: null } }));
+  // Approving the design is `approveDesign` since J8 (`j8.test.ts` holds its own
+  // story): it needs a brief for the path and, on the pre-made path, a chosen concept.
+  const type = await prisma.templateType.create({ data: { slug: 'store', labelFa: 'ف', labelEn: 'Store' } });
+  await prisma.contractBrief.create({ data: { contractId: f.contract.id, kind: 'NEW_SITE', templateTypeId: type.id, designTier: 'THEME_PICK', premadeRounds: 3 } });
+  await prisma.designConcept.updateMany({ where: { designRevisionId: f.designRevision.id, key: '1a' }, data: { chosenAt: new Date() } });
+  ok(await exec('mutation($c: ID!){ approveDesign(contractId: $c) { id } }', { as: f.customer, variables: { c: f.contract.id } }));
   assert.equal((await prisma.feedbackItem.findUniqueOrThrow({ where: { id: design.id } })).status, 'ACCEPTED');
   const untouched = await prisma.feedbackItem.findUniqueOrThrow({ where: { id: requirements.id } });
   assert.equal(untouched.status, 'OPEN');
@@ -972,12 +979,17 @@ test('FeedbackItem_anchor_matches_step: every row of the anchor table, inserted 
   const { phase, demo, home, line, scopeItem } = await seedDemo();
   const concept = await prisma.designConcept.findFirstOrThrow({ where: { designRevisionId: f.designRevision.id } });
   const page = await prisma.pageDesign.findFirstOrThrow({ where: { conceptId: concept.id } });
+  // A palette item is a real row since J8 added the foreign key S2 left off.
+  const swatch = await prisma.designPaletteItem.create({
+    data: { designRevisionId: f.designRevision.id, kind: 'COLOR', role: 'primary', value: '#112233', labelFa: 'ا', labelEn: 'P' },
+  });
   const real: Partial<Record<keyof FeedbackAnchor, string>> = {
     anchorScopeItemId: scopeItem.id,
     contractRevisionId: f.contractRevision.id,
     designRevisionId: f.designRevision.id,
     conceptId: concept.id,
     pageDesignId: page.id,
+    paletteItemId: swatch.id,
     demoId: demo.id,
     demoPageId: home.id,
     frameLineId: line.id,
@@ -990,7 +1002,7 @@ test('FeedbackItem_anchor_matches_step: every row of the anchor table, inserted 
       columns[key] = typeof value === 'string' && key in real ? real[key as keyof FeedbackAnchor] : value;
     }
     // The table names placeholders; anything that is not a real foreign key
-    // (a brief field, a palette item, an article number) is used as it is.
+    // (a brief field, an article number) is used as it is.
     let outcome: 'inserted' | 'check' | string;
     try {
       await prisma.$transaction(async (tx) => {
@@ -1056,8 +1068,12 @@ test('the duplicate-collapse indexes, by insert: both general ones, the whole-re
   await refuses({ step: 'DESIGN', designRevisionId: f.designRevision.id, conceptId: concept.id }, 'FeedbackItem_conceptId_key');
   await make({ step: 'DESIGN', designRevisionId: f.designRevision.id, pageDesignId: page.id });
   await refuses({ step: 'DESIGN', designRevisionId: f.designRevision.id, pageDesignId: page.id }, 'FeedbackItem_pageDesignId_key');
-  await make({ step: 'DESIGN', designRevisionId: f.designRevision.id, paletteItemId: 'swatch-1' });
-  await refuses({ step: 'DESIGN', designRevisionId: f.designRevision.id, paletteItemId: 'swatch-1' }, 'FeedbackItem_paletteItemId_key');
+  // (A palette item is a real row since J8, which added the foreign key S2 left off.)
+  const swatch = await prisma.designPaletteItem.create({
+    data: { designRevisionId: f.designRevision.id, kind: 'COLOR', role: 'primary', value: '#112233', labelFa: 'ا', labelEn: 'P' },
+  });
+  await make({ step: 'DESIGN', designRevisionId: f.designRevision.id, paletteItemId: swatch.id });
+  await refuses({ step: 'DESIGN', designRevisionId: f.designRevision.id, paletteItemId: swatch.id }, 'FeedbackItem_paletteItemId_key');
 
   // The demo page keeps L3’s own unique.
   await make({ step: 'DEMO', phaseId: phase.id, demoId: home.demoId, demoPageId: home.id });

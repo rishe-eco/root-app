@@ -302,7 +302,13 @@ export async function gql<T = Record<string, unknown>>(
  * does). Sales does it, as sales would; the seeded contract has no fee, so any
  * plan is a plan that adds up.
  */
-export async function completeStepOneViaApi(request: APIRequestContext, ref = WIZARD_CONTRACT_REF): Promise<string> {
+export async function completeStepOneViaApi(
+  request: APIRequestContext,
+  ref = WIZARD_CONTRACT_REF,
+  // J8: the design path is the brief's tier — pre-made by default, as before.
+  opts: { designTier?: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' } = {},
+): Promise<string> {
+  const designTier = opts.designTier ?? 'THEME_PICK';
   await apiSignIn(request, SALES);
   const { allContracts } = await gql<{ allContracts: Array<{ id: string; ref: string }> }>(request, '{ allContracts { id ref } }');
   const contract = allContracts.find((c) => c.ref === ref);
@@ -315,7 +321,7 @@ export async function completeStepOneViaApi(request: APIRequestContext, ref = WI
     i: {
       kind: 'NEW_SITE',
       templateTypeId: store.id,
-      designTier: 'THEME_PICK',
+      designTier,
       budgetCap: '150000000',
       hardDeadline: '2026-10-23',
       domainName: 'nahal.ir',
@@ -323,7 +329,9 @@ export async function completeStepOneViaApi(request: APIRequestContext, ref = WI
       hostProvidedBy: 'ROOT',
       contentProvidedBy: 'CUSTOMER',
       supportMonths: 6,
-      premadeRounds: 2,
+      // The allowance the tier counts against: two pre-made rounds, or (custom)
+      // the default two wireframe iterations plus the mockup's.
+      ...(designTier === 'THEME_PICK' ? { premadeRounds: 2 } : { mockupIterations: 2 }),
       demoIterationsPerPhase: 2,
       commitments: [
         { key: 'domain', dueAt: '2026-10-05' },
@@ -379,6 +387,58 @@ export async function completeStepTwoViaApi(request: APIRequestContext, contract
     e: '2026-12-20',
   });
   await gql(request, 'mutation($c: ID!){ publishContractRevision(contractId: $c) { id } }', { c: contractId });
+}
+
+/**
+ * The customer approves and signs the agreement over the API (journeys build
+ * plan J7), which is what opens step 4 (J8): the design starts once the
+ * agreement is *signed*. `20-agreement` drives the screen; a spec about what
+ * comes after has no need to.
+ */
+export async function approveAndSignViaApi(request: APIRequestContext, contractId: string): Promise<void> {
+  await apiSignIn(request, CUSTOMER);
+  await gql(request, 'mutation($c: ID!){ approveContract(contractId: $c) { id } }', { c: contractId });
+  await gql(request, 'mutation($c: ID!, $n: String!){ signContract(contractId: $c, typedName: $n) { id } }', {
+    c: contractId,
+    n: 'Nahal Rezaei',
+  });
+}
+
+/** A real 1×1 PNG — `PNG` above is only the magic bytes, enough to pass the upload's sniff and not enough for a browser to decode. */
+export const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+/**
+ * The designer keeps a catalogue (T2): these themes, each with a demo link and a
+ * preview image, all offered for the seeded `store` type — what step 4's
+ * pre-made path proposes from. Done over the API as the designer, since
+ * `15-themes` is the spec that drives the catalogue's own screen.
+ */
+export async function seedThemesViaApi(request: APIRequestContext, names: string[]): Promise<Array<{ id: string; name: string }>> {
+  await apiSignIn(request, DESIGNER);
+  const { templateTypes } = await gql<{ templateTypes: Array<{ id: string; slug: string }> }>(request, '{ templateTypes(activeOnly: true) { id slug } }');
+  const store = templateTypes.find((t) => t.slug === 'store');
+  if (!store) throw new Error('seedThemesViaApi: the seeded store type is missing');
+  const made: Array<{ id: string; name: string }> = [];
+  for (const name of names) {
+    const { createTheme } = await gql<{ createTheme: { id: string } }>(
+      request,
+      'mutation($n: String!, $v: String, $d: String){ createTheme(name: $n, vendor: $v, demoUrl: $d, rtlSupport: FULL, licenseCost: "4500000") { id } }',
+      { n: name, v: `${name} Studio`, d: `https://demo.example.com/${encodeURIComponent(name)}` },
+    );
+    const res = await request.post(`${E2E_API_URL}/upload?class=THEME_PREVIEW&themeId=${createTheme.id}`, {
+      multipart: { file: { name: 'preview.png', mimeType: 'image/png', buffer: PIXEL } },
+    });
+    if (!res.ok()) throw new Error(`seedThemesViaApi: the preview upload failed (${res.status()})`);
+    made.push({ id: createTheme.id, name });
+  }
+  await gql(request, 'mutation($t: ID!, $ids: [ID!]!){ setTemplateTypeThemes(typeId: $t, themeIds: $ids) { id } }', {
+    t: store.id,
+    ids: made.map((m) => m.id),
+  });
+  return made;
 }
 
 /**

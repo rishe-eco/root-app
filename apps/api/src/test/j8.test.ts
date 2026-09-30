@@ -163,7 +163,6 @@ async function reachDesign(over: Record<string, unknown> = {}) {
 
 const reachCustom = (over: Record<string, unknown> = {}) => reachDesign({ designTier: 'SENIOR_DESIGNER', premadeRounds: null, ...over });
 
-const DESIGNER_FIELDS = `id designDraft { id version concepts { id key themeSnapshot { name vendor demoUrl } themeId imageUrl chosen pages { id key } } palette { id kind role value labelFa labelEn imageUrl position } }`;
 const CONTRACT_DESIGN = `query($c: ID!){ contract(id: $c) {
   id sequence
   concepts { id key labelFa labelEn imageUrl chosen themeSnapshot { name vendor demoUrl } themeId pages { id key approved } }

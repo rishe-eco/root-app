@@ -27,7 +27,12 @@ before(async () => {
 
 beforeEach(async () => {
   await resetDatabase();
-  f = await seedFixture();
+  // The design-image tests drive the legacy road's design (concepts and pages on
+  // a contract that was design-first). Since J8 the new road's design opens only
+  // once the agreement is signed, and `j8.test.ts` covers its images and previews;
+  // this suite is about what an upload *is*, so it stays on the road it was
+  // written for (as `v2`, `v3` and `draft` do).
+  f = await seedFixture({ sequence: 'DESIGN_FIRST' });
 });
 
 after(async () => {

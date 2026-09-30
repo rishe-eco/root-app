@@ -32,7 +32,7 @@ import { startFileServer, upload } from './http.js';
  * `NOT_SIGNED` (J13) likewise: issuing a payment plan's first row on a contract
  * nobody has signed is what "allowed" looks like for that row.
  */
-type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED' | 'NOT_SIGNED';
+type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED' | 'NOT_SIGNED' | 'NO_DRAFT' | 'DESIGN_INCOMPLETE';
 
 let f: Fixture;
 const staff: Record<string, User> = {};
@@ -174,6 +174,11 @@ after(async () => {
   await prisma.$disconnect();
 });
 
+/** The fixture's agreement, signed — the row `agreementSignedAt` reads, and the
+ *  one thing that opens the design (J8). */
+const signAgreement = () =>
+  prisma.signature.create({ data: { contractRevisionId: f.contractRevision.id, signerId: f.customer.id, typedName: 'Test Customer' } });
+
 /** Who is asking, by row label. */
 function actor(label: string): User {
   if (label === 'ADMIN') return f.admin;
@@ -204,11 +209,56 @@ const OPS: Record<string, (as: User) => ReturnType<typeof exec>> = {
   'contracts.readAll · status counts': (as) =>
     exec('{ allContractStatusCounts { status count } }', { as }),
   'contracts.read* · contract list': (as) => exec('{ allContracts { id } }', { as }),
-  'design.author · add concept': (as) =>
-    exec('mutation($c: ID!){ addConcept(contractId: $c, key: "9z", labelFa: "ط", labelEn: "C") { id } }', {
+  // Journeys build plan J8: the design opens once the agreement is signed, so the
+  // design operations sign the fixture first (each test starts from a reset
+  // database, and the billing row that wants an *unsigned* agreement is another
+  // test). A signature is what `agreementSignedAt` reads (J13's one rule).
+  'design.author · add concept': async (as) => {
+    await signAgreement();
+    return exec('mutation($c: ID!){ addConcept(contractId: $c, key: "9z", labelFa: "ط", labelEn: "C") { id } }', {
       as,
       variables: { c: f.contract.id },
-    }),
+    });
+  },
+  'design.author · start a round': async (as) => {
+    await signAgreement();
+    return exec('mutation($c: ID!){ startDesignDraft(contractId: $c) { id } }', { as, variables: { c: f.contract.id } });
+  },
+  'design.author · propose themes': async (as) => {
+    await signAgreement();
+    // The brief is pre-made; a theme offered for its type is what a round proposes.
+    const theme = await prisma.theme.create({ data: { name: 'Astra' } });
+    await prisma.templateTypeTheme.create({ data: { typeId: (await prisma.contractBrief.findUniqueOrThrow({ where: { contractId: f.contract.id } })).templateTypeId, themeId: theme.id } });
+    return exec('mutation($c: ID!, $t: [ID!]!){ proposeThemes(contractId: $c, themeIds: $t) { id } }', {
+      as,
+      variables: { c: f.contract.id, t: [theme.id] },
+    });
+  },
+  'design.author · add a palette item': async (as) => {
+    await signAgreement();
+    // A palette belongs to a custom design.
+    await prisma.contractBrief.update({ where: { contractId: f.contract.id }, data: { designTier: 'SENIOR_DESIGNER' } });
+    return exec(
+      'mutation($c: ID!){ addPaletteItem(contractId: $c, kind: COLOR, role: "primary", value: "#1f3a5c", labelFa: "ا", labelEn: "P") { id } }',
+      { as, variables: { c: f.contract.id } },
+    );
+  },
+  'design.author · publish a round': async (as) => {
+    await signAgreement();
+    return exec('mutation($c: ID!){ publishDesignRevision(contractId: $c) { id } }', { as, variables: { c: f.contract.id } });
+  },
+  'contracts.author · extend the allowance': async (as) => {
+    await prisma.contractBrief.update({ where: { contractId: f.contract.id }, data: { premadeRounds: 3 } });
+    return exec(
+      'mutation($c: ID!){ extendAllowance(contractId: $c, step: DESIGN, extra: 1, reason: "Changed direction") { id } }',
+      { as, variables: { c: f.contract.id } },
+    );
+  },
+  // The customer's operations are an ownership edge: every staff role hears NOT_FOUND.
+  'customer · request other options': (as) =>
+    exec('mutation($c: ID!){ requestOtherOptions(contractId: $c) { id } }', { as, variables: { c: f.contract.id } }),
+  'customer · approve the design': (as) =>
+    exec('mutation($c: ID!){ approveDesign(contractId: $c) { id } }', { as, variables: { c: f.contract.id } }),
   'builds.author · demo CRUD': (as) =>
     exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://nahal.staging.m-root.com") { id } }', {
       as,
@@ -286,6 +336,8 @@ const N = 'NOT_ASSIGNED' as const;
 const NF = 'NOT_FOUND' as const;
 const U = 'SCOPE_UNCONFIRMED' as const;
 const NS = 'NOT_SIGNED' as const;
+const ND = 'NO_DRAFT' as const;
+const DI = 'DESIGN_INCOMPLETE' as const;
 
 /**
  * The matrix. Columns: ADMIN, SALES, DESIGNER, DESIGNER_UNASSIGNED,
@@ -311,6 +363,15 @@ const MATRIX: Record<keyof typeof OPS, Outcome[]> = {
   'contracts.readAll · status counts':    ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'contracts.read* · contract list':      ['OK', 'OK', 'OK', 'OK', 'OK', 'OK', F,   F,   F],
   'design.author · add concept':          ['OK', F,    'OK', N,    F,    F,    F,   F,   F],
+  // J8. An authorized publish with no draft is the step's own refusal, the way
+  // an authorized publish of the contract draft is SCOPE_UNCONFIRMED.
+  'design.author · start a round':        ['OK', F,    'OK', N,    F,    F,    F,   F,   F],
+  'design.author · propose themes':       ['OK', F,    'OK', N,    F,    F,    F,   F,   F],
+  'design.author · add a palette item':   ['OK', F,    'OK', N,    F,    F,    F,   F,   F],
+  'design.author · publish a round':      [ND,   F,    ND,   N,    F,    F,    F,   F,   F],
+  'contracts.author · extend the allowance': ['OK', 'OK', F,   F,    F,    F,    F,   F,   F],
+  'customer · request other options':     [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  'OK'],
+  'customer · approve the design':        [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  DI],
   'builds.author · demo CRUD':            ['OK', F,    F,    F,    'OK', N,    F,   F,   F],
   'builds.author · builds queue':         ['OK', F,    F,    F,    'OK', N,    F,   F,   F],
   'dependencies.verifyGeneral · verify':  ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
