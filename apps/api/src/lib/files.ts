@@ -69,6 +69,19 @@ const XLSX: AcceptedType = {
   magic: [{ offset: 0, bytes: [0x50, 0x4b, 0x03, 0x04] }],
 };
 
+/** A mockup bundle (journeys build plan J9). The local-file-header magic is the
+ *  same four bytes as `.xlsx`'s — an .xlsx *is* a zip — which is why the two
+ *  classes cannot tell each other apart by sniffing and do not try: which one
+ *  a file is decided by the class the caller named, and by `validateBundle`
+ *  (an index.html and an extension allowlist) for this one. An empty archive
+ *  starts `PK` instead and is deliberately not accepted: it has no
+ *  index to serve. */
+const ZIP: AcceptedType = {
+  mime: 'application/zip',
+  ext: '.zip',
+  magic: [{ offset: 0, bytes: [0x50, 0x4b, 0x03, 0x04] }],
+};
+
 export type ClassPolicy = {
   visibility: FileVisibility;
   maxBytes: number;
@@ -88,14 +101,32 @@ export type ClassPolicy = {
    * nothing cannot be checked against them.
    */
   owner: 'contract' | 'entry' | 'project' | 'theme';
+  /**
+   * Received straight to a temp file instead of buffered in memory (journeys
+   * build plan D-9; `routes/files.ts`, `lib/multipartStream.ts`). Set only for
+   * the class whose ceiling is large enough that buffering it would hold ~100 MB
+   * per concurrent upload; every other class keeps the buffered path exactly as
+   * it was.
+   */
+  streamed?: true;
 };
 
 /**
- * **SVG is deliberately not accepted anywhere.** It is a document that can
- * carry script, and these files are served from the app's own origin — an
- * uploaded SVG is a stored-XSS with a picture on it. If vector previews are
+ * **SVG is deliberately not accepted anywhere in this table.** It is a document
+ * that can carry script, and these files are served from the app's own origin —
+ * an uploaded SVG is a stored-XSS with a picture on it. If vector previews are
  * ever wanted, they get rasterised on upload or served from a separate origin;
  * they do not get added to this list.
+ *
+ * **The one place that differs is inside a mockup bundle** (journeys build plan
+ * J9, trap 3): `lib/mockupBundle.ts` allows `.svg` (and `.js`, `.html`) among a
+ * zip's entries, and that is not a hole in the rule above. A bundle is never
+ * served from the portal's origin — `GET /files/:id` would hand back the opaque
+ * zip, with `nosniff` and the sandboxing CSP Nginx adds to `/files/` — it is
+ * served by `routes/mockups.ts` on its own per-view subdomain, an origin that
+ * holds no cookie, no session and no other customer's data. The rule stands
+ * because of *whose origin* serves the bytes; the mockup origin is the one
+ * origin where the answer is different.
  */
 export const POLICY: Record<FileClass, ClassPolicy> = {
   DESIGN_IMAGE: {
@@ -138,6 +169,19 @@ export const POLICY: Record<FileClass, ClassPolicy> = {
     // here, because a theme belongs to no one contract.
     uploader: 'templates.types',
     owner: 'theme',
+  },
+  MOCKUP_BUNDLE: {
+    visibility: 'PRIVATE',
+    // The one class that streams (D-9). 50 MB is the plan's figure; the
+    // uncompressed ceiling (200 MB) and the entry limits are `validateBundle`'s.
+    maxBytes: 50 * 1024 * 1024,
+    accepted: [ZIP],
+    // The designer's verb, like DESIGN_IMAGE — and, like it, only half the
+    // answer: the route also asks that the uploader is *this contract's*
+    // designer (`canAuthorDesign`, house rule 2), which a capability cannot say.
+    uploader: 'design.author',
+    owner: 'contract',
+    streamed: true,
   },
 };
 
