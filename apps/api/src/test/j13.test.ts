@@ -30,9 +30,11 @@ import { ServiceRun } from '../graphql/resolvers/fields.js';
  * area's overdue line; and the capability and money rules.
  *
  * **Signing.** A contract on the new road cannot be approved or signed through
- * the API until J7, so a test that needs a *signed* one writes the row J7 will
- * write — the AGREEMENT `StepApproval` — by direct insert (`sign` below). There
- * is no `Contract.signedAt`: "signed" is `agreementSignedAt` (lib/steps.ts).
+ * the API until J7, so a test that needs a *signed* one writes the row signing
+ * writes — a `Signature` on the current revision — by direct insert (`sign`
+ * below). There is no `Contract.signedAt`: "signed" is `agreementSignedAt`
+ * (lib/steps.ts), and an AGREEMENT `StepApproval` alone is approval, not a
+ * signature (J13 review).
  * Likewise a phase's accepted demo is a direct DEMO `StepApproval` (`accept`),
  * which is exactly what J10 will produce, so J10 has only to produce the row.
  */
@@ -145,9 +147,12 @@ async function draft(over: { amount?: string; term?: number | null; contract?: s
   ).createInvoiceDraft as Entry;
 }
 
-/** Signs the agreement the way J7 will: the AGREEMENT `StepApproval`. */
-const sign = (contractId = f.contract.id) =>
-  prisma.stepApproval.create({ data: { contractId, step: 'AGREEMENT', approvedById: f.customer.id } });
+/** Signs the agreement: a `Signature` on the fixture's current revision — the
+ *  row `signContract` writes, and the only thing "signed" reads. */
+const sign = () =>
+  prisma.signature.create({
+    data: { contractRevisionId: f.contractRevision.id, signerId: f.customer.id, typedName: 'Customer', signedHash: f.contractRevision.contentHash },
+  });
 
 /** A phase's accepted demo, the way J10 will write it. */
 const accept = (phaseId: string, contractId = f.contract.id) =>
@@ -611,6 +616,11 @@ test('the plan rule: NOT_SIGNED → PREVIOUS_UNPAID → PHASE_NOT_ACCEPTED, each
   // Nothing is signed: every row waits on the signature.
   assert.deepEqual(states(await readPlan(staff.SALES)), ['NOT_YET_ISSUABLE/NOT_SIGNED', 'NOT_YET_ISSUABLE/NOT_SIGNED', 'NOT_YET_ISSUABLE/NOT_SIGNED']);
   assert.equal((await issuePlanned(p1.id)).code, 'NOT_SIGNED');
+  // Approved is not signed (J13 review): the AGREEMENT approval J7 writes comes
+  // before the signature, and issuing waits for the signature.
+  const approvalOnly = await prisma.stepApproval.create({ data: { contractId: f.contract.id, step: 'AGREEMENT', approvedById: f.customer.id } });
+  assert.equal((await issuePlanned(p1.id)).code, 'NOT_SIGNED', 'approved but unsigned');
+  await prisma.stepApproval.delete({ where: { id: approvalOnly.id } });
   assert.equal(await prisma.billingEntry.count(), 0);
   assert.equal((await sequenceState()).is_called, false, 'a refusal burns no number');
 
@@ -739,13 +749,10 @@ test('setPaymentPlan refuses to replace a plan once any row has been issued (PLA
   assert.equal(replaced.paymentPlan!.invoices.length, 1);
 
   // Issue that one, and the same call is refused — with the plan and its invoice untouched.
-  // "Signed" here is the current revision's signature, which `agreementSignedAt`
-  // accepts and which locks nothing: the AGREEMENT `StepApproval` J7 will write
-  // locks REQUIREMENTS outright (`STEP_LOCKED`, checked first), so this guard is
-  // the *only* one exactly until J7 — the state this test stands in.
-  await prisma.signature.create({
-    data: { contractRevisionId: f.contractRevision.id, signerId: f.customer.id, typedName: 'Customer', signedHash: f.contractRevision.contentHash },
-  });
+  // Signed, which locks nothing: the AGREEMENT `StepApproval` J7 writes on
+  // approval locks REQUIREMENTS outright (`STEP_LOCKED`, checked first), so this
+  // guard is the *only* one exactly until J7 — the state this test stands in.
+  await sign();
   const only = replaced.paymentPlan!.invoices[0];
   ok(await issuePlanned(only.id));
   const refused = await exec(SET_PLAN, { as: staff.SALES, variables: { c: f.contract.id, s: 'INSTALLMENTS', r: oneRow('Other', '1') } });
@@ -756,7 +763,7 @@ test('setPaymentPlan refuses to replace a plan once any row has been issued (PLA
   assert.equal(after.invoices[0].invoice!.invoiceNumber, 'INV-000001');
 
   // Once the agreement is approved the step is locked and that is what answers.
-  await sign();
+  await prisma.stepApproval.create({ data: { contractId: f.contract.id, step: 'AGREEMENT', approvedById: f.customer.id } });
   const locked = await exec(SET_PLAN, { as: staff.SALES, variables: { c: f.contract.id, s: 'INSTALLMENTS', r: oneRow('Other', '1') } });
   assert.equal(locked.code, 'STEP_LOCKED');
 });
@@ -769,13 +776,17 @@ const ago = (days: number) => new Date(Date.now() - days * 86_400_000);
 test('started: a contract with a plan is started once it is signed and its first invoice is paid; without a plan, once it is signed', async () => {
   const summary = async (as: User = f.customer) => (ok(await exec(SUMMARY, { as, variables: { c: f.contract.id } })).contract as { statusSummary: { started: boolean; startedAt: string | null; overdueCount: number } }).statusSummary;
 
-  // No plan (and so no first invoice to wait for): signed is started.
+  // No plan (and so no first invoice to wait for): signed is started — and
+  // approved is not signed (J13 review).
   assert.equal((await summary()).started, false);
-  const approval = await sign();
+  const approvalOnly = await prisma.stepApproval.create({ data: { contractId: f.contract.id, step: 'AGREEMENT', approvedById: f.customer.id } });
+  assert.equal((await summary()).started, false, 'an approved, unsigned agreement is not started');
+  await prisma.stepApproval.delete({ where: { id: approvalOnly.id } });
+  const signature = await sign();
   const noPlan = await summary();
   assert.equal(noPlan.started, true);
-  assert.equal(noPlan.startedAt, approval.approvedAt.toISOString());
-  await prisma.stepApproval.delete({ where: { id: approval.id } });
+  assert.equal(noPlan.startedAt, signature.signedAt.toISOString());
+  await prisma.signature.delete({ where: { id: signature.id } });
 
   // A plan: unsigned, signed, first invoice issued, first invoice paid.
   const { rows } = await makePlan();

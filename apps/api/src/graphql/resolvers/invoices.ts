@@ -58,7 +58,6 @@ export async function loadPlanFacts(db: Db, planId: string) {
     }),
   ]);
   const signedAt = agreementSignedAt({
-    approvals,
     signatureSignedAt: contract.currentContractRevision?.signature?.signedAt ?? null,
   });
   return { plan, entries, approvals, signedAt };

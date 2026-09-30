@@ -202,14 +202,16 @@ export function insertDraftNewRoadContract() {
 
 /**
  * A signed new-road contract with a two-row payment plan (journeys build plan
- * J13): the seeded wizard contract (`WIZARD_CONTRACT_REF`), an AGREEMENT
- * `StepApproval`, and a plan of a deposit and a delivery payment — neither tied
- * to a phase, so the second is issuable the moment the first is paid.
+ * J13): the seeded wizard contract (`WIZARD_CONTRACT_REF`), a published
+ * revision with the customer's signature, and a plan of a deposit and a
+ * delivery payment — neither tied to a phase, so the second is issuable the
+ * moment the first is paid.
  *
  * **Signing is a direct insert, and says so.** An `AGREEMENT_FIRST` contract
  * cannot be approved or signed through the API until J7 builds the agreement
- * gate, so this writes the row J7 will write (`agreementSignedAt`,
- * lib/steps.ts, reads it). The plan is inserted too because `setPaymentPlan` is
+ * gate, so this writes the rows signing writes — a revision made current and a
+ * `Signature` on it, which is all `agreementSignedAt` (lib/steps.ts) reads. The
+ * revision carries no snapshot: nothing in this spec renders the agreement. The plan is inserted too because `setPaymentPlan` is
  * the desk's step-1 form and `17-requirements` already drives that; this spec
  * is about what happens *after* it.
  */
@@ -218,8 +220,12 @@ export function insertSignedPaymentPlan() {
   execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
     cwd: API_DIR,
     input: `
-      INSERT INTO "StepApproval" ("id", "contractId", "step", "approvedById")
-      SELECT 'e2e-agreement', c."id", 'AGREEMENT'::"StepKind", c."customerId"
+      INSERT INTO "ContractRevision" ("id", "contractId", "version", "publishedAt", "approvedAt")
+      SELECT 'e2e-revision', c."id", 1, now(), now()
+      FROM "Contract" c WHERE c."ref" = '${WIZARD_CONTRACT_REF}';
+      UPDATE "Contract" SET "currentContractRevisionId" = 'e2e-revision' WHERE "ref" = '${WIZARD_CONTRACT_REF}';
+      INSERT INTO "Signature" ("id", "contractRevisionId", "signerId", "typedName")
+      SELECT 'e2e-signature', 'e2e-revision', c."customerId", 'Nahal'
       FROM "Contract" c WHERE c."ref" = '${WIZARD_CONTRACT_REF}';
       INSERT INTO "PaymentPlan" ("id", "contractId", "split", "updatedAt")
       SELECT 'e2e-plan', c."id", 'INSTALLMENTS'::"PaymentSplit", now()

@@ -243,17 +243,14 @@ export function legacyFinished(input: {
  * **When the agreement was signed** — one rule for "signed" (house rule 3),
  * read by the status area's *started* and by J13's invoice issuing
  * (`NOT_SIGNED`), so a contract cannot be signed to one and unsigned to the
- * other. On the new road it is the AGREEMENT `StepApproval` (J7 writes it);
- * the legacy road's is the current revision's signature, which J7 retires as a
- * reading on a new-road contract ("the first the only one") but which a
- * `DESIGN_FIRST` contract always has. There is no `Contract.signedAt` column —
- * J13's brief assumed one — and adding a second copy of a fact the two rows
- * above already carry would be the drift this file exists to prevent.
+ * other. On **both** roads it is the current contract revision's signature.
+ * The AGREEMENT `StepApproval` is *not* a signature: on the new road
+ * `approveContract` writes it (J7) and signing follows on the same screen, so
+ * an approved-but-unsigned contract must not issue invoices or count as
+ * started (J13 review). There is no `Contract.signedAt` column, and adding a
+ * second copy of a fact the signature row already carries would be the drift
+ * this file exists to prevent.
  */
-export function agreementSignedAt(input: {
-  approvals: ReadonlyArray<{ step: StepKind; phaseId: string | null; approvedAt: Date }>;
-  signatureSignedAt: Date | null;
-}): Date | null {
-  const approval = input.approvals.find((a) => a.step === 'AGREEMENT' && a.phaseId === null);
-  return approval?.approvedAt ?? input.signatureSignedAt ?? null;
+export function agreementSignedAt(input: { signatureSignedAt: Date | null }): Date | null {
+  return input.signatureSignedAt;
 }

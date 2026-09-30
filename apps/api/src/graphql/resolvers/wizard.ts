@@ -333,10 +333,9 @@ export const contractWizardFields = {
       sequence: c.sequence,
       wizard: computeWizard(stateOf(c, facts)),
       attention: attentionFor(input, viewer),
-      // The agreement's approval on the new road, the signature on the old;
-      // J7 makes the first the only one. `agreementSignedAt` is the one rule —
-      // the invoice issuing reads it too.
-      signedAt: agreementSignedAt({ approvals: facts.approvals, signatureSignedAt: revision?.signature?.signedAt ?? null }),
+      // The current revision's signature, on both roads — approval is not
+      // signing. `agreementSignedAt` is the one rule; invoice issuing reads it too.
+      signedAt: agreementSignedAt({ signatureSignedAt: revision?.signature?.signedAt ?? null }),
       invoicePlan:
         planRows.length === 0
           ? null

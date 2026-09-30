@@ -346,19 +346,8 @@ test('SEQUENCE_FOR_NEW_CONTRACTS stays DESIGN_FIRST until J7 builds the agreemen
   assert.equal(SEQUENCE_FOR_NEW_CONTRACTS, 'DESIGN_FIRST');
 });
 
-test('agreementSignedAt (J13): the AGREEMENT approval on the new road, else the signature, else null — one rule for "signed"', () => {
-  const approved = new Date('2026-10-02T00:00:00Z');
+test('agreementSignedAt (J13): the signature, on both roads — an AGREEMENT approval alone is not signed', () => {
   const signed = new Date('2026-10-01T00:00:00Z');
-  const agreement = { step: 'AGREEMENT' as StepKind, phaseId: null, approvedAt: approved };
-  assert.deepEqual(agreementSignedAt({ approvals: [agreement], signatureSignedAt: null }), approved);
-  assert.deepEqual(agreementSignedAt({ approvals: [agreement], signatureSignedAt: signed }), approved, 'the approval wins');
-  assert.deepEqual(agreementSignedAt({ approvals: [], signatureSignedAt: signed }), signed, 'the legacy signature');
-  assert.equal(agreementSignedAt({ approvals: [], signatureSignedAt: null }), null);
-  // Only the whole-contract AGREEMENT counts: a DEMO approval of a phase, or a
-  // REQUIREMENTS one, is not "signed".
-  const others = [
-    { step: 'DEMO' as StepKind, phaseId: 'p1', approvedAt: approved },
-    { step: 'DESIGN' as StepKind, phaseId: null, approvedAt: approved },
-  ];
-  assert.equal(agreementSignedAt({ approvals: others, signatureSignedAt: null }), null);
+  assert.deepEqual(agreementSignedAt({ signatureSignedAt: signed }), signed);
+  assert.equal(agreementSignedAt({ signatureSignedAt: null }), null);
 });
