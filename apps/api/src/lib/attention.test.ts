@@ -279,3 +279,45 @@ test('every item the module can emit names a sentence that exists in the table',
     assert.ok(audiences.includes('staff'), `${item.kind}/${item.variant} has no staff sentence`);
   }
 });
+
+// --- J5: proposals waiting, and a scope trade waiting -------------------------------
+
+test('proposals waiting for Root are one line, Root’s move, sales’ job, dated by the oldest', () => {
+  const items = attentionFor(
+    empty({ scope: { undecidedProposals: [{ since: day(-1) }, { since: day(-4) }, { since: day(-2) }], openTrades: [] } }),
+    SALES,
+  );
+  assert.deepEqual(summary(items), ['PROPOSAL_TO_DECIDE/default/ROOT']);
+  assert.deepEqual(items[0].params, { count: 3 });
+  assert.equal(items[0].role, 'SALES');
+  assert.equal(items[0].since.getTime(), day(-4).getTime());
+  // The customer sees that Root owes them an answer — it is not Root's housekeeping.
+  assert.deepEqual(summary(attentionFor(empty({ scope: { undecidedProposals: [{ since: day(-1) }], openTrades: [] } }), CUSTOMER)), [
+    'PROPOSAL_TO_DECIDE/default/ROOT',
+  ]);
+  assert.deepEqual(attentionFor(empty({ scope: { undecidedProposals: [], openTrades: [] } }), SALES), []);
+  assert.deepEqual(attentionFor(empty(), SALES), [], 'a fixture that predates the scope facts still works');
+});
+
+test('a scope trade: the customer’s move until they confirm, then Root’s to confirm, then Root’s to carry out', () => {
+  const trade = (over: Partial<{ rootConfirmedAt: Date | null; customerConfirmedAt: Date | null }>) => ({
+    id: 't1',
+    proposedAt: day(-3),
+    rootConfirmedAt: null,
+    customerConfirmedAt: null,
+    ...over,
+  });
+  const at = (t: ReturnType<typeof trade>) => summary(attentionFor(empty({ scope: { undecidedProposals: [], openTrades: [t] } }), SALES));
+  // Neither has confirmed: both sides owe something.
+  assert.deepEqual(at(trade({})).sort(), ['TRADE_TO_CONFIRM/customer/CUSTOMER', 'TRADE_TO_CONFIRM/root/ROOT']);
+  // Root confirmed; the customer has not.
+  assert.deepEqual(at(trade({ rootConfirmedAt: day(-2) })), ['TRADE_TO_CONFIRM/customer/CUSTOMER']);
+  // The customer confirmed; Root has not.
+  assert.deepEqual(at(trade({ customerConfirmedAt: day(-2) })), ['TRADE_TO_CONFIRM/root/ROOT']);
+  // Both: only carrying it out is left, and that is Root's.
+  assert.deepEqual(at(trade({ rootConfirmedAt: day(-2), customerConfirmedAt: day(-1) })), ['TRADE_TO_CONFIRM/execute/ROOT']);
+  // The customer sees the ones about them, with a sentence written for them (locale test above).
+  const forCustomer = attentionFor(empty({ scope: { undecidedProposals: [], openTrades: [trade({})] } }), CUSTOMER);
+  assert.equal(forCustomer.length, 2);
+  assert.ok(forCustomer.every((i) => ATTENTION_SENTENCES.TRADE_TO_CONFIRM?.[i.variant]?.includes('customer')));
+});

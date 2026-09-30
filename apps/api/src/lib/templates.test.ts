@@ -7,10 +7,13 @@ import {
   CHECKLIST,
   PAGES,
   PLACEHOLDER_SCOPE,
+  ROOT_PARTY,
   SCOPE,
   TEMPLATE_KINDS,
   TEMPLATE_TYPES,
   isTemplateSensitiveArticle,
+  partiesFor,
+  renderArticleBody,
   scopeKindForKey,
 } from './templates.js';
 import { KEY_PATTERN, SLUG_PATTERN, checkSlug, checkTemplateScope } from './templateScope.js';
@@ -59,6 +62,53 @@ test('the migration backfill states the same rule: its page list is PAGES, its n
   assert.deepEqual(inSql, PAGES.map(([key]) => key), 'migration page list and PAGES have drifted');
 
   assert.match(block, /"key" LIKE 'checklist\.%'/);
+});
+
+test('D-5: the template names no one — its only placeholders are {{client}} and {{provider}}, and no stranger’s name is left in it', () => {
+  const bodies = ARTICLES.flatMap(([, , , bodyFa, bodyEn]) => [bodyFa, bodyEn]).filter((b): b is string => typeof b === 'string');
+  assert.ok(bodies.length >= 4);
+  for (const body of bodies) {
+    for (const [, name] of body.matchAll(/\{\{(\w*)\}\}/g)) {
+      assert.ok(name === 'client' || name === 'provider', `unknown placeholder {{${name}}}`);
+    }
+    assert.ok(!/Nahal|نهال/.test(body), `a body still names a customer: ${body.slice(0, 60)}`);
+  }
+  // Article 1 names both parties, so it uses both placeholders in both languages.
+  const [, , , bodyFa, bodyEn] = ARTICLES[0];
+  for (const body of [bodyFa!, bodyEn!]) assert.ok(body.includes('{{client}}') && body.includes('{{provider}}'));
+  // J4 matches the money articles by number and title, so neither may have moved.
+  assert.deepEqual(ARTICLES.map(([n, , titleEn]) => [n, titleEn]).slice(3, 5), [
+    [4, 'Fees'],
+    [5, 'Payment Schedule'],
+  ]);
+});
+
+test('renderArticleBody: fills both placeholders, per language, and renders nothing it does not know', () => {
+  const customer = { clientName: 'Acme Studio', name: 'Ann' };
+  const en = partiesFor(customer, 'en');
+  const fa = partiesFor(customer, 'fa');
+  assert.deepEqual(en, { client: 'Acme Studio', provider: 'Root' });
+  assert.deepEqual(fa, { client: 'Acme Studio', provider: 'ریشه' });
+  assert.equal(ROOT_PARTY.fa, 'ریشه');
+  assert.equal(
+    renderArticleBody('Between {{client}} and {{provider}}; {{client}} again.', en),
+    'Between Acme Studio and Root; Acme Studio again.',
+  );
+  assert.equal(renderArticleBody('میان {{client}} و {{provider}}', fa), 'میان Acme Studio و ریشه');
+  // A typo'd placeholder stays visible rather than vanishing.
+  assert.equal(renderArticleBody('{{clinet}} {{client}}', en), '{{clinet}} Acme Studio');
+  assert.equal(renderArticleBody(undefined, en), null);
+  assert.equal(renderArticleBody(null, en), null);
+  assert.equal(renderArticleBody('', en), '');
+  // A customer with no company name falls back to their own; a padded one is trimmed.
+  assert.equal(partiesFor({ clientName: null, name: 'Ann' }, 'en').client, 'Ann');
+  assert.equal(partiesFor({ clientName: '   ', name: 'Ann' }, 'en').client, 'Ann');
+  assert.equal(partiesFor({ clientName: '  Acme  ', name: 'Ann' }, 'en').client, 'Acme');
+  // No leftover placeholder in any rendered article.
+  for (const [, , , bodyFa, bodyEn] of ARTICLES) {
+    assert.ok(!/\{\{/.test(renderArticleBody(bodyFa, fa) ?? ''));
+    assert.ok(!/\{\{/.test(renderArticleBody(bodyEn, en) ?? ''));
+  }
 });
 
 test('isTemplateSensitiveArticle: Fees and Payment Schedule, by number and title together (PD-14, J4)', () => {

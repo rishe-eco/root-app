@@ -268,7 +268,7 @@ test('mayReadInternalNotes: contract readers who can see the contract; never the
   assert.equal(mayReadInternalNotes(person('s', 'SALES'), contract({ publishedAt: null })), true);
 });
 
-test('mayReadPlannedDates: staff readers always; a customer only once the agreement is approved', () => {
+test('mayReadPlannedDates: staff readers always; a customer only once the loader says they are shown (a draft published, or the agreement approved — J6)', () => {
   assert.equal(mayReadPlannedDates(person('s', 'SALES'), false), true);
   assert.equal(mayReadPlannedDates(person('d', 'DESIGNER'), false), true);
   assert.equal(mayReadPlannedDates(person('cust', 'CUSTOMER'), false), false);

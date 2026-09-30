@@ -19,6 +19,8 @@ import {
   TEMPLATE_TYPES,
   PLACEHOLDER_SCOPE,
   isTemplateSensitiveArticle,
+  partiesFor,
+  renderArticleBody,
   scopeKindForKey,
 } from '../src/lib/templates.js';
 
@@ -348,8 +350,11 @@ async function main() {
         number,
         titleFa,
         titleEn,
-        bodyFa: bodyFa ?? null,
-        bodyEn: bodyEn ?? null,
+        // The template's {{client}} and {{provider}} are rendered here, as
+        // `applyContractTemplate` renders them (D-5): this is the seeded
+        // customer's contract, not a stranger's.
+        bodyFa: renderArticleBody(bodyFa, partiesFor(customer, 'fa')),
+        bodyEn: renderArticleBody(bodyEn, partiesFor(customer, 'en')),
         // Fees and Payment Schedule (PD-14, J4) — the template's own rule.
         sensitive: isTemplateSensitiveArticle(number, titleEn),
       },

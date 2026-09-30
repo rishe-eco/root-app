@@ -12,6 +12,9 @@ import {
   requestMessageEmail,
   requestArchivedEmail,
   briefSharedEmail,
+  scopeProposedEmail,
+  scopeProposalDecidedEmail,
+  draftPublishedEmail,
   feedbackSubmittedEmail,
   answerPendingEmail,
   answerPublishedEmail,
@@ -83,6 +86,71 @@ const builders: Array<{ name: string; build: (locale: string) => MailContent; li
         customerName: 'نهال',
         projectTitleFa: 'یک فروشگاه',
         projectTitleEn: 'A shop',
+        portalUrl: PORTAL_CONTRACT_URL,
+      }),
+    link: PORTAL_CONTRACT_URL,
+  },
+  // Journeys build plan J5 — a proposal made (to sales), decided (to the customer).
+  {
+    name: 'scope-proposed',
+    build: (l) =>
+      scopeProposedEmail(l, {
+        recipientName: 'فروش',
+        projectTitleFa: 'یک فروشگاه',
+        projectTitleEn: 'A shop',
+        proposalKind: 'ADD',
+        text: 'یک صفحه‌ی وبلاگ',
+        deskUrl: DESK_REQUEST_URL,
+      }),
+    link: DESK_REQUEST_URL,
+  },
+  {
+    name: 'scope-proposal-accepted',
+    build: (l) =>
+      scopeProposalDecidedEmail(l, {
+        customerName: 'نهال',
+        projectTitleFa: 'یک فروشگاه',
+        projectTitleEn: 'A shop',
+        decision: 'ACCEPTED',
+        reason: null,
+        portalUrl: PORTAL_CONTRACT_URL,
+      }),
+    link: PORTAL_CONTRACT_URL,
+  },
+  {
+    name: 'scope-proposal-declined',
+    build: (l) =>
+      scopeProposalDecidedEmail(l, {
+        customerName: 'نهال',
+        projectTitleFa: 'یک فروشگاه',
+        projectTitleEn: 'A shop',
+        decision: 'DECLINED',
+        reason: 'خارج از حوزه‌ی کار است.',
+        portalUrl: PORTAL_CONTRACT_URL,
+      }),
+    link: PORTAL_CONTRACT_URL,
+  },
+  // Journeys build plan J6 — the draft contract published (C0's promised contract-revised).
+  {
+    name: 'draft-published',
+    build: (l) =>
+      draftPublishedEmail(l, {
+        customerName: 'نهال',
+        projectTitleFa: 'یک فروشگاه',
+        projectTitleEn: 'A shop',
+        version: 1,
+        portalUrl: PORTAL_CONTRACT_URL,
+      }),
+    link: PORTAL_CONTRACT_URL,
+  },
+  {
+    name: 'draft-revised',
+    build: (l) =>
+      draftPublishedEmail(l, {
+        customerName: 'نهال',
+        projectTitleFa: 'یک فروشگاه',
+        projectTitleEn: 'A shop',
+        version: 3,
         portalUrl: PORTAL_CONTRACT_URL,
       }),
     link: PORTAL_CONTRACT_URL,
@@ -171,4 +239,76 @@ test('a request\'s title and an archive reason are escaped in html, verbatim in 
   assert.ok(archived.html.includes('Not a fit &lt;yet&gt;<br>Try again in spring'));
   assert.ok(archived.text.includes(reason));
   assert.ok(archived.subject.includes(title), 'a subject is plain text, not html');
+});
+
+test('J5: a proposal’s words are escaped in html and verbatim in text, and a decline carries its reason — an acceptance has none', () => {
+  const text = 'Add a <blog>\nand a "news" page';
+  for (const locale of LOCALES) {
+    const proposed = scopeProposedEmail(locale, {
+      recipientName: 'Sales',
+      projectTitleFa: 'فروشگاه',
+      projectTitleEn: 'A <shop>',
+      proposalKind: 'ADD',
+      text,
+      deskUrl: DESK_REQUEST_URL,
+    });
+    assert.ok(proposed.html.includes('Add a &lt;blog&gt;<br>and a &quot;news&quot; page'), `${locale}: escaped, line breaks kept`);
+    assert.ok(!proposed.html.includes('<blog>'));
+    assert.ok(proposed.text.includes(text), `${locale}: verbatim in text`);
+  }
+  // Each kind reads differently, in both languages.
+  for (const locale of LOCALES) {
+    const bodies = (['ADD', 'REMOVE', 'RESTORE'] as const).map(
+      (proposalKind) =>
+        scopeProposedEmail(locale, { recipientName: 'S', projectTitleFa: 'ا', projectTitleEn: 'a', proposalKind, text: 'x', deskUrl: DESK_REQUEST_URL }).text,
+    );
+    assert.equal(new Set(bodies).size, 3, `${locale}: three kinds, three sentences`);
+  }
+
+  const reason = 'Out of <scope>\nsorry';
+  const declined = scopeProposalDecidedEmail('en', {
+    customerName: 'N',
+    projectTitleFa: 'ا',
+    projectTitleEn: 'A shop',
+    decision: 'DECLINED',
+    reason,
+    portalUrl: PORTAL_CONTRACT_URL,
+  });
+  assert.ok(declined.html.includes('Out of &lt;scope&gt;<br>sorry'));
+  assert.ok(declined.text.includes(reason));
+  assert.match(declined.subject, /declined/);
+  const declinedFa = scopeProposalDecidedEmail('fa', {
+    customerName: 'N',
+    projectTitleFa: 'فروشگاه',
+    projectTitleEn: 'a',
+    decision: 'DECLINED',
+    reason,
+    portalUrl: PORTAL_CONTRACT_URL,
+  });
+  assert.ok(declinedFa.text.includes(reason));
+  assert.match(declinedFa.text, /نپذیرفت/);
+  const accepted = scopeProposalDecidedEmail('en', {
+    customerName: 'N',
+    projectTitleFa: 'ا',
+    projectTitleEn: 'A shop',
+    decision: 'ACCEPTED',
+    reason: 'ignored on an acceptance',
+    portalUrl: PORTAL_CONTRACT_URL,
+  });
+  assert.match(accepted.subject, /accepted/);
+  assert.ok(!accepted.text.includes('ignored on an acceptance'));
+});
+
+test('J6: the draft email says whether it is the first look or a revision, the version in Latin digits', () => {
+  const first = draftPublishedEmail('en', { customerName: 'N', projectTitleFa: 'ا', projectTitleEn: 'A shop', version: 1, portalUrl: PORTAL_CONTRACT_URL });
+  const later = draftPublishedEmail('en', { customerName: 'N', projectTitleFa: 'ا', projectTitleEn: 'A shop', version: 3, portalUrl: PORTAL_CONTRACT_URL });
+  assert.match(first.subject, /ready to read/);
+  assert.ok(!/v1|version 1/.test(first.text), 'a first draft has no version to announce');
+  assert.match(later.subject, /revised \(v3\)/);
+  assert.ok(later.text.includes('version 3'));
+  assert.ok(later.text.includes('earlier notes'), 'a revision says the notes show what changed');
+  const laterFa = draftPublishedEmail('fa', { customerName: 'N', projectTitleFa: 'فروشگاه', projectTitleEn: 'a', version: 3, portalUrl: PORTAL_CONTRACT_URL });
+  assert.ok(laterFa.subject.includes('v3'), 'never «v۳» — a version is an identifier (house rule 14)');
+  assert.ok(laterFa.text.includes('3'));
+  assert.ok(!/[۰-۹]/.test(laterFa.text));
 });
