@@ -4,6 +4,7 @@ import type { ContractSequence, StepKind } from '@prisma/client';
 import {
   LOCKS_WITH_AGREEMENT,
   SEQUENCE_FOR_NEW_CONTRACTS,
+  agreementSignedAt,
   assertStepOpen,
   computeWizard,
   currentStepOf,
@@ -343,4 +344,10 @@ test('SEQUENCE_FOR_NEW_CONTRACTS stays DESIGN_FIRST until J7 builds the agreemen
   // test is the line to change — and its failure is the reminder that
   // createContract's callers are now on the new road.
   assert.equal(SEQUENCE_FOR_NEW_CONTRACTS, 'DESIGN_FIRST');
+});
+
+test('agreementSignedAt (J13): the signature, on both roads — an AGREEMENT approval alone is not signed', () => {
+  const signed = new Date('2026-10-01T00:00:00Z');
+  assert.deepEqual(agreementSignedAt({ signatureSignedAt: signed }), signed);
+  assert.equal(agreementSignedAt({ signatureSignedAt: null }), null);
 });

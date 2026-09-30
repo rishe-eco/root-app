@@ -86,6 +86,16 @@ const schema = z.object({
   INVITE_DAYS: z.coerce.number().default(14),
   RESET_HOURS: z.coerce.number().default(2),
   /**
+   * Journeys build plan J13: the days between an invoice's issue and its due
+   * day when nothing else says — the lazy subscription generator's invoices,
+   * and a draft whose author left the term blank. **A placeholder until the
+   * founder sets it** (the plan's own words); a planned invoice carries its own
+   * term and never reads this. Copied onto each invoice at issue
+   * (`BillingEntry.paymentTermDays`), so changing it moves no due date already
+   * promised.
+   */
+  DEFAULT_PAYMENT_TERM_DAYS: z.coerce.number().int().min(0).max(365).default(7),
+  /**
    * Where uploaded files are written. Deliberately **has no default in
    * production**: the release script swaps the whole app directory on every
    * deploy, so a relative default would put customers' design files inside a

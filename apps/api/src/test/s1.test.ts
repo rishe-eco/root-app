@@ -29,8 +29,10 @@ import { startFileServer, upload } from './http.js';
  * hears. `SCOPE_UNCONFIRMED` is a row whose capability check passed and whose
  * first refusal is the step's own — the fixture has no scope, so publishing the
  * draft gets exactly that far (J6) for whoever holds `contracts.author`.
+ * `NOT_SIGNED` (J13) likewise: issuing a payment plan's first row on a contract
+ * nobody has signed is what "allowed" looks like for that row.
  */
-type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED';
+type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED' | 'NOT_SIGNED';
 
 let f: Fixture;
 const staff: Record<string, User> = {};
@@ -40,6 +42,11 @@ let dependencyId: string;
 let technicalDependencyId: string;
 let proposalId: string;
 let tradeId: string;
+// J13: a draft (to edit, delete and issue), an issued invoice (to mark paid),
+// and the first row of a payment plan on a contract that is not signed.
+let draftEntryId: string;
+let issuedEntryId: string;
+let plannedInvoiceId: string;
 
 before(async () => {
   await resetDatabase();
@@ -132,6 +139,34 @@ beforeEach(async () => {
       data: { projectId, outItemId: outItem.id, inItemId: inItem.id, proposedById: f.admin.id, rootConfirmedAt: new Date() },
     })
   ).id;
+
+  const draft = await prisma.billingEntry.create({
+    data: { customerId: f.customer.id, source: 'CONTRACT', descriptionFa: 'پیش‌نویس', descriptionEn: 'Draft', amount: 1_000n },
+  });
+  draftEntryId = draft.id;
+  const issued = await prisma.billingEntry.create({
+    data: {
+      customerId: f.customer.id,
+      source: 'CONTRACT',
+      descriptionFa: 'صادرشده',
+      descriptionEn: 'Issued',
+      amount: 1_000n,
+      issuedAt: new Date('2026-09-01T00:00:00Z'),
+      invoiceNumber: 'INV-900001',
+      dueAt: new Date('2026-09-08T00:00:00Z'),
+      paymentTermDays: 7,
+    },
+  });
+  issuedEntryId = issued.id;
+  const plan = await prisma.paymentPlan.create({
+    data: {
+      contractId: f.contract.id,
+      split: 'LUMP_SUM',
+      invoices: { create: [{ ordinal: 1, labelFa: 'همه', labelEn: 'All', amount: 1_000n, paymentTermDays: 7 }] },
+    },
+    include: { invoices: true },
+  });
+  plannedInvoiceId = plan.invoices[0].id;
 });
 
 after(async () => {
@@ -194,6 +229,26 @@ const OPS: Record<string, (as: User) => ReturnType<typeof exec>> = {
       variables: { d: technicalDependencyId },
     }),
   'billing.manage · ledger': (as) => exec('{ allBillingEntries { id } }', { as }),
+  // Journeys build plan J13: every new invoice operation is `billing.manage`.
+  'billing.manage · create draft': (as) =>
+    exec(
+      'mutation($c: ID!){ createInvoiceDraft(customerId: $c, source: CONTRACT, descriptionFa: "ب", descriptionEn: "B", amount: "1000") { id } }',
+      { as, variables: { c: f.customer.id } },
+    ),
+  'billing.manage · update draft': (as) =>
+    exec(
+      'mutation($e: ID!){ updateInvoiceDraft(entryId: $e, descriptionFa: "ب", descriptionEn: "B", amount: "2000") { id } }',
+      { as, variables: { e: draftEntryId } },
+    ),
+  'billing.manage · delete draft': (as) =>
+    exec('mutation($e: ID!){ deleteInvoiceDraft(entryId: $e) }', { as, variables: { e: draftEntryId } }),
+  'billing.manage · issue invoice': (as) =>
+    exec('mutation($e: ID!){ issueInvoice(entryId: $e) { id } }', { as, variables: { e: draftEntryId } }),
+  'billing.manage · issue planned invoice': (as) =>
+    exec('mutation($p: ID!){ issuePlannedInvoice(plannedInvoiceId: $p) { id } }', { as, variables: { p: plannedInvoiceId } }),
+  'billing.manage · mark paid': (as) =>
+    exec('mutation($e: ID!){ markBillingEntryPaid(entryId: $e) { id } }', { as, variables: { e: issuedEntryId } }),
+  'billing.manage · payment plans': (as) => exec('{ contractsWithPaymentPlan { id } }', { as }),
   'tickets.answer · desk queue': (as) => exec('{ allTickets { id } }', { as }),
   'customers.manage · service runs': (as) => exec('{ allServiceRuns { id } }', { as }),
   'contracts.author · assign': (as) =>
@@ -230,6 +285,7 @@ const F = 'FORBIDDEN' as const;
 const N = 'NOT_ASSIGNED' as const;
 const NF = 'NOT_FOUND' as const;
 const U = 'SCOPE_UNCONFIRMED' as const;
+const NS = 'NOT_SIGNED' as const;
 
 /**
  * The matrix. Columns: ADMIN, SALES, DESIGNER, DESIGNER_UNASSIGNED,
@@ -260,6 +316,13 @@ const MATRIX: Record<keyof typeof OPS, Outcome[]> = {
   'dependencies.verifyGeneral · verify':  ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'dependencies.verifyTechnical · verify': ['OK', F,    F,    F,    'OK', N,    F,   F,   F],
   'billing.manage · ledger':              ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
+  'billing.manage · create draft':        ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
+  'billing.manage · update draft':        ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
+  'billing.manage · delete draft':        ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
+  'billing.manage · issue invoice':       ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
+  'billing.manage · issue planned invoice': [NS, NS,   F,    F,    F,    F,    F,   F,   F],
+  'billing.manage · mark paid':           ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
+  'billing.manage · payment plans':       ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'tickets.answer · desk queue':          ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'customers.manage · service runs':      ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'contracts.author · assign':            ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],

@@ -35,6 +35,8 @@ export { LOCALES, resolveLocale };
  *   - `scopeProposedSms`, `scopeProposalDecidedSms` (J5) and `draftPublishedSms`
  *     (J6): **one placeholder** each, the URL — a proposal's text and a
  *     decline's reason are free text and stay in the email.
+ *   - `invoiceIssuedSms` (journeys build plan J13): **one placeholder**, the URL —
+ *     no number, no amount.
  *
  * Codes are printed in Latin digits in both languages, never through
  * `toPersianDigits` — house rule 14's own exception for an identifier
@@ -83,6 +85,19 @@ export function requestArchivedSms(locale: string | null | undefined, params: { 
     return { text: `Your Root request was archived. See why: ${params.portalUrl}` };
   }
   return { text: `درخواست شما در ریشه بایگانی شد. دلیل را ببینید: ${params.portalUrl}` };
+}
+
+/**
+ * J13 — to the customer, when an invoice is issued. One placeholder, the URL: no
+ * number and no amount, for the reason the request bodies carry no title (a
+ * registered pattern's placeholder count is part of what is registered) — the
+ * email has the facts, and the page is one tap away.
+ */
+export function invoiceIssuedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A new invoice was issued on Root: ${params.portalUrl}` };
+  }
+  return { text: `صورت‌حساب تازه‌ای در ریشه صادر شد: ${params.portalUrl}` };
 }
 
 /** J4 — to the customer, when sales hands step 1 over. */

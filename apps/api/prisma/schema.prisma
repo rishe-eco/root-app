@@ -2047,8 +2047,42 @@ model BillingEntry {
   /// Toman. Integer — no float ever touches a charge (build plan L6's second
   /// banked trap; the predecessor plan's own §6.3 trap, arriving here again).
   amount        BigInt
-  issuedAt      DateTime      @default(now())
+
+  /// Journeys build plan J13 (D-7): **null means a draft** — invisible to the
+  /// customer everywhere a BillingEntry reaches them (`lib/visibility.ts`,
+  /// `invoiceVisibleTo`), with no number and no due date. It used to default
+  /// to now(), which made every entry an issued invoice the instant it was
+  /// created; the three hand-authored creators now write drafts, and only the
+  /// issuing paths (`resolvers/admin/invoices.ts`, and the lazy subscription
+  /// generator in `lib/billing.ts`) set this. The CHECK
+  /// `BillingEntry_issued_is_complete` (hand-written in the migration, proven
+  /// by direct insert) is what makes "issued" mean *numbered and dated*
+  /// whatever wrote the row.
+  issuedAt      DateTime?
   paidAt        DateTime?
+
+  /// `INV-000123`, Latin (house rule 14), taken from the Postgres sequence
+  /// `invoice_number_seq` inside the issuing transaction (PD-11). Unique;
+  /// gaps are acceptable — a rolled-back issue burns its number. The sequence
+  /// is hand-written in the migration: Prisma has no model for one.
+  invoiceNumber   String?   @unique
+  /// A calendar day (PD-19), `@db.Date`, rendered in UTC: the issue day plus
+  /// `paymentTermDays`. The plan's J13 section wrote `DateTime`; PD-19 says
+  /// invoice due dates are days, and wins.
+  dueAt           DateTime? @db.Date
+  /// The term this invoice was issued with — copied from the planned invoice,
+  /// the draft, or `env.DEFAULT_PAYMENT_TERM_DAYS`, so a later change of the
+  /// default never moves a due date already promised.
+  paymentTermDays Int?
+
+  /// The planned invoice this entry issued (J13). Unique: a planned invoice
+  /// is issued once, and two concurrent presses of *Issue next* produce one
+  /// row and one `ALREADY_ISSUED`. **Restrict**, not SetNull: a payment plan
+  /// whose rows have been issued cannot be replaced out from under its
+  /// invoices — `setPaymentPlan` refuses first (`PLAN_HAS_ISSUED_INVOICES`),
+  /// and this is what it could not be talked around.
+  plannedInvoiceId String?         @unique
+  plannedInvoice   PlannedInvoice? @relation(fields: [plannedInvoiceId], references: [id], onDelete: Restrict)
 
   @@unique([subscriptionId, periodStart])
   @@index([customerId, paidAt])
@@ -2436,6 +2470,9 @@ model PlannedInvoice {
 
   /// Days from issue to due.
   paymentTermDays Int
+
+  /// The invoice issued from this row, once it has been (J13).
+  billingEntry BillingEntry?
 
   @@unique([planId, ordinal])
   @@index([phaseId])

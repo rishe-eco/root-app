@@ -9,6 +9,7 @@ import {
   contractVisibleTo,
   contractVisibleToStaff,
   isActiveContract,
+  invoiceVisibleTo,
   isContractReader,
   mayReadInternalNotes,
   mayReadArticleBody,
@@ -202,6 +203,24 @@ test('mayReadMoney: the customer and money.read, never design or development', (
   assert.equal(mayReadMoney(person('des', 'DESIGNER'), c), false);
   assert.equal(mayReadMoney(person('dev', 'DEVELOPER'), c), false);
   assert.equal(mayReadMoney(person('other', 'CUSTOMER'), c), false);
+});
+
+test('invoiceVisibleTo (J13): a draft is billing’s alone; an issued invoice is its customer’s and money readers’; design and development see none', () => {
+  const issued = { customerId: 'cust', issuedAt: new Date('2026-09-01T00:00:00Z') };
+  const draft = { customerId: 'cust', issuedAt: null };
+  const table: Array<{ who: string; viewer: ReturnType<typeof person>; issued: boolean; draft: boolean }> = [
+    { who: 'the customer', viewer: person('cust', 'CUSTOMER'), issued: true, draft: false },
+    { who: 'another customer', viewer: person('other', 'CUSTOMER'), issued: false, draft: false },
+    { who: 'sales (billing.manage and money.read)', viewer: person('s', 'SALES'), issued: true, draft: true },
+    { who: 'admin', viewer: person('a', 'ADMIN'), issued: true, draft: true },
+    { who: 'a designer', viewer: person('des', 'DESIGNER'), issued: false, draft: false },
+    { who: 'a developer', viewer: person('dev', 'DEVELOPER'), issued: false, draft: false },
+    { who: 'a contributor', viewer: person('con', 'CONTRIBUTOR'), issued: false, draft: false },
+  ];
+  for (const row of table) {
+    assert.equal(invoiceVisibleTo(row.viewer, issued), row.issued, `${row.who}, issued`);
+    assert.equal(invoiceVisibleTo(row.viewer, draft), row.draft, `${row.who}, draft`);
+  }
 });
 
 /**

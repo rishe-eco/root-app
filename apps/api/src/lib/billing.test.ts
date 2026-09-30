@@ -103,9 +103,11 @@ test('isValidTomanAmount refuses floats, signs, and non-numeric input', () => {
 
 test('computeBillingReport totals issued/paid/outstanding across sources', () => {
   const report = computeBillingReport([
-    { source: 'CONTRACT', amount: 100n, paidAt: new Date() },
-    { source: 'CONTRACT', amount: 50n, paidAt: null },
-    { source: 'TICKET', amount: 20n, paidAt: new Date() },
+    { source: 'CONTRACT', amount: 100n, issuedAt: new Date(), paidAt: new Date() },
+    { source: 'CONTRACT', amount: 50n, issuedAt: new Date(), paidAt: null },
+    { source: 'TICKET', amount: 20n, issuedAt: new Date(), paidAt: new Date() },
+    // A draft (J13) is in neither issued nor outstanding.
+    { source: 'CONTRACT', amount: 9_999n, issuedAt: null, paidAt: null },
   ]);
   assert.equal(report.totalIssued, 170n);
   assert.equal(report.totalPaid, 120n);

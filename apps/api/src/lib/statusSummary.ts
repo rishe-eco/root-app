@@ -17,8 +17,13 @@ import type { AttentionItem, WaitingOn } from './attention.js';
  * - **Whose move a step is** — add a case to `nextMoveOn`. Until a stage does,
  *   a new-road step's move is Root's: nothing the customer can act on exists
  *   yet, which is also what its panel says.
- * - **"Started"** — J13 adds "and the first invoice is paid" to `started`
- *   (Q11; until then, signed).
+ * - **"Started"** — signed *and*, for a contract with a payment plan, the
+ *   plan's first invoice is paid (Q11, J13). **A contract with no payment plan
+ *   has no first invoice to wait for, so `started` stays `signed` for it** —
+ *   which is every legacy contract (a payment plan exists only on the new road,
+ *   J4), and the one thing that could not be true of them is being "not started"
+ *   for want of an invoice nobody can ever issue. `invoicePlan` is `null` for
+ *   that case and `{ firstPaidAt }` otherwise.
  * - **Progress** — a stage that gives Root a new way to show work adds its
  *   dates to `progressAt` in `resolvers/wizard.ts`. Read today: builds
  *   published (`Build.publishedAt`), contract revisions published
@@ -27,8 +32,9 @@ import type { AttentionItem, WaitingOn } from './attention.js';
  *   published (S2), a scope proposal published (J5), the draft published (J6,
  *   which is a `ContractRevision` and so already counted), a design round
  *   (J8) and a mockup iteration (J9).
- * - **Overdue** — J13 adds invoices past their due date, and a phase past its
- *   `plannedEndAt`, to `overdueCount`.
+ * - **Overdue** — `overdueCount` counts overdue commitments and (J13) overdue
+ *   invoices — the second from the `INVOICE_OVERDUE` line's own `count`. A phase
+ *   past its `plannedEndAt` is still to add.
  */
 
 export type StatusSummaryInput = {
@@ -39,6 +45,10 @@ export type StatusSummaryInput = {
   attention: AttentionItem[];
   /** The agreement's approval, or the legacy signature. */
   signedAt: Date | null;
+  /** Null when the contract has no payment plan (every legacy contract);
+   *  otherwise when its first planned invoice was paid, or null if it has not
+   *  been (issued and paid — `firstInvoicePaidAt`, lib/invoice.ts). */
+  invoicePlan: { firstPaidAt: Date | null } | null;
   plannedStartAt: Date | null;
   plannedEndAt: Date | null;
   /** When Root last showed the customer something: every date of every source
@@ -102,11 +112,21 @@ export function computeStatusSummary(input: StatusSummaryInput): StatusSummary {
     null,
   );
 
+  // Started (Q11): signed, and — when there is a plan to wait on — its first
+  // invoice paid. The moment is the later of the two, since the second is what
+  // set work going.
+  const firstPaidAt = input.invoicePlan?.firstPaidAt ?? null;
+  const started = input.signedAt !== null && (input.invoicePlan === null || firstPaidAt !== null);
+  const startedAt =
+    !started || input.signedAt === null
+      ? null
+      : firstPaidAt !== null && firstPaidAt.getTime() > input.signedAt.getTime()
+        ? firstPaidAt
+        : input.signedAt;
+
   return {
-    // Signed. J13 adds "and the first invoice is paid" (Q11); until then the
-    // two are the same moment.
-    started: input.signedAt !== null,
-    startedAt: input.signedAt,
+    started,
+    startedAt,
     currentStep: current?.step ?? null,
     currentPhaseId: current?.phaseId ?? null,
     currentPhaseNumber: current?.phaseNumber ?? null,
@@ -115,7 +135,9 @@ export function computeStatusSummary(input: StatusSummaryInput): StatusSummary {
     waitingOnCustomer: input.attention.filter((a) => a.waitingOn === 'CUSTOMER').length,
     plannedStartAt: input.plannedStartAt,
     plannedEndAt: input.plannedEndAt,
-    overdueCount: input.attention.filter((a) => a.kind === 'COMMITMENT_OVERDUE').length,
+    overdueCount:
+      input.attention.filter((a) => a.kind === 'COMMITMENT_OVERDUE').length +
+      input.attention.filter((a) => a.kind === 'INVOICE_OVERDUE').reduce((n, a) => n + Number(a.params.count ?? 0), 0),
     lastProgressAt,
     daysSinceProgress:
       lastProgressAt === null ? null : Math.max(0, Math.floor((input.now.getTime() - lastProgressAt.getTime()) / DAY_MS)),

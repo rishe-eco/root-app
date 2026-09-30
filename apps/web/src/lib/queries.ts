@@ -755,6 +755,11 @@ export type PlannedInvoice = {
 
 export type PaymentPlan = { id: string; split: PaymentSplit; total: string; invoices: PlannedInvoice[] };
 
+/** J13 — where a payment plan's row stands (lib/invoice.ts). */
+export type PlannedInvoiceState = 'NOT_YET_ISSUABLE' | 'ISSUABLE' | 'ISSUED' | 'PAID' | 'OVERDUE';
+/** What keeps an unissued row from being issued. */
+export type IssueBlock = 'NOT_SIGNED' | 'PREVIOUS_UNPAID' | 'PHASE_NOT_ACCEPTED';
+
 const USER_FIELDS = gql`
   fragment UserFields on User {
     id
@@ -2948,7 +2953,7 @@ export type Ticket = {
   briefDesiredState: string | null;
   briefLang: string | null;
   /** Build plan L6: the charge this billable ticket produced, if any. */
-  billingEntry: { id: string; amount: string; paidAt: string | null } | null;
+  billingEntry: { id: string; amount: string; paidAt: string | null; issuedAt: string | null } | null;
   messages: TicketMessage[];
   createdAt: string;
   updatedAt: string;
@@ -2974,6 +2979,7 @@ const TICKET_FIELDS = gql`
       id
       amount
       paidAt
+      issuedAt
     }
     customer {
       id
@@ -3199,7 +3205,7 @@ export type BillingEntry = {
   id: string;
   customer: Pick<User, 'id' | 'name' | 'clientName'>;
   contract: { id: string; ref: string } | null;
-  phase: { id: string; titleFa: string; titleEn: string; milestoneLabel: string | null } | null;
+  phase: { id: string; number: number; titleFa: string; titleEn: string; milestoneLabel: string | null } | null;
   subscription: Pick<Subscription, 'id' | 'labelFa' | 'labelEn'> | null;
   periodStart: string | null;
   periodEnd: string | null;
@@ -3209,8 +3215,17 @@ export type BillingEntry = {
   descriptionEn: string;
   /** Toman — a string, since BigInt does not survive JSON. */
   amount: string;
-  issuedAt: string;
+  /** Null is a draft (J13) — only the desk ever receives one. */
+  issuedAt: string | null;
   paidAt: string | null;
+  /** `INV-000123`, Latin in every language. Null on a draft. */
+  invoiceNumber: string | null;
+  /** A calendar day (PD-19): render with `calendarDate`. Null on a draft. */
+  dueAt: string | null;
+  paymentTermDays: number | null;
+  /** The plan row this issued — what it waited on. */
+  plannedInvoice: { id: string; ordinal: number; labelFa: string; labelEn: string } | null;
+  overdue: boolean;
 };
 
 export type BillingSourceTotal = {
@@ -3259,8 +3274,18 @@ const BILLING_ENTRY_FIELDS = gql`
     amount
     issuedAt
     paidAt
+    invoiceNumber
+    dueAt
+    paymentTermDays
+    overdue
     periodStart
     periodEnd
+    plannedInvoice {
+      id
+      ordinal
+      labelFa
+      labelEn
+    }
     customer {
       id
       name
@@ -3272,6 +3297,7 @@ const BILLING_ENTRY_FIELDS = gql`
     }
     phase {
       id
+      number
       titleFa
       titleEn
       milestoneLabel
@@ -3302,10 +3328,21 @@ const BILLING_REPORT_FIELDS = gql`
   }
 `;
 
-export const MY_BILLING_ENTRIES = gql`
+/** The caller's own issued invoices (J13) — never a draft. */
+export const MY_INVOICES = gql`
   ${BILLING_ENTRY_FIELDS}
-  query MyBillingEntries {
-    myBillingEntries {
+  query MyInvoices {
+    myInvoices {
+      ...BillingEntryFields
+    }
+  }
+`;
+
+/** One of the caller's own issued invoices; NOT_FOUND for anything else. */
+export const INVOICE = gql`
+  ${BILLING_ENTRY_FIELDS}
+  query Invoice($id: ID!) {
+    invoice(id: $id) {
       ...BillingEntryFields
     }
   }
@@ -3356,11 +3393,104 @@ export const ALL_SUBSCRIPTIONS = gql`
   }
 `;
 
-export const CREATE_BILLING_ENTRY = gql`
+/** A draft (J13) — the customer sees nothing until `ISSUE_INVOICE`. */
+export const CREATE_INVOICE_DRAFT = gql`
   ${BILLING_ENTRY_FIELDS}
-  mutation CreateBillingEntry($customerId: ID!, $contractId: ID, $phaseId: ID, $source: BillingSource!, $descriptionFa: String!, $descriptionEn: String!, $amount: String!) {
-    createBillingEntry(customerId: $customerId, contractId: $contractId, phaseId: $phaseId, source: $source, descriptionFa: $descriptionFa, descriptionEn: $descriptionEn, amount: $amount) {
+  mutation CreateInvoiceDraft($customerId: ID!, $contractId: ID, $phaseId: ID, $source: BillingSource!, $descriptionFa: String!, $descriptionEn: String!, $amount: String!, $paymentTermDays: Int) {
+    createInvoiceDraft(customerId: $customerId, contractId: $contractId, phaseId: $phaseId, source: $source, descriptionFa: $descriptionFa, descriptionEn: $descriptionEn, amount: $amount, paymentTermDays: $paymentTermDays) {
       ...BillingEntryFields
+    }
+  }
+`;
+
+export const ISSUE_INVOICE = gql`
+  ${BILLING_ENTRY_FIELDS}
+  mutation IssueInvoice($entryId: ID!) {
+    issueInvoice(entryId: $entryId) {
+      ...BillingEntryFields
+    }
+  }
+`;
+
+export const DELETE_INVOICE_DRAFT = gql`
+  mutation DeleteInvoiceDraft($entryId: ID!) {
+    deleteInvoiceDraft(entryId: $entryId)
+  }
+`;
+
+/** A payment plan as the desk's billing screen reads it, per contract (J13). */
+export type PlanContract = {
+  id: string;
+  ref: string;
+  titleFa: string;
+  titleEn: string;
+  customer: Pick<User, 'id' | 'name' | 'clientName'>;
+  paymentPlan: {
+    id: string;
+    split: PaymentSplit;
+    total: string;
+    invoices: Array<
+      PlannedInvoice & {
+        state: PlannedInvoiceState;
+        blockedBy: IssueBlock | null;
+        invoice: Pick<BillingEntry, 'id' | 'invoiceNumber' | 'issuedAt' | 'dueAt' | 'paidAt' | 'overdue'> | null;
+      }
+    >;
+  } | null;
+};
+
+const PLAN_CONTRACT_FIELDS = gql`
+  fragment PlanContractFields on Contract {
+    id
+    ref
+    titleFa
+    titleEn
+    customer {
+      id
+      name
+      clientName
+    }
+    paymentPlan {
+      id
+      split
+      total
+      invoices {
+        id
+        ordinal
+        labelFa
+        labelEn
+        amount
+        phaseId
+        paymentTermDays
+        state
+        blockedBy
+        invoice {
+          id
+          invoiceNumber
+          issuedAt
+          dueAt
+          paidAt
+          overdue
+        }
+      }
+    }
+  }
+`;
+
+export const CONTRACTS_WITH_PAYMENT_PLAN = gql`
+  ${PLAN_CONTRACT_FIELDS}
+  query ContractsWithPaymentPlan($customerId: ID) {
+    contractsWithPaymentPlan(customerId: $customerId) {
+      ...PlanContractFields
+    }
+  }
+`;
+
+export const ISSUE_PLANNED_INVOICE = gql`
+  ${PLAN_CONTRACT_FIELDS}
+  mutation IssuePlannedInvoice($plannedInvoiceId: ID!) {
+    issuePlannedInvoice(plannedInvoiceId: $plannedInvoiceId) {
+      ...PlanContractFields
     }
   }
 `;
@@ -3463,7 +3593,7 @@ export type ServiceRun = {
   appliedBy: Pick<User, 'id' | 'name'> | null;
   rows: ServiceRunRow[];
   summary: ServiceRunSummary;
-  billingEntry: { id: string; amount: string; paidAt: string | null } | null;
+  billingEntry: { id: string; amount: string; paidAt: string | null; issuedAt: string | null } | null;
 };
 
 const SERVICE_RUN_FIELDS = gql`
@@ -3511,6 +3641,7 @@ const SERVICE_RUN_FIELDS = gql`
       id
       amount
       paidAt
+      issuedAt
     }
   }
 `;

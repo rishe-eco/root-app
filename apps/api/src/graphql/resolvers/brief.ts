@@ -333,7 +333,8 @@ export const briefMutations = {
    * A row's `phaseId` must be one of *this contract's* phases
    * (`PHASE_WRONG_CONTRACT`). Refusals: `FORBIDDEN`, `NOT_FOUND`,
    * `STEP_NOT_ON_ROAD`, the rows' own (`PLAN_ROWS_REQUIRED`, `TOO_MANY_ROWS`,
-   * `LABEL_REQUIRED`, `INVALID_AMOUNT`, `INVALID_TERM`), `STEP_LOCKED`.
+   * `LABEL_REQUIRED`, `INVALID_AMOUNT`, `INVALID_TERM`), `STEP_LOCKED`, and
+   * (J13) `PLAN_HAS_ISSUED_INVOICES` once any row has been issued.
    */
   setPaymentPlan: async (
     _p: unknown,
@@ -348,6 +349,18 @@ export const briefMutations = {
     await prisma.$transaction(async (tx) => {
       await lockContract(tx, contract.id);
       await assertStepOpenOn(contract.id, 'REQUIREMENTS', null, tx);
+
+      // J13 (J4's owed item): a replace deletes every planned invoice, and one
+      // that has been issued is a customer's invoice with a number. Refused
+      // rather than preserved — a partial replace would have to decide which
+      // rows "are the same" as the old ones, and the desk form does not say.
+      // Taken under the contract's lock, which `issuePlannedInvoice` also
+      // holds, so an issue cannot slip in between this count and the delete;
+      // the entry's Restrict foreign key is what stops anything else.
+      const existingPlan = await tx.paymentPlan.findUnique({ where: { contractId: contract.id }, select: { id: true } });
+      if (existingPlan && (await tx.billingEntry.count({ where: { plannedInvoice: { planId: existingPlan.id } } })) > 0) {
+        throw refuse('PLAN_HAS_ISSUED_INVOICES', 'Part of this payment plan has already been issued as invoices, so the plan cannot be replaced.');
+      }
 
       const named = [...new Set(args.invoices.map((r) => r.phaseId).filter((id): id is string => !!id))];
       if (named.length > 0) {

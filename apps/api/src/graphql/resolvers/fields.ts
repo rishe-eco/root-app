@@ -10,6 +10,7 @@ import {
   requestVisibleTo,
   visibleComment,
   visibleItem,
+  invoiceVisibleTo,
 } from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
@@ -17,6 +18,7 @@ import { agreedScopeSnapshot } from '../../lib/scope.js';
 import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
 import { computeProjectProgress } from '../../lib/phase.js';
 import { isOverdue } from '../../lib/dependency.js';
+import { isOverdue as isInvoiceOverdue } from '../../lib/invoice.js';
 import { summarizeRows } from '../../lib/serviceImport.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
 import { feedbackItemInclude } from './feedback.js';
@@ -689,6 +691,11 @@ export const Dependency = {
  */
 export const BillingEntry = {
   amount: (e: { amount: bigint }) => e.amount.toString(),
+  // Derived on every read, never stored — Dependency.overdue's discipline.
+  overdue: (e: { issuedAt: Date | null; dueAt: Date | null; paidAt: Date | null }) => isInvoiceOverdue(e, new Date()),
+  // Loaded by `billingEntryInclude`; `amount` is the one BigInt on the row.
+  plannedInvoice: (e: { plannedInvoice?: { amount: bigint } | null }) =>
+    e.plannedInvoice ? { ...e.plannedInvoice, amount: e.plannedInvoice.amount.toString() } : null,
 };
 
 export const Subscription = {
@@ -707,6 +714,13 @@ export const BillingReport = {
   totalOutstanding: (r: { totalOutstanding: bigint }) => r.totalOutstanding.toString(),
 };
 
+/** J13: the ticket's charge is a draft until sales issues it — `ServiceRun.billingEntry`'s
+ *  reasoning, for the ticket edge. */
+export const Ticket = {
+  billingEntry: (t: { billingEntry?: { customerId: string; issuedAt: Date | null } | null }, _a: unknown, ctx: Context) =>
+    t.billingEntry && invoiceVisibleTo(viewerOf(ctx), t.billingEntry) ? t.billingEntry : null,
+};
+
 /** Build plan L7. `fileUrl` is `/files/<id>` — the same PRIVATE-file route
  *  every other class already downloads through (routes/files.ts), which
  *  re-checks ownership on every request rather than trusting this field to
@@ -718,6 +732,15 @@ export const ServiceRun = {
   fileName: (r: { file: { originalName: string } }) => r.file.originalName,
   fileBytes: (r: { file: { bytes: number } }) => r.file.bytes,
   summary: (r: { rows: Array<{ action: 'CREATE' | 'UPDATE' | 'UNCHANGED' | 'REJECTED' }> }) => summarizeRows(r.rows),
+  /**
+   * J13: the charge a run produced is a **draft** until sales issues it, and a
+   * draft is Root's — the project's customer reads their own runs, and this is
+   * the edge that would have shown them the amount of one they have not been
+   * billed for. `invoiceVisibleTo` is the one rule (and `mayReadMoney` inside it
+   * is why a staff reader without `money.read` sees no amount either).
+   */
+  billingEntry: <E extends { customerId: string; issuedAt: Date | null }>(r: { billingEntry: E | null }, _a: unknown, ctx: Context): E | null =>
+    r.billingEntry && invoiceVisibleTo(viewerOf(ctx), r.billingEntry) ? r.billingEntry : null,
 };
 
 export const ServiceRunRow = {

@@ -22,6 +22,7 @@ import {
   scopeProposedEmail,
   scopeProposalDecidedEmail,
   draftPublishedEmail,
+  invoiceIssuedEmail,
   type MailContent,
 } from './mailTemplates.js';
 import {
@@ -33,6 +34,7 @@ import {
   scopeProposedSms,
   scopeProposalDecidedSms,
   draftPublishedSms,
+  invoiceIssuedSms,
 } from './smsTemplates.js';
 
 /**
@@ -51,8 +53,9 @@ import {
  * all, so SMS is not an enhancement there, it can be the *only* way the
  * invite reaches them — and, since J2, for the three request events
  * (`REQUEST_SUBMITTED`, `REQUEST_MESSAGE`, `REQUEST_ARCHIVED`) and, since J4,
- * `BRIEF_SHARED` (step 1 handed over), and, since J5 and J6, `SCOPE_PROPOSED`,
- * `SCOPE_PROPOSAL_DECIDED` and `DRAFT_PUBLISHED`: a customer who
+ * `BRIEF_SHARED` (step 1 handed over), since J5 and J6 `SCOPE_PROPOSED`,
+ * `SCOPE_PROPOSAL_DECIDED` and `DRAFT_PUBLISHED`, and since J13
+ * `INVOICE_ISSUED`: a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
@@ -163,6 +166,11 @@ export type NotifyEvent =
   | {
       kind: 'DRAFT_PUBLISHED';
       params: { customerName: string; projectTitleFa: string; projectTitleEn: string; version: number; portalUrl: string };
+    }
+  // Journeys build plan J13 — an invoice was issued to the customer.
+  | {
+      kind: 'INVOICE_ISSUED';
+      params: { customerName: string; invoiceNumber: string; amount: string; dueOn: string; portalUrl: string };
     };
 
 /** Every event's email rendering — always defined, since every event this
@@ -205,6 +213,8 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return scopeProposalDecidedEmail(locale, event.params);
     case 'DRAFT_PUBLISHED':
       return draftPublishedEmail(locale, event.params);
+    case 'INVOICE_ISSUED':
+      return invoiceIssuedEmail(locale, event.params);
   }
 }
 
@@ -239,6 +249,11 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
       return scopeProposalDecidedSms(locale, { portalUrl: event.params.portalUrl });
     case 'DRAFT_PUBLISHED':
       return draftPublishedSms(locale, { portalUrl: event.params.portalUrl });
+    // J13: an invoice is money owed, and a customer who signs in by phone
+    // alone must be able to learn it exists — the same reason as above. The SMS
+    // carries only the link; the amount and the due day are the email's.
+    case 'INVOICE_ISSUED':
+      return invoiceIssuedSms(locale, event.params);
     default:
       return null;
   }

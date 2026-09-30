@@ -18,6 +18,8 @@ export const billingEntryInclude = {
   phase: true,
   subscription: true,
   ticket: true,
+  // J13: "what it waited on" — the plan row this issued, if any.
+  plannedInvoice: true,
 } satisfies Prisma.BillingEntryInclude;
 
 /**
@@ -300,22 +302,14 @@ export const Query = {
   },
 
   /**
-   * Billing (build plan L6; spec §8) — the caller's own entries. Lazily
+   * Billing (build plan L6; spec §8) — the caller's own report. The caller's
+   * own invoices are `myInvoices` (`invoices.ts`, J13: issued only). Lazily
    * catches up every one of the caller's subscriptions first
    * (`ensureDueEntriesFor`, lib/billing.ts) so a customer opening this for
    * the first time in months sees every period they owe, not only the ones
-   * some earlier read happened to generate.
+   * some earlier read happened to generate. Drafts are not in the totals
+   * (`computeBillingReport`).
    */
-  myBillingEntries: async (_p: unknown, _a: unknown, ctx: Context) => {
-    const user = requireUser(ctx);
-    await ensureDueEntriesFor(prisma, { customerId: user.id });
-    return prisma.billingEntry.findMany({
-      where: { customerId: user.id },
-      include: billingEntryInclude,
-      orderBy: { issuedAt: 'desc' },
-    });
-  },
-
   myBillingReport: async (_p: unknown, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
     await ensureDueEntriesFor(prisma, { customerId: user.id });
@@ -359,7 +353,14 @@ export const Query = {
         : {}),
     };
     await ensureDueEntriesFor(prisma, args.customerId ? { customerId: args.customerId } : {});
-    return prisma.billingEntry.findMany({ where, include: billingEntryInclude, orderBy: { issuedAt: 'desc' } });
+    // Drafts (`issuedAt` null) sort first under DESC — unissued work is what
+    // the desk wants on top — and `id` (a cuid, roughly creation order) orders
+    // them among themselves, since a draft has no other date.
+    return prisma.billingEntry.findMany({
+      where,
+      include: billingEntryInclude,
+      orderBy: [{ issuedAt: 'desc' }, { id: 'desc' }],
+    });
   },
 
   /** Staff (billing.manage). One customer's report, or the whole book

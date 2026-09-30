@@ -39,6 +39,10 @@ const run = spawnSync('npx tsx --test --test-concurrency=1 src/test/*.test.ts', 
     SMS_SENDER: '',
     SMS_CODE_PATTERN: '',
     SMS_INVITE_PATTERN: '',
+    // J13: tests assert due days, so the default payment term is the shipped 7
+    // whatever this checkout's .env says (it is not a provider key; it is the
+    // same pinning rule for a setting a test's arithmetic depends on).
+    DEFAULT_PAYMENT_TERM_DAYS: '7',
   },
   stdio: 'inherit',
   // cmd.exe does not expand the glob, and does not need to: Node's test

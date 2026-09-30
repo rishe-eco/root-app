@@ -105,7 +105,7 @@ J4    step 1 — requirements; phases belong to a contract   ✔ 2026-09-30 [J4.
 J5    step 2a — pages, features and deliverables
 J6    step 2b — the draft and its anchored notes
 J7    step 3 — approve and sign; the agreement gate; snapshot format 2
-J13   invoices — drafts, numbers, due dates, plan issuing, print
+J13   invoices — drafts, numbers, due dates, plan issuing  ✔ 2026-09-30 [J13.md] (built before J7)
 T2+J8 step 4 — theme catalogue, wireframes and palette      ◐ T2 catalogue ✔ 2026-09-29 [T2.md] · J8 after J7
 J9    step 5 — the mockup host, streamed bundle upload
 J10   step 6 — demo submission, readiness, per-phase approval
@@ -390,6 +390,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`J3.md`](J3.md) | steps, the wizard shell, status area, attention, notes, view-as-customer | ✔ built |
 | [`S2.md`](S2.md) | one feedback model, answers and the approval queue, `approveStepTx` | ✔ built |
 | [`J4.md`](J4.md) | step 1: the brief, the payment plan, phases that belong to a contract, money gating | ✔ built |
+| [`J13.md`](J13.md) | invoices: drafts, numbers, due dates, issuing the payment plan, the invoice view | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |

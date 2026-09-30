@@ -163,7 +163,12 @@ function TicketRow({ ticket, me }: { ticket: Ticket; me: User }) {
               <p className="t-small">
                 {t('desk.tickets.billedAmount', { amount: formatAmount(ticket.billingEntry.amount, locale) })}
                 {' — '}
-                {ticket.billingEntry.paidAt ? t('billing.paid') : t('billing.outstanding')}
+                {/* J13: the charge is a draft until it is issued from Billing. */}
+                {ticket.billingEntry.issuedAt === null
+                  ? t('desk.billing.draft')
+                  : ticket.billingEntry.paidAt
+                    ? t('billing.paid')
+                    : t('billing.outstanding')}
               </p>
             ) : (
               <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>

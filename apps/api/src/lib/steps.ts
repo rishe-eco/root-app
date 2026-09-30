@@ -238,3 +238,19 @@ export function legacyFinished(input: {
   for (const phaseId of input.acceptedPhaseIds) out.push({ step: 'DEMO', phaseId, at: null });
   return out;
 }
+
+/**
+ * **When the agreement was signed** — one rule for "signed" (house rule 3),
+ * read by the status area's *started* and by J13's invoice issuing
+ * (`NOT_SIGNED`), so a contract cannot be signed to one and unsigned to the
+ * other. On **both** roads it is the current contract revision's signature.
+ * The AGREEMENT `StepApproval` is *not* a signature: on the new road
+ * `approveContract` writes it (J7) and signing follows on the same screen, so
+ * an approved-but-unsigned contract must not issue invoices or count as
+ * started (J13 review). There is no `Contract.signedAt` column, and adding a
+ * second copy of a fact the signature row already carries would be the drift
+ * this file exists to prevent.
+ */
+export function agreementSignedAt(input: { signatureSignedAt: Date | null }): Date | null {
+  return input.signatureSignedAt;
+}

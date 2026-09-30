@@ -102,6 +102,9 @@ export default defineConfig({
         // e2e/helpers.ts's signIn), so this has to be on for the *whole*
         // suite, not opted into per spec.
         SMS_E2E_OUTBOX: '1',
+        // J13: the invoice specs assert due days; pinned to the shipped 7
+        // whatever this checkout's .env says.
+        DEFAULT_PAYMENT_TERM_DAYS: '7',
       },
     },
     {

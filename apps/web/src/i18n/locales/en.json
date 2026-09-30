@@ -176,7 +176,7 @@
     "workspace": "Workspace",
     "navContracts": "Contracts",
     "navTools": "Tools",
-    "navBilling": "Billing",
+    "navBilling": "Invoices",
     "navSupport": "Support",
     "navDesk": "Desk",
     "soon": "Soon",
@@ -657,7 +657,48 @@
       "subscriptionsEmpty": "No subscriptions yet.",
       "entriesTitle": "Entries",
       "addEntry": "Add entry",
-      "entriesEmpty": "No billing entries yet."
+      "entriesEmpty": "No billing entries yet.",
+      "draft": "Draft",
+      "draftHelp": "A draft is invisible to the customer until it is issued.",
+      "termLabel": "Payment term (days)",
+      "termHint": "Left empty, the default term applies when the draft is issued.",
+      "issue": "Issue",
+      "deleteDraft": "Delete draft",
+      "confirmDeleteDraft": "Delete this draft?",
+      "dueOn": "Due {{date}}",
+      "overdue": "Overdue",
+      "numberingNote": "Invoice numbers come from a sequence and may skip a number; that is expected.",
+      "plansTitle": "Payment plans",
+      "plansLede": "Each contract’s planned invoices, issued one at a time — once the agreement is signed, and once the previous invoice is paid.",
+      "plansEmpty": "No contract has a payment plan yet.",
+      "issueNext": "Issue next",
+      "planDone": "Every invoice of this plan has been issued.",
+      "phaseTied": "Tied to a phase’s acceptance",
+      "planState": {
+        "NOT_YET_ISSUABLE": "Not yet",
+        "ISSUABLE": "Ready to issue",
+        "ISSUED": "Issued",
+        "PAID": "Paid",
+        "OVERDUE": "Overdue"
+      },
+      "blocked": {
+        "NOT_SIGNED": "Waiting for the agreement to be signed.",
+        "PREVIOUS_UNPAID": "Waiting for the previous invoice to be paid.",
+        "PHASE_NOT_ACCEPTED": "Waiting for the phase’s demo to be accepted."
+      },
+      "error": {
+        "ALREADY_ISSUED": "That invoice has already been issued.",
+        "NOT_SIGNED": "The agreement has not been signed yet.",
+        "PREVIOUS_UNPAID": "The previous invoice has not been paid yet.",
+        "PHASE_NOT_ACCEPTED": "The phase’s demo has not been accepted yet.",
+        "NOT_A_DRAFT": "An issued invoice cannot be edited or deleted.",
+        "NOT_ISSUED": "A draft has not been issued, so there is nothing to mark paid.",
+        "SUCCESSOR_ISSUED": "The next invoice of this plan has already been issued, so this one stays paid.",
+        "INVALID_TERM": "A payment term is a whole number of days, from 0 to 365.",
+        "INVALID_AMOUNT": "The amount must be a whole number of Toman above zero.",
+        "FORBIDDEN": "You do not have access to that.",
+        "NOT_FOUND": "Not found."
+      }
     },
     "navRequests": "Requests",
     "newContractFromRequest": "Converting the request “{{title}}” from {{customer}}. The conversation stays with the project, read-only, and is linked from the contract.",
@@ -1244,6 +1285,43 @@
       "range": "{{start}} – {{end}}"
     }
   },
+  "invoices": {
+    "title": "Invoices",
+    "lede": "What Root has billed you, what each invoice was waiting on, and what is still to pay.",
+    "empty": "No invoices yet. When Root bills you, the invoice appears here.",
+    "open": "Open",
+    "status": {
+      "paid": "Paid",
+      "due": "To pay",
+      "overdue": "Overdue"
+    },
+    "dueOn": "Due {{date}}",
+    "paidOn": "Paid {{date}}",
+    "notFound": "There is no such invoice.",
+    "backToList": "All invoices",
+    "kind": "Invoice",
+    "factNumber": "Invoice number",
+    "factFor": "For",
+    "factAmount": "Amount",
+    "factIssued": "Issued",
+    "factDue": "Due",
+    "factTerm": "Payment term",
+    "factPaid": "Paid",
+    "term": "{{n}} days",
+    "unpaid": "Not paid yet",
+    "billedTo": "Billed to",
+    "issuedBy": "Issued by",
+    "waitedOnTitle": "What it waited on",
+    "waitedOn": {
+      "signed": "The agreement being signed.",
+      "previous": "The invoice before it being paid.",
+      "phase": "Phase {{n}} being accepted.",
+      "direct": "Nothing — Root billed this directly."
+    },
+    "howToPayTitle": "How to pay",
+    "howToPay": "There is no online payment on this portal. Pay Root directly, by bank transfer. Once Root has received it, this invoice is marked paid here. If you need Root’s payment details, ask your contact at Root.",
+    "numberingNote": "Invoice numbers are a record of what Root has billed, not a tax ledger — an occasional number may be skipped."
+  },
   "requests": {
     "newRequest": "New request",
     "sectionTitle": "Your requests",
@@ -1378,7 +1456,7 @@
     },
     "started": "Started",
     "notStarted": "Not started yet",
-    "notStartedHelp": "Work begins once the agreement is signed.",
+    "notStartedHelp": "Work begins once the agreement is signed and the first invoice is paid.",
     "planned": "Planned",
     "plannedRange": "{{start}} – {{end}}",
     "plannedNone": "No dates set yet",
@@ -1665,6 +1743,14 @@
         "customer": "Both sides confirmed a scope trade — Root will carry it out.",
         "staff": "Both sides confirmed a scope trade — carry it out."
       }
+    },
+    "INVOICE_OVERDUE": {
+      "default": {
+        "customer_one": "{{n}} invoice is past its due date and has not been paid.",
+        "customer_other": "{{n}} invoices are past their due date and have not been paid.",
+        "staff_one": "The customer has {{n}} overdue invoice.",
+        "staff_other": "The customer has {{n}} overdue invoices."
+      }
     }
   },
   "timeline": {
@@ -1919,6 +2005,7 @@
       "INVALID_AMOUNT": "Every amount must be a whole number of Toman above zero.",
       "INVALID_TERM": "A payment term is a whole number of days, from 0 to 365.",
       "PHASE_WRONG_CONTRACT": "A payment row names a phase this contract does not have.",
+      "PLAN_HAS_ISSUED_INVOICES": "Part of this payment plan has already been issued as invoices, so the plan can no longer be replaced.",
       "PHASE_NUMBER_TAKEN": "This contract already has a phase with that number.",
       "NOT_AN_EXTRA": "Only an extra can be switched on or off here.",
       "EXTRA_IN_PROGRESS": "Work has started on that, so it cannot be switched off here.",

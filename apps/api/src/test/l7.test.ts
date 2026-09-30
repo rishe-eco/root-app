@@ -358,6 +358,18 @@ test('createServiceRunBillingEntry refuses an unapplied run (NOT_APPLIED), then 
   const run = billed.createServiceRunBillingEntry as { billingEntry: { source: string; amount: string } };
   assert.equal(run.billingEntry.source, 'SERVICE');
   assert.equal(run.billingEntry.amount, '50000');
+  // J13: the charge is a draft — sales issues it — so the customer sees nothing
+  // of it until then (`ServiceRun.billingEntry` hides a draft from them).
+  const drafted = await prisma.billingEntry.findFirstOrThrow({ where: { source: 'SERVICE' } });
+  assert.equal(drafted.issuedAt, null);
+  assert.equal(drafted.invoiceNumber, null);
+  const customersView = ok(
+    await exec(`query($p: ID!){ projectServiceRuns(projectId: $p) { id billingEntry { id } } }`, {
+      as: f.customer,
+      variables: { p: projectId },
+    }),
+  ).projectServiceRuns as Array<{ billingEntry: unknown }>;
+  assert.equal(customersView[0].billingEntry, null);
 
   const second = await exec(
     `mutation($runId: ID!){ createServiceRunBillingEntry(runId: $runId, amount: "1", descriptionFa: "x", descriptionEn: "x") { id } }`,

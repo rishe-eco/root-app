@@ -15,6 +15,7 @@ import {
   scopeProposedEmail,
   scopeProposalDecidedEmail,
   draftPublishedEmail,
+  invoiceIssuedEmail,
   feedbackSubmittedEmail,
   answerPendingEmail,
   answerPublishedEmail,
@@ -30,6 +31,7 @@ const THREAD_URL = 'https://example.com/en/desk/review/round1/doc1#thread-abc';
 const DESK_REQUEST_URL = 'https://example.com/en/desk/requests/proj1';
 const PORTAL_REQUEST_URL = 'https://example.com/fa/app/contracts?request=proj1';
 const PORTAL_CONTRACT_URL = 'https://example.com/fa/app/contracts/c1';
+const PORTAL_INVOICE_URL = 'https://example.com/fa/app/invoices/e1';
 
 const builders: Array<{ name: string; build: (locale: string) => MailContent; link: string }> = [
   { name: 'invite', build: (l) => inviteEmail(l, { name: 'کاربر', inviteUrl: INVITE_URL }), link: INVITE_URL },
@@ -154,6 +156,19 @@ const builders: Array<{ name: string; build: (locale: string) => MailContent; li
         portalUrl: PORTAL_CONTRACT_URL,
       }),
     link: PORTAL_CONTRACT_URL,
+  },
+  // Journeys build plan J13 — an invoice was issued.
+  {
+    name: 'invoice-issued',
+    build: (l) =>
+      invoiceIssuedEmail(l, {
+        customerName: 'نهال',
+        invoiceNumber: 'INV-000123',
+        amount: '45000000',
+        dueOn: '2026-10-17',
+        portalUrl: PORTAL_INVOICE_URL,
+      }),
+    link: PORTAL_INVOICE_URL,
   },
 ];
 
@@ -311,4 +326,45 @@ test('J6: the draft email says whether it is the first look or a revision, the v
   assert.ok(laterFa.subject.includes('v3'), 'never «v۳» — a version is an identifier (house rule 14)');
   assert.ok(laterFa.text.includes('3'));
   assert.ok(!/[۰-۹]/.test(laterFa.text));
+});
+
+test('the invoice email: the number stays Latin in both languages; the amount and the due day take the locale’s digits (house rule 14, PD-19)', () => {
+  const params = {
+    customerName: 'Nahal',
+    invoiceNumber: 'INV-000123',
+    amount: '45000000',
+    dueOn: '2026-10-17',
+    portalUrl: PORTAL_INVOICE_URL,
+  };
+  const en = invoiceIssuedEmail('en', params);
+  const fa = invoiceIssuedEmail('fa', params);
+  for (const mail of [en, fa]) {
+    assert.ok(mail.subject.includes('INV-000123'), 'the subject names the invoice');
+    assert.ok(mail.text.includes('INV-000123') && mail.html.includes('INV-000123'));
+  }
+  // English: Latin digits, grouped, and the day as a day (not shifted by a
+  // time zone — 17 October, whatever the machine's clock says).
+  assert.ok(en.text.includes('45,000,000 Toman'), en.text);
+  assert.ok(en.text.includes('October 17, 2026'), en.text);
+  // Persian: Persian digits for the amount, the Jalali day (25 Mehr 1405), and
+  // no Latin digits anywhere but the invoice number and the link.
+  assert.ok(fa.text.includes('۴۵٬۰۰۰٬۰۰۰ تومان'), fa.text);
+  assert.ok(fa.text.includes('۲۵ مهر ۱۴۰۵'), fa.text);
+  const faDigits = fa.text.replace('INV-000123', '').replace(PORTAL_INVOICE_URL, '');
+  assert.ok(!/[0-9]/.test(faDigits), `Latin digits leaked into the Persian body: ${faDigits}`);
+  // It says how Root is paid — and that it is not here.
+  assert.match(en.text, /does not take payment/);
+  assert.match(fa.text, /پرداخت از راه پرتال انجام نمی‌شود/);
+});
+
+test('the invoice email escapes the customer’s name in html and leaves it verbatim in text', () => {
+  const mail = invoiceIssuedEmail('en', {
+    customerName: '<b>N</b>',
+    invoiceNumber: 'INV-000001',
+    amount: '1',
+    dueOn: '2026-10-17',
+    portalUrl: PORTAL_INVOICE_URL,
+  });
+  assert.ok(!mail.html.includes('<b>N</b>'));
+  assert.ok(mail.text.includes('<b>N</b>'));
 });

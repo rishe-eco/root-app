@@ -4,7 +4,9 @@ import { prisma } from '../../lib/prisma.js';
 import { requireUser, viewerOf, type Context } from '../../context.js';
 import { computeGate } from '../../lib/gate.js';
 import { isPhaseAccepted } from '../../lib/phase.js';
+import { firstInvoicePaidAt } from '../../lib/invoice.js';
 import {
+  agreementSignedAt,
   assertStepOpen,
   computeWizard,
   legacyFinished,
@@ -70,6 +72,7 @@ async function loadFacts(c: FullContract) {
     sensitiveArticles,
     scopeProposals,
     scopeTrades,
+    invoices,
   ] = await Promise.all([
     prisma.stepApproval.findMany({
       where: { contractId: c.id },
@@ -130,7 +133,17 @@ async function loadFacts(c: FullContract) {
     // `briefCompleteness`, which is REQUIREMENTS' done signal — and the
     // sensitive articles decide which DRAFT notes are about money (PD-21).
     prisma.contractBrief.findUnique({ where: { contractId: c.id } }),
-    prisma.paymentPlan.findUnique({ where: { contractId: c.id }, select: { invoices: { select: { amount: true } } } }),
+    // The plan's rows with what became of each (J13): `briefCompleteness` reads
+    // the amounts; "started" reads whether the first row's invoice is paid.
+    prisma.paymentPlan.findUnique({
+      where: { contractId: c.id },
+      select: {
+        invoices: {
+          orderBy: { ordinal: 'asc' },
+          select: { id: true, ordinal: true, phaseId: true, amount: true, billingEntry: { select: { issuedAt: true, paidAt: true } } },
+        },
+      },
+    }),
     prisma.article.findMany({ where: { contractId: c.id, sensitive: true }, select: { number: true } }),
     // Step 2a's own rows (J5): the customer's proposals — SCOPE's done signal
     // and the attention module's "Root has proposals to decide" — and the scope
@@ -147,6 +160,13 @@ async function loadFacts(c: FullContract) {
       select: { id: true, proposedAt: true, rootConfirmedAt: true, customerConfirmedAt: true },
       orderBy: { proposedAt: 'asc' },
     }),
+    // Issued and unpaid, with the due day: the status area's overdue invoices
+    // (J13). Nothing here is money the viewer may read until `attentionVisibleTo`
+    // says so — it is only dates, and the attention item carries a count.
+    prisma.billingEntry.findMany({
+      where: { contractId: c.id, issuedAt: { not: null }, paidAt: null },
+      select: { issuedAt: true, dueAt: true, paidAt: true },
+    }),
   ]);
   return {
     approvals,
@@ -161,6 +181,7 @@ async function loadFacts(c: FullContract) {
     sensitiveArticles,
     scopeProposals,
     scopeTrades,
+    invoices,
   };
 }
 
@@ -333,6 +354,7 @@ async function loadAttentionInput(c: FullContract, facts: Facts, now: Date): Pro
       undecidedProposals: facts.scopeProposals.filter((p) => p.decidedAt === null).map((p) => ({ since: p.createdAt })),
       openTrades: facts.scopeTrades,
     },
+    invoices: facts.invoices,
   };
 }
 
@@ -399,15 +421,27 @@ export const contractWizardFields = {
     const input = await attentionInputFor(ctx, c, facts);
     const now = input.now;
     const revision = c.currentContractRevision;
-    const approval = facts.approvals.find((a) => a.step === 'AGREEMENT' && a.phaseId === null);
+    // The plan's first invoice (J13, Q11): a contract with a plan is "started"
+    // once it is signed *and* that invoice is paid; one without a plan — every
+    // legacy contract — keeps `started = signed`, so it passes `null`.
+    const planRows = facts.plan?.invoices ?? [];
     return computeStatusSummary({
       now,
       sequence: c.sequence,
       wizard: computeWizard(stateOf(c, facts)),
       attention: attentionFor(input, viewer),
-      // The agreement's approval on the new road, the signature on the old;
-      // J7 makes the first the only one.
-      signedAt: approval?.approvedAt ?? revision?.signature?.signedAt ?? null,
+      // The current revision's signature, on both roads — approval is not
+      // signing. `agreementSignedAt` is the one rule; invoice issuing reads it too.
+      signedAt: agreementSignedAt({ signatureSignedAt: revision?.signature?.signedAt ?? null }),
+      invoicePlan:
+        planRows.length === 0
+          ? null
+          : {
+              firstPaidAt: firstInvoicePaidAt(
+                planRows,
+                planRows.flatMap((r) => (r.billingEntry ? [{ plannedInvoiceId: r.id, ...r.billingEntry }] : [])),
+              ),
+            },
       plannedStartAt: mayReadPlannedDates(viewer, plannedDatesShown(facts)) ? c.plannedStartAt : null,
       plannedEndAt: mayReadPlannedDates(viewer, plannedDatesShown(facts)) ? c.plannedEndAt : null,
       // Every published row Root has shown the customer — the sources are
