@@ -8,6 +8,8 @@ import Lock from '@/components/Lock';
 import DemoViewport from '@/components/DemoViewport';
 import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
 import RequirementsPanel from '@/components/RequirementsPanel';
+import ScopePanel from '@/components/ScopePanel';
+import DraftPanel from '@/components/DraftPanel';
 import { can } from '@/lib/access';
 
 /**
@@ -27,8 +29,10 @@ import { can } from '@/lib/access';
  * - J4  `REQUIREMENTS` — ✔ built: the brief as read-only cards with a note on every
  *   field (`RequirementsPanel`), and for staff the form above them
  *   (`RequirementsEditor`)
- * - J5  `SCOPE`        — pages, features and deliverables; the proposal decisions
- * - J6  `DRAFT`        — the contract draft with its anchored notes
+ * - J5  `SCOPE`        — ✔ built: pages, features and deliverables, the customer's
+ *   proposals and Root's decisions (`ScopePanel`)
+ * - J6  `DRAFT`        — ✔ built: the published draft article by article with its
+ *   anchored notes and where each note's article is now (`DraftPanel`)
  * - J7  `AGREEMENT`    — approve and sign; the agreement gate
  * - J8  `DESIGN`       — the theme catalogue, rounds, wireframes and palette
  * - J9  `MOCKUP`       — the mockup host, iterations
@@ -86,6 +90,8 @@ function DemoStepPanel({ contract, step, audience, me, asCustomer = false }: Ste
 
 const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {
   REQUIREMENTS: RequirementsPanel,
+  SCOPE: ScopePanel,
+  DRAFT: DraftPanel,
   DEMO: DemoStepPanel,
 };
 

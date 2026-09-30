@@ -83,6 +83,9 @@ export type ScopeItem = {
   /** Journeys build plan T1 — `EXTRA` rows are the completeness checklist's
    *  areas, which step 1 (J4) toggles as the brief's "extras". */
   kind: ScopeKind;
+  /** The agreement that agreed this item (PD-5, T1) — step 2a shows a contract
+   *  its own items, and a project can hold several contracts. */
+  contractId: string | null;
   checked: boolean;
   status: ScopeStatus;
   temporary: boolean;
@@ -95,6 +98,43 @@ export type ScopeItem = {
   originRound: string | null;
   /** Which phase (L2) is building this item, if any. */
   phaseId: string | null;
+};
+
+/**
+ * What a customer asked of their contract's scope (journeys build plan J5,
+ * step 2a), in their own words, and Root's decision. An accepted ADD names the
+ * bilingual item sales wrote (`createdItem`); a declined one carries its reason.
+ */
+export type ScopeProposalKind = 'ADD' | 'REMOVE' | 'RESTORE';
+export type ScopeProposal = {
+  id: string;
+  kind: ScopeProposalKind;
+  scopeItem: Pick<ScopeItem, 'id' | 'key' | 'labelFa' | 'labelEn' | 'kind' | 'status'> | null;
+  requestedKind: ScopeKind | null;
+  text: string;
+  lang: 'fa' | 'en';
+  proposedBy: Pick<User, 'id' | 'name'>;
+  createdAt: string;
+  decidedAt: string | null;
+  decision: 'ACCEPTED' | 'DECLINED' | null;
+  declineReason: string | null;
+  createdItem: Pick<ScopeItem, 'id' | 'key' | 'labelFa' | 'labelEn' | 'kind'> | null;
+};
+
+/**
+ * A note on the contract draft (journeys build plan J6): a DRAFT `FeedbackItem`
+ * with where its article is *now*. `articleNumber` is the number in the revision
+ * the note was written against (`revisionVersion`); `currentArticleNumber` the
+ * current revision's; `articleGone` when the article cannot be found by title.
+ */
+export type DraftNote = {
+  item: FeedbackItem;
+  revisionVersion: number;
+  onCurrentRevision: boolean;
+  articleNumber: number | null;
+  currentArticleNumber: number | null;
+  articleChangedSince: boolean;
+  articleGone: boolean;
 };
 
 export type ScopeTrade = {
@@ -663,6 +703,12 @@ export type Contract = {
   paymentPlan?: PaymentPlan | null;
   /** This contract's own phases (`project.phases` is every phase of the project). */
   phases?: Array<Pick<Phase, 'id' | 'number' | 'titleFa' | 'titleEn' | 'contractId' | 'plannedEndAt'>>;
+  /** Journeys build plan J5 — step 2a: the customer's proposals, oldest first. */
+  scopeProposals?: ScopeProposal[];
+  /** Journeys build plan J6 — the planned start and end (Q12), calendar days: null
+   *  to a customer until a draft is published, and while unset. */
+  plannedStartAt?: string | null;
+  plannedEndAt?: string | null;
 };
 
 export type BriefKind = 'NEW_SITE' | 'FEATURE_FOR_EXISTING';
@@ -929,6 +975,38 @@ export const WIZARD_FIELDS = gql`
       code
       key
     }
+    scopeProposals {
+      id
+      kind
+      requestedKind
+      text
+      lang
+      createdAt
+      decidedAt
+      decision
+      declineReason
+      scopeItem {
+        id
+        key
+        labelFa
+        labelEn
+        kind
+        status
+      }
+      createdItem {
+        id
+        key
+        labelFa
+        labelEn
+        kind
+      }
+      proposedBy {
+        id
+        name
+      }
+    }
+    plannedStartAt
+    plannedEndAt
     paymentPlan {
       id
       split
@@ -1013,6 +1091,7 @@ export const CONTRACT_FIELDS = gql`
       originRound
       phaseId
       kind
+      contractId
     }
     project {
       id
@@ -1031,12 +1110,16 @@ export const CONTRACT_FIELDS = gql`
           key
           labelFa
           labelEn
+          status
+          contractId
         }
         inItem {
           id
           key
           labelFa
           labelEn
+          status
+          contractId
         }
       }
       progress {
@@ -1136,6 +1219,7 @@ export const CONTRACT_FIELDS = gql`
       titleEn
       bodyFa
       bodyEn
+      sensitive
     }
     agreedScopeItems {
       key
@@ -2504,6 +2588,129 @@ export const CONTRACT_FEEDBACK = gql`
       feedbackItems(step: $step, phaseId: $phaseId) {
         ...FeedbackItemFields
       }
+    }
+  }
+`;
+
+/**
+ * Step 2b's notes (journeys build plan J6): the DRAFT items anchored to an
+ * article, each with where its article is now, plus the draft-wide note (which
+ * is not anchored to a revision and so stays on `feedbackItems`). `asCustomer`
+ * asks as the customer would be asked.
+ */
+export const CONTRACT_DRAFT_NOTES = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  query ContractDraftNotes($id: ID!, $asCustomer: Boolean) {
+    contract(id: $id, asCustomer: $asCustomer) {
+      id
+      draftNotes {
+        revisionVersion
+        onCurrentRevision
+        articleNumber
+        currentArticleNumber
+        articleChangedSince
+        articleGone
+        item {
+          ...FeedbackItemFields
+        }
+      }
+      feedbackItems(step: DRAFT) {
+        ...FeedbackItemFields
+      }
+    }
+  }
+`;
+
+/**
+ * Step 2a (journeys build plan J5). The customer's three proposals and Root's
+ * decision return the whole Contract (T9) — the wizard's SCOPE state and the
+ * status area move with the act; the desk's answers return the workspace shape.
+ */
+export const PROPOSE_SCOPE_ADDITION = gql`
+  ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
+  mutation ProposeScopeAddition($contractId: ID!, $kind: ScopeKind!, $text: String!, $lang: String!) {
+    proposeScopeAddition(contractId: $contractId, kind: $kind, text: $text, lang: $lang) {
+      ...ContractFields
+      ...WizardFields
+    }
+  }
+`;
+
+export const PROPOSE_SCOPE_REMOVAL = gql`
+  ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
+  mutation ProposeScopeRemoval($scopeItemId: ID!, $text: String!) {
+    proposeScopeRemoval(scopeItemId: $scopeItemId, text: $text) {
+      ...ContractFields
+      ...WizardFields
+    }
+  }
+`;
+
+export const PROPOSE_RESTORE = gql`
+  ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
+  mutation ProposeRestore($scopeItemId: ID!, $text: String!) {
+    proposeRestore(scopeItemId: $scopeItemId, text: $text) {
+      ...ContractFields
+      ...WizardFields
+    }
+  }
+`;
+
+/** The customer's half of a scope trade — works when SCOPE is locked. */
+export const CONFIRM_SCOPE_TRADE_CUSTOMER = gql`
+  ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
+  mutation ConfirmScopeTradeCustomer($tradeId: ID!, $contractId: ID) {
+    confirmScopeTradeCustomer(tradeId: $tradeId, contractId: $contractId) {
+      ...ContractFields
+      ...WizardFields
+    }
+  }
+`;
+
+export const APPLY_SCOPE_TEMPLATE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation ApplyScopeTemplate($contractId: ID!) {
+    applyScopeTemplate(contractId: $contractId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const DECIDE_SCOPE_PROPOSAL = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation DecideScopeProposal(
+    $id: ID!
+    $decision: ScopeProposalDecision!
+    $labelFa: String
+    $labelEn: String
+    $key: String
+    $kind: ScopeKind
+    $declineReason: String
+  ) {
+    decideScopeProposal(
+      id: $id
+      decision: $decision
+      labelFa: $labelFa
+      labelEn: $labelEn
+      key: $key
+      kind: $kind
+      declineReason: $declineReason
+    ) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+/** The contract's planned start and end (J6, Q12), `YYYY-MM-DD` days. */
+export const SET_PLANNED_DATES = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetPlannedDates($contractId: ID!, $plannedStartAt: String, $plannedEndAt: String) {
+    setPlannedDates(contractId: $contractId, plannedStartAt: $plannedStartAt, plannedEndAt: $plannedEndAt) {
+      ...ContractWorkspaceFields
     }
   }
 `;

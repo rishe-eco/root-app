@@ -1392,6 +1392,204 @@
     "attentionEmpty": "Nothing is waiting right now.",
     "since": "since {{when}}"
   },
+  "scope": {
+    "lede": {
+      "customer": "This is what Root has agreed to build for you. Ask for anything to be added, removed or brought back — Root answers every request, and you will see what became of it.",
+      "staff": "The pages, features and deliverables this contract agrees to. Start from the site type’s list, then confirm or decline each request the customer makes."
+    },
+    "empty": {
+      "customer": "Root has not set out the list yet.",
+      "staff": "Nothing here yet. Apply the site type’s starting list, or add items in the Scope tab."
+    },
+    "group": {
+      "PAGE": "Pages",
+      "FEATURE": "Features",
+      "DELIVERABLE": "Deliverables"
+    },
+    "kind": {
+      "PAGE": "Page",
+      "FEATURE": "Feature",
+      "DELIVERABLE": "Deliverable"
+    },
+    "lang": {
+      "fa": "Persian",
+      "en": "English"
+    },
+    "waiting": "Waiting for Root",
+    "leftOut": {
+      "title": "Not included",
+      "reason": "Left out: {{reason}}",
+      "traded": "Swapped out in an agreed trade"
+    },
+    "remove": {
+      "action": "Remove",
+      "placeholder": "Why should this come out?",
+      "submit": "Ask Root to remove it"
+    },
+    "restore": {
+      "action": "Bring back",
+      "placeholder": "Why should this be included again?",
+      "submit": "Ask Root to bring it back"
+    },
+    "ask": {
+      "title": "Ask for something new",
+      "help": "Describe a page, a feature or a deliverable you would like. Root will confirm it, or explain why not.",
+      "kind": "It is a",
+      "text": "What would you like?",
+      "placeholder": "For example: a blog, with a page for each post",
+      "lang": "You are writing in",
+      "submit": "Send to Root",
+      "sent": "Sent. Root will answer here."
+    },
+    "requests": {
+      "title": "Your requests"
+    },
+    "request": {
+      "kind": {
+        "ADD": "Add",
+        "REMOVE": "Remove",
+        "RESTORE": "Bring back"
+      },
+      "accepted": {
+        "ADD": "Added",
+        "REMOVE": "Removed",
+        "RESTORE": "Brought back"
+      },
+      "acceptedAdd": "Added as “{{label}}”",
+      "declined": "Root declined: {{reason}}"
+    },
+    "history": {
+      "title": "Decided requests"
+    },
+    "queue": {
+      "title_one": "{{n}} request waiting for a decision",
+      "title_other": "{{n}} requests waiting for a decision"
+    },
+    "decide": {
+      "langHint": "The customer wrote this in {{lang}} — write the other label.",
+      "labelFa": "Label (Persian)",
+      "labelEn": "Label (English)",
+      "kind": "Kind",
+      "key": "Key (optional)",
+      "keyHelp": "Latin letters and digits; leave it empty and one is generated (custom.1, custom.2…).",
+      "reason": "Reason (the customer reads it)",
+      "reasonHelp": "Say why — this is exactly what the customer sees.",
+      "confirm": "Confirm",
+      "decline": "Decline…",
+      "declineSend": "Decline with this reason"
+    },
+    "seed": {
+      "title": "Start from the site type",
+      "help": "Fills this contract’s pages, features and deliverables from the “{{type}}” list. It can be done once.",
+      "noBrief": "Choose the site type in step 1 first.",
+      "action": "Apply the starting list"
+    },
+    "trade": {
+      "title": "Scope trades",
+      "help": "After the agreement a scope changes by a trade: one item out, one in, confirmed by both sides.",
+      "line": "Swap “{{out}}” for “{{in}}”",
+      "confirm": "Confirm the trade",
+      "state": {
+        "customer": {
+          "WAITING_ON_BOTH": "Waiting for you and for Root",
+          "WAITING_ON_CUSTOMER": "Waiting for your confirmation",
+          "WAITING_ON_ROOT": "You confirmed. Waiting for Root.",
+          "READY": "Both sides confirmed — Root will carry it out."
+        },
+        "staff": {
+          "WAITING_ON_BOTH": "Neither side has confirmed.",
+          "WAITING_ON_CUSTOMER": "Root confirmed; waiting for the customer.",
+          "WAITING_ON_ROOT": "The customer confirmed; waiting for Root.",
+          "READY": "Both sides confirmed — carry it out."
+        }
+      }
+    },
+    "locked": {
+      "customer": "This step is locked. To change the scope now, Root proposes a trade.",
+      "staff": "This step is locked. A scope changes only by a trade now."
+    },
+    "error": {
+      "EMPTY_PROPOSAL": "Say what you would like first.",
+      "PROPOSAL_TOO_LONG": "That is too long — a few sentences are enough.",
+      "INVALID_KIND": "You can ask for a page, a feature or a deliverable.",
+      "INVALID_LANG": "Write in Persian or English.",
+      "ITEM_NOT_REMOVABLE": "Only an agreed item can be proposed for removal.",
+      "ITEM_NOT_RESTORABLE": "Only an item that was left out can be brought back.",
+      "NOT_PROPOSABLE": "The extras are decided in step 1 — leave a note there.",
+      "PROPOSAL_PENDING": "There is already a proposal about this item waiting for Root.",
+      "STEP_LOCKED": "This step is locked.",
+      "STEP_NOT_ON_ROAD": "This contract has no such step.",
+      "NOT_FOUND": "No such item.",
+      "ALREADY_DECIDED": "That proposal has already been decided.",
+      "REASON_REQUIRED": "Declining a proposal needs a reason — the customer reads it.",
+      "REASON_TOO_LONG": "That reason is too long.",
+      "LABEL_REQUIRED": "Confirming an addition needs its label in both languages.",
+      "INVALID_KEY": "A key is Latin letters and digits joined by dots or hyphens.",
+      "KEY_TAKEN": "That key is already used on this project.",
+      "ITEM_STATE_CHANGED": "That item is no longer in the state it was in when the proposal was made.",
+      "SCOPE_ALREADY_SEEDED": "This contract already has pages, features or deliverables.",
+      "BRIEF_MISSING": "Choose the site type in step 1 first.",
+      "TEMPLATE_SCOPE_EMPTY": "That site type’s list is still empty.",
+      "ALREADY_CONFIRMED": "Already confirmed.",
+      "ALREADY_EXECUTED": "That trade has already been carried out."
+    }
+  },
+  "draft": {
+    "lede": {
+      "customer": "This is the contract draft, article by article. Leave a note on anything that is not right — Root answers each one, and in later versions you will see whether the article changed.",
+      "staff": "The draft the customer is reading, article by article. Answer their notes here; edit the articles in the Contract tab."
+    },
+    "empty": {
+      "customer": "Root has not published the draft yet.",
+      "staff": "No draft has been published — publish it once the scope is confirmed and step 1 is complete."
+    },
+    "version_one": "Version v{{version}} · {{n}} article",
+    "version_other": "Version v{{version}} · {{n}} articles",
+    "bodyHidden": "This article is about money, so its text is not shown to you.",
+    "bodyEmpty": "No text yet.",
+    "note": {
+      "writtenOn": "Written on v{{version}}",
+      "changed": "Changed in v{{version}}",
+      "moved": "Now article {{n}}",
+      "another": "Another note on this article",
+      "newOnCurrent": "A new note on v{{version}}"
+    },
+    "orphan": {
+      "title": "Notes whose article no longer exists",
+      "line": "Note on article {{n}} of v{{version}} — that article is no longer in the contract",
+      "whole": "Note on v{{version}} as a whole"
+    },
+    "dates": {
+      "title": "Planned dates",
+      "proposal": "Proposed by Root with this draft.",
+      "help": "Proposed with the draft; they are fixed when the customer approves.",
+      "start": "Planned start",
+      "end": "Planned end"
+    },
+    "controls": {
+      "title": "The draft",
+      "published": "v{{version}} is published.",
+      "unpublished": "Nothing is published yet.",
+      "dirty": "The working copy has changes that are not published.",
+      "clean": "The working copy matches what is published.",
+      "applyTemplate": "Fill the articles from the template",
+      "publish": "Publish the draft",
+      "edit": "Edit the articles",
+      "publishedNow": "Published — the customer has been told."
+    },
+    "error": {
+      "SCOPE_UNCONFIRMED": "The scope is not confirmed: it has nothing in it yet, or a proposal is still waiting for a decision.",
+      "BRIEF_INCOMPLETE": "Step 1 is not complete yet.",
+      "NO_CHANGES": "Nothing has changed since the last version.",
+      "CONTRACT_SIGNED": "This contract is signed — a change goes in as an amendment.",
+      "STEP_LOCKED": "This step is locked.",
+      "TEMPLATE_NOT_EMPTY": "This contract already has articles.",
+      "INVALID_DATE": "That is not a date.",
+      "DATES_OUT_OF_ORDER": "The end cannot be before the start.",
+      "STEP_NOT_ON_ROAD": "This contract has no such step.",
+      "FORBIDDEN": "You do not have access to that."
+    }
+  },
   "attention": {
     "DRAFT_TO_REVIEW": {
       "contract": {
@@ -1444,6 +1642,28 @@
       },
       "root": {
         "staff": "Root is late on “{{title}}”."
+      }
+    },
+    "PROPOSAL_TO_DECIDE": {
+      "default": {
+        "customer_one": "{{n}} of your scope proposals is waiting for Root’s answer.",
+        "customer_other": "{{n}} of your scope proposals are waiting for Root’s answer.",
+        "staff_one": "{{n}} scope proposal needs a decision.",
+        "staff_other": "{{n}} scope proposals need a decision."
+      }
+    },
+    "TRADE_TO_CONFIRM": {
+      "customer": {
+        "customer": "A scope trade is waiting for your confirmation.",
+        "staff": "A scope trade is waiting for the customer’s confirmation."
+      },
+      "root": {
+        "customer": "A scope trade is waiting for Root’s confirmation.",
+        "staff": "A scope trade is waiting for Root’s confirmation."
+      },
+      "execute": {
+        "customer": "Both sides confirmed a scope trade — Root will carry it out.",
+        "staff": "Both sides confirmed a scope trade — carry it out."
       }
     }
   },

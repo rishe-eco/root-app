@@ -187,6 +187,47 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 .dayinput-select { inline-size: auto; min-inline-size: 5.5rem; }
 .dayinput-readout { color: var(--color-text-subtle); }
 
+/* ---- steps 2a and 2b, the scope and the draft (journeys build plan J5, J6) ---
+   The scope list is the generic feedback panel with each item as a target; what
+   is here is the proposal forms, the request rows and the queue, and the draft's
+   article body and note markers. Tokens and logical properties only. */
+.scope-step, .draft-step { display: flex; flex-direction: column; gap: var(--space-4); }
+.scope-step h4, .draft-step h4 { margin: 0; }
+.scope-item { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.scope-item-label { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.scope-item[data-status='DECLINED'] .scope-item-label,
+.scope-item[data-status='TRADED'] .scope-item-label { color: var(--color-text-subtle); text-decoration: line-through; }
+.scope-waiting { background: var(--color-accent-soft); color: var(--color-accent); }
+.scope-propose-form { display: flex; flex-direction: column; gap: var(--space-2); inline-size: 100%; }
+.scope-requests { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.scope-request, .scope-trade {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel);
+}
+.scope-request p, .scope-trade p { margin: 0; }
+.scope-request-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.scope-request-target { font-weight: var(--weight-medium); }
+.scope-request-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.scope-request[data-decision='DECLINED'] { border-inline-start: 3px solid var(--color-error); }
+.scope-request[data-decision='ACCEPTED'] { border-inline-start: 3px solid var(--color-secondary); }
+.scope-request[data-decision='PENDING'] { border-inline-start: 3px solid var(--gold-600); }
+.scope-decide { display: flex; flex-direction: column; gap: var(--space-3); }
+.scope-decide-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-3); }
+.scope-decide-fields > .t-caption { grid-column: 1 / -1; margin: 0; }
+.scope-trade-line { font-weight: var(--weight-medium); }
+
+/* An article's text as the customer reads it: line breaks kept, long words broken. */
+.draft-body { display: block; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-body); color: var(--color-text); }
+.draft-body-hidden, .draft-body-empty { color: var(--color-text-subtle); font-style: italic; }
+.draft-note-caption { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.draft-changed { background: var(--color-accent-soft); color: var(--color-accent); }
+.draft-dates { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+
 /* ---- the desk's workspace header, and internal notes --------------------- */
 .workspace-head-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .notes { display: flex; flex-direction: column; gap: var(--space-4); }
