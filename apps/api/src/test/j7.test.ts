@@ -535,6 +535,18 @@ const lockTable: LockRow[] = [
     as: () => staff.SALES,
     run: (c) => exec('mutation($s: ID!){ deleteScopeItem(scopeItemId: $s) { id } }', { as: staff.SALES, variables: { s: c.scopeItemId } }),
   },
+  {
+    // Declining an agreed item rewrites the signed appendix (J7 review) — the
+    // same `inOpenScope` lock; other status moves stay open (the test below).
+    mutation: 'setScopeItemStatus (to DECLINED)',
+    file: 'registry.ts',
+    as: () => staff.SALES,
+    run: (c) =>
+      exec('mutation($s: ID!){ setScopeItemStatus(scopeItemId: $s, status: DECLINED, reason: "late") { id } }', {
+        as: staff.SALES,
+        variables: { s: c.scopeItemId },
+      }),
+  },
   // feedback.ts — S2's guard, which the same approval closes for steps 1–3
   {
     mutation: 'submitFeedback',
@@ -613,12 +625,12 @@ test('the lock table is complete: every file’s count of guarded writes matches
   }
   // Call sites per file, and the rows each one covers. `scope.ts` has four
   // sites for five rows (one shared helper serves the remove and the restore);
-  // `registry.ts` has two for three (the helper `inOpenScope` serves update and
-  // delete); `feedback.ts` guards by the item's own step (`args.step`), so its
+  // `registry.ts` has two for four (the helper `inOpenScope` serves update,
+  // delete and a status change across DECLINED); `feedback.ts` guards by the item's own step (`args.step`), so its
   // rows are S2's and are not counted by the literal scan.
   assert.deepEqual(sites, { 'brief.ts': 3, 'phases.ts': 3, 'scope.ts': 4, 'contracts.ts': 6, 'registry.ts': 2 });
   const rows = lockTable.reduce<Record<string, number>>((acc, r) => ({ ...acc, [r.file]: (acc[r.file] ?? 0) + 1 }), {});
-  assert.deepEqual(rows, { 'brief.ts': 3, 'phases.ts': 3, 'scope.ts': 5, 'contracts.ts': 6, 'registry.ts': 3, 'feedback.ts': 2 });
+  assert.deepEqual(rows, { 'brief.ts': 3, 'phases.ts': 3, 'scope.ts': 5, 'contracts.ts': 6, 'registry.ts': 4, 'feedback.ts': 2 });
 });
 
 test('the agreement’s approval is the only thing that locks: before it, every one of those writes works', async () => {
@@ -630,6 +642,18 @@ test('the agreement’s approval is the only thing that locks: before it, every 
   ok(await exec('mutation($c: ID!){ setArticle(contractId: $c, number: 1, titleFa: "ت", titleEn: "T", bodyEn: "x") { id } }', { as: staff.SALES, variables: { c: f.contract.id } }));
   ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-12', e: '2026-12-20' } }));
   assert.ok(steps.revisionId);
+});
+
+test('after the lock the registry still lives: an agreed item moves to IN_BUILD, IN_DEMO and ACCEPTED, and only declining it is refused', async () => {
+  await approved();
+  const home = await prisma.scopeItem.findFirstOrThrow({ where: { contractId: f.contract.id, key: 'home' } });
+  const set = (status: string) =>
+    exec(`mutation($s: ID!){ setScopeItemStatus(scopeItemId: $s, status: ${status}, reason: "r") { id } }`, { as: staff.SALES, variables: { s: home.id } });
+  ok(await set('IN_BUILD'));
+  ok(await set('IN_DEMO'));
+  ok(await set('ACCEPTED'));
+  assert.equal((await set('DECLINED')).code, 'STEP_LOCKED');
+  assert.equal((await prisma.scopeItem.findUniqueOrThrow({ where: { id: home.id } })).status, 'ACCEPTED');
 });
 
 // =================================================================================

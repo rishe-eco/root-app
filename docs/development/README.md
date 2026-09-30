@@ -104,7 +104,7 @@ T1    template types, scope templates, ScopeItem.kind      ✔ 2026-09-29 [T1.md
 J4    step 1 — requirements; phases belong to a contract   ✔ 2026-09-30 [J4.md]
 J5    step 2a — pages, features and deliverables        ✔ 2026-09-30 [J56.md]
 J6    step 2b — the draft and its anchored notes        ✔ 2026-09-30 [J56.md]
-J7    step 3 — approve and sign; the agreement gate; snapshot format 2
+J7    step 3 — approve and sign; the gate; format 2; the flip  ✔ 2026-10-01 [J7.md]
 J13   invoices — drafts, numbers, due dates, plan issuing  ✔ 2026-09-30 [J13.md] (built before J7)
 T2+J8 step 4 — theme catalogue, wireframes and palette      ◐ T2 catalogue ✔ 2026-09-29 [T2.md] · J8 after J7
 J9    step 5 — the mockup host, streamed bundle upload
@@ -391,6 +391,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`S2.md`](S2.md) | one feedback model, answers and the approval queue, `approveStepTx` | ✔ built |
 | [`J4.md`](J4.md) | step 1: the brief, the payment plan, phases that belong to a contract, money gating | ✔ built |
 | [`J56.md`](J56.md) | steps 2a and 2b: scope proposals, template seeding, the trade's customer half, D-5, the draft and its notes | ✔ built |
+| [`J7.md`](J7.md) | step 3: the agreement gate, approve and sign, the locks, snapshot format 2, new contracts on the new road | ✔ built |
 | [`J13.md`](J13.md) | invoices: drafts, numbers, due dates, issuing the payment plan, the invoice view | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |

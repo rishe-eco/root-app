@@ -150,20 +150,28 @@ export const registryMutations = {
       status: args.status,
       declinedReason: args.status === 'DECLINED' ? (args.reason ?? null) : null,
     };
-    if (item.kind !== 'EXTRA') {
-      await prisma.scopeItem.update({ where: { id: item.id }, data });
-      return reloadOnProject(item.projectId, args.contractId);
-    }
     // An extra (J4) implies commitments on the dependency board, so changing its
     // status here — the generic door, which `setExtra` deliberately is not —
     // must leave the board saying what the registry says. Removals and side
     // flips only: a row needs a date, and the brief's form is where one is set.
-    const contractId = await contractOnProject(item.projectId, args.contractId);
-    await prisma.$transaction(async (tx) => {
+    const extraContractId = item.kind === 'EXTRA' ? await contractOnProject(item.projectId, args.contractId) : null;
+    const write = async (tx: Prisma.TransactionClient) => {
       await tx.scopeItem.update({ where: { id: item.id }, data });
-      await syncBriefDependencies(tx, contractId, user.id);
-    });
-    return reloadOnProject(item.projectId, contractId);
+      if (extraContractId) await syncBriefDependencies(tx, extraContractId, user.id);
+    };
+    // **Into or out of DECLINED is a change to what was agreed** (J7 review):
+    // once the agreement locks SCOPE, declining an agreed item — or agreeing a
+    // declined one — would rewrite the appendix the customer signed, so it goes
+    // through the same lock as add/update/delete (`inOpenScope`); after the
+    // lock that change is a scope trade or an amendment. Every other move
+    // (AGREED → IN_BUILD → IN_DEMO → ACCEPTED, and back) is how the project lives after the
+    // agreement, and stays open.
+    if ((args.status === 'DECLINED') !== (item.status === 'DECLINED')) {
+      await inOpenScope(item, args.contractId, write);
+    } else {
+      await prisma.$transaction(write);
+    }
+    return reloadOnProject(item.projectId, extraContractId ?? args.contractId);
   },
 
   setScopeItemFlags: async (
