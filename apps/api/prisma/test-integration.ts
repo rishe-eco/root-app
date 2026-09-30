@@ -43,6 +43,9 @@ const run = spawnSync('npx tsx --test --test-concurrency=1 src/test/*.test.ts', 
     // whatever this checkout's .env says (it is not a provider key; it is the
     // same pinning rule for a setting a test's arithmetic depends on).
     DEFAULT_PAYMENT_TERM_DAYS: '7',
+    // J9: the mockup host's base domain, pinned like the rest — j9a.test.ts
+    // builds `Host` headers from it and asserts on the URLs it produces.
+    MOCKUP_BASE_DOMAIN: 'mockup.localhost',
   },
   stdio: 'inherit',
   // cmd.exe does not expand the glob, and does not need to: Node's test

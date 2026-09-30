@@ -43,6 +43,7 @@ load-bearing, not cosmetic.
   storage/                uploaded files — STORAGE_DIR
     public/               served straight off disk by Nginx
     private/              only ever through the API, after an ownership check
+    tmp/                  uploads in flight (streamed mockup bundles) — never served
 ```
 
 `current` is a symlink and Nginx's document root. `release-web.sh` swaps it
@@ -332,8 +333,12 @@ issues once by hand but cannot renew unattended, and a wildcard cert is not
 something to renew by hand every 90 days.
 
 ```bash
-sudo certbot certonly --dns-<provider> -d '*.staging.m-root.com' -d '*.mockup.m-root.com'
+sudo certbot certonly --dns-<provider> --cert-name m-root-wildcards   -d '*.staging.m-root.com' -d '*.mockup.m-root.com'
 ```
+
+`--cert-name` matters: without it certbot names the certificate after the first
+`-d` (`staging.m-root.com`), and `deploy/nginx/mockup.conf` points at
+`/etc/letsencrypt/live/m-root-wildcards/`.
 
 Then prove renewal actually works before relying on it:
 
@@ -364,12 +369,70 @@ These are the third guard the reporter snippet's own README documents
 read that file for why the header exists and what it is defending against;
 this section only says where it has to be set for each new site, not why.
 
-**4. The mockup wildcard's Nginx** — **not configured yet.** PD-9 has the
-mockup wildcard proxying to the API on loopback, the same way `/graphql` and
-`/upload` do, so that a single Node route can stream each view straight out
-of its stored zip. That server block arrives with stage **J9** and does not
-exist on the VPS until then; do not create one ahead of it; there is nothing
-here for the mockup wildcard to point at yet.
+**4. The mockup wildcard's Nginx** (J9, PD-9). Uploaded mockups are served by
+the API, out of the stored zip, one subdomain per view grant
+(`<32-hex-id>.mockup.m-root.com`). The server block is
+[`nginx/mockup.conf`](nginx/mockup.conf):
+
+```bash
+sudo cp deploy/nginx/mockup.conf /etc/nginx/sites-available/root-mockup
+sudo ln -s /etc/nginx/sites-available/root-mockup /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Three things about that file are load-bearing, and `securityHeaders.test.ts`
+reads it as text to hold the first two:
+
+- **It has one `location`, `/`, and it proxies only to the API on loopback,
+  passing `Host`.** No `/graphql`, `/upload`, `/files/`, `/ask`, no SPA, no
+  static root — a mockup is code Root did not write, running on a sibling
+  subdomain of the portal's registrable domain, and this origin must offer
+  nothing but the mockup router. The API refuses everything but mockups on that
+  host too (the fence at the top of `index.ts`); this block is the second fence,
+  not the only one. **Never add a portal location to it**, and never point
+  `server_name` at anything but the wildcard.
+- **It adds no headers and includes no portal snippet.** The API sends the
+  mockup origin's `Content-Security-Policy` (which names `APP_ORIGIN` as the
+  only frame ancestor), `Referrer-Policy: no-referrer` and `nosniff` itself; a
+  second copy here would double the CSP, and the portal's own policy would break
+  every mockup it touched.
+- **It strips cookies both ways and blanks `X-Forwarded-Host`.** A mockup origin
+  never carries the session cookie and never sets one.
+
+**The API needs `MOCKUP_BASE_DOMAIN=mockup.m-root.com`** in `.env` — the default
+in production, so it can be left unset; it must match the wildcard above. Every
+mockup URL the portal hands out is built from it.
+
+**`/upload`'s body limit is 51m, not 26m, since J9** (`nginx/root.conf`): a
+mockup bundle is capped at 50 MB and Nginx must not turn a 30 MB one into a bare
+413 the desk cannot translate. The API still enforces the real per-class limit
+(`FILE_TOO_LARGE`), and it now *streams* a bundle to `STORAGE_DIR/tmp/` rather
+than holding it in memory — so a container restart during an upload can leave a
+`*.part` file there. They are safe to delete when no upload is in flight:
+
+```bash
+find /srv/root/storage/tmp -name '*.part' -mmin +60 -delete
+```
+
+**Check it after every deploy that touches Nginx** — like the portal's headers,
+no test in this repository can see them. Any request to the wildcard for a
+grant that does not exist is a plain 404 *with the mockup headers*, so:
+
+```bash
+curl -sI https://00000000000000000000000000000000.mockup.m-root.com/
+# 404, content-security-policy: frame-ancestors https://<APP_ORIGIN>; …,
+# referrer-policy: no-referrer, x-content-type-options: nosniff, and NO set-cookie.
+curl -sI https://00000000000000000000000000000000.mockup.m-root.com/graphql
+# 404 as well: the API's fence, and nothing of the portal is reachable here.
+```
+
+**Storage growth.** Every iteration's bundle is kept — it is the record of what
+the customer was shown and approved, and `Build.bundleFileId` is `Restrict`, so
+the database will not let a bundle be deleted while a build points at it. At up
+to 50 MB per iteration and a few iterations per custom-path contract this is
+small, but it only grows. Retention for superseded bundles after a contract is
+delivered is a later decision; until it is made, `storage/private/` is part of
+the backup (below) and part of the disk-space watch.
 
 ---
 

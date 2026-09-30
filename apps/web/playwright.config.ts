@@ -76,6 +76,10 @@ export default defineConfig({
         JWT_SECRET: 'e2e-only-secret-not-used-anywhere-else-0123456789',
         APP_ORIGIN: `http://localhost:${WEB_PORT}`,
         TRUST_PROXY_HOPS: '0',
+        // J9: pinned like the provider keys — a mockup view is
+        // http://<grant-id>.mockup.localhost:<API port>/, which a real browser
+        // resolves to loopback with no DNS, whatever this checkout's .env says.
+        MOCKUP_BASE_DOMAIN: 'mockup.localhost',
         // C2 is the first stage whose flows (opening/replying to a thread,
         // inviting a reviewer) actually call sendMail. Blank, not omitted —
         // env.ts's loadEnvFile() only skips a var already present in
