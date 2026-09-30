@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
-import { buildContractSnapshot, contentHash, draftState } from '../lib/revision.js';
-import { agreedScopeSnapshot } from '../lib/scope.js';
+import { buildContractSnapshot, contentHash } from '../lib/revision.js';
+import { draftStateOn } from '../graphql/resolvers/agreement.js';
+import { loadContract } from '../graphql/resolvers/contracts.js';
 // The same singleton the resolvers use, deliberately — a second client would
 // be a second connection pool and a second chance to be looking at a different
 // database than the code under test.
@@ -228,16 +229,12 @@ export async function approveContract(fixture: Fixture) {
  * `BRIEF_INCOMPLETE`) to get one. A test about the gates uses the mutation.
  */
 export async function publishDraftDirect(contractId: string) {
-  const contract = await prisma.contract.findUniqueOrThrow({
-    where: { id: contractId },
-    include: { articles: true, project: { include: { scopeItems: true } }, currentContractRevision: true },
-  });
-  const { snapshot, hash } = draftState(
-    contract,
-    contract.articles,
-    contract.currentContractRevision,
-    agreedScopeSnapshot(contract.project.scopeItems),
-  );
+  // **In the road's own format** (J7): a new-road contract's draft is a format-2
+  // snapshot, and one published as format 1 would read as stale to the agreement
+  // gate the moment a test tried to approve it. `draftStateOn` is the very
+  // computation `publishContractRevision` makes, minus the gates.
+  const contract = (await loadContract(contractId))!;
+  const { snapshot, hash } = await draftStateOn(prisma, contract);
   const latest = await prisma.contractRevision.findFirst({ where: { contractId }, orderBy: { version: 'desc' } });
   const now = new Date();
   const revision = await prisma.contractRevision.create({

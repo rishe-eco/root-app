@@ -11,6 +11,7 @@ import {
   SCOPE,
   TEMPLATE_KINDS,
   TEMPLATE_TYPES,
+  isPaymentScheduleArticle,
   isTemplateSensitiveArticle,
   partiesFor,
   renderArticleBody,
@@ -192,4 +193,25 @@ test('checkTemplateScope: duplicates, kinds and labels each refuse with a code o
   assert.equal(checkTemplateScope([row('a', { labelEn: '' })]), 'LABEL_REQUIRED');
   // The malformed key is reported before the duplicate it also is.
   assert.equal(checkTemplateScope([row('A'), row('A')]), 'INVALID_KEY');
+});
+
+test('isPaymentScheduleArticle (J7): only article 5, Payment Schedule — by number and English title together — and it is a sensitive article of the template', () => {
+  assert.equal(isPaymentScheduleArticle(5, 'Payment Schedule'), true);
+  assert.equal(isPaymentScheduleArticle(4, 'Payment Schedule'), false, 'a bare title');
+  assert.equal(isPaymentScheduleArticle(5, 'Fees'), false, 'a bare number');
+  assert.equal(isPaymentScheduleArticle(5, 'Something else'), false);
+  // The one the plan renders is one of the money articles J4 flagged, and the
+  // template gives it no body: with one schedule, two cannot disagree.
+  const [n, , titleEn, bodyFa, bodyEn] = ARTICLES.find(([num]) => num === 5)!;
+  assert.equal(isPaymentScheduleArticle(n, titleEn), true);
+  assert.equal(isTemplateSensitiveArticle(n, titleEn), true);
+  assert.deepEqual([bodyFa, bodyEn], [undefined, undefined]);
+});
+
+test('isPaymentScheduleArticle is mirrored on the web and the two are the same rule (apps/web cannot import from apps/api)', () => {
+  const rule = "return number === 5 && titleEn === 'Payment Schedule';";
+  const api = readFileSync(fileURLToPath(new URL('./templates.ts', import.meta.url)), 'utf8');
+  const web = readFileSync(fileURLToPath(new URL('../../../web/src/lib/agreement.ts', import.meta.url)), 'utf8');
+  assert.ok(api.includes(rule), 'the API rule');
+  assert.ok(web.includes(rule), 'the web rule is the API rule, character for character');
 });

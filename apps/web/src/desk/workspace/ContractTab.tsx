@@ -18,16 +18,31 @@ import {
   type Amendment,
   type Article,
 } from '@/lib/queries';
-import { fullDateTime, pick } from '@/lib/format';
+import { fullDateTime, instantDate, pick } from '@/lib/format';
+import { isPaymentScheduleArticle } from '@/lib/agreement';
+import { errorCode } from '@/components/FeedbackPanel';
+import Lock from '@/components/Lock';
 import type { WorkspaceContext } from './ContractWorkspace';
 
-function errorMessage(err: unknown): string {
+function errorMessage(err: unknown, t?: (key: string, opts?: Record<string, unknown>) => string): string {
+  // The refusals J7 added get a sentence in the reader's language; everything else keeps the server's own message, as it always did.
+  const code = errorCode(err);
+  if (t && code && ['STEP_LOCKED', 'SCHEDULE_IS_GENERATED'].includes(code)) return t(`workspace.error.${code}`);
   return (err as { message?: string })?.message ?? String(err);
 }
 
 /** Title and fee. `ref` is shown in the workspace header, not here — it is
  *  frozen at creation (T1) and never editable, so there is no form for it. */
-function TitleFeeCard({ contractId, draft }: { contractId: string; draft: NonNullable<WorkspaceContext['contract']['draft']> | undefined }) {
+function TitleFeeCard({
+  contractId,
+  draft,
+  locked,
+}: {
+  contractId: string;
+  draft: NonNullable<WorkspaceContext['contract']['draft']> | undefined;
+  /** The agreement is approved (J7): the draft is sealed, the API would refuse. */
+  locked: boolean;
+}) {
   const { t } = useTranslation();
   const [titleFa, setTitleFa] = useState(draft?.titleFa ?? '');
   const [titleEn, setTitleEn] = useState(draft?.titleEn ?? '');
@@ -43,7 +58,7 @@ function TitleFeeCard({ contractId, draft }: { contractId: string; draft: NonNul
         variables: { contractId, titleFa, titleEn, amount: amount || null },
       });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     }
   }
 
@@ -81,7 +96,7 @@ function TitleFeeCard({ contractId, draft }: { contractId: string; draft: NonNul
         </div>
         {error ? <p className="error">{error}</p> : null}
         <div>
-          <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
+          <button className="btn btn-primary btn-sm" type="submit" disabled={loading || locked}>
             {t('workspace.save')}
           </button>
         </div>
@@ -95,11 +110,17 @@ function ArticleCard({
   article,
   nextNumber,
   onDone,
+  locked,
+  newRoad,
 }: {
   contractId: string;
   article: Article | null;
   nextNumber: number;
   onDone?: () => void;
+  /** The agreement is approved (J7): every write here would be `STEP_LOCKED`. */
+  locked: boolean;
+  /** An `AGREEMENT_FIRST` contract — the only road with a generated schedule. */
+  newRoad: boolean;
 }) {
   const { t } = useTranslation();
   const [number] = useState(article?.number ?? nextNumber);
@@ -107,20 +128,37 @@ function ArticleCard({
   const [titleEn, setTitleEn] = useState(article?.titleEn ?? '');
   const [bodyFa, setBodyFa] = useState(article?.bodyFa ?? '');
   const [bodyEn, setBodyEn] = useState(article?.bodyEn ?? '');
+  // PD-14 (J4): this article's prose is about money. The API had the argument
+  // since J4 and the desk no way to set it — J7 owed the toggle.
+  const [sensitive, setSensitive] = useState(article?.sensitive ?? false);
   const [error, setError] = useState<string | null>(null);
   const [setArticle, { loading: saving }] = useMutation(SET_ARTICLE);
   const [deleteArticle, { loading: deleting }] = useMutation(DELETE_ARTICLE);
+  // The payment schedule is generated from the plan on the new road (J7's second
+  // trap): a body typed here would be a second schedule, so there is no field.
+  const scheduleGenerated = newRoad && isPaymentScheduleArticle(number, titleEn);
 
   async function onSave(e: FormEvent) {
     e.preventDefault();
     setError(null);
     try {
       await setArticle({
-        variables: { contractId, number, titleFa, titleEn, bodyFa: bodyFa || null, bodyEn: bodyEn || null },
+        variables: {
+          contractId,
+          number,
+          titleFa,
+          titleEn,
+          bodyFa: scheduleGenerated ? null : bodyFa || null,
+          bodyEn: scheduleGenerated ? null : bodyEn || null,
+          // A new article that is not ticked defers to the template's rule
+          // (Fees and Payment Schedule are sensitive by number and title);
+          // an existing one sends exactly what the box says.
+          sensitive: article ? sensitive : sensitive ? true : null,
+        },
       });
       onDone?.();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     }
   }
 
@@ -130,7 +168,7 @@ function ArticleCard({
     try {
       await deleteArticle({ variables: { contractId, number } });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     }
   }
 
@@ -139,7 +177,7 @@ function ArticleCard({
       <div className="editor-card-head">
         <span className="t-eyebrow num-latin">{number}</span>
         {article ? (
-          <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete} disabled={deleting}>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete} disabled={deleting || locked}>
             {t('workspace.delete')}
           </button>
         ) : null}
@@ -155,19 +193,37 @@ function ArticleCard({
             <input className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
           </div>
         </div>
-        <div className="editor-grid-2">
-          <div className="field">
-            <label className="label">{t('workspace.bodyFa')}</label>
-            <textarea className="textarea" dir="rtl" value={bodyFa} onChange={(e) => setBodyFa(e.target.value)} />
+        {scheduleGenerated ? (
+          <p className="t-small desk-muted" data-testid="schedule-generated-note">
+            {t('workspace.scheduleGenerated')}
+          </p>
+        ) : (
+          <div className="editor-grid-2">
+            <div className="field">
+              <label className="label">{t('workspace.bodyFa')}</label>
+              <textarea className="textarea" dir="rtl" value={bodyFa} onChange={(e) => setBodyFa(e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="label">{t('workspace.bodyEn')}</label>
+              <textarea className="textarea" dir="ltr" value={bodyEn} onChange={(e) => setBodyEn(e.target.value)} />
+            </div>
           </div>
-          <div className="field">
-            <label className="label">{t('workspace.bodyEn')}</label>
-            <textarea className="textarea" dir="ltr" value={bodyEn} onChange={(e) => setBodyEn(e.target.value)} />
-          </div>
-        </div>
+        )}
+        <label className="req-check">
+          <input
+            type="checkbox"
+            data-testid="article-sensitive"
+            checked={sensitive}
+            onChange={(e) => setSensitive(e.target.checked)}
+          />
+          <span>
+            {t('workspace.sensitive')}
+            <span className="t-caption desk-muted"> {t('workspace.sensitiveHelp')}</span>
+          </span>
+        </label>
         {error ? <p className="error">{error}</p> : null}
         <div>
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={saving}>
+          <button className="btn btn-secondary btn-sm" type="submit" disabled={saving || locked}>
             {t('workspace.save')}
           </button>
         </div>
@@ -181,8 +237,9 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
   const locale = useLocale();
   const [titleFa, setTitleFa] = useState(amendment.titleFa);
   const [titleEn, setTitleEn] = useState(amendment.titleEn);
-  const [bodyFa, setBodyFa] = useState(amendment.bodyFa);
-  const [bodyEn, setBodyEn] = useState(amendment.bodyEn);
+  const [bodyFa, setBodyFa] = useState(amendment.bodyFa ?? '');
+  const [bodyEn, setBodyEn] = useState(amendment.bodyEn ?? '');
+  const [sensitive, setSensitive] = useState(amendment.sensitive);
   const [relatesToArticle, setRelatesToArticle] = useState(amendment.relatesToArticle ?? '');
   const [error, setError] = useState<string | null>(null);
   const [update, { loading: saving }] = useMutation(UPDATE_AMENDMENT);
@@ -203,10 +260,11 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
           bodyFa,
           bodyEn,
           relatesToArticle: relatesToArticle === '' ? null : Number(relatesToArticle),
+          sensitive,
         },
       });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     }
   }
 
@@ -215,7 +273,7 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
     try {
       await remove({ variables: { amendmentId: amendment.id } });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     }
   }
 
@@ -224,7 +282,7 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
     try {
       await publish({ variables: { amendmentId: amendment.id } });
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     }
   }
 
@@ -292,6 +350,18 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
             ))}
           </select>
         </div>
+        <label className="req-check">
+          <input
+            type="checkbox"
+            data-testid="amendment-sensitive"
+            checked={sensitive}
+            onChange={(e) => setSensitive(e.target.checked)}
+          />
+          <span>
+            {t('workspace.amendmentSensitive')}
+            <span className="t-caption desk-muted"> {t('workspace.amendmentSensitiveHelp')}</span>
+          </span>
+        </label>
         {error ? <p className="error">{error}</p> : null}
         <div>
           <button className="btn btn-secondary btn-sm" type="submit" disabled={saving}>
@@ -344,6 +414,7 @@ function ReadOnlyContractView({ contract, canReadMoney }: { contract: WorkspaceC
 export default function ContractTab() {
   const { t } = useTranslation();
   const { contract, me } = useOutletContext<WorkspaceContext>();
+  const locale = useLocale();
   const [addingArticle, setAddingArticle] = useState(false);
   const [issuingAmendment, setIssuingAmendment] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -359,6 +430,12 @@ export default function ContractTab() {
   const nextNumber = (articles.at(-1)?.number ?? 0) + 1;
   const amendments = contract.revision?.amendments ?? [];
   const baseSigned = !!contract.revision?.signature;
+  // The agreement's approval locks the draft (J7). The API refuses every write
+  // (`STEP_LOCKED`); a form that can only fail is worse than none, so the
+  // controls are off and the date says why. The legacy road is never locked.
+  const draftStep = contract.wizard?.find((s) => s.step === 'DRAFT');
+  const locked = draftStep?.locked ?? false;
+  const newRoad = contract.sequence === 'AGREEMENT_FIRST';
 
   if (!can(me, 'contracts.author')) {
     return <ReadOnlyContractView contract={contract} canReadMoney={can(me, 'money.read')} />;
@@ -369,7 +446,7 @@ export default function ContractTab() {
     try {
       await applyTemplate({ variables: { contractId: contract.id } });
     } catch (err) {
-      setPublishError(errorMessage(err));
+      setPublishError(errorMessage(err, t));
     }
   }
 
@@ -378,7 +455,7 @@ export default function ContractTab() {
     try {
       await publishRevision({ variables: { contractId: contract.id } });
     } catch (err) {
-      setPublishError(errorMessage(err));
+      setPublishError(errorMessage(err, t));
     }
   }
 
@@ -391,7 +468,7 @@ export default function ContractTab() {
     try {
       await publishContract({ variables: { contractId: contract.id } });
     } catch (err) {
-      setHandoverError(errorMessage(err));
+      setHandoverError(errorMessage(err, t));
     }
   }
 
@@ -406,27 +483,36 @@ export default function ContractTab() {
           titleEn: form.get('titleEn'),
           bodyFa: form.get('bodyFa'),
           bodyEn: form.get('bodyEn'),
+          // Unticked defers to the API, which follows the article it relates to.
+          sensitive: form.get('sensitive') === 'on' ? true : null,
         },
       });
       setIssuingAmendment(false);
     } catch (err) {
-      setPublishError(errorMessage(err));
+      setPublishError(errorMessage(err, t));
     }
   }
 
   return (
     <>
-      <TitleFeeCard contractId={contract.id} draft={draft} />
+      {locked && draftStep?.lockedAt ? (
+        <p className="locknote" data-testid="contract-locked-note">
+          <Lock />
+          <span>{t('wizard.lockedSince', { when: instantDate(draftStep.lockedAt, locale) })}</span>
+        </p>
+      ) : null}
+
+      <TitleFeeCard contractId={contract.id} draft={draft} locked={locked} />
 
       <div className="workspace-row">
         <h3 className="t-h3">{t('workspace.articlesTitle')}</h3>
         <div className="editor-card-actions">
           {articles.length === 0 ? (
-            <button className="btn btn-secondary btn-sm" type="button" onClick={onApplyTemplate} disabled={applyingTemplate}>
+            <button className="btn btn-secondary btn-sm" type="button" onClick={onApplyTemplate} disabled={applyingTemplate || locked}>
               {t('workspace.applyTemplate')}
             </button>
           ) : null}
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingArticle(true)}>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingArticle(true)} disabled={locked}>
             {t('workspace.addArticle')}
           </button>
         </div>
@@ -439,10 +525,12 @@ export default function ContractTab() {
             article={null}
             nextNumber={nextNumber}
             onDone={() => setAddingArticle(false)}
+            locked={locked}
+            newRoad={newRoad}
           />
         ) : null}
         {articles.map((a) => (
-          <ArticleCard key={a.number} contractId={contract.id} article={a} nextNumber={a.number} />
+          <ArticleCard key={a.number} contractId={contract.id} article={a} nextNumber={a.number} locked={locked} newRoad={newRoad} />
         ))}
       </div>
 
@@ -455,7 +543,7 @@ export default function ContractTab() {
           className="btn btn-primary btn-sm"
           type="button"
           onClick={onPublishRevision}
-          disabled={publishing || !draft?.dirty}
+          disabled={publishing || !draft?.dirty || locked}
         >
           {t('workspace.publishRevision')}
         </button>
@@ -502,6 +590,13 @@ export default function ContractTab() {
                   <textarea className="textarea" name="bodyEn" dir="ltr" required />
                 </div>
               </div>
+              <label className="req-check">
+                <input type="checkbox" name="sensitive" />
+                <span>
+                  {t('workspace.amendmentSensitive')}
+                  <span className="t-caption desk-muted"> {t('workspace.amendmentSensitiveHelp')}</span>
+                </span>
+              </label>
               <div>
                 <button className="btn btn-primary btn-sm" type="submit" disabled={issuing}>
                   {t('workspace.save')}

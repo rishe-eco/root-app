@@ -82,6 +82,17 @@ export function fullDateTime(iso: string, locale: Locale): string {
 }
 
 /**
+ * The day an *instant* fell on, in the reader's own time zone — "locked on 4
+ * Aban". Distinct from `calendarDate` below, which is for stored calendar days
+ * and pins UTC: an approval is an event with a time, and the day it happened on
+ * is the day on the reader's clock. The Jalali calendar comes with the `fa`
+ * locale.
+ */
+export function instantDate(iso: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(intlTag(locale), { dateStyle: 'medium' }).format(new Date(iso));
+}
+
+/**
  * A calendar day, not an instant (journeys build plan PD-19): planned dates,
  * deadlines and due dates are stored as `date` columns, which arrive at
  * midnight UTC. **Rendered in UTC**, so 1 Aban stays 1 Aban on a machine in

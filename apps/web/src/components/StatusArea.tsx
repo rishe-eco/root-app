@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import type { Contract } from '@/lib/queries';
-import { calendarDate, formatCount, relativeTime } from '@/lib/format';
+import { calendarDate, formatCount, instantDate, relativeTime } from '@/lib/format';
 import { attentionText, moveLabel, stepLabel, type Audience } from '@/lib/wizard';
 
 /**
@@ -74,6 +74,22 @@ export default function StatusArea({ contract, audience }: { contract: Contract;
           <dt>{t(`statusArea.waiting.${audience}.ROOT`)}</dt>
           <dd>{formatCount(summary.waitingOnRoot, locale)}</dd>
         </div>
+        {/* The agreement's two moments (J7) — approval locks steps 1–3, the
+            signature is what counts as signed — on the new road only: the legacy
+            road's approval and signature are its own sections' business, and its
+            status area is unchanged. */}
+        {contract.sequence === 'AGREEMENT_FIRST' ? (
+          <div className="status-fact" data-fact="agreement" data-state={summary.signedAt ? 'signed' : summary.agreementApprovedAt ? 'approved' : 'open'}>
+            <dt>{t('statusArea.agreement')}</dt>
+            <dd>
+              {summary.signedAt
+                ? t('statusArea.agreementSigned', { date: instantDate(summary.signedAt, locale) })
+                : summary.agreementApprovedAt
+                  ? t('statusArea.agreementApproved', { date: instantDate(summary.agreementApprovedAt, locale) })
+                  : t('statusArea.agreementNone')}
+            </dd>
+          </div>
+        ) : null}
         <div className="status-fact" data-fact="started">
           <dt>{summary.started ? t('statusArea.started') : t('statusArea.notStarted')}</dt>
           <dd>

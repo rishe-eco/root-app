@@ -433,13 +433,59 @@ export type Amendment = {
   ordinal: number;
   titleFa: string;
   titleEn: string;
-  bodyFa: string;
-  bodyEn: string;
+  /** Null for a sensitive amendment when the viewer may not read the contract's money (J7, PD-14). */
+  bodyFa: string | null;
+  bodyEn: string | null;
+  /** J7: this amendment's prose is about money. */
+  sensitive: boolean;
   contentHash: string;
   relatesToArticle: number | null;
   publishedAt: string | null;
   approvedAt: string | null;
   signature: Signature | null;
+};
+
+/**
+ * A format-2 snapshot's steps 1 and 2 (journeys build plan J7) — what the
+ * customer approves and signs. `budgetCap` and `paymentPlan` are null to staff
+ * without `money.read` who are not the customer; the customer reads all of it.
+ */
+export type AgreementSnapshot = {
+  brief: {
+    kind: 'NEW_SITE' | 'FEATURE_FOR_EXISTING';
+    existingSiteUrl: string | null;
+    templateType: { slug: string; labelFa: string; labelEn: string };
+    designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+    budgetCap: string | null;
+    idealDeadline: string | null;
+    hardDeadline: string | null;
+    domainName: string | null;
+    domainProvidedBy: 'CUSTOMER' | 'ROOT' | null;
+    hostProvidedBy: 'CUSTOMER' | 'ROOT' | null;
+    contentProvidedBy: 'CUSTOMER' | 'ROOT' | null;
+    supportMonths: number | null;
+  } | null;
+  allowances: {
+    premadeRounds: number | null;
+    wireframeIterations: number;
+    mockupIterations: number | null;
+    demoIterationsPerPhase: number | null;
+  } | null;
+  paymentPlan: {
+    split: 'LUMP_SUM' | 'INSTALLMENTS' | 'MONTHLY';
+    total: string;
+    invoices: Array<{
+      ordinal: number;
+      labelFa: string;
+      labelEn: string;
+      amount: string;
+      phaseNumber: number | null;
+      paymentTermDays: number;
+    }>;
+  } | null;
+  phases: Array<{ number: number; titleFa: string; titleEn: string; plannedEndAt: string | null; milestoneLabel: string | null }>;
+  plannedStartAt: string | null;
+  plannedEndAt: string | null;
 };
 
 /**
@@ -459,6 +505,10 @@ export type ContractRevision = {
   approvedAt: string | null;
   signature: Signature | null;
   amendments: Amendment[];
+  /** The snapshot's format: 1 before J7 and on the legacy road, 2 on the new one. */
+  format: number;
+  /** Steps 1 and 2 as approved — format 2 only (J7). */
+  agreement: AgreementSnapshot | null;
 };
 
 export type Gate = {
@@ -617,6 +667,10 @@ export type AttentionItem = {
 export type StatusSummary = {
   started: boolean;
   startedAt: string | null;
+  /** J7: when the customer approved the agreement (steps 1–3 locked from then); null before, and on the legacy road. */
+  agreementApprovedAt: string | null;
+  /** When the current revision was signed — approval is not signing. */
+  signedAt: string | null;
   currentStep: StepKind | null;
   currentPhaseId: string | null;
   currentPhaseNumber: number | null;
@@ -664,7 +718,7 @@ export type Contract = {
   /** Appendix 1 as frozen into the current published revision (build plan
    *  L1) — the registry's agreed set at publish time, not the live registry
    *  (`scopeItems` above). Empty for a revision published before L1. */
-  agreedScopeItems: Array<{ key: string; labelFa: string; labelEn: string }>;
+  agreedScopeItems: Array<{ key: string; labelFa: string; labelEn: string; kind?: ScopeKind | null }>;
   comments: Comment[];
   changeLog: ChangeLogEntry[];
   signature: Signature | null;
@@ -916,6 +970,8 @@ export const WIZARD_FIELDS = gql`
     }
     statusSummary {
       started
+      agreementApprovedAt
+      signedAt
       startedAt
       currentStep
       currentPhaseId
@@ -1230,6 +1286,7 @@ export const CONTRACT_FIELDS = gql`
       key
       labelFa
       labelEn
+      kind
     }
     comments {
       id
@@ -1265,6 +1322,54 @@ export const CONTRACT_FIELDS = gql`
       contentHash
       publishedAt
       approvedAt
+      format
+      agreement {
+        brief {
+          kind
+          existingSiteUrl
+          templateType {
+            slug
+            labelFa
+            labelEn
+          }
+          designTier
+          budgetCap
+          idealDeadline
+          hardDeadline
+          domainName
+          domainProvidedBy
+          hostProvidedBy
+          contentProvidedBy
+          supportMonths
+        }
+        allowances {
+          premadeRounds
+          wireframeIterations
+          mockupIterations
+          demoIterationsPerPhase
+        }
+        paymentPlan {
+          split
+          total
+          invoices {
+            ordinal
+            labelFa
+            labelEn
+            amount
+            phaseNumber
+            paymentTermDays
+          }
+        }
+        phases {
+          number
+          titleFa
+          titleEn
+          plannedEndAt
+          milestoneLabel
+        }
+        plannedStartAt
+        plannedEndAt
+      }
       signature {
         id
         typedName
@@ -1277,6 +1382,7 @@ export const CONTRACT_FIELDS = gql`
         titleEn
         bodyFa
         bodyEn
+        sensitive
         contentHash
         relatesToArticle
         publishedAt
@@ -1331,6 +1437,7 @@ export const CONTRACT_FIELDS = gql`
         titleEn
         bodyFa
         bodyEn
+        sensitive
         contentHash
         relatesToArticle
         publishedAt
@@ -1392,6 +1499,7 @@ export const CONTRACT_WORKSPACE_FIELDS = gql`
         titleEn
         bodyFa
         bodyEn
+        sensitive
       }
     }
     designDraft {
@@ -2087,8 +2195,8 @@ export const UPDATE_CONTRACT_DRAFT = gql`
 
 export const SET_ARTICLE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation SetArticle($contractId: ID!, $number: Int!, $titleFa: String!, $titleEn: String!, $bodyFa: String, $bodyEn: String) {
-    setArticle(contractId: $contractId, number: $number, titleFa: $titleFa, titleEn: $titleEn, bodyFa: $bodyFa, bodyEn: $bodyEn) {
+  mutation SetArticle($contractId: ID!, $number: Int!, $titleFa: String!, $titleEn: String!, $bodyFa: String, $bodyEn: String, $sensitive: Boolean) {
+    setArticle(contractId: $contractId, number: $number, titleFa: $titleFa, titleEn: $titleEn, bodyFa: $bodyFa, bodyEn: $bodyEn, sensitive: $sensitive) {
       ...ContractWorkspaceFields
     }
   }
@@ -3712,8 +3820,8 @@ export const CREATE_SERVICE_RUN_BILLING_ENTRY = gql`
 
 export const ISSUE_AMENDMENT = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation IssueAmendment($contractId: ID!, $titleFa: String!, $titleEn: String!, $bodyFa: String!, $bodyEn: String!, $relatesToArticle: Int) {
-    issueAmendment(contractId: $contractId, titleFa: $titleFa, titleEn: $titleEn, bodyFa: $bodyFa, bodyEn: $bodyEn, relatesToArticle: $relatesToArticle) {
+  mutation IssueAmendment($contractId: ID!, $titleFa: String!, $titleEn: String!, $bodyFa: String!, $bodyEn: String!, $relatesToArticle: Int, $sensitive: Boolean) {
+    issueAmendment(contractId: $contractId, titleFa: $titleFa, titleEn: $titleEn, bodyFa: $bodyFa, bodyEn: $bodyEn, relatesToArticle: $relatesToArticle, sensitive: $sensitive) {
       ...ContractWorkspaceFields
     }
   }
@@ -3721,8 +3829,8 @@ export const ISSUE_AMENDMENT = gql`
 
 export const UPDATE_AMENDMENT = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UpdateAmendment($amendmentId: ID!, $titleFa: String!, $titleEn: String!, $bodyFa: String!, $bodyEn: String!, $relatesToArticle: Int) {
-    updateAmendment(amendmentId: $amendmentId, titleFa: $titleFa, titleEn: $titleEn, bodyFa: $bodyFa, bodyEn: $bodyEn, relatesToArticle: $relatesToArticle) {
+  mutation UpdateAmendment($amendmentId: ID!, $titleFa: String!, $titleEn: String!, $bodyFa: String!, $bodyEn: String!, $relatesToArticle: Int, $sensitive: Boolean) {
+    updateAmendment(amendmentId: $amendmentId, titleFa: $titleFa, titleEn: $titleEn, bodyFa: $bodyFa, bodyEn: $bodyEn, relatesToArticle: $relatesToArticle, sensitive: $sensitive) {
       ...ContractWorkspaceFields
     }
   }

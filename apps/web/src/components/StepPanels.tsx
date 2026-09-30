@@ -2,7 +2,7 @@ import type { ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import type { Contract, StepKind, User, WizardStep } from '@/lib/queries';
-import { relativeTime } from '@/lib/format';
+import { instantDate } from '@/lib/format';
 import { stepLabel, type Audience } from '@/lib/wizard';
 import Lock from '@/components/Lock';
 import DemoViewport from '@/components/DemoViewport';
@@ -10,6 +10,7 @@ import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
 import RequirementsPanel from '@/components/RequirementsPanel';
 import ScopePanel from '@/components/ScopePanel';
 import DraftPanel from '@/components/DraftPanel';
+import AgreementPanel from '@/components/AgreementPanel';
 import { can } from '@/lib/access';
 
 /**
@@ -33,7 +34,8 @@ import { can } from '@/lib/access';
  *   proposals and Root's decisions (`ScopePanel`)
  * - J6  `DRAFT`        — ✔ built: the published draft article by article with its
  *   anchored notes and where each note's article is now (`DraftPanel`)
- * - J7  `AGREEMENT`    — approve and sign; the agreement gate
+ * - J7  `AGREEMENT`    — ✔ built: the snapshot as a document, then Approve and Sign on one
+ *   screen (`AgreementPanel`); approval locks steps 1–3
  * - J8  `DESIGN`       — the theme catalogue, rounds, wireframes and palette
  * - J9  `MOCKUP`       — the mockup host, iterations
  * - J10 `DEMO`         — per phase: submission, readiness, approval
@@ -92,6 +94,7 @@ const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {
   REQUIREMENTS: RequirementsPanel,
   SCOPE: ScopePanel,
   DRAFT: DraftPanel,
+  AGREEMENT: AgreementPanel,
   DEMO: DemoStepPanel,
 };
 
@@ -131,7 +134,7 @@ export default function StepPanel(props: StepPanelProps) {
       {step.locked && step.lockedAt ? (
         <p className="locknote">
           <Lock />
-          <span>{t('wizard.lockedSince', { when: relativeTime(step.lockedAt, locale) })}</span>
+          <span>{t('wizard.lockedSince', { when: instantDate(step.lockedAt, locale) })}</span>
         </p>
       ) : null}
       {Panel ? <Panel {...props} /> : <NotYet step={step} audience={props.audience} />}

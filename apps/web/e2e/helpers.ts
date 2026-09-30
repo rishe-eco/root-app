@@ -179,9 +179,10 @@ export function insertPublishedDemo() {
 /**
  * A new-road contract sales has *not* handed over yet (journeys build plan J4):
  * `AGREEMENT_FIRST`, unpublished, no brief, on the seeded customer's project.
- * `createContract` still makes legacy contracts (J7 flips that), and the seeded
- * wizard contract is already published — so the hand-over, and the
- * `BRIEF_MISSING` refusal in front of it, need one put in the database.
+ * The seeded wizard contract is already published, so the hand-over, and the
+ * `BRIEF_MISSING` refusal in front of it, need one that is not — put straight
+ * in the database rather than made through the desk's form, which this spec is
+ * not about (`createContract` makes new-road contracts too since J7).
  */
 export const DRAFT_CONTRACT_REF = 'RC-2026-022';
 export const DRAFT_CONTRACT_TITLE = 'Nahal mobile app';
@@ -207,9 +208,10 @@ export function insertDraftNewRoadContract() {
  * delivery payment — neither tied to a phase, so the second is issuable the
  * moment the first is paid.
  *
- * **Signing is a direct insert, and says so.** An `AGREEMENT_FIRST` contract
- * cannot be approved or signed through the API until J7 builds the agreement
- * gate, so this writes the rows signing writes — a revision made current and a
+ * **Signing is a direct insert, and says so.** J7 built the agreement gate and
+ * `20-agreement` drives approving and signing through the screen; this spec is
+ * about what comes after a signature and has no need of the steps before it, so
+ * it writes the rows signing writes — a revision made current and a
  * `Signature` on it, which is all `agreementSignedAt` (lib/steps.ts) reads. The
  * revision carries no snapshot: nothing in this spec renders the agreement. The plan is inserted too because `setPaymentPlan` is
  * the desk's step-1 form and `17-requirements` already drives that; this spec
@@ -344,6 +346,59 @@ export async function completeStepOneViaApi(request: APIRequestContext, ref = WI
     },
   );
   return contract.id;
+}
+
+/**
+ * Steps 2a and 2b of a new-road contract whose step 1 is complete
+ * (`completeStepOneViaApi`), over the API as sales: the fee (so the payment plan
+ * can match it — *no fee is not a match*, `planMatchesFee`), the scope seeded
+ * from the site type, the articles from the template, the planned dates, and the
+ * draft published. The contract is then one press of **Approve** from the
+ * agreement (journeys build plan J7), which is what `20-agreement` is about —
+ * the steps before it are `17-requirements` and `18-scope-draft`'s.
+ */
+export async function completeStepTwoViaApi(request: APIRequestContext, contractId: string): Promise<void> {
+  await apiSignIn(request, SALES);
+  const { allContracts } = await gql<{ allContracts: Array<{ id: string; titleFa: string; titleEn: string }> }>(
+    request,
+    '{ allContracts { id titleFa titleEn } }',
+  );
+  const contract = allContracts.find((c) => c.id === contractId);
+  if (!contract) throw new Error(`completeStepTwoViaApi: no contract ${contractId}`);
+  await gql(request, 'mutation($c: ID!, $fa: String!, $en: String!, $a: String){ updateContractDraft(contractId: $c, titleFa: $fa, titleEn: $en, amount: $a) { id } }', {
+    c: contractId,
+    fa: contract.titleFa,
+    en: contract.titleEn,
+    a: '150000000',
+  });
+  await gql(request, 'mutation($c: ID!){ applyScopeTemplate(contractId: $c) { id } }', { c: contractId });
+  await gql(request, 'mutation($c: ID!){ applyContractTemplate(contractId: $c) { id } }', { c: contractId });
+  await gql(request, 'mutation($c: ID!, $s: String, $e: String){ setPlannedDates(contractId: $c, plannedStartAt: $s, plannedEndAt: $e) { id } }', {
+    c: contractId,
+    s: '2026-10-12',
+    e: '2026-12-20',
+  });
+  await gql(request, 'mutation($c: ID!){ publishContractRevision(contractId: $c) { id } }', { c: contractId });
+}
+
+/**
+ * Puts a contract on the **legacy** (`DESIGN_FIRST`) road, straight into the
+ * database. `createContract` makes new-road contracts since J7 flipped
+ * `SEQUENCE_FOR_NEW_CONTRACTS`, and `04-workspace` is the spec that drives the
+ * legacy flow from nothing to a signature through the desk's own forms — so it
+ * needs a contract created the way sales creates one, then moved to the road it
+ * is about. Only ever called on a freshly created contract (nothing approved,
+ * nothing published), which is the one state where the change is not a
+ * migration.
+ */
+export function makeContractLegacy(contractId: string) {
+  if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
+    cwd: API_DIR,
+    input: `UPDATE "Contract" SET "sequence" = 'DESIGN_FIRST'::"ContractSequence" WHERE "id" = '${contractId.replace(/'/g, "''")}';`,
+    stdio: 'pipe',
+    timeout: 60_000,
+  });
 }
 
 /**

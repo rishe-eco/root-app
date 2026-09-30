@@ -748,6 +748,15 @@
     "amendmentSigned": "Signed",
     "amendmentApproved": "Approved, awaiting signature",
     "amendmentWaiting": "Awaiting the customer",
+    "sensitive": "About money",
+    "sensitiveHelp": "Hides this article's text from staff who may not read money.",
+    "scheduleGenerated": "The payment schedule is generated from the contract's payment plan and shown here — this article's text stays empty.",
+    "amendmentSensitive": "About money",
+    "amendmentSensitiveHelp": "Hides this amendment's text from staff who may not read money. Left unticked, it follows the article it relates to.",
+    "error": {
+      "STEP_LOCKED": "The agreement has been approved, so this can no longer be changed. Use an amendment or a scope trade.",
+      "SCHEDULE_IS_GENERATED": "The payment schedule is generated from the payment plan — leave this article's text empty."
+    },
     "relatesToArticle": "Relates to article",
     "relatesToArticleNone": "No specific article",
     "noDraftHelp": "Showing the published design. Add a concept to start a new draft.",
@@ -1414,7 +1423,7 @@
       "UPCOMING": "Upcoming"
     },
     "locked": "Locked",
-    "lockedSince": "Locked {{when}} — this step can no longer be changed.",
+    "lockedSince": "Locked on {{when}} — this step can no longer be changed.",
     "panel": {
       "notYetTitle": "Not available yet",
       "notYetCustomer": "Root has not opened this step yet. It will appear here when it is ready.",
@@ -1468,7 +1477,11 @@
     "progressNever": "Nothing shown yet",
     "attentionTitle": "Waiting for action",
     "attentionEmpty": "Nothing is waiting right now.",
-    "since": "since {{when}}"
+    "since": "since {{when}}",
+    "agreement": "Agreement",
+    "agreementNone": "Not approved yet",
+    "agreementApproved": "Approved on {{date}} — waiting for the signature",
+    "agreementSigned": "Signed on {{date}}"
   },
   "scope": {
     "lede": {
@@ -1801,6 +1814,64 @@
       "10": "Dey",
       "11": "Bahman",
       "12": "Esfand"
+    }
+  },
+  "agreement": {
+    "brief": "Requirements",
+    "designPath": "Design path",
+    "moneyHidden": "Not shown to you — it is money.",
+    "phasesAndDates": "Phases and dates",
+    "plannedStart": "Planned start",
+    "plannedEnd": "Planned end",
+    "phase": "Phase",
+    "noPhases": "No phases were set when this draft was published.",
+    "planRow": "Payment",
+    "planAmount": "Amount",
+    "planTerm": "Due",
+    "bodyWithheld": "This article is about money, and its text is not shown to you.",
+    "kindGroup": {
+      "PAGE": "Pages",
+      "FEATURE": "Features",
+      "DELIVERABLE": "Deliverables",
+      "EXTRA": "Extras"
+    },
+    "unpublished": {
+      "customer": "Root has not published the contract yet. It appears here when it is ready to read.",
+      "staff": "No draft is published yet. Publish it in step 2b, then the customer can approve and sign here."
+    },
+    "lede": {
+      "customer": "This is the whole agreement as Root published it: what you asked for, the scope, the payment plan, the dates and the contract text. Approve it and sign below. Once you approve, steps 1 to 3 are locked — later changes go through an amendment.",
+      "staff": "The agreement as the customer reads it. They approve it and sign on this screen; approving locks steps 1 to 3."
+    },
+    "approveHelp": "Approving locks the requirements, the scope and the draft. You sign right after.",
+    "approveCta": "Approve the agreement",
+    "approvedOn": "✓ Approved on {{date}}",
+    "signLabel": "Full name",
+    "signPlaceholder": "Type your full name",
+    "signCta": "Sign the agreement",
+    "signedOn": "Signed {{date}}",
+    "awaitingApproval": {
+      "customer": "Root has not finished this yet.",
+      "staff": "Waiting for the customer to approve."
+    },
+    "awaitingSignature": {
+      "customer": "Approved — sign to finish.",
+      "staff": "Approved. Waiting for the customer to sign."
+    },
+    "printLink": "Open the printable version",
+    "error": {
+      "STEP_LOCKED": "This agreement is already approved.",
+      "ALREADY_APPROVED": "This agreement is already approved.",
+      "NO_PUBLISHED_REVISION": "Root has not published the contract yet.",
+      "SCOPE_UNCONFIRMED": "The scope is not settled yet — Root still has a proposal to decide.",
+      "PLAN_TOTAL_MISMATCH": "The payment plan does not add up to the fee yet. Root is fixing it.",
+      "DATES_INCOMPLETE": "The planned dates are not complete yet. Root is setting them.",
+      "BRIEF_INCOMPLETE": "The requirements are not complete yet. Root is finishing them.",
+      "REVISION_STALE": "Root changed something after publishing this draft and has to publish it again first. Check back in a moment.",
+      "STEP_HAS_OPEN_FEEDBACK": "One of your notes is still waiting for Root's answer. The agreement can be approved once every note has been answered.",
+      "STEP_HAS_PENDING_ANSWERS": "Root is still finishing an answer to one of your notes. Try again in a moment.",
+      "NAME_TOO_SHORT": "Type your full name to sign.",
+      "NOT_FOUND": "This contract is not available."
     }
   },
   "brief": {

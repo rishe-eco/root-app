@@ -16,6 +16,8 @@ import {
   scopeProposalDecidedEmail,
   draftPublishedEmail,
   invoiceIssuedEmail,
+  agreementApprovedEmail,
+  agreementSignedEmail,
   feedbackSubmittedEmail,
   answerPendingEmail,
   answerPublishedEmail,
@@ -32,6 +34,7 @@ const DESK_REQUEST_URL = 'https://example.com/en/desk/requests/proj1';
 const PORTAL_REQUEST_URL = 'https://example.com/fa/app/contracts?request=proj1';
 const PORTAL_CONTRACT_URL = 'https://example.com/fa/app/contracts/c1';
 const PORTAL_INVOICE_URL = 'https://example.com/fa/app/invoices/e1';
+const DESK_STEPS_URL = 'https://example.com/en/desk/contracts/c1/steps';
 
 const builders: Array<{ name: string; build: (locale: string) => MailContent; link: string }> = [
   { name: 'invite', build: (l) => inviteEmail(l, { name: 'کاربر', inviteUrl: INVITE_URL }), link: INVITE_URL },
@@ -169,6 +172,31 @@ const builders: Array<{ name: string; build: (locale: string) => MailContent; li
         portalUrl: PORTAL_INVOICE_URL,
       }),
     link: PORTAL_INVOICE_URL,
+  },
+  // Journeys build plan J7 — the agreement moved: to sales.
+  {
+    name: 'agreement-approved',
+    build: (l) =>
+      agreementApprovedEmail(l, {
+        recipientName: 'فروش',
+        customerName: 'نهال',
+        projectTitleFa: 'فروشگاه نهال',
+        projectTitleEn: 'Nahal shop',
+        deskUrl: DESK_STEPS_URL,
+      }),
+    link: DESK_STEPS_URL,
+  },
+  {
+    name: 'agreement-signed',
+    build: (l) =>
+      agreementSignedEmail(l, {
+        recipientName: 'فروش',
+        customerName: 'نهال',
+        projectTitleFa: 'فروشگاه نهال',
+        projectTitleEn: 'Nahal shop',
+        deskUrl: DESK_STEPS_URL,
+      }),
+    link: DESK_STEPS_URL,
   },
 ];
 
@@ -367,4 +395,42 @@ test('the invoice email escapes the customer’s name in html and leaves it verb
   });
   assert.ok(!mail.html.includes('<b>N</b>'));
   assert.ok(mail.text.includes('<b>N</b>'));
+});
+
+// ---- J7 — the agreement moves: to sales ------------------------------------------
+
+const agreementParams = {
+  recipientName: 'Sara <b>',
+  customerName: 'Nahal & Co',
+  projectTitleFa: 'فروشگاه نهال',
+  projectTitleEn: 'Nahal <shop>',
+  deskUrl: DESK_STEPS_URL,
+};
+
+test('J7: the approved and signed emails go to sales in each locale, name the customer and the project, link the desk, and escape what they were given', () => {
+  for (const [name, build, en, fa] of [
+    ['approved', agreementApprovedEmail, /Agreement approved/, /توافق‌نامه تأیید شد/],
+    ['signed', agreementSignedEmail, /Agreement signed/, /توافق‌نامه امضا شد/],
+  ] as const) {
+    const english = build('en', agreementParams);
+    assert.match(english.subject, en, name);
+    assert.ok(english.subject.includes('Nahal <shop>'), 'the plain-text subject is not escaped');
+    assert.ok(english.html.includes('Nahal &amp; Co'), name);
+    assert.ok(english.html.includes('Nahal &lt;shop&gt;'), name);
+    assert.ok(!english.html.includes('<b>'), name + ': a name is text, not markup');
+    assert.ok(english.html.includes(DESK_STEPS_URL) && english.text.includes(DESK_STEPS_URL), name);
+    const persian = build('fa', agreementParams);
+    assert.match(persian.subject, fa, name);
+    assert.ok(persian.text.includes('فروشگاه نهال') && persian.text.includes('Nahal & Co'), name);
+    assert.ok(persian.html.includes('dir="rtl"') || persian.html.includes('rtl'), name + ': Persian is right-to-left');
+    assert.ok(persian.text.includes(DESK_STEPS_URL), name);
+  }
+});
+
+test('J7: an approved agreement says steps 1 to 3 are locked and that the signature comes next; a signed one says the plan can be issued', () => {
+  assert.match(agreementApprovedEmail('en', agreementParams).text, /locked/);
+  assert.match(agreementApprovedEmail('en', agreementParams).text, /sign next/);
+  assert.match(agreementSignedEmail('en', agreementParams).text, /invoice by invoice/);
+  assert.match(agreementApprovedEmail('fa', agreementParams).text, /قفل/);
+  assert.match(agreementSignedEmail('fa', agreementParams).text, /یکی‌یکی/);
 });

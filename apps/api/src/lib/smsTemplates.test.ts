@@ -13,6 +13,8 @@ import {
   scopeProposalDecidedSms,
   draftPublishedSms,
   invoiceIssuedSms,
+  agreementApprovedSms,
+  agreementSignedSms,
   type SmsContent,
 } from './smsTemplates.js';
 
@@ -38,6 +40,9 @@ const builders: Array<{ name: string; build: (locale: string) => SmsContent; mus
   { name: 'scope-proposed', build: (l) => scopeProposedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
   { name: 'scope-proposal-decided', build: (l) => scopeProposalDecidedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
   { name: 'draft-published', build: (l) => draftPublishedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  // Journeys build plan J7 — to sales; one placeholder, the URL.
+  { name: 'agreement-approved', build: (l) => agreementApprovedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  { name: 'agreement-signed', build: (l) => agreementSignedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
   // Journeys build plan J13 — one placeholder, the URL; no number, no amount.
   { name: 'invoice-issued', build: (l) => invoiceIssuedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
 ];
@@ -90,6 +95,8 @@ test('the request SMS bodies carry no free text — only fixed words and the URL
     (l: string) => scopeProposalDecidedSms(l, { portalUrl: REQUEST_URL }),
     (l: string) => draftPublishedSms(l, { portalUrl: REQUEST_URL }),
     (l: string) => invoiceIssuedSms(l, { portalUrl: REQUEST_URL }),
+    (l: string) => agreementApprovedSms(l, { deskUrl: REQUEST_URL }),
+    (l: string) => agreementSignedSms(l, { deskUrl: REQUEST_URL }),
   ]) {
     for (const locale of LOCALES) {
       const words = build(locale).text.replace(REQUEST_URL, '');

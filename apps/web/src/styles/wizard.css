@@ -253,7 +253,15 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 /* A disabled fieldset with no frame: it exists only to disable what is inside. */
 .view-as-scope { border: 0; margin: 0; padding: 0; min-inline-size: 0; }
 
+/* Step 3 — the agreement (journeys build plan J7): the document inline in the
+   wizard, in the same paper style the print route uses, without the sheet's
+   own frame. */
+.doc-inline { box-shadow: none; padding: var(--space-8); max-inline-size: none; }
+.agreement { display: flex; flex-direction: column; gap: var(--space-4); }
+.agreement-actions { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; }
+
 @media (max-width: 640px) {
+  .doc-inline { padding: var(--space-4); }
   .stepper-item { flex-basis: 100%; }
   .view-as-banner { padding-inline: var(--space-6); }
 }

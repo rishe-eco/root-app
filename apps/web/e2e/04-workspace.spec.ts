@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN, CUSTOMER, PNG, resetTestDatabase, signIn } from './helpers';
+import { ADMIN, CUSTOMER, PNG, makeContractLegacy, resetTestDatabase, signIn } from './helpers';
 
 /**
  * V2's acceptance test, driven through the browser: Root takes a contract
@@ -29,6 +29,14 @@ test('a contract goes from nothing to signed, then an amendment to signature', a
 
   await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
   const contractId = page.url().match(/contracts\/([^/]+)\//)![1];
+
+  // This spec is the legacy (design-first) flow, driven from nothing through the
+  // desk's own forms — and `createContract` makes new-road contracts since J7. So
+  // the contract is created the way sales creates one and then put on the road
+  // this spec is about: nothing is published or approved yet, which is the one
+  // moment that is not a migration. (`20-agreement` is the new road's spec.)
+  makeContractLegacy(contractId);
+  await page.reload();
 
   // --- fill in articles via the template, publish the revision --------------
   await page.getByRole('button', { name: 'Apply standard template' }).click();

@@ -13,6 +13,7 @@ import {
   isContractReader,
   mayReadInternalNotes,
   mayReadArticleBody,
+  mayReadAmendmentBody,
   mayReadContactOf,
   mayReadMoney,
   mayReadPlannedDates,
@@ -303,4 +304,20 @@ test('mayReadContactOf: yourself, and the staff who work with accounts — never
   for (const role of ['CUSTOMER', 'CONTRIBUTOR', 'REVIEWER'] as Role[]) {
     assert.equal(mayReadContactOf(person('x', role), staffer), false, role);
   }
+});
+
+test('mayReadAmendmentBody (J7): a sensitive amendment reads like a sensitive article — the customer and money readers only', () => {
+  const c = { customerId: 'cust' };
+  for (const sensitive of [true, false]) {
+    for (const role of ['DESIGNER', 'DEVELOPER', 'CONTRIBUTOR', 'REVIEWER', 'SALES', 'ADMIN'] as Role[]) {
+      assert.equal(
+        mayReadAmendmentBody(person('x', role), c, { sensitive }),
+        mayReadArticleBody(person('x', role), c, { sensitive }),
+        role + ' ' + sensitive,
+      );
+    }
+  }
+  assert.equal(mayReadAmendmentBody(person('cust', 'CUSTOMER'), c, { sensitive: true }), true);
+  assert.equal(mayReadAmendmentBody(person('x', 'DESIGNER'), c, { sensitive: true }), false);
+  assert.equal(mayReadAmendmentBody(person('x', 'DESIGNER'), c, { sensitive: false }), true);
 });

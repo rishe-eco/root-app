@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { GraphQLError } from 'graphql';
 import {
   agreedScopeSnapshot,
+  agreedScopeSnapshotFor,
   assertCanConfirmTradeAsRoot,
   assertCanExecuteTrade,
   isAgreedOrBeyond,
@@ -108,4 +109,38 @@ test('assertCanExecuteTrade refuses an already-executed trade', () => {
     ),
     'ALREADY_EXECUTED',
   );
+});
+
+test('agreedScopeSnapshotFor (J7): format 2’s appendix — agreed items with their kind, this contract’s own, and the project’s extras', () => {
+  const item = (key: string, over: Partial<ScopeItemLike> = {}): ScopeItemLike => ({
+    key,
+    labelFa: key + '-fa',
+    labelEn: key + '-en',
+    status: 'AGREED',
+    position: 0,
+    kind: 'PAGE',
+    contractId: 'c1',
+    ...over,
+  });
+  const items = [
+    item('c', { position: 2, kind: 'FEATURE' }),
+    item('a', { position: 0 }),
+    item('sibling', { position: 1, contractId: 'c2' }),
+    item('declined', { position: 3, status: 'DECLINED' }),
+    item('extra', { position: 4, kind: 'EXTRA', contractId: 'c2' }),
+    item('proposed', { position: 5, status: 'PROPOSED' }),
+    item('traded', { position: 6, status: 'TRADED' }),
+    item('orphan', { position: 7, contractId: null }),
+  ];
+  assert.deepEqual(
+    agreedScopeSnapshotFor('c1', items).map((i) => [i.key, i.kind]),
+    [['a', 'PAGE'], ['c', 'FEATURE'], ['extra', 'EXTRA']],
+    'registry order; a sibling contract’s item, an unagreed one and an orphan are not in this contract’s agreement; an extra is',
+  );
+  // Format 1’s function is untouched: the whole project’s agreed set, no kind, as before.
+  assert.deepEqual(
+    agreedScopeSnapshot(items).map((i) => i.key),
+    ['a', 'sibling', 'c', 'extra', 'orphan'],
+  );
+  assert.ok(agreedScopeSnapshot(items).every((i) => !('kind' in i)));
 });

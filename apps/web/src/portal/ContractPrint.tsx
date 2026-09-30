@@ -5,6 +5,7 @@ import { useLocale, lp } from '@/lib/locale';
 import { dirOf } from '@/i18n';
 import { CONTRACT, type Contract, type User } from '@/lib/queries';
 import { formatAmount, fullDateTime, pick } from '@/lib/format';
+import AgreementDocument from '@/components/AgreementDocument';
 
 /**
  * The printable contract — the page a customer turns into a PDF.
@@ -78,7 +79,6 @@ export default function ContractPrint() {
   const title = pick(revision, 'title', locale);
   const amount = formatAmount(revision.amount, locale);
   const signature = revision.signature;
-  const client = contract.customer.clientName ?? contract.customer.name;
 
   const fact = (label: string, value: string, latin = false) => (
     <div className="doc-fact">
@@ -136,54 +136,10 @@ export default function ContractPrint() {
         {amount ? fact(t('print.fee'), t('print.toman', { amount })) : null}
       </dl>
 
-      <section className="doc-sec doc-parties">
-        <h2 className="doc-h">{t('print.parties')}</h2>
-        <div className="doc-party">
-          <span className="doc-party-role">{t('print.provider')}</span>
-          <span className="doc-party-name">{t('brand.main')}</span>
-        </div>
-        <div className="doc-party">
-          <span className="doc-party-role">{t('print.client')}</span>
-          <span className="doc-party-name">{client}</span>
-        </div>
-      </section>
-
-      <section className="doc-sec">
-        <h2 className="doc-h">{t('print.articles')}</h2>
-        {contract.articles.map((a) => {
-          const body = pick(a, 'body', locale);
-          return (
-            <div className="doc-art" key={a.id}>
-              <h3 className="doc-art-h">
-                <span className="num-latin">{a.number}.</span> {pick(a, 'title', locale)}
-              </h3>
-              {body ? (
-                <p className="doc-art-body">{body}</p>
-              ) : (
-                <p className="doc-art-body doc-art-empty">{t('print.articleEmpty')}</p>
-              )}
-            </div>
-          );
-        })}
-      </section>
-
-      {/* Appendix 1, as a view of the registry's agreed set frozen into this
-          revision (build plan L1) — never the live registry (that is the
-          portal's own scope checklist, elsewhere on this contract). Empty
-          for a revision published before L1, since the snapshot gained this
-          field only going forward. */}
-      <section className="doc-sec">
-        <h2 className="doc-h">{t('print.appendix')}</h2>
-        {contract.agreedScopeItems.length > 0 ? (
-          <ul className="doc-list">
-            {contract.agreedScopeItems.map((s) => (
-              <li key={s.key}>{pick({ labelFa: s.labelFa, labelEn: s.labelEn }, 'label', locale)}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="doc-art-body doc-art-empty">{t('print.appendixEmpty')}</p>
-        )}
-      </section>
+      {/* The parties, steps 1 and 2 as frozen (format 2), the articles — Article 5
+          carrying the payment plan — and Appendix 1: one component, shared with
+          the wizard's step 3 so the two cannot describe different documents. */}
+      <AgreementDocument contract={contract} revision={revision} />
 
       {/* Amendments — changes made after signature, each standing on its own
           hash and its own signature. */}
@@ -195,7 +151,11 @@ export default function ContractPrint() {
               <h3 className="doc-art-h">
                 <span className="num-latin">A{am.ordinal}.</span> {pick(am, 'title', locale)}
               </h3>
-              <p className="doc-art-body">{pick(am, 'body', locale)}</p>
+              {am.bodyFa === null || am.bodyEn === null ? (
+                <p className="doc-art-body doc-art-empty">{t('agreement.bodyWithheld')}</p>
+              ) : (
+                <p className="doc-art-body">{pick(am, 'body', locale)}</p>
+              )}
               <p className="doc-art-meta num-latin">
                 {t('print.hash')} {am.contentHash}
               </p>

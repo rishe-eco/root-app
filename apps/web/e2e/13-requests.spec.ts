@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { CUSTOMER, DESIGNER, SALES, resetTestDatabase, signIn } from './helpers';
+import { CUSTOMER, DESIGNER, SALES, completeStepOneViaApi, resetTestDatabase, signIn } from './helpers';
 
 /**
  * J2's acceptance test (journeys build plan §5 "J2"): a customer submits a
@@ -141,6 +141,7 @@ test('sales converts the request: the contract form opens prefilled, and the thr
 
 test('the customer sees the converted request until sales hands the contract over, then the contract carries the thread', async ({
   page,
+  request,
 }) => {
   await signIn(page, CUSTOMER, 'en');
   await page.goto('/en/app/contracts');
@@ -153,7 +154,12 @@ test('the customer sees the converted request until sales hands the contract ove
   await expect(drawer.getByRole('textbox')).toHaveCount(0);
   await drawer.getByRole('button', { name: 'Close' }).click();
 
-  // Sales publishes the contract.
+  // Sales completes step 1 (the converted contract is a new-road one since J7,
+  // and handing it over needs a brief — `BRIEF_MISSING` otherwise; the brief
+  // itself is `17-requirements`' subject, so it goes in over the API) …
+  await completeStepOneViaApi(request, 'RC-2026-J2A');
+
+  // … and publishes the contract.
   await signIn(page, SALES, 'en');
   await page.goto('/en/desk/contracts');
   await page.locator('tr.crow', { hasText: 'RC-2026-J2A' }).getByRole('button', { name: 'Publish' }).click();
