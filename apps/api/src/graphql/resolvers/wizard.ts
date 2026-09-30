@@ -505,8 +505,12 @@ export const wizardMutations = {
  * writes** (`setBrief`, `setExtra`, `setPaymentPlan`, and the phase edits, all
  * REQUIREMENTS), each after `lockContract` where it writes. Nothing can lock
  * REQUIREMENTS until J7 writes the AGREEMENT approval, so those calls cannot
- * fire yet — they land now so J7 changes nothing here. The rest are still to
- * wire.
+ * fire yet — they land now so J7 changes nothing here. **J5's** proposals,
+ * decisions and `applyScopeTemplate` (SCOPE) and **J6's** `publishContractRevision`,
+ * `setPlannedDates` and `applyContractTemplate` (DRAFT) are wired the same way.
+ * The rest — the other draft edits (`setArticle`, `updateContractDraft`,
+ * `deleteArticle`), the registry's own edits — are J7's, which the survey below
+ * lists.
  *
  * The survey J3 made, so the stages that wire it need not repeat it: three
  * groups of existing mutations edit content a `StepApproval` will one day lock.

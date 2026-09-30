@@ -486,6 +486,9 @@ test('applyContractTemplate: each row is classified by its key and agreed by thi
   // The fixture's three articles make the template refuse (v2.test.ts asserts
   // that); clear them, since this test is about what it writes.
   await prisma.article.deleteMany({ where: { contractId: f.contract.id } });
+  // The fixed six-item list is the legacy road's: on the new road the template writes
+  // the articles only (J5) and the scope comes from `applyScopeTemplate`.
+  await prisma.contract.update({ where: { id: f.contract.id }, data: { sequence: 'DESIGN_FIRST' } });
   const before = await prisma.scopeItem.count({ where: { projectId: f.contract.projectId } });
   assert.equal(before, 0);
   ok(await exec(`mutation($id: ID!){ applyContractTemplate(contractId: $id) { id } }`, { as: staff.SALES, variables: { id: f.contract.id } }));

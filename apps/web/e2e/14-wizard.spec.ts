@@ -68,10 +68,13 @@ test('the customer sees the new road: seven steps, the status area, an honest "n
   await expect(panel).toHaveAttribute('data-step', 'REQUIREMENTS');
   await expect(panel.getByTestId('brief-empty')).toHaveText('Root has not written the requirements yet.');
 
-  // Any step can be looked at; the ones not built yet do not pretend to have content.
+  // Any step can be looked at. The draft is built (J6): before Root publishes one it says so,
+  // rather than "not available". The steps still to come do not pretend to have content.
   await page.locator('.stepper-item[data-step="DRAFT"] button').click();
   await expect(panel).toHaveAttribute('data-step', 'DRAFT');
   await expect(panel.getByRole('heading', { name: 'The draft' })).toBeVisible();
+  await expect(panel.getByTestId('draft-empty')).toHaveText('Root has not published the draft yet.');
+  await page.locator('.stepper-item[data-step="AGREEMENT"] button').click();
   await expect(panel.getByText('Not available yet')).toBeVisible();
 
   // The legacy sections are not on this road.

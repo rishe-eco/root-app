@@ -207,6 +207,107 @@ const E2E_API_URL = `http://localhost:${process.env.E2E_API_PORT || 4101}`;
 export type TestBlock = { id: string; kind: 'HEADING' | 'PARAGRAPH' | 'CODE' | 'LIST' | 'QUOTE' | 'TABLE'; depth?: number; text: string };
 
 /**
+ * Signs `who` in over the API (no browser), so a spec can do the part of a
+ * story that is not what it is about. J1: sign-in takes an identifier, and the
+ * four second-factor roles meet the factor — so this is the same two steps the
+ * browser helper below takes, with the code read from the e2e outbox. The
+ * request context keeps the cookie `verifySignInFactor` sets.
+ */
+export async function apiSignIn(
+  request: APIRequestContext,
+  who: { email: string; password: string; phone?: string },
+): Promise<void> {
+  await resetRateLimits();
+  const signIn = await request.post(`${E2E_API_URL}/graphql`, {
+    data: {
+      query:
+        'mutation($i:String!,$p:String!){ signIn(identifier:$i,password:$p){ user { id } factorChallengeId } }',
+      variables: { i: who.email, p: who.password },
+    },
+  });
+  const signInBody = await signIn.json();
+  if (signInBody.errors) throw new Error(`apiSignIn failed: ${JSON.stringify(signInBody.errors)}`);
+  const challengeId = signInBody.data.signIn.factorChallengeId as string | null;
+  if (challengeId) {
+    if (!who.phone) throw new Error(`apiSignIn: ${who.email} met the second factor and helpers.ts gave it no phone`);
+    const code = await readSmsCode(who.phone);
+    const factor = await request.post(`${E2E_API_URL}/graphql`, {
+      data: {
+        query: 'mutation($c:String!,$k:String!){ verifySignInFactor(challengeId:$c,code:$k){ user { id } } }',
+        variables: { c: challengeId, k: code },
+      },
+    });
+    const factorBody = await factor.json();
+    if (factorBody.errors) throw new Error(`apiSignIn factor failed: ${JSON.stringify(factorBody.errors)}`);
+  }
+}
+
+/** One GraphQL call as whoever `apiSignIn` signed in on this context; throws on any error. */
+export async function gql<T = Record<string, unknown>>(
+  request: APIRequestContext,
+  query: string,
+  variables: Record<string, unknown> = {},
+): Promise<T> {
+  const res = await request.post(`${E2E_API_URL}/graphql`, { data: { query, variables } });
+  const body = await res.json();
+  if (body.errors) throw new Error(`gql failed: ${JSON.stringify(body.errors)}`);
+  return body.data as T;
+}
+
+/**
+ * Step 1 of the seeded new-road contract, completed through the API — the
+ * brief, one phase with its end date and a payment plan — so a spec about step
+ * 2 does not have to fill in step 1 by hand (`17-requirements` is the spec that
+ * does). Sales does it, as sales would; the seeded contract has no fee, so any
+ * plan is a plan that adds up.
+ */
+export async function completeStepOneViaApi(request: APIRequestContext, ref = WIZARD_CONTRACT_REF): Promise<string> {
+  await apiSignIn(request, SALES);
+  const { allContracts } = await gql<{ allContracts: Array<{ id: string; ref: string }> }>(request, '{ allContracts { id ref } }');
+  const contract = allContracts.find((c) => c.ref === ref);
+  if (!contract) throw new Error(`completeStepOneViaApi: no contract ${ref}`);
+  const { templateTypes } = await gql<{ templateTypes: Array<{ id: string; slug: string }> }>(request, '{ templateTypes(activeOnly: true) { id slug } }');
+  const store = templateTypes.find((t) => t.slug === 'store');
+  if (!store) throw new Error('completeStepOneViaApi: the seeded store type is missing');
+  await gql(request, 'mutation($c: ID!, $i: BriefInput!){ setBrief(contractId: $c, input: $i) { id } }', {
+    c: contract.id,
+    i: {
+      kind: 'NEW_SITE',
+      templateTypeId: store.id,
+      designTier: 'THEME_PICK',
+      budgetCap: '150000000',
+      hardDeadline: '2026-10-23',
+      domainName: 'nahal.ir',
+      domainProvidedBy: 'CUSTOMER',
+      hostProvidedBy: 'ROOT',
+      contentProvidedBy: 'CUSTOMER',
+      supportMonths: 6,
+      premadeRounds: 2,
+      demoIterationsPerPhase: 2,
+      commitments: [
+        { key: 'domain', dueAt: '2026-10-05' },
+        { key: 'host', dueAt: '2026-10-06' },
+        { key: 'content', dueAt: '2026-10-07' },
+      ],
+    },
+  });
+  const { createPhase } = await gql<{ createPhase: { phases: Array<{ id: string }> } }>(
+    request,
+    'mutation($c: ID!){ createPhase(contractId: $c, number: 1, titleFa: "فاز اول", titleEn: "First phase", plannedEndAt: "2026-11-10") { phases { id } } }',
+    { c: contract.id },
+  );
+  await gql(
+    request,
+    'mutation($c: ID!, $r: [PlannedInvoiceInput!]!){ setPaymentPlan(contractId: $c, split: LUMP_SUM, invoices: $r) { id } }',
+    {
+      c: contract.id,
+      r: [{ labelFa: 'کل مبلغ', labelEn: 'The whole amount', amount: '150000000', phaseId: createPhase.phases[0].id, paymentTermDays: 7 }],
+    },
+  );
+  return contract.id;
+}
+
+/**
  * Publishes a Review Room round by calling `publishReviewRound` directly —
  * the same mutation `prisma/publish-round.ts` calls, the same trust
  * boundary (C1.md §3.1), just without a real root-sot checkout to shell git
@@ -218,32 +319,7 @@ export async function publishTestRound(
   request: APIRequestContext,
   opts: { sha: string; label?: string; documents: Array<{ path: string; title: string; order: number; blocks: TestBlock[] }> },
 ): Promise<{ id: string }> {
-  // J1: sign-in takes an identifier, and ADMIN meets the staff second factor
-  // — so this is the same two steps the browser helper below takes, over the
-  // API, with the code read from the e2e outbox. The request context keeps
-  // the cookie verifySignInFactor sets.
-  await resetRateLimits();
-  const signIn = await request.post(`${E2E_API_URL}/graphql`, {
-    data: {
-      query:
-        'mutation($i:String!,$p:String!){ signIn(identifier:$i,password:$p){ user { id } factorChallengeId } }',
-      variables: { i: ADMIN.email, p: ADMIN.password },
-    },
-  });
-  const signInBody = await signIn.json();
-  if (signInBody.errors) throw new Error(`publishTestRound sign-in failed: ${JSON.stringify(signInBody.errors)}`);
-  const challengeId = signInBody.data.signIn.factorChallengeId as string | null;
-  if (challengeId) {
-    const code = await readSmsCode(ADMIN.phone);
-    const factor = await request.post(`${E2E_API_URL}/graphql`, {
-      data: {
-        query: 'mutation($c:String!,$k:String!){ verifySignInFactor(challengeId:$c,code:$k){ user { id } } }',
-        variables: { c: challengeId, k: code },
-      },
-    });
-    const factorBody = await factor.json();
-    if (factorBody.errors) throw new Error(`publishTestRound factor failed: ${JSON.stringify(factorBody.errors)}`);
-  }
+  await apiSignIn(request, ADMIN);
 
   const res = await request.post(`${E2E_API_URL}/graphql`, {
     data: {

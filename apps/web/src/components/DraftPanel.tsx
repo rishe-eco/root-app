@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery } from '@apollo/client';
+import { useApolloClient, useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { lp, useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
@@ -195,10 +195,15 @@ export default function DraftPanel({ contract, step, audience, me, asCustomer = 
   const revision = contract.revision;
   const canAuthor = staff && can(me, 'contracts.author') && !step.locked;
 
-  const { data, refetch } = useQuery<{ contract: { id: string; draftNotes: DraftNote[]; feedbackItems: FeedbackItem[] } }>(
+  const client = useApolloClient();
+  const { data } = useQuery<{ contract: { id: string; draftNotes: DraftNote[]; feedbackItems: FeedbackItem[] } }>(
     CONTRACT_DRAFT_NOTES,
     { variables: { id: contract.id, asCustomer: asCustomer || null }, fetchPolicy: 'cache-and-network' },
   );
+  // A note or an answer moves the step's own state (done while no note waits for
+  // Root), and neither mutation returns a Contract — so every active query is
+  // asked again, the wizard's and the notes' alike.
+  const refresh = () => void client.refetchQueries({ include: 'active' });
   const notes = data?.contract.draftNotes ?? [];
   const articles = [...contract.articles].sort((a, b) => a.number - b.number);
   const { byArticle, orphans } = notesByArticle(articles, notes);
@@ -289,7 +294,8 @@ export default function DraftPanel({ contract, step, audience, me, asCustomer = 
             canAnswer={staff && can(me, 'feedback.answer')}
             answerDirect={can(me, 'answers.direct.agreement')}
             locked={step.locked}
-            onChanged={() => void refetch()}
+            onChanged={refresh}
+            onAnswered={refresh}
           />
         </>
       )}

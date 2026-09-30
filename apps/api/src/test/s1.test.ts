@@ -123,7 +123,6 @@ beforeEach(async () => {
           position,
           kind: 'FEATURE',
           status: key === 'out-item' ? 'AGREED' : 'PROPOSED',
-          contractId: key === 'out-item' ? f.contract.id : null,
         },
       }),
     ),
@@ -216,7 +215,7 @@ const OPS: Record<string, (as: User) => ReturnType<typeof exec>> = {
       variables: { c: f.contract.id },
     }),
   'customer · confirm scope trade': (as) =>
-    exec('mutation($t: ID!){ confirmScopeTradeCustomer(tradeId: $t) { id } }', { as, variables: { t: tradeId } }),
+    exec('mutation($t: ID!, $c: ID){ confirmScopeTradeCustomer(tradeId: $t, contractId: $c) { id } }', { as, variables: { t: tradeId, c: f.contract.id } }),
   // --- J6: step 2b ---
   'contracts.author · planned dates': (as) =>
     exec('mutation($c: ID!){ setPlannedDates(contractId: $c, plannedStartAt: "2026-11-01", plannedEndAt: "2027-01-15") { id } }', {

@@ -88,6 +88,11 @@ export type FeedbackPanelProps = {
    *  merge into the cache — a first comment on a target creates an item the
    *  list has never seen. */
   onChanged: () => void;
+  /** Called after Root's answer is saved. Optional, and unused by the steps whose
+   *  state does not move with an answer; the draft (J6) needs it because that
+   *  step is *done* while no note waits for Root, so an answer changes the road
+   *  the step list draws — and `answerFeedback` returns an item, not a Contract. */
+  onAnswered?: () => void;
 };
 
 /** The first GraphQL error's `extensions.code`, or null. */
@@ -427,6 +432,7 @@ export default function FeedbackPanel({
   locked,
   canApprove = false,
   onChanged,
+  onAnswered,
 }: FeedbackPanelProps) {
   const { t } = useTranslation();
   const locale = useLocale();
@@ -497,6 +503,7 @@ export default function FeedbackPanel({
     setErrors((e) => ({ ...e, [target.key]: '' }));
     try {
       await answerFeedback({ variables: { itemId: target.item.id, body, resolution } });
+      onAnswered?.();
     } catch (err) {
       setErrors((e) => ({ ...e, [target.key]: errorText(err) }));
     }

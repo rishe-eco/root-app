@@ -683,6 +683,8 @@ test('executeScopeTrade amends the contract that agreed the outgoing item, and a
 
 test('setScopeItem (the customer\'s tick): acts through the contract named, else the one that agreed the item, else the newest published', async () => {
   const { first, second, item, projectId } = await twoContracts(); // item.contractId = second
+  // The tick is the legacy road's (J5 refuses it on the new one): both contracts are legacy here.
+  await prisma.contract.updateMany({ where: { projectId }, data: { sequence: 'DESIGN_FIRST' } });
   const proposed = await prisma.scopeItem.create({
     data: { projectId, key: 'proposed-two', kind: 'FEATURE', labelFa: 'پ', labelEn: 'p', status: 'PROPOSED' },
   });
