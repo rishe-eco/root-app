@@ -141,7 +141,8 @@ test.describe('pre-made', () => {
     // --- the designer finds the step locked --------------------------------------------------
     await openDesignerDesign(page);
     await expect(page.getByTestId('design-author-premade')).toHaveCount(0);
-    await expect(page.locator('.locknote')).toBeVisible();
+    await expect(page.locator('.step-panel-head ~ .locknote')).toContainText('Locked on');
+    await expect(page.getByTestId('design-approved')).toBeVisible();
   });
 
   test('sales reads the design without authoring controls, and can extend the allowance', async ({ page }) => {
