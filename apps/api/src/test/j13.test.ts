@@ -438,7 +438,11 @@ test('every resolver that can return a BillingEntry is accounted for — a new e
   };
   assert.deepEqual(mentions.sort(), Object.keys(accounted).sort(), 'a resolver file reads or returns billing entries that this test does not know about');
 
-  const read = (name: string) => readFileSync(`${dir}${name}`, 'utf8');
+  // Code only: a comment that names `issuedAt: { not: null }` is not a query.
+  const read = (name: string) =>
+    readFileSync(`${dir}${name}`, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
   const fields = read('fields.ts');
   assert.equal((fields.match(/invoiceVisibleTo\(/g) ?? []).length, 2, 'ServiceRun.billingEntry and Ticket.billingEntry');
   assert.equal((read('invoices.ts').match(/issuedAt: \{ not: null \}/g) ?? []).length, 2, 'myInvoices and invoice(id) select issued rows only');
