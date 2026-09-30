@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchDemoPath, normalizePath } from './demoPages.js';
+import {
+  MAX_MAPPING_PATH_LENGTH,
+  UNMAPPED_PATH,
+  bundlePagePaths,
+  isMapped,
+  mappedPages,
+  matchDemoPath,
+  mockupMappingPath,
+  normalizePath,
+} from './demoPages.js';
 
 // ---------------------------------------------------------------------------
 // L2.1's own five shapes for "the products page," plus the percent-encoded
@@ -192,4 +201,53 @@ test('matchDemoPath without the option is untouched by it: "/about.html" and "/a
   assert.equal(matchDemoPath('/about.html', pages).kind, 'UNMATCHED');
   assert.equal(matchDemoPath('/about', pages).kind, 'MATCHED');
   assert.equal(matchDemoPath('/about.html', pages, { stripHtml: false }).kind, 'UNMATCHED');
+});
+
+// ---------------------------------------------------------------------------
+// A mockup's page mapping (journeys build plan J9b)
+// ---------------------------------------------------------------------------
+
+test('mockupMappingPath: every spelling of a page folds to one stored path', () => {
+  for (const typed of ['about.html', '/about.html', '/about/', '/about', ' /About.HTML ', '/fa/about.html', '/about?x=1#y']) {
+    assert.equal(mockupMappingPath(typed), '/about', typed);
+  }
+  assert.equal(mockupMappingPath('index.html'), '/');
+  assert.equal(mockupMappingPath('/'), '/');
+  assert.equal(mockupMappingPath('/shop/index.html'), '/shop');
+  assert.equal(mockupMappingPath('/shop/cart.html'), '/shop/cart');
+});
+
+test('mockupMappingPath: blank unmaps; a path no bundle could hold is null', () => {
+  assert.equal(mockupMappingPath(''), UNMAPPED_PATH);
+  assert.equal(mockupMappingPath('   '), UNMAPPED_PATH);
+  assert.equal(mockupMappingPath('/a\u0000b'), null);
+  assert.equal(mockupMappingPath('/a\\b'), null);
+  assert.equal(mockupMappingPath('/' + 'x'.repeat(MAX_MAPPING_PATH_LENGTH)), null);
+  assert.equal(mockupMappingPath('/' + 'x'.repeat(MAX_MAPPING_PATH_LENGTH - 1)), '/' + 'x'.repeat(MAX_MAPPING_PATH_LENGTH - 1));
+});
+
+test('an unmapped page is not a page a report can match — left in, its empty path would claim the home page', () => {
+  const pages = [
+    { id: 'home', canonicalPath: '/' },
+    { id: 'todo', canonicalPath: UNMAPPED_PATH },
+  ];
+  // The trap this guards: '' normalizes to '/', the same as the home page.
+  assert.equal(normalizePath(UNMAPPED_PATH), '/');
+  assert.deepEqual(pages.filter(isMapped).map((p) => p.id), ['home']);
+  assert.deepEqual(mappedPages(pages).map((p) => p.id), ['home']);
+  const onlyUnmapped = [{ id: 'todo', canonicalPath: UNMAPPED_PATH }];
+  assert.equal(matchDemoPath('/', mappedPages(onlyUnmapped), { stripHtml: true }).kind, 'UNMATCHED');
+});
+
+test('bundlePagePaths: each HTML entry folds the way a mapping does; assets are not pages', () => {
+  const paths = bundlePagePaths(['index.html', 'about.html', 'shop/index.html', 'shop/cart.html', 'css/app.css', 'img/logo.png', 'js/app.js']);
+  assert.deepEqual([...paths].sort(), ['/', '/about', '/shop', '/shop/cart']);
+});
+
+test('bundlePagePaths: about.html and about/index.html are one page; case folds; a mapping finds what it was typed against', () => {
+  assert.deepEqual([...bundlePagePaths(['about.html', 'about/index.html'])], ['/about']);
+  assert.deepEqual([...bundlePagePaths(['About.HTML'])], ['/about']);
+  const paths = bundlePagePaths(['index.html', 'about.html']);
+  for (const typed of ['about.html', '/about/', '/']) assert.ok(paths.has(mockupMappingPath(typed)!), typed);
+  assert.ok(!paths.has(mockupMappingPath('/contact')!));
 });

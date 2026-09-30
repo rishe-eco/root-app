@@ -1775,6 +1775,7 @@
     "CONTRACT_SIGNED": "Contract signed (v{{number}})",
     "DESIGN_PUBLISHED": "Design v{{number}} published",
     "BUILD_PUBLISHED": "Build {{number}} published on the demo",
+    "MOCKUP_PUBLISHED": "Mockup {{number}} published",
     "byCustomer": "Customer",
     "byRoot": "Root",
     "empty": "Nothing has happened yet."

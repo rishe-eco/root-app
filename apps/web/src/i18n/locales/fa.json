@@ -1775,6 +1775,7 @@
     "CONTRACT_SIGNED": "قرارداد امضا شد (v{{number}})",
     "DESIGN_PUBLISHED": "نسخه‌ی v{{number}} طرح منتشر شد",
     "BUILD_PUBLISHED": "بیلد {{number}} روی دمو منتشر شد",
+    "MOCKUP_PUBLISHED": "ماکتِ {{number}} منتشر شد",
     "byCustomer": "مشتری",
     "byRoot": "ریشه",
     "empty": "هنوز اتفاقی نیفتاده."
