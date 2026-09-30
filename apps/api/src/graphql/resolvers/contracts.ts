@@ -13,9 +13,11 @@ import { contractVisibleTo } from '../../lib/visibility.js';
  * these, and lives in its own file.
  */
 
-/** The concepts-and-pages shape, reused for the current revision and drafts. */
+/** The concepts-and-pages shape, reused for the current revision and drafts —
+ *  and, since J8, the palette a custom design carries beside them. */
 export const conceptsInclude = {
   concepts: { include: { pages: { orderBy: { position: 'asc' } } }, orderBy: { position: 'asc' } },
+  palette: { orderBy: [{ position: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.DesignRevisionInclude;
 
 /**
@@ -97,7 +99,7 @@ export async function log(
  * Automatic transitions are defaults, not rails (v3 §8) — Root can always
  * override with setContractStatus. Terminal states are left alone.
  */
-export async function nudgeStatus(contract: FullContract, next: ContractStatus, db: Db = prisma) {
+export async function nudgeStatus(contract: Pick<FullContract, 'id' | 'status'>, next: ContractStatus, db: Db = prisma) {
   if (contract.status === 'DONE' || contract.status === 'DISCARDED') return;
   if (contract.status === next) return;
   // statusChangedAt only moves on a real transition (V4 defect D7) — this
@@ -114,32 +116,57 @@ export const reload = async (id: string) => (await loadContract(id))!;
  * The design revision Root is currently editing: the one with no `publishedAt`.
  * There is at most one. Created on demand by cloning the published revision —
  * concepts and pages come across, approvals do not, because an approval is of
- * a revision and this is a different one.
+ * a revision and this is a different one. **Since J8 the palette comes across
+ * too**, item for item — it carries no approval, so unlike a page there is
+ * nothing to leave behind — and a theme concept keeps its theme pointer and its
+ * snapshot (a round that shows the same theme again shows what it showed
+ * before, not what the catalogue says today).
+ *
+ * Takes the caller's transaction client: every design write since J8 runs under
+ * the contract's row lock, and a draft created outside that transaction would be
+ * created outside the lock.
  */
-export async function draftDesignRevision(contractId: string) {
-  const existing = await prisma.designRevision.findFirst({
+export async function draftDesignRevision(contractId: string, db: Db = prisma) {
+  const existing = await db.designRevision.findFirst({
     where: { contractId, publishedAt: null },
     include: conceptsInclude,
   });
   if (existing) return existing;
 
-  const latest = await prisma.designRevision.findFirst({
+  const latest = await db.designRevision.findFirst({
     where: { contractId },
     orderBy: { version: 'desc' },
     include: conceptsInclude,
   });
 
-  const draft = await prisma.designRevision.create({
+  const draft = await db.designRevision.create({
     data: { contractId, version: (latest?.version ?? 0) + 1 },
   });
 
+  for (const item of latest?.palette ?? []) {
+    await db.designPaletteItem.create({
+      data: {
+        designRevisionId: draft.id,
+        kind: item.kind,
+        role: item.role,
+        value: item.value,
+        labelFa: item.labelFa,
+        labelEn: item.labelEn,
+        imageFileId: item.imageFileId,
+        position: item.position,
+      },
+    });
+  }
+
   for (const concept of latest?.concepts ?? []) {
-    await prisma.designConcept.create({
+    await db.designConcept.create({
       data: {
         designRevisionId: draft.id,
         key: concept.key,
         labelFa: concept.labelFa,
         labelEn: concept.labelEn,
+        themeId: concept.themeId,
+        themeSnapshot: concept.themeSnapshot === null ? undefined : (concept.themeSnapshot as Prisma.InputJsonValue),
         // Both halves of the image, together — see the note on
         // PageDesign.imageUrl. Copying the string alone would leave the fork
         // claiming an externally hosted image and would drop the reference
@@ -161,7 +188,7 @@ export async function draftDesignRevision(contractId: string) {
     });
   }
 
-  return (await prisma.designRevision.findUnique({
+  return (await db.designRevision.findUnique({
     where: { id: draft.id },
     include: conceptsInclude,
   }))!;

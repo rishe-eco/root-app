@@ -18,6 +18,7 @@ import { contractInclude, loadForActor, log, nudgeStatus, reload, type FullContr
 import { loadAgreementParts } from './agreement.js';
 import { briefIncompleteOn } from './wizard.js';
 import { linkContractId } from './admin/shared.js';
+import { designPathOn, openDesign, tellDesigner } from './design.js';
 
 /**
  * What the customer does to their own contract: choose a concept, approve
@@ -131,6 +132,20 @@ export const customerMutations = {
   ) => {
     const user = requireUser(ctx);
     const contract = await loadForActor(args.contractId, user);
+    const newRoad = contract.sequence === 'AGREEMENT_FIRST';
+    if (newRoad) {
+      // The new road's design is the customer's own (J8): staff who can see the
+      // contract hear what a stranger hears. The legacy road keeps its reading
+      // of this file's header ("an admin can act on a contract too").
+      if (contract.customerId !== user.id) throw notFound('contract');
+      // A custom design has one direction and nothing to choose between; choosing
+      // would only reset the page approvals beneath it.
+      if ((await designPathOn(prisma, contract.id)) === 'CUSTOM') {
+        throw new GraphQLError('There is nothing to choose between on a custom design.', {
+          extensions: { code: 'NOT_APPLICABLE' },
+        });
+      }
+    }
     const revision = contract.currentDesignRevision;
     const concept = revision?.concepts.find((c) => c.id === args.conceptId);
     if (!revision || !concept) {
@@ -142,26 +157,32 @@ export const customerMutations = {
     // to work through it. The old guard read the contract's approval because
     // there was only ever one design; keeping it here would reopen the design
     // step and then refuse every action that could close it again.
+    //
+    // What *does* gate it, since J8, is the design step's own lock: once the
+    // customer has approved the design, the choice is made (`STEP_LOCKED`) — the
+    // legacy road has no such lock, so it is unchanged.
 
     // Choosing a different concept resets the page approvals beneath it —
     // approving pages of a design you then abandoned would be meaningless.
     // Scoped to this revision: approvals in a superseded one stay as history.
-    await prisma.$transaction([
-      prisma.designConcept.updateMany({
-        where: { designRevisionId: revision.id },
-        data: { chosenAt: null },
-      }),
-      prisma.pageDesign.updateMany({
-        where: { concept: { designRevisionId: revision.id } },
-        data: { approvedAt: null },
-      }),
-      prisma.designConcept.update({
-        where: { id: concept.id },
-        data: { chosenAt: new Date() },
-      }),
-    ]);
+    await prisma.$transaction(async (tx) => {
+      await openDesign(tx, contract.id);
+      // Re-checked under the lock: a round published since this was read makes
+      // the concept a superseded revision's, which is history and not choosable.
+      const current = await tx.contract.findUniqueOrThrow({ where: { id: contract.id }, select: { currentDesignRevisionId: true } });
+      if (current.currentDesignRevisionId !== revision.id) {
+        throw new GraphQLError('That concept belongs to an older design revision.', {
+          extensions: { code: 'REVISION_NOT_CURRENT' },
+        });
+      }
+      await tx.designConcept.updateMany({ where: { designRevisionId: revision.id }, data: { chosenAt: null } });
+      await tx.pageDesign.updateMany({ where: { concept: { designRevisionId: revision.id } }, data: { approvedAt: null } });
+      await tx.designConcept.update({ where: { id: concept.id }, data: { chosenAt: new Date() } });
+    });
 
     await log(contract.id, user.id, 'CHOSE_CONCEPT', concept.key);
+    // Told once per choice (J8): choosing the concept that is already chosen is not news.
+    if (newRoad && concept.chosenAt === null) await tellDesigner('DESIGN_CONCEPT_CHOSEN', contract);
     return reload(contract.id);
   },
 
@@ -179,6 +200,13 @@ export const customerMutations = {
       throw new GraphQLError('No such page design.', { extensions: { code: 'NOT_FOUND' } });
     }
     const contract = await loadForActor(page.concept.designRevision.contractId, user);
+    // The new road's design is the customer's own (J8), as `chooseConcept` says.
+    // A custom design has no concept to choose, so its pages are approved
+    // without one; a pre-made design has no pages at all.
+    const newRoad = contract.sequence === 'AGREEMENT_FIRST';
+    if (newRoad && contract.customerId !== user.id) {
+      throw new GraphQLError('No such page design.', { extensions: { code: 'NOT_FOUND' } });
+    }
     // Only the live revision is approvable. A page in a superseded one is
     // history, and a page in an unpublished draft has not been handed over.
     if (contract.currentDesignRevisionId !== page.concept.designRevisionId) {
@@ -189,15 +217,25 @@ export const customerMutations = {
     // Not gated on the contract lineage — see chooseConcept. Being current is
     // the whole requirement: this revision is the one in front of the
     // customer, whatever the text has done in the meantime.
-    if (page.concept.chosenAt === null) {
+    if (page.concept.chosenAt === null && !(newRoad && (await designPathOn(prisma, contract.id)) === 'CUSTOM')) {
       throw new GraphQLError('Choose this concept before approving its pages.', {
         extensions: { code: 'CONCEPT_NOT_CHOSEN' },
       });
     }
 
-    await prisma.pageDesign.update({
-      where: { id: page.id },
-      data: { approvedAt: args.approved ? new Date() : null },
+    await prisma.$transaction(async (tx) => {
+      await openDesign(tx, contract.id);
+      // Re-checked under the lock, as `chooseConcept` does.
+      const current = await tx.contract.findUniqueOrThrow({ where: { id: contract.id }, select: { currentDesignRevisionId: true } });
+      if (current.currentDesignRevisionId !== page.concept.designRevisionId) {
+        throw new GraphQLError('That page belongs to an older design revision.', {
+          extensions: { code: 'REVISION_NOT_CURRENT' },
+        });
+      }
+      await tx.pageDesign.update({
+        where: { id: page.id },
+        data: { approvedAt: args.approved ? new Date() : null },
+      });
     });
     await log(
       contract.id,

@@ -9,10 +9,12 @@ import {
   agreementSignedAt,
   assertStepOpen,
   computeWizard,
+  designPathOf,
   legacyFinished,
   type Finished,
   type WizardState,
 } from '../../lib/steps.js';
+import { allowanceFor } from '../../lib/allowance.js';
 import {
   briefCompleteness,
   isCommitmentKey,
@@ -73,6 +75,7 @@ async function loadFacts(c: FullContract) {
     scopeProposals,
     scopeTrades,
     invoices,
+    allowanceExtensions,
   ] = await Promise.all([
     prisma.stepApproval.findMany({
       where: { contractId: c.id },
@@ -167,6 +170,8 @@ async function loadFacts(c: FullContract) {
       where: { contractId: c.id, issuedAt: { not: null }, paidAt: null },
       select: { issuedAt: true, dueAt: true, paidAt: true },
     }),
+    // The rounds sales has granted beyond the brief (J8), which the step counters read.
+    prisma.allowanceExtension.findMany({ where: { contractId: c.id }, select: { step: true, phaseId: true, extra: true } }),
   ]);
   return {
     approvals,
@@ -182,6 +187,7 @@ async function loadFacts(c: FullContract) {
     scopeProposals,
     scopeTrades,
     invoices,
+    allowanceExtensions,
   };
 }
 
@@ -280,12 +286,27 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
     const signedAt = agreementSignedAt({ signatureSignedAt: c.currentContractRevision?.signature?.signedAt ?? null });
     if (signedAt) finished.push({ step: 'AGREEMENT', phaseId: null, at: signedAt });
   }
+  // The design path is the brief's tier through `designPathOf` (J8, PD-13); the
+  // legacy road has none. The design step's rounds are the published design
+  // revisions against the brief's allowance and any extension — MOCKUP's and a
+  // demo's are J9's and J10's and are simply not listed.
+  const newRoad = c.sequence === 'AGREEMENT_FIRST';
   return {
     sequence: c.sequence,
-    designPath: null, // J8 (PD-13) derives it from the design tier
+    designPath: newRoad && facts.brief ? designPathOf(facts.brief.designTier) : null,
     phases: facts.phases.map((p) => ({ id: p.id, number: p.number })),
     approvals: facts.approvals,
     finished,
+    iterations: newRoad
+      ? [
+          {
+            step: 'DESIGN',
+            phaseId: null,
+            used: facts.designRevisions.length,
+            allowance: allowanceFor('DESIGN', null, facts.brief, facts.allowanceExtensions),
+          },
+        ]
+      : [],
   };
 }
 
@@ -462,6 +483,7 @@ export const contractWizardFields = {
       ],
       facts: {
         designPublished: facts.designRevisions.length > 0,
+        designOpenFeedback: facts.feedback.some((i) => i.step === 'DESIGN' && i.status === 'OPEN'),
         contractPublished: facts.contractRevisions.length > 0,
         publishedDemoPhaseIds: facts.phases.filter((p) => p.demos.length > 0).map((p) => p.id),
       },
@@ -559,9 +581,12 @@ export const wizardMutations = {
  * the registry's status, flag, decision and order edits are how a project lives
  * after the agreement and are not locked (see `inOpenScope` there).
  *
- * The design (all of `admin/design.ts`, DESIGN) is J8's, the mockup J9's and a
- * demo's J10's: each adds its calls in the same commit as the approval that makes
- * them reachable.
+ * The design (DESIGN — all of `admin/design.ts` and the customer's `chooseConcept`,
+ * `setPageApproval`, `requestOtherOptions` and `approveDesign` in `customer.ts` /
+ * `design.ts`) is J8's and calls it through `openDesign`, which adds the one rule
+ * the others do not need: on the new road the design opens once the agreement is
+ * *signed*. The mockup is J9's and a demo J10's: each adds its calls in the same
+ * commit as the approval that makes them reachable.
  *
  * Takes a transaction client so the check and the write share a snapshot.
  */
@@ -596,5 +621,18 @@ export async function wizardStateOn(
     throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
   }
   const phases = await db.phase.findMany({ where: { contractId }, select: { id: true, number: true } });
-  return { sequence: contract.sequence, designPath: null, phases, approvals: contract.stepApprovals, finished: [] };
+  // The road depends on the design path (MOCKUP is on it for the custom one), so
+  // the lock check reads the brief's tier through the same `designPathOf` the
+  // wizard uses (J8). The legacy road has no path.
+  const brief =
+    contract.sequence === 'AGREEMENT_FIRST'
+      ? await db.contractBrief.findUnique({ where: { contractId }, select: { designTier: true } })
+      : null;
+  return {
+    sequence: contract.sequence,
+    designPath: brief ? designPathOf(brief.designTier) : null,
+    phases,
+    approvals: contract.stepApprovals,
+    finished: [],
+  };
 }

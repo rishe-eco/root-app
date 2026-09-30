@@ -63,6 +63,11 @@ export type StatusSummaryInput = {
 
 export type MoveFacts = {
   designPublished: boolean;
+  /** J8: a design note (or "show me other options") is waiting for Root's
+   *  answer — the new road's design step is then Root's move even though a
+   *  round is out. Optional so the legacy road, which never reads it, need not
+   *  supply it. */
+  designOpenFeedback?: boolean;
   contractPublished: boolean;
   /** Phases with a demo the customer can open. */
   publishedDemoPhaseIds: string[];
@@ -98,8 +103,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * revision exists, and Root's before; the agreement likewise on the contract
  * text (and, since J7, the new road's too); a demo is the customer's to review once it is published. **Every
  * other new-road step is Root's** until its stage adds a case (J4 REQUIREMENTS … J11
- * SUMMARY): with no data behind the step there is nothing for the customer to
- * do, and saying so is the honest reading.
+ * SUMMARY; J8 added the design's): with no data behind the step there is nothing
+ * for the customer to do, and saying so is the honest reading.
  */
 export function nextMoveOn(sequence: ContractSequence, step: WizardStep, facts: MoveFacts): WaitingOn {
   // The agreement (J7), on both roads: once Root has published the text it is
@@ -112,6 +117,9 @@ export function nextMoveOn(sequence: ContractSequence, step: WizardStep, facts: 
       return step.phaseId !== null && facts.publishedDemoPhaseIds.includes(step.phaseId) ? 'CUSTOMER' : 'ROOT';
     }
   }
+  // The new road's design (J8): the customer's to choose or approve once a round
+  // is out — unless they have asked for something and Root owes an answer.
+  if (step.step === 'DESIGN') return facts.designPublished && facts.designOpenFeedback !== true ? 'CUSTOMER' : 'ROOT';
   return 'ROOT';
 }
 

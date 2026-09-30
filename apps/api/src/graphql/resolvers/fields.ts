@@ -15,7 +15,8 @@ import {
 } from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, isAgreementSnapshot, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
-import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
+import { carryForward, diffDesign, readThemeSnapshot, type PageChange } from '../../lib/design.js';
+import { canReadThemes } from '../../lib/themes.js';
 import { computeProjectProgress } from '../../lib/phase.js';
 import { isOverdue } from '../../lib/dependency.js';
 import { isOverdue as isInvoiceOverdue } from '../../lib/invoice.js';
@@ -469,6 +470,19 @@ export const Amendment = {
 
 export const DesignConcept = {
   chosen: (c: { chosenAt: Date | null }) => c.chosenAt !== null,
+  /**
+   * A pre-made round's theme as it was shown (J8): name, vendor, demo URL and
+   * nothing else — `readThemeSnapshot` returns exactly those three keys, so a
+   * licence cost that ever reached the JSON column still cannot reach a reader.
+   */
+  themeSnapshot: (c: { themeSnapshot: unknown }) => readThemeSnapshot(c.themeSnapshot),
+  /** The catalogue row a concept came from — the designer's, so a customer (or
+   *  sales viewing as one) reads null. A round never reads through it. */
+  themeId: (c: { themeId: string | null }, _a: unknown, ctx: Context) => (canReadThemes(viewerOf(ctx)) ? c.themeId : null),
+};
+
+export const DesignPaletteItem = {
+  imageUrl: (p: { imageFileId: string | null }) => (p.imageFileId ? `/files/${p.imageFileId}` : null),
 };
 
 export const PageDesign = {

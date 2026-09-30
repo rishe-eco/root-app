@@ -4,6 +4,7 @@ import {
   Amendment,
   ContractRevision,
   DesignConcept,
+  DesignPaletteItem,
   DesignDraft,
   PageDesign,
   Project,
@@ -44,6 +45,8 @@ import { briefMutations, contractBriefFields } from './brief.js';
 import { scopeMutations, contractScopeFields } from './scope.js';
 import { contractDraftNoteFields } from './draftNotes.js';
 import { PlannedInvoice, invoiceQueries } from './invoices.js';
+import { contractDesignFields, designCustomerMutations } from './design.js';
+import { allowanceMutations } from './allowance.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -72,10 +75,14 @@ export const resolvers = {
     ...contractBriefFields,
     ...contractScopeFields,
     ...contractDraftNoteFields,
+    // Journeys build plan J8: the palette, what the design still lacks, and the
+    // allowance extensions (staff only) — see design.ts.
+    ...contractDesignFields,
   },
   Amendment,
   ContractRevision,
   DesignConcept,
+  DesignPaletteItem,
   DesignDraft,
   PageDesign,
   Project,
@@ -184,5 +191,10 @@ export const resolvers = {
     // (contracts.author) — see scope.ts. setPlannedDates and the J6 publish
     // gate live in admin/contracts.ts beside the draft they belong to.
     ...scopeMutations,
+    // journeys build plan J8: the customer's half of step 4 (other options,
+    // approving the design — ownership edges) and sales' extension of an
+    // allowance (contracts.author). The designer's half is admin/design.ts.
+    ...designCustomerMutations,
+    ...allowanceMutations,
   },
 };

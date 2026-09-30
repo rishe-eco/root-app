@@ -205,6 +205,12 @@ export function readThemeSnapshot(value: unknown): ThemeSnapshot | null {
  *  (and keeps a choice the customer already made), and unique within one. */
 export const themeConceptKey = (themeId: string): string => `theme-${themeId}`;
 
+/** What the customer's "show me other options" says when they add no words of
+ *  their own — a comment in the thread like any other, in their language. */
+export function otherOptionsAskBody(locale: string | null | undefined): string {
+  return locale === 'en' ? 'Please show me other options.' : 'لطفاً گزینه‌های دیگری نشانم بده.';
+}
+
 /**
  * What the designer's answer says when a new round resolves "show me other
  * options" — the closure on record (journeys spec F9), written into the thread

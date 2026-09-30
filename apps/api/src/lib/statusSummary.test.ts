@@ -199,11 +199,21 @@ test('nextMoveOn: the legacy road, read off what has been published', () => {
   }
 });
 
-test('nextMoveOn: every new-road step but the agreement is Root’s until its own stage says otherwise', () => {
+test('nextMoveOn: every new-road step but the agreement and the design is Root’s until its own stage says otherwise', () => {
   const everything = facts({ designPublished: true, contractPublished: true, publishedDemoPhaseIds: ['p1'] });
-  for (const name of ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'DESIGN', 'MOCKUP', 'DEMO', 'SUMMARY']) {
+  for (const name of ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'MOCKUP', 'DEMO', 'SUMMARY']) {
     assert.equal(nextMoveOn('AGREEMENT_FIRST', step(name, name === 'DEMO' ? 'p1' : null), everything), 'ROOT', name);
   }
+});
+
+test('nextMoveOn (J8): the new road’s design is the customer’s once a round is out, and Root’s while a note or a request for other options waits for an answer', () => {
+  const at = (over: Partial<MoveFacts>) => nextMoveOn('AGREEMENT_FIRST', step('DESIGN'), facts(over));
+  assert.equal(at({}), 'ROOT', 'nothing published');
+  assert.equal(at({ designPublished: true }), 'CUSTOMER');
+  assert.equal(at({ designPublished: true, designOpenFeedback: false }), 'CUSTOMER');
+  assert.equal(at({ designPublished: true, designOpenFeedback: true }), 'ROOT');
+  // The legacy road never reads the new fact.
+  assert.equal(nextMoveOn('DESIGN_FIRST', step('DESIGN'), facts({ designPublished: true, designOpenFeedback: true })), 'CUSTOMER');
 });
 
 test('nextMoveOn (J7): the new road’s agreement is the customer’s once the text is published, Root’s before', () => {

@@ -133,7 +133,7 @@ const reloadItem = (id: string) => prisma.feedbackItem.findUniqueOrThrow({ where
  * feedback nobody is told about is the dead end the loop exists to close.
  * Feedback about money goes only to those who may read it (PD-21).
  */
-async function stepOwners(contract: Pick<ContractForItem, 'designerId' | 'developerId'>, step: StepKind, money: boolean) {
+export async function stepOwners(contract: Pick<ContractForItem, 'designerId' | 'developerId'>, step: StepKind, money: boolean) {
   let recipients: User[] = [];
   if (step === 'REQUIREMENTS' || step === 'SCOPE' || step === 'DRAFT') {
     recipients = await recipientsHolding('contracts.author');
@@ -297,6 +297,15 @@ async function resolveTarget(
       });
       if (!page) throw notFound('page design');
     }
+    // J8: a palette item is a real row now (S2 left the column without its
+    // foreign key), and — like a concept — must be one of *this* revision's.
+    if (anchor.paletteItemId) {
+      const item = await prisma.designPaletteItem.findFirst({
+        where: { id: anchor.paletteItemId, designRevisionId: revision.id },
+        select: { id: true },
+      });
+      if (!item) throw notFound('palette item');
+    }
   }
   if (anchor.demoId) {
     const demo = await prisma.demo.findFirst({
@@ -359,135 +368,149 @@ function anchorColumns(anchor: FeedbackAnchor) {
 const isUniqueViolation = (err: unknown) =>
   !!err && typeof err === 'object' && (err as { code?: unknown }).code === 'P2002';
 
-export const feedbackMutations = {
-  /**
-   * The contract's own customer raises feedback on one step. A second
-   * submission against a target that already has an item appends a comment to
-   * it instead of creating a second one (D4's duplicate collapse — the indexes
-   * are the backstop), and **commenting on an item Root has resolved reopens
-   * it** (§3.1, `reopensOnComment`): `ADDRESSED`, `DECLINED` and `MOVED` all
-   * go back to `OPEN`, and a stale build pointer is dropped rather than left
-   * claiming a fix the customer has just contradicted.
-   *
-   * Intercepted (D4) when the target resolves to a decided/temporary scope
-   * item and `confirmReopen` is not yet true: nothing is written; the caller
-   * resubmits identically with `confirmReopen: true`. Generalized from L3's
-   * frame lines to every anchor that names a scope item.
-   *
-   * The submission **is** the ratification (PD-2): `ratifiedAt`/`ratifiedById`
-   * are written at creation, and there is no status between "raised" and
-   * "actionable".
-   */
-  submitFeedback: async (
-    _p: unknown,
-    args: {
-      contractId: string;
-      step: StepKind;
-      phaseId?: string | null;
-      target: FeedbackTargetArg;
-      body: string;
-      confirmReopen?: boolean | null;
-    },
-    ctx: Context,
-  ) => {
-    const user = requireUser(ctx);
-    const contract = await loadForActor(args.contractId, user);
-    // Not a role test and not a capability: the contract's own customer
-    // (house rule 2). Staff who can see the contract get the same answer as
-    // a stranger — Root answers, it does not raise.
-    if (contract.customerId !== user.id) throw notFound('contract');
+/**
+ * The contract's own customer raises feedback on one step. A second
+ * submission against a target that already has an item appends a comment to
+ * it instead of creating a second one (D4's duplicate collapse — the indexes
+ * are the backstop), and **commenting on an item Root has resolved reopens
+ * it** (§3.1, `reopensOnComment`): `ADDRESSED`, `DECLINED` and `MOVED` all
+ * go back to `OPEN`, and a stale build pointer is dropped rather than left
+ * claiming a fix the customer has just contradicted.
+ *
+ * Intercepted (D4) when the target resolves to a decided/temporary scope
+ * item and `confirmReopen` is not yet true: nothing is written; the caller
+ * resubmits identically with `confirmReopen: true`. Generalized from L3's
+ * frame lines to every anchor that names a scope item.
+ *
+ * The submission **is** the ratification (PD-2): `ratifiedAt`/`ratifiedById`
+ * are written at creation, and there is no status between "raised" and
+ * "actionable".
+ *
+ * **One function, two doors** (journeys build plan J8): `submitFeedback` is this
+ * with no options, and `requestOtherOptions` (`resolvers/design.ts`) is this with
+ * `markOtherOptions` — the same write, marked in the same transaction, so "show me
+ * other options" is a comment like any other and can never be a second, drifting
+ * way to raise a `general` DESIGN item. It sends its own notification (to the
+ * designer, saying what was asked), so it asks this one to stay `silent`.
+ */
+export type RaiseOptions = { markOtherOptions?: boolean; silent?: boolean };
 
-    if (!takesFeedback(args.step)) throw invalidTarget();
-    if (!stepOnRoad(contract.sequence, args.step)) {
-      throw refuse('STEP_NOT_ON_ROAD', 'This contract has no such step.');
-    }
-    // (Until J4 a demo or mockup could only be commented on through the
-    // project's first contract, because phases belonged to the project. A phase
-    // names its contract now: `resolveTarget` looks the demo and the phase up
-    // *on this contract*, so a demo of a sibling contract is `NOT_FOUND` and an
-    // item cannot collapse onto another contract's page under the wrong lock.)
+export async function raiseFeedback(
+  args: {
+    contractId: string;
+    step: StepKind;
+    phaseId?: string | null;
+    target: FeedbackTargetArg;
+    body: string;
+    confirmReopen?: boolean | null;
+  },
+  ctx: Context,
+  opts: RaiseOptions = {},
+) {
+  const user = requireUser(ctx);
+  const contract = await loadForActor(args.contractId, user);
+  // Not a role test and not a capability: the contract's own customer
+  // (house rule 2). Staff who can see the contract get the same answer as
+  // a stranger — Root answers, it does not raise.
+  if (contract.customerId !== user.id) throw notFound('contract');
 
-    const body = args.body.trim();
-    if (!body) throw refuse('EMPTY_COMMENT', 'A comment needs a body.');
+  if (!takesFeedback(args.step)) throw invalidTarget();
+  if (!stepOnRoad(contract.sequence, args.step)) {
+    throw refuse('STEP_NOT_ON_ROAD', 'This contract has no such step.');
+  }
+  // (Until J4 a demo or mockup could only be commented on through the
+  // project's first contract, because phases belonged to the project. A phase
+  // names its contract now: `resolveTarget` looks the demo and the phase up
+  // *on this contract*, so a demo of a sibling contract is `NOT_FOUND` and an
+  // item cannot collapse onto another contract's page under the wrong lock.)
 
-    const target = await resolveTarget(contract, args.step, args.phaseId ?? null, args.target);
-    // MOCKUP has no phase (J9 makes a mockup's demo phase-less); everything
-    // else is keyed as the caller named it.
-    const phaseId = args.step === 'MOCKUP' ? null : target.phaseId;
+  const body = args.body.trim();
+  if (!body) throw refuse('EMPTY_COMMENT', 'A comment needs a body.');
 
-    const interception = checkInterception(target.scopeItem);
-    if (interception.intercepted && !args.confirmReopen) {
-      // Nothing written yet — the customer has not confirmed past the prompt
-      // this result lets the web build (house rule 6: a code and parameters,
-      // never a sentence, from this side of the wire).
-      return {
-        item: null,
-        intercepted: true,
-        interceptionReason: interception.reason,
-        interceptionScopeItem: target.scopeItem,
-      };
-    }
+  const target = await resolveTarget(contract, args.step, args.phaseId ?? null, args.target);
+  // MOCKUP has no phase (J9 makes a mockup's demo phase-less); everything
+  // else is keyed as the caller named it.
+  const phaseId = args.step === 'MOCKUP' ? null : target.phaseId;
 
-    const money = isMoneyAnchored({
-      ...target.anchor,
-      articleSensitive: (await sensitiveArticleKeys([contract.id])).has(`${contract.id}:${target.anchor.articleNumber}`),
+  const interception = checkInterception(target.scopeItem);
+  if (interception.intercepted && !args.confirmReopen) {
+    // Nothing written yet — the customer has not confirmed past the prompt
+    // this result lets the web build (house rule 6: a code and parameters,
+    // never a sentence, from this side of the wire).
+    return {
+      item: null,
+      intercepted: true,
+      interceptionReason: interception.reason,
+      interceptionScopeItem: target.scopeItem,
+    };
+  }
+
+  const money = isMoneyAnchored({
+    ...target.anchor,
+    articleSensitive: (await sensitiveArticleKeys([contract.id])).has(`${contract.id}:${target.anchor.articleNumber}`),
+  });
+  const columns = anchorColumns(target.anchor);
+  // A demo page or frame line is one row for the whole project (the indexes
+  // are on the target alone), so that is what "already there" means for them.
+  const existingWhere: Prisma.FeedbackItemWhereInput = target.anchor.demoPageId
+    ? { demoPageId: target.anchor.demoPageId }
+    : target.anchor.frameLineId
+      ? { frameLineId: target.anchor.frameLineId }
+      : { contractId: contract.id, step: args.step, phaseId, ...columns };
+
+  const write = () =>
+    prisma.$transaction(async (tx) => {
+      await lockContract(tx, contract.id);
+      await assertStepOpenOn(contract.id, args.step, phaseId, tx);
+
+      const existing = await tx.feedbackItem.findFirst({ where: existingWhere });
+      const item =
+        existing ??
+        (await tx.feedbackItem.create({
+          data: {
+            projectId: contract.projectId,
+            contractId: contract.id,
+            step: args.step,
+            phaseId,
+            ...columns,
+            reopenedScopeItemId: interception.intercepted ? interception.scopeItemId : null,
+            ratifiedAt: new Date(),
+            ratifiedById: user.id,
+          },
+        }));
+
+      // A target already on record can still be re-intercepted later (the
+      // scope item is decided *after* the first, un-intercepted comment) —
+      // record that the moment it is confirmed, rather than only at creation.
+      if (existing && interception.intercepted && !existing.reopenedScopeItemId) {
+        await tx.feedbackItem.update({ where: { id: item.id }, data: { reopenedScopeItemId: interception.scopeItemId } });
+      }
+
+      if (existing && reopensOnComment(existing.status)) {
+        await tx.feedbackItem.update({ where: { id: item.id }, data: { status: 'OPEN', addressedInBuildId: null } });
+      }
+
+      await tx.feedbackComment.create({ data: { feedbackItemId: item.id, authorId: user.id, body } });
+      // J8: "show me other options" is marked in the write that raises it, so the
+      // marker can never be set without the comment or the comment without it.
+      if (opts.markOtherOptions) {
+        await tx.feedbackItem.update({ where: { id: item.id }, data: { otherOptionsAskedAt: new Date() } });
+      }
+      return item.id;
     });
-    const columns = anchorColumns(target.anchor);
-    // A demo page or frame line is one row for the whole project (the indexes
-    // are on the target alone), so that is what "already there" means for them.
-    const existingWhere: Prisma.FeedbackItemWhereInput = target.anchor.demoPageId
-      ? { demoPageId: target.anchor.demoPageId }
-      : target.anchor.frameLineId
-        ? { frameLineId: target.anchor.frameLineId }
-        : { contractId: contract.id, step: args.step, phaseId, ...columns };
 
-    const write = () =>
-      prisma.$transaction(async (tx) => {
-        await lockContract(tx, contract.id);
-        await assertStepOpenOn(contract.id, args.step, phaseId, tx);
+  let itemId: string;
+  try {
+    itemId = await write();
+  } catch (err) {
+    // Two first comments on one target at the same moment: the second's
+    // create loses to the unique index. Retried once, it finds the row.
+    if (!isUniqueViolation(err)) throw err;
+    itemId = await write();
+  }
 
-        const existing = await tx.feedbackItem.findFirst({ where: existingWhere });
-        const item =
-          existing ??
-          (await tx.feedbackItem.create({
-            data: {
-              projectId: contract.projectId,
-              contractId: contract.id,
-              step: args.step,
-              phaseId,
-              ...columns,
-              reopenedScopeItemId: interception.intercepted ? interception.scopeItemId : null,
-              ratifiedAt: new Date(),
-              ratifiedById: user.id,
-            },
-          }));
-
-        // A target already on record can still be re-intercepted later (the
-        // scope item is decided *after* the first, un-intercepted comment) —
-        // record that the moment it is confirmed, rather than only at creation.
-        if (existing && interception.intercepted && !existing.reopenedScopeItemId) {
-          await tx.feedbackItem.update({ where: { id: item.id }, data: { reopenedScopeItemId: interception.scopeItemId } });
-        }
-
-        if (existing && reopensOnComment(existing.status)) {
-          await tx.feedbackItem.update({ where: { id: item.id }, data: { status: 'OPEN', addressedInBuildId: null } });
-        }
-
-        await tx.feedbackComment.create({ data: { feedbackItemId: item.id, authorId: user.id, body } });
-        return item.id;
-      });
-
-    let itemId: string;
-    try {
-      itemId = await write();
-    } catch (err) {
-      // Two first comments on one target at the same moment: the second's
-      // create loses to the unique index. Retried once, it finds the row.
-      if (!isUniqueViolation(err)) throw err;
-      itemId = await write();
-    }
-
-    // "The team has been notified" (spec §6) — the mechanism, not polish.
+  // "The team has been notified" (spec §6) — the mechanism, not polish.
+  if (!opts.silent) {
     await tell(async () => {
       const recipients = (await stepOwners(contract, args.step, money)).filter((r) => r.id !== user.id);
       await Promise.all(
@@ -505,14 +528,23 @@ export const feedbackMutations = {
         ),
       );
     });
+  }
 
-    return {
-      item: await reloadItem(itemId),
-      intercepted: interception.intercepted,
-      interceptionReason: interception.intercepted ? interception.reason : null,
-      interceptionScopeItem: target.scopeItem,
-    };
-  },
+  return {
+    item: await reloadItem(itemId),
+    intercepted: interception.intercepted,
+    interceptionReason: interception.intercepted ? interception.reason : null,
+    interceptionScopeItem: target.scopeItem,
+  };
+}
+
+export const feedbackMutations = {
+  /** The customer raises feedback on one step — see `raiseFeedback`. */
+  submitFeedback: (
+    _p: unknown,
+    args: Parameters<typeof raiseFeedback>[0],
+    ctx: Context,
+  ) => raiseFeedback(args, ctx),
 
   /**
    * Root answers. The comment is direct or pending by `answerRoute(caller,
@@ -681,23 +713,26 @@ export const feedbackMutations = {
    * customer accepts a step, not items one by one, and nothing Root does can
    * close the loop for them.
    *
-   * Which steps: DESIGN, MOCKUP and DEMO. The agreement is J7's gate and has
+   * Which steps: MOCKUP and DEMO, for now. The agreement is J7's gate and has
    * its own door — `approveContract` on an `AGREEMENT_FIRST` contract, which
    * checks the scope, the payment plan, the phases' dates and the brief before
    * calling `approveStepTx(AGREEMENT)` — and a bare approval here would let a
    * customer lock steps 1–3 without any of it, so this **keeps refusing
    * AGREEMENT** (J7 left it so on purpose); REQUIREMENTS, SCOPE and DRAFT are
-   * sealed by that approval, never approved alone. J8–J10
-   * replace this door for their step with their own, passing their own
-   * preconditions to the same `approveStepTx`. A `DESIGN_FIRST` contract
-   * approves through its own gate and never through here.
+   * sealed by that approval, never approved alone. **The design has its own door
+   * too, since J8** (`approveDesign`, `resolvers/design.ts`): the same
+   * `approveStepTx`, with the path's completeness as its precondition — and this
+   * one stopped approving DESIGN so that there is one way to approve it, not two
+   * that would differ on whether a design has to be complete. J9–J10 replace this
+   * door for their steps the same way, passing their own preconditions. A
+   * `DESIGN_FIRST` contract approves through its own gate and never through here.
    */
   approveStep: async (_p: unknown, args: { contractId: string; step: StepKind; phaseId?: string | null }, ctx: Context) => {
     const user = requireUser(ctx);
     const contract = await loadForActor(args.contractId, user);
     if (contract.customerId !== user.id) throw notFound('contract');
 
-    if (contract.sequence !== 'AGREEMENT_FIRST' || !['DESIGN', 'MOCKUP', 'DEMO'].includes(args.step)) {
+    if (contract.sequence !== 'AGREEMENT_FIRST' || !['MOCKUP', 'DEMO'].includes(args.step)) {
       throw refuse('STEP_NOT_APPROVABLE', 'That step cannot be approved this way.');
     }
 

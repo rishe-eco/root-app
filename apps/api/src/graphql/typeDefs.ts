@@ -130,9 +130,67 @@ export const typeDefs = /* GraphQL */ `
     key: String!
     labelFa: String!
     labelEn: String!
+    "For a pre-made round's theme: the copy of its preview, owned by this contract (J8)."
     imageUrl: String
     chosen: Boolean!
     pages: [PageDesign!]!
+    """
+    J8: a pre-made round's concept is a theme, as it was shown — name, vendor
+    and demo URL taken when it was proposed. Never the licence cost. Null for
+    a concept that is not a theme.
+    """
+    themeSnapshot: ThemeSnapshot
+    "The catalogue row this came from. Staff only — null for a customer and under view-as. A round reads its snapshot, never this."
+    themeId: ID
+  }
+
+  """
+  What a design round remembers of a theme (journeys build plan J8). The demo
+  is opened in a new tab and never framed: third-party demos refuse framing and
+  the portal's CSP does not allow them.
+  """
+  type ThemeSnapshot {
+    name: String!
+    vendor: String
+    demoUrl: String
+  }
+
+  "What a palette item is (J8): a colour is a hex, a font a family name, logo usage a short note."
+  enum PaletteKind {
+    COLOR
+    FONT
+    LOGO_USAGE
+  }
+
+  "One entry of a custom design's palette (J8), on the revision it was shown in."
+  type DesignPaletteItem {
+    id: ID!
+    kind: PaletteKind!
+    "A Latin identifier — primary, heading, logo-dark."
+    role: String!
+    "A lowercase #rrggbb, a font family name, or a note, by kind."
+    value: String!
+    labelFa: String!
+    labelEn: String!
+    "A specimen or a logo on a background, if there is one."
+    imageUrl: String
+    position: Int!
+  }
+
+  """
+  Rounds sales granted beyond the brief's allowance (J8; journeys Q-S5). Staff
+  only — a customer sees the resulting allowance ("round 2 of 4"), not why.
+  """
+  type AllowanceExtension {
+    id: ID!
+    step: StepKind!
+    phaseId: ID
+    extra: Int!
+    reason: String!
+    approvedBy: User!
+    "The draft invoice's amount, as a decimal string. Null without money.read, and when the extension was free."
+    charge: String
+    createdAt: DateTime!
   }
 
   """
@@ -662,6 +720,11 @@ export const typeDefs = /* GraphQL */ `
     conceptId: ID
     pageDesignId: ID
     paletteItemId: ID
+    """
+    J8: set on the DESIGN general item while a "show me other options" request
+    waits for the next round — the round's publish answers it and clears this.
+    """
+    otherOptionsAskedAt: DateTime
     "MOCKUP and DEMO: the page or frame line."
     demoPage: DemoPage
     frameLine: DemoFrameLine
@@ -1195,6 +1258,7 @@ export const typeDefs = /* GraphQL */ `
     id: ID!
     version: Int!
     concepts: [DesignConcept!]!
+    palette: [DesignPaletteItem!]!
     carryForward: CarryForwardPreview!
   }
 
@@ -1270,6 +1334,17 @@ export const typeDefs = /* GraphQL */ `
     updatedAt: DateTime!
     gate: Gate!
     concepts: [DesignConcept!]!
+    "J8: the current published round's palette (a custom design's). Empty otherwise."
+    palette: [DesignPaletteItem!]!
+    """
+    J8: what the new road's design step still lacks, as codes — CONCEPT_NOT_CHOSEN
+    (pre-made); NO_PAGES, PAGE_NOT_APPROVED, PALETTE_EMPTY (custom); NO_ROUND,
+    BRIEF_MISSING. approveDesign refuses (DESIGN_INCOMPLETE) on exactly this list.
+    Empty for a legacy contract, whose design is complete when "gate" says so.
+    """
+    designMissing: [String!]!
+    "J8: rounds granted beyond the brief. Staff readers only; empty for anyone else."
+    allowanceExtensions: [AllowanceExtension!]!
     "Live — this project's whole registry, not only what is agreed. See agreedScopeItems for the frozen view."
     scopeItems: [ScopeItem!]!
     "Every contract has a project (required since J2)."
@@ -2664,8 +2739,47 @@ export const typeDefs = /* GraphQL */ `
     addPageDesign(conceptId: ID!, key: String!, labelFa: String!, labelEn: String!, imageUrl: String): Contract!
     updatePageDesign(pageId: ID!, labelFa: String!, labelEn: String!): Contract!
     deletePageDesign(pageId: ID!): Contract!
-    "Deletes the unpublished design revision and its concepts/pages."
+    "Deletes the unpublished design revision and its concepts/pages (and the copied previews nothing else shows)."
     discardDesignDraft(contractId: ID!): Contract!
+
+    """
+    design.author + the contract's designer (J8). Starts a round: creates the
+    design draft if there is none (idempotent), and on the custom path gives it
+    its one concept, "wireframes", to hang pages on. Every design write below
+    is STEP_LOCKED once the customer has approved the design, and on the new
+    road AGREEMENT_NOT_SIGNED until the agreement is signed.
+    """
+    startDesignDraft(contractId: ID!): Contract!
+    """
+    design.author + the contract's designer (J8). A pre-made round: the draft's
+    themes become exactly themeIds, in that order. Each new one is snapshotted
+    (name, vendor, demo URL — never the licence cost) and its preview copied into
+    a contract-owned image. NOT_PREMADE, DUPLICATE_THEME, THEME_NOT_FOUND,
+    THEME_INACTIVE, THEME_NOT_OFFERED (not assigned to the brief's template type).
+    """
+    proposeThemes(contractId: ID!, themeIds: [ID!]!): Contract!
+    """
+    design.author + the contract's designer (J8). A colour, a font or a logo note
+    in the custom design's palette. NOT_CUSTOM, INVALID_COLOR / INVALID_FONT /
+    INVALID_LOGO_NOTE, INVALID_ROLE, LABEL_REQUIRED, LABEL_TOO_LONG, ROLE_TAKEN,
+    PALETTE_FULL.
+    """
+    addPaletteItem(contractId: ID!, kind: PaletteKind!, role: String!, value: String!, labelFa: String!, labelEn: String!): Contract!
+    "The value and the labels; kind and role never change."
+    updatePaletteItem(itemId: ID!, value: String!, labelFa: String!, labelEn: String!): Contract!
+    "Attach a DESIGN_IMAGE of this contract (a font specimen, the logo on a background), or null to remove it."
+    setPaletteItemImage(itemId: ID!, fileId: ID): Contract!
+    deletePaletteItem(itemId: ID!): Contract!
+
+    """
+    contracts.author (J8; journeys Q-S5: a sales approval, optionally billed).
+    Admits "extra" more rounds of a step; with "charge" (Toman, a decimal string,
+    and billing.manage) it also creates a DRAFT invoice for it. Only DESIGN yet
+    (STEP_NOT_BUILT for the others); the new road only (STEP_NOT_ON_ROAD).
+    INVALID_EXTRA, REASON_REQUIRED, STEP_HAS_NO_ALLOWANCE, INVALID_AMOUNT,
+    NO_ALLOWANCE_SET.
+    """
+    extendAllowance(contractId: ID!, step: StepKind!, phaseId: ID, extra: Int!, reason: String!, charge: String): Contract!
 
     """
     Attach a file already uploaded through POST /upload, or pass fileId: null
@@ -2857,11 +2971,28 @@ export const typeDefs = /* GraphQL */ `
     while any comment on it is open (STEP_HAS_OPEN_FEEDBACK) or any answer is
     waiting for sales (STEP_HAS_PENDING_ANSWERS); otherwise accepts every
     resolved item at once and locks the step (STEP_LOCKED for anything after,
-    staff included). phaseId is required for a DEMO. Only DESIGN, MOCKUP and
-    DEMO are approved here (STEP_NOT_APPROVABLE for the rest): the agreement is
-    J7's gate, and the steps it seals are approved with it.
+    staff included). phaseId is required for a DEMO. Only MOCKUP and DEMO are
+    approved here (STEP_NOT_APPROVABLE for the rest): the agreement is J7's gate,
+    and the steps it seals are approved with it; the design has its own door,
+    approveDesign (J8).
     """
     approveStep(contractId: ID!, step: StepKind!, phaseId: ID): Contract!
+
+    """
+    The contract's own customer only (J8). "Show me other options" on a pre-made
+    design: a general DESIGN note, marked, that the next round answers. "note"
+    is optional — without it the comment says so in the customer's language.
+    NOT_PREMADE, NO_ROUND, STEP_LOCKED.
+    """
+    requestOtherOptions(contractId: ID!, note: String): Contract!
+
+    """
+    The contract's own customer only (J8). Approves the design: approveStep's
+    rule (STEP_HAS_OPEN_FEEDBACK, STEP_HAS_PENDING_ANSWERS) plus the path's own
+    completeness — DESIGN_INCOMPLETE unless designMissing is empty. After it
+    every design mutation is STEP_LOCKED. STEP_NOT_APPROVABLE on the legacy road.
+    """
+    approveDesign(contractId: ID!): Contract!
 
     # --- Builds and the resolution ledger (build plan L3b) ---
     """
