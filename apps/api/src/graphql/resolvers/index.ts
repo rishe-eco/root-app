@@ -48,6 +48,7 @@ import { PlannedInvoice, invoiceQueries } from './invoices.js';
 import { contractDesignFields, designCustomerMutations } from './design.js';
 import { allowanceMutations } from './allowance.js';
 import { mockupQueries } from './mockups.js';
+import { Demo, contractMockupFields, mockupCustomerMutations, mockupMutations } from './mockupStep.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -79,7 +80,11 @@ export const resolvers = {
     // Journeys build plan J8: the palette, what the design still lacks, and the
     // allowance extensions (staff only) — see design.ts.
     ...contractDesignFields,
+    // Journeys build plan J9b: the contract's mockup demo — see mockupStep.ts.
+    ...contractMockupFields,
   },
+  // J9b: a MOCKUP demo's iterations, fixed frame lines and bundle pages.
+  Demo,
   Amendment,
   ContractRevision,
   DesignConcept,
@@ -200,5 +205,10 @@ export const resolvers = {
     // allowance (contracts.author). The designer's half is admin/design.ts.
     ...designCustomerMutations,
     ...allowanceMutations,
+    // journeys build plan J9b: step 5 — the designer's demo, mapping and
+    // iterations (design.author and the contract's designer), and the
+    // customer's approval. publishBuild's mockup branch is builds.ts's door.
+    ...mockupMutations,
+    ...mockupCustomerMutations,
   },
 };

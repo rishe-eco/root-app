@@ -194,7 +194,10 @@ export const demoFrameMutations = {
 
   /**
    * "A demo cannot be published naked" (spec §6) — refuses without a frame
-   * authored first (NO_FRAME). The one writer of `Demo.publishedAt`.
+   * authored first (NO_FRAME). The one writer of a **site** demo's `publishedAt`;
+   * a mockup's is written by its first iteration's publish (`publishMockupBuild`,
+   * J9b), whose frame is derived and synced in that same transaction — it cannot
+   * be published naked, so the rule has nothing to refuse there.
    */
   publishDemo: async (_p: unknown, args: { demoId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'builds.author');

@@ -154,3 +154,66 @@ export function matchDemoPath(
   const page = pages.find((p) => normalizePath(p.canonicalPath, DEFAULT_LOCALES, options) === normalizedPath);
   return page ? { kind: 'MATCHED', pageId: page.id, normalizedPath } : { kind: 'UNMATCHED', normalizedPath };
 }
+
+// ---------------------------------------------------------------------------
+// A mockup's page mapping (journeys build plan J9b)
+// ---------------------------------------------------------------------------
+
+/**
+ * The `canonicalPath` of a MOCKUP demo's page that the designer has not pointed
+ * at a path in the bundle yet. A mockup's pages are declared from the registry
+ * the moment the demo is made — before any bundle exists — so "declared" and
+ * "mapped" are different facts, and the column is `NOT NULL`.
+ *
+ * **The empty string, because nothing else is free.** `normalizePath('')` is
+ * `'/'` (the home page), so an unmapped page compared through `matchDemoPath`
+ * would quietly claim the root — which is why a MOCKUP demo's report goes
+ * through `mappedPages` first, and why this lives here beside the comparison it
+ * must never reach. A SITE demo never has one: its pages are declared with the
+ * path they live at.
+ */
+export const UNMAPPED_PATH = '';
+
+export const isMapped = (page: { canonicalPath: string }): boolean => page.canonicalPath !== UNMAPPED_PATH;
+
+/** The pages a reported path may be matched against: the mapped ones. */
+export function mappedPages<T extends { canonicalPath: string }>(pages: readonly T[]): T[] {
+  return pages.filter(isMapped);
+}
+
+/** The longest mapping path accepted — a typo guard; a real page path is a few segments. */
+export const MAX_MAPPING_PATH_LENGTH = 300;
+
+/**
+ * What a designer typed as a page's path, as the canonical form stored (and
+ * compared) — the `stripHtml` fold every MOCKUP path goes through, so
+ * `about.html`, `/about.html` and `/about/` are one page. Blank unmaps
+ * (`UNMAPPED_PATH`). `null` is a path no bundle could have: too long, a NUL, or
+ * a backslash (no key in a validated bundle contains one — `validateBundle`
+ * refuses it — so a mapping with one could never be matched).
+ */
+export function mockupMappingPath(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return UNMAPPED_PATH;
+  if (trimmed.length > MAX_MAPPING_PATH_LENGTH || trimmed.includes('\0') || trimmed.includes('\\')) return null;
+  return normalizePath(trimmed, DEFAULT_LOCALES, { stripHtml: true });
+}
+
+/**
+ * The pages a bundle has: each HTML entry's key, folded the way a mapping is, so
+ * `index.html` is `/`, `about.html` is `/about` and `shop/index.html` is
+ * `/shop`. What "the bundle maps this page" means — a mapped path that no entry
+ * folds to is not shown (`deriveMockupFrame` calls it missing).
+ *
+ * `keys` are the validated map's keys (`ValidatedBundle.entries`, relative to the
+ * root prefix). A set: `about.html` and `about/index.html` are one page, and
+ * which of them the router serves is its own question (`entryRequestFor`).
+ */
+export function bundlePagePaths(keys: Iterable<string>): Set<string> {
+  const paths = new Set<string>();
+  for (const key of keys) {
+    if (!/\.html$/i.test(key)) continue;
+    paths.add(normalizePath(`/${key}`, DEFAULT_LOCALES, { stripHtml: true }));
+  }
+  return paths;
+}

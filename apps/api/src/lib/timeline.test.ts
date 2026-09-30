@@ -56,6 +56,26 @@ test('every source becomes one item, newest first, each naming the side that act
   );
 });
 
+test('J9b: a published mockup iteration is one item naming its ordinal, apart from the site builds', () => {
+  const items = timelineFor(
+    empty({
+      builds: [{ id: 'b1', number: 1, publishedAt: d(11) }],
+      mockupBuilds: [
+        { id: 'm1', iteration: 1, publishedAt: d(5) },
+        { id: 'm2', iteration: 2, publishedAt: d(8) },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    items.map((i) => [i.kind, i.step, i.number]),
+    [
+      ['BUILD_PUBLISHED', null, 1],
+      ['MOCKUP_PUBLISHED', 'MOCKUP', 2],
+      ['MOCKUP_PUBLISHED', 'MOCKUP', 1],
+    ],
+  );
+});
+
 test('an unapproved, unsigned revision is just published', () => {
   const items = timelineFor(
     empty({ contractRevisions: [{ id: 'r1', version: 2, publishedAt: d(3), approvedAt: null, signedAt: null }] }),

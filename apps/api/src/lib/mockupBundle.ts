@@ -81,6 +81,28 @@ const MAX_TOTAL_UNCOMPRESSED_BYTES = 200 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO = 100;
 
 /**
+ * The folder macOS's Finder adds beside whatever it zips (journeys build plan
+ * J9b; J9a's owed item). "Compress" on a folder `site/` writes `site/…` **and**
+ * `__MACOSX/site/._index.html` — AppleDouble resource forks, one per file, which
+ * nobody authored and no browser will ever ask for. Left in, they fail the bundle
+ * twice over: `__MACOSX` is a second top-level folder (`BUNDLE_NO_INDEX`, which
+ * reads to a designer as "my index.html is right there"), and `._photo.jpg` is a
+ * name with an allowed extension and bytes that are not an image.
+ *
+ * **Decided: ignore it, do not refuse it.** Refusing with a message is the right
+ * call for anything a designer could have meant, and this is the one thing every
+ * designer on a Mac produces without meaning anything; a refusal would teach them
+ * to zip from a terminal. The entries are still *read* — they count toward the
+ * entry and size caps and are checked for unsafe names and symlinks, because
+ * ignoring what a hostile zip puts under this name would be a hole with a
+ * friendly label — and then dropped: not in `entries`, so the router can never
+ * serve one, and not in the top-level-folder count that decides the root. Only
+ * the **top-level** folder is ignored; `site/__MACOSX/` is an ordinary folder with
+ * ordinary (extension-checked) contents.
+ */
+const IGNORED_TOP_LEVEL = '__MACOSX';
+
+/**
  * What a mockup bundle's entries may be — J9's "Logic" section, verbatim.
  * Directories are exempt (checked separately): a folder has no extension to
  * refuse.
@@ -207,6 +229,7 @@ export async function validateBundle(zipPath: string): Promise<ValidatedBundle> 
 
       const isDirectory = entry.fileName.endsWith('/');
       const normalizedPath = normalizeEntryPath(entry.fileName);
+      const ignored = normalizedPath.split('/')[0] === IGNORED_TOP_LEVEL;
       const lowerKey = normalizedPath.toLowerCase();
       if (seenNormalizedLower.has(lowerKey)) {
         throw new UploadError(
@@ -235,7 +258,7 @@ export async function validateBundle(zipPath: string): Promise<ValidatedBundle> 
         }
 
         const extension = extensionOf(normalizedPath);
-        if (!ALLOWED_EXTENSIONS.has(extension)) {
+        if (!ignored && !ALLOWED_EXTENSIONS.has(extension)) {
           throw new UploadError(
             415,
             'BUNDLE_TYPE_REFUSED',
@@ -244,7 +267,7 @@ export async function validateBundle(zipPath: string): Promise<ValidatedBundle> 
         }
       }
 
-      files.push({ normalizedPath, entryName: entry.fileName, isDirectory });
+      if (!ignored) files.push({ normalizedPath, entryName: entry.fileName, isDirectory });
     }
   } catch (err) {
     // `eachEntry()`'s own promise rejects with a plain Error for anything

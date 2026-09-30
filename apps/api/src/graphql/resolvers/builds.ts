@@ -1,24 +1,15 @@
 import { GraphQLError } from 'graphql';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
-import { requireCapability, type Context } from '../../context.js';
-import {
-  missingDispositions,
-  hasAtMostOneOrigin,
-  outcomeAllowedForStatus,
-  declinedRequiresNote,
-  noOriginRequiresNote,
-  noteAndLangTogether,
-  nextFeedbackStatus,
-  nextBuildNumber,
-  type BuildChangeInputLike,
-  type BuildChangeOutcomeLike,
-} from '../../lib/build.js';
+import { requireCapability, requireUser, type Context } from '../../context.js';
+import { can } from '../../lib/capabilities.js';
 import { notify } from '../../lib/notify.js';
 import { env } from '../../lib/env.js';
 import { feedbackItemInclude } from './feedback.js';
 import { linkContractId } from './admin/shared.js';
 import { buildPhaseScope, requireBuildAuthorOnPhase, requireBuildAuthorOnProject } from './access.js';
+import { buildInclude, declareBuildFor, type BuildChangeInputArg } from './buildLedger.js';
+import { publishMockupBuild } from './mockupStep.js';
 
 /**
  * Builds and the resolution ledger (build plan L3b; spec §6's gap). Lives
@@ -41,14 +32,6 @@ import { buildPhaseScope, requireBuildAuthorOnPhase, requireBuildAuthorOnProject
  * `ScopeItem!` or a thin `BuildPhase!` instead — none of which reach
  * `Contract` at all.
  */
-
-const buildInclude = {
-  declaredBy: true,
-  changes: {
-    include: { feedbackItem: { include: feedbackItemInclude }, scopeItem: true },
-    orderBy: { createdAt: 'asc' as const },
-  },
-} satisfies Prisma.BuildInclude;
 
 const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extensions: { code: 'NOT_FOUND' } });
 
@@ -75,14 +58,6 @@ const openDemoItems = (projectId: string, phaseId: string | null): Prisma.Feedba
 const ownPhases = (user: Parameters<typeof buildPhaseScope>[0]): { phase?: Prisma.PhaseWhereInput } => {
   const scope = buildPhaseScope(user);
   return Object.keys(scope).length > 0 ? { phase: scope } : {};
-};
-
-type BuildChangeInputArg = {
-  feedbackItemId?: string | null;
-  scopeItemId?: string | null;
-  outcome?: BuildChangeOutcomeLike | null;
-  note?: string | null;
-  noteLang?: string | null;
 };
 
 export const buildQueries = {
@@ -196,154 +171,22 @@ export const buildMutations = {
       where: openDemoItems(phase.projectId, phase.id),
       select: { id: true, status: true },
     });
-    const openIds = openItems.map((i) => i.id);
-    const missing = missingDispositions(openIds, args.changes as BuildChangeInputLike[]);
-    if (missing.length > 0) {
-      throw new GraphQLError('Every open feedback item needs a disposition before a build can be declared.', {
-        extensions: { code: 'MISSING_DISPOSITION', missingFeedbackItemIds: missing },
-      });
-    }
-    const statusById = new Map(openItems.map((i) => [i.id, i.status] as const));
 
-    const feedbackIdsSeen = new Set<string>();
-    for (const change of args.changes) {
-      if (!hasAtMostOneOrigin(change)) {
-        throw new GraphQLError('A change entry may name a feedback item or a scope item, never both.', {
-          extensions: { code: 'INVALID_CHANGE_ORIGIN' },
-        });
-      }
-      if (!noOriginRequiresNote(change)) {
-        throw new GraphQLError('A change with no origin needs a note — the note is the entry.', {
-          extensions: { code: 'NOTE_REQUIRED' },
-        });
-      }
-      if (!declinedRequiresNote(change)) {
-        throw new GraphQLError('A declined item needs its reason.', {
-          extensions: { code: 'DECLINE_REASON_REQUIRED' },
-        });
-      }
-      if (!noteAndLangTogether(change)) {
-        throw new GraphQLError('A note needs the language it was authored in, and vice versa.', {
-          extensions: { code: 'NOTE_LANG_REQUIRED' },
-        });
-      }
-
-      if (change.feedbackItemId) {
-        if (feedbackIdsSeen.has(change.feedbackItemId)) {
-          throw new GraphQLError("A feedback item may only appear once in a build's change list.", {
-            extensions: { code: 'DUPLICATE_DISPOSITION' },
-          });
-        }
-        feedbackIdsSeen.add(change.feedbackItemId);
-
-        const status = statusById.get(change.feedbackItemId);
-        if (!status) throw notFound('open feedback item on this project');
-        if (!change.outcome) {
-          throw new GraphQLError('A feedback-item change needs an outcome.', {
-            extensions: { code: 'OUTCOME_REQUIRED' },
-          });
-        }
-        if (!outcomeAllowedForStatus(change.outcome, status)) {
-          throw new GraphQLError('That item is no longer open.', { extensions: { code: 'NOT_OPEN' } });
-        }
-      } else if (change.outcome) {
-        throw new GraphQLError('Only a feedback-item change may carry an outcome.', {
-          extensions: { code: 'INVALID_CHANGE_ORIGIN' },
-        });
-      }
-    }
-
-    const scopeItemIds = args.changes.map((c) => c.scopeItemId).filter((id): id is string => !!id);
-    const scopeItems = scopeItemIds.length
-      ? await prisma.scopeItem.findMany({ where: { id: { in: scopeItemIds } } })
-      : [];
-    const scopeById = new Map(scopeItems.map((s) => [s.id, s]));
-    for (const id of scopeItemIds) {
-      const item = scopeById.get(id);
-      if (!item || item.projectId !== phase.projectId) throw notFound('scope item on this project');
-      if (item.status !== 'IN_BUILD') {
-        throw new GraphQLError('Only an item currently in build can ship in a build.', {
-          extensions: { code: 'SCOPE_ITEM_NOT_IN_BUILD' },
-        });
-      }
-    }
-
-    let buildId: string;
-    try {
-      buildId = await prisma.$transaction(async (tx) => {
-        // Numbered per (project, kind) since J9: a site's "version 4" must not
-        // count the mockup's iterations (the unique index says the same).
-        const highest = await tx.build.aggregate({
-          where: { projectId: phase.projectId, kind: 'SITE' },
-          _max: { number: true },
-        });
-        const number = nextBuildNumber(highest._max.number);
-
-        const created = await tx.build.create({
-          data: {
-            kind: 'SITE',
-            phaseId: phase.id,
-            projectId: phase.projectId,
-            number,
-            declaredById: developer.id,
-            ref: args.ref ?? null,
-          },
-        });
-
-        for (const change of args.changes) {
-          const note = change.note?.trim() || null;
-          await tx.buildChangeEntry.create({
-            data: {
-              buildId: created.id,
-              feedbackItemId: change.feedbackItemId ?? null,
-              scopeItemId: change.scopeItemId ?? null,
-              outcome: change.outcome ?? null,
-              note,
-              noteLang: note ? (change.noteLang ?? null) : null,
-            },
-          });
-
-          if (change.feedbackItemId && change.outcome) {
-            const nextStatus = nextFeedbackStatus(change.outcome);
-            if (nextStatus) {
-              // **A disposition is the developer's answer** (S2, PD-4): a
-              // staff comment carrying the resolution, direct because the
-              // caller holds `answers.direct.demo` (required above). The
-              // note is the answer's text; an ADDRESSED with none is an
-              // answer with no words — "addressed in build N" says it. Without
-              // the comment, a designer's older pending answer approved later
-              // would be judged against a ledger that is not in the thread.
-              await tx.feedbackComment.create({
-                data: {
-                  feedbackItemId: change.feedbackItemId,
-                  authorId: developer.id,
-                  body: note ?? '',
-                  resolution: nextStatus,
-                  approval: 'NOT_REQUIRED',
-                },
-              });
-              await tx.feedbackItem.update({
-                where: { id: change.feedbackItemId },
-                data: { status: nextStatus, addressedInBuildId: nextStatus === 'ADDRESSED' ? created.id : null },
-              });
-            }
-          }
-
-          if (change.scopeItemId) {
-            await tx.scopeItem.update({ where: { id: change.scopeItemId }, data: { status: 'IN_DEMO' } });
-          }
-        }
-
-        return created.id;
-      });
-    } catch (err) {
-      if (err && typeof err === 'object' && (err as { code?: unknown }).code === 'P2002') {
-        throw new GraphQLError('Someone else declared a build at the same moment — try again.', {
-          extensions: { code: 'CONCURRENT_BUILD' },
-        });
-      }
-      throw err;
-    }
+    // The rule itself — every open item disposed, each disposition a direct
+    // answer, the number the next of its kind — is `declareBuildFor`'s, which
+    // the designer's `declareMockupBuild` shares (J9b).
+    const buildId = await declareBuildFor({
+      kind: 'SITE',
+      projectId: phase.projectId,
+      phaseId: phase.id,
+      demoId: null,
+      bundleFileId: null,
+      openItems,
+      declarer: developer,
+      ref: args.ref,
+      changes: args.changes,
+      scopeItems: 'SHIP',
+    });
 
     return prisma.build.findUniqueOrThrow({ where: { id: buildId }, include: buildInclude });
   },
@@ -353,18 +196,31 @@ export const buildMutations = {
    * rule) — "a build the customer is not told about is a deployment, not a
    * version." Every FeedbackItem/ScopeItem transition already happened at
    * declareBuild; this only sets publishedAt and sends the mail.
+   *
+   * **One mutation, two surfaces** (journeys build plan J9b): a `MOCKUP` build is
+   * the designer's (`design.author` and being the contract's designer —
+   * `publishMockupBuild`, which also holds the allowance) and a `SITE` build the
+   * developer's (`builds.author` and the phase's assignment). The kind is read
+   * before either guard that needs a row, so **the first check is "do you hold
+   * either capability"**: someone with neither hears `FORBIDDEN` whatever id they
+   * name, and cannot use the two different refusals below to learn which ids are
+   * mockups. Holding the *other* surface's capability answers `NOT_FOUND` — a
+   * developer is not shown that a mockup build exists on this surface, and (as
+   * before J9b) the designer is told `FORBIDDEN` for a site build.
    */
   publishBuild: async (_p: unknown, args: { buildId: string }, ctx: Context) => {
-    requireCapability(ctx, 'builds.author');
+    const user = requireUser(ctx);
+    if (!can(user, 'builds.author') && !can(user, 'design.author')) {
+      throw new GraphQLError('You do not have access to that.', { extensions: { code: 'FORBIDDEN' } });
+    }
     const build = await prisma.build.findUnique({
       where: { id: args.buildId },
       include: { project: { include: { customer: true } }, phase: { select: { contractId: true } } },
     });
     if (!build) throw notFound('build');
-    // A MOCKUP build (J9) has no phase and is the designer's, not the
-    // developer's: this mutation is the SITE builds' publish. J9b widens it
-    // (the mockup branch, and the allowance check) rather than this file
-    // guessing at a designer guard now.
+    if (build.kind === 'MOCKUP') return publishMockupBuild(ctx, build.id);
+
+    requireCapability(ctx, 'builds.author');
     if (build.phaseId === null || !build.phase) throw notFound('build');
     await requireBuildAuthorOnPhase(ctx, build.phaseId);
     if (build.publishedAt) {

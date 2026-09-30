@@ -22,8 +22,8 @@ import type { StepKind } from '@prisma/client';
  * `timelineFor`, add its kind to `TIMELINE_KINDS` (and the SDL enum), and its
  * sentence to both locale files as `timeline.<KIND>` — `timeline.test.ts` fails
  * on a missing one. Sources still to come: scope proposals decided (J5), the
- * brief handed over (J4), invoices issued and paid (J13), design rounds and
- * mockup iterations (J8, J9), demos submitted and approved per phase (J10),
+ * brief handed over (J4), invoices issued and paid (J13), design rounds (J8; the
+ * mockup's iterations are in, J9b), demos submitted and approved per phase (J10),
  * delivery (J11).
  */
 
@@ -36,6 +36,7 @@ export const TIMELINE_KINDS = [
   'CONTRACT_SIGNED',
   'DESIGN_PUBLISHED',
   'BUILD_PUBLISHED',
+  'MOCKUP_PUBLISHED',
 ] as const;
 
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
@@ -69,6 +70,10 @@ export type TimelineInput = {
   }>;
   designRevisions: Array<{ id: string; version: number; publishedAt: Date }>;
   builds: Array<{ id: string; number: number; publishedAt: Date }>;
+  /** Published mockup iterations (J9b). `iteration` is the ordinal among the
+   *  published ones — "mockup 2" — not the build's number, which skips whenever a
+   *  declared draft was never published. Optional so a caller with none passes none. */
+  mockupBuilds?: Array<{ id: string; iteration: number; publishedAt: Date }>;
 };
 
 /** Newest first — a rail reads from the top. Ties by kind order, then id, so
@@ -108,6 +113,9 @@ export function timelineFor(input: TimelineInput): TimelineItem[] {
   }
   for (const b of input.builds) {
     item(`build-${b.id}`, b.publishedAt, 'BUILD_PUBLISHED', 'ROOT', { number: b.number });
+  }
+  for (const m of input.mockupBuilds ?? []) {
+    item(`mockup-${m.id}`, m.publishedAt, 'MOCKUP_PUBLISHED', 'ROOT', { step: 'MOCKUP', number: m.iteration });
   }
 
   return items.sort(

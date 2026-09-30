@@ -1029,6 +1029,88 @@ export function designApprovedEmail(locale: string | null | undefined, params: D
 }
 
 /**
+ * Journeys build plan J9b — a mockup iteration was published: the customer's cue
+ * to open it and comment. "Mockup 2 of 3" for the same reason the design round
+ * says "round 2 of 3" (journeys §7.4: the allowance is a promise the customer
+ * has been told about). The count is a **count** of published iterations, in the
+ * locale's own digits (house rule 14) — not the build's number, which is an
+ * identifier that skips whenever a draft is abandoned. `allowance` is null when
+ * the brief set none.
+ */
+export function mockupIterationPublishedEmail(
+  locale: string | null | undefined,
+  params: {
+    customerName: string;
+    projectTitleFa: string;
+    projectTitleEn: string;
+    iteration: number;
+    allowance: number | null;
+    portalUrl: string;
+  },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    const which =
+      params.allowance === null ? `Mockup ${params.iteration}` : `Mockup ${params.iteration} of ${params.allowance}`;
+    return {
+      subject: `${which} is ready — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${which} of <strong>${title}</strong> is ready. It is a mockup: click through it, leave a note on any page that is not right, and approve the mockup when you are happy with it.</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\n${which} of "${params.projectTitleEn}" is ready. It is a mockup: click through it, leave a note on any page that is not right, and approve the mockup when you are happy with it.\n\n${params.portalUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const iteration = countText(params.iteration, 'fa');
+  const which =
+    params.allowance === null ? `ماکتِ ${iteration}` : `ماکتِ ${iteration} از ${countText(params.allowance, 'fa')}`;
+  return {
+    subject: `${which} آماده است — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${which} «${title}» آماده است. این یک ماکت است: در آن بگرد، هر صفحه‌ای که درست نیست نکته بگذار و وقتی راضی بودی ماکت را تأیید کن.</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\n${which} «${params.projectTitleFa}» آماده است. این یک ماکت است: در آن بگرد، هر صفحه‌ای که درست نیست نکته بگذار و وقتی راضی بودی ماکت را تأیید کن.\n\n${params.portalUrl}`,
+  };
+}
+
+/**
+ * Journeys build plan J9b — to the contract's designer: the customer approved
+ * the mockup, and the step is locked from this instant. On the shape
+ * `designApprovedEmail` gave the design step, for the same reason.
+ */
+export function mockupApprovedEmail(locale: string | null | undefined, params: DesignerMailParams): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const customer = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `Mockup approved — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${customer} approved the mockup for <strong>${title}</strong>. The mockup step is now locked; the build can begin.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\n${params.customerName} approved the mockup for "${params.projectTitleEn}". The mockup step is now locked; the build can begin.\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  return {
+    subject: `ماکت تأیید شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${customer} ماکتِ «${title}» را تأیید کرد. مرحله‌ی ماکت از همین لحظه قفل شد و ساخت می‌تواند آغاز شود.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\n${params.customerName} ماکتِ «${params.projectTitleFa}» را تأیید کرد. مرحله‌ی ماکت از همین لحظه قفل شد و ساخت می‌تواند آغاز شود.\n\n${params.deskUrl}`,
+  };
+}
+
+/**
  * Journeys build plan J8 (plan §6.2, "allowance exhausted → sales") — the
  * designer tried to publish another round and the brief's allowance, and any
  * extension, is used up. Sales is the only one who can extend it (Q-S5), and

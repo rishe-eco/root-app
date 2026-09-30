@@ -559,7 +559,13 @@ export const typeDefs = /* GraphQL */ `
   """
   type Demo {
     id: ID!
-    stagingUrl: String!
+    """
+    Journeys build plan J9: a site demo (L2's live staging site) or a mockup (an
+    uploaded bundle, served by this app on a per-viewer subdomain).
+    """
+    kind: DemoKind!
+    "Null exactly for a MOCKUP demo (J9): it is served at a per-view subdomain, never at a stored URL. Ask mockupViewUrl."
+    stagingUrl: String
     "D2's build reference. A plain string until L3b's Build object exists."
     buildRef: String
     "Convention, not machinery (L2.2) — no deploy lock is implied by these dates."
@@ -577,6 +583,33 @@ export const typeDefs = /* GraphQL */ `
     unmatchedPaths: [DemoUnmatchedPath!]!
     "Every feedback item filed against this demo's pages or frame lines, newest first."
     feedbackItems: [FeedbackItem!]!
+    """
+    J9b: a MOCKUP demo's iterations, oldest first — the customer's are the published
+    ones only. Empty for a site demo, whose builds hang off its phase.
+    """
+    builds: [Build!]!
+    """
+    J9b: frame lines every mockup has that are words of the interface, not rows —
+    codes (MOCKUP_TEMPORARY) the web renders from its locale keys. Empty for a site demo.
+    """
+    fixedFrameLines: [String!]!
+    """
+    J9b, staff readers only: the page paths the newest bundle has (index.html is "/",
+    about.html is "/about") — what the desk offers when the designer maps a page.
+    """
+    bundlePages: [String!]!
+  }
+
+  "What a demo shows (journeys build plan J9)."
+  enum DemoKind {
+    MOCKUP
+    SITE
+  }
+
+  "What a build is a build of (journeys build plan J9): an uploaded mockup iteration or a state of the staging site."
+  enum BuildKind {
+    MOCKUP
+    SITE
   }
 
   # ---------------------------------------------------------------------
@@ -906,7 +939,9 @@ export const typeDefs = /* GraphQL */ `
   """
   type Build {
     id: ID!
-    "Latin figures, always (house rule 14) — project-wide and monotonic, never reset per phase."
+    "J9: a MOCKUP build is an iteration of the mockup (numbered apart from site builds)."
+    kind: BuildKind!
+    "Latin figures, always (house rule 14) — project-wide and monotonic per kind, never reset per phase."
     number: Int!
     deployedAt: DateTime!
     declaredBy: User!
@@ -1343,6 +1378,11 @@ export const typeDefs = /* GraphQL */ `
     Empty for a legacy contract, whose design is complete when "gate" says so.
     """
     designMissing: [String!]!
+    """
+    J9b: this contract's mockup (step 5) — null on the pre-made path and before the
+    designer starts it; a customer gets it once its first iteration is published.
+    """
+    mockup: Demo
     "J8: rounds granted beyond the brief. Staff readers only; empty for anyone else."
     allowanceExtensions: [AllowanceExtension!]!
     "Live — this project's whole registry, not only what is agreed. See agreedScopeItems for the frozen view."
@@ -1636,6 +1676,7 @@ export const typeDefs = /* GraphQL */ `
     CONTRACT_SIGNED
     DESIGN_PUBLISHED
     BUILD_PUBLISHED
+    MOCKUP_PUBLISHED
   }
 
   "One step of the road. A demo is one entry per phase; a new-road contract with no phase yet has one with phaseId null."
@@ -2980,10 +3021,10 @@ export const typeDefs = /* GraphQL */ `
     while any comment on it is open (STEP_HAS_OPEN_FEEDBACK) or any answer is
     waiting for sales (STEP_HAS_PENDING_ANSWERS); otherwise accepts every
     resolved item at once and locks the step (STEP_LOCKED for anything after,
-    staff included). phaseId is required for a DEMO. Only MOCKUP and DEMO are
-    approved here (STEP_NOT_APPROVABLE for the rest): the agreement is J7's gate,
-    and the steps it seals are approved with it; the design has its own door,
-    approveDesign (J8).
+    staff included). phaseId is required for a DEMO. Only DEMO is approved here
+    (STEP_NOT_APPROVABLE for the rest): the agreement is J7's gate, and the steps
+    it seals are approved with it; the design and the mockup have their own
+    doors, approveDesign (J8) and approveMockup (J9b).
     """
     approveStep(contractId: ID!, step: StepKind!, phaseId: ID): Contract!
 
@@ -3003,6 +3044,41 @@ export const typeDefs = /* GraphQL */ `
     """
     approveDesign(contractId: ID!): Contract!
 
+    # --- Step 5, the mockup (journeys build plan J9b) ---
+    """
+    Designer (design.author, and the contract's designer — NOT_ASSIGNED
+    otherwise). Starts step 5: the contract's MOCKUP demo with a page per agreed
+    PAGE item of the contract, unmapped. One per contract (MOCKUP_DEMO_EXISTS).
+    STEP_LOCKED, STEP_NOT_ON_ROAD (legacy), BRIEF_MISSING, NOT_CUSTOM (the pre-made
+    path has no mockup), DESIGN_NOT_APPROVED, NO_PAGES.
+    """
+    createMockupDemo(contractId: ID!): Contract!
+
+    """
+    Designer. Points one mockup page at a path in the bundle — about.html, /about.html
+    and /about/ are one page; a blank path unmaps it. INVALID_PATH,
+    PATH_ALREADY_MAPPED, STEP_LOCKED. Brings the frame up to date.
+    """
+    mapMockupPage(demoPageId: ID!, path: String!): Contract!
+
+    """
+    Designer (design.author + answers.direct.mockup, and the contract's designer).
+    Declares a mockup iteration from an uploaded MOCKUP_BUNDLE of this contract —
+    numbered per kind ("mockup 2"). Every open MOCKUP feedback item needs a
+    disposition (MISSING_DISPOSITION otherwise), each the designer's direct answer;
+    a change may not name a scope item (SCOPE_ITEM_NOT_ON_MOCKUP). FILE_ALREADY_USED
+    for a bundle that is already an iteration. Declaring costs nothing; publishBuild
+    spends the allowance.
+    """
+    declareMockupBuild(demoId: ID!, fileId: ID!, ref: String, changes: [BuildChangeInput!]!): Build!
+
+    """
+    The contract's own customer only (J9b). Approves the mockup: approveStep's rule
+    (STEP_HAS_OPEN_FEEDBACK, STEP_HAS_PENDING_ANSWERS) plus a published iteration
+    (NO_PUBLISHED_MOCKUP). After it every mockup mutation is STEP_LOCKED.
+    """
+    approveMockup(contractId: ID!): Contract!
+
     # --- Builds and the resolution ledger (build plan L3b) ---
     """
     Staff (builds.author). Declares a build for a phase — number is
@@ -3015,7 +3091,15 @@ export const typeDefs = /* GraphQL */ `
     change entry implies happens now, not at publishBuild.
     """
     declareBuild(phaseId: ID!, ref: String, changes: [BuildChangeInput!]!): Build!
-    "Staff (builds.author). Notifies the project's customer — a build they are not told about is a deployment, not a version. Refused a second time (ALREADY_PUBLISHED)."
+    """
+    Notifies the project's customer — a build they are not told about is a
+    deployment, not a version. Refused a second time (ALREADY_PUBLISHED). A SITE build
+    is the developer's (builds.author, and the phase's developer). A MOCKUP build
+    (J9b) is the designer's (design.author, and the contract's designer): it checks
+    the mockup allowance (ALLOWANCE_EXHAUSTED until extendAllowance admits one more),
+    refuses an older draft once a newer iteration is out (BUILD_SUPERSEDED), brings the
+    frame up to date and publishes the mockup demo with its first iteration.
+    """
     publishBuild(buildId: ID!): Build!
 
     # --- Tickets and the three channels (build plan L4) ---

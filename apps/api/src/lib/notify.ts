@@ -30,6 +30,8 @@ import {
   designOtherOptionsEmail,
   designApprovedEmail,
   allowanceExhaustedEmail,
+  mockupIterationPublishedEmail,
+  mockupApprovedEmail,
   type MailContent,
 } from './mailTemplates.js';
 import {
@@ -49,6 +51,8 @@ import {
   designOtherOptionsSms,
   designApprovedSms,
   allowanceExhaustedSms,
+  mockupIterationPublishedSms,
+  mockupApprovedSms,
 } from './smsTemplates.js';
 
 /**
@@ -72,7 +76,8 @@ import {
  * `INVOICE_ISSUED`, and since J7 `AGREEMENT_APPROVED` and `AGREEMENT_SIGNED` (to
  * sales — the moments an agreement moves), and since J8 the design step's five
  * (`DESIGN_ROUND_PUBLISHED`, `DESIGN_CONCEPT_CHOSEN`, `DESIGN_OTHER_OPTIONS_ASKED`,
- * `DESIGN_APPROVED`, `ALLOWANCE_EXHAUSTED`): a customer who
+ * `DESIGN_APPROVED`, `ALLOWANCE_EXHAUSTED`) and since J9b the mockup's two
+ * (`MOCKUP_ITERATION_PUBLISHED`, `MOCKUP_APPROVED`): a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
@@ -229,6 +234,24 @@ export type NotifyEvent =
         allowance: number;
         deskUrl: string;
       };
+    }
+  // Journeys build plan J9b — step 5, the mockup. An iteration published (to the
+  // customer: "mockup 2 of 3"), and the mockup approved (to the contract's
+  // designer, the step locked).
+  | {
+      kind: 'MOCKUP_ITERATION_PUBLISHED';
+      params: {
+        customerName: string;
+        projectTitleFa: string;
+        projectTitleEn: string;
+        iteration: number;
+        allowance: number | null;
+        portalUrl: string;
+      };
+    }
+  | {
+      kind: 'MOCKUP_APPROVED';
+      params: { recipientName: string; customerName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string };
     };
 
 /** Every event's email rendering — always defined, since every event this
@@ -287,6 +310,10 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return designApprovedEmail(locale, event.params);
     case 'ALLOWANCE_EXHAUSTED':
       return allowanceExhaustedEmail(locale, event.params);
+    case 'MOCKUP_ITERATION_PUBLISHED':
+      return mockupIterationPublishedEmail(locale, event.params);
+    case 'MOCKUP_APPROVED':
+      return mockupApprovedEmail(locale, event.params);
   }
 }
 
@@ -343,6 +370,12 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
       return designApprovedSms(locale, { deskUrl: event.params.deskUrl });
     case 'ALLOWANCE_EXHAUSTED':
       return allowanceExhaustedSms(locale, { deskUrl: event.params.deskUrl });
+    // J9b: an iteration is the customer's cue to look; the approval is the
+    // designer's cue that the step is done.
+    case 'MOCKUP_ITERATION_PUBLISHED':
+      return mockupIterationPublishedSms(locale, { portalUrl: event.params.portalUrl });
+    case 'MOCKUP_APPROVED':
+      return mockupApprovedSms(locale, { deskUrl: event.params.deskUrl });
     default:
       return null;
   }

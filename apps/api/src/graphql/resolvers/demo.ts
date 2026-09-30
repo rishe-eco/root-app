@@ -2,7 +2,7 @@ import { GraphQLError } from 'graphql';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, type Context } from '../../context.js';
 import { projectVisibleTo } from '../../lib/visibility.js';
-import { matchDemoPath } from '../../lib/demoPages.js';
+import { mappedPages, matchDemoPath } from '../../lib/demoPages.js';
 
 /**
  * `reportDemoPath` — the reporter snippet's own call (build plan L2; D2).
@@ -60,7 +60,11 @@ export const demoMutations = {
     // A MOCKUP demo is served by this app out of a zip, so its `.html` is a
     // fact about the bundle and the mapping folds it away (`stripHtml`); a
     // SITE demo's server decides that for itself and never opts in.
-    const result = matchDemoPath(args.path, demo.pages, { stripHtml: demo.kind === 'MOCKUP' });
+    // A MOCKUP page the designer has not mapped yet has no path to match (J9b,
+    // `UNMAPPED_PATH`) — left in, its empty path would fold to "/" and claim the
+    // home page.
+    const pages = demo.kind === 'MOCKUP' ? mappedPages(demo.pages) : demo.pages;
+    const result = matchDemoPath(args.path, pages, { stripHtml: demo.kind === 'MOCKUP' });
     if (result.kind === 'MATCHED') {
       const page = demo.pages.find((p) => p.id === result.pageId) ?? null;
       return { matched: true, page, normalizedPath: result.normalizedPath };
