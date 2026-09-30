@@ -92,9 +92,15 @@ export function timelineFor(input: TimelineInput): TimelineItem[] {
       phaseNumber: a.phaseNumber,
     });
   }
+  // On the new road one act writes both the AGREEMENT approval and the revision's
+  // `approvedAt` (J7: `approveContract`, one transaction, one instant) — a rail that
+  // listed "agreement approved" and "contract approved" at the same second would
+  // say one thing twice. The approval row is the fuller sentence, so the revision's
+  // own line yields to it; a legacy contract has no such row and keeps its line.
+  const agreementApprovedAt = new Set(input.approvals.filter((a) => a.step === 'AGREEMENT').map((a) => a.approvedAt.getTime()));
   for (const r of input.contractRevisions) {
     item(`revision-${r.id}`, r.publishedAt, 'REVISION_PUBLISHED', 'ROOT', { number: r.version });
-    if (r.approvedAt) item(`revision-approved-${r.id}`, r.approvedAt, 'REVISION_APPROVED', 'CUSTOMER', { number: r.version });
+    if (r.approvedAt && !agreementApprovedAt.has(r.approvedAt.getTime())) item(`revision-approved-${r.id}`, r.approvedAt, 'REVISION_APPROVED', 'CUSTOMER', { number: r.version });
     if (r.signedAt) item(`revision-signed-${r.id}`, r.signedAt, 'CONTRACT_SIGNED', 'CUSTOMER', { number: r.version });
   }
   for (const d of input.designRevisions) {

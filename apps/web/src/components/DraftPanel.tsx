@@ -18,6 +18,8 @@ import {
 } from '@/lib/queries';
 import DayInput from '@/components/DayInput';
 import FeedbackPanel, { errorCode, type FeedbackTarget } from '@/components/FeedbackPanel';
+import { PaymentSchedule } from '@/components/AgreementDocument';
+import { isPaymentScheduleArticle } from '@/lib/agreement';
 import type { StepPanelProps } from '@/components/StepPanels';
 
 /**
@@ -54,10 +56,18 @@ function refusalText(t: T, err: unknown): string {
   return code && t(`draft.error.${code}`, { defaultValue: '' }) ? t(`draft.error.${code}`) : (err as Error).message;
 }
 
-/** An article's body, or the reason there is none to show. */
-function Body({ article }: { article: Article }) {
+/**
+ * An article's body, or the reason there is none to show. **On a format-2 draft
+ * the Payment Schedule article carries the plan instead of a body** (J7's second
+ * trap): the customer reads the same schedule here that they will sign at step 3,
+ * from the same snapshot, rather than an article that looks empty.
+ */
+function Body({ article, contract }: { article: Article; contract: Contract }) {
   const { t } = useTranslation();
   const locale = useLocale();
+  if (contract.revision?.agreement && isPaymentScheduleArticle(article.number, article.titleEn)) {
+    return <PaymentSchedule revision={contract.revision} />;
+  }
   const body = locale === 'fa' ? article.bodyFa : article.bodyEn;
   if (body === null) {
     return <span className="draft-body draft-body-hidden" data-testid="draft-body-hidden">{t('draft.bodyHidden')}</span>;
@@ -237,7 +247,7 @@ export default function DraftPanel({ contract, step, audience, me, asCustomer = 
   for (const a of articles) {
     const group = `${a.number}. ${pick(a, 'title', locale)}`;
     const mine = byArticle.get(a.number) ?? [];
-    const body = <Body article={a} />;
+    const body = <Body article={a} contract={contract} />;
     mine.forEach((n, i) => targets.push(noteTarget(n, i === 0 ? body : <span className="t-caption">{t('draft.note.another')}</span>, i === 0 ? group : undefined)));
     // An article with nothing yet on the version being read offers a blank note anchored there.
     if (revision && !hasNoteOnCurrent(mine)) {

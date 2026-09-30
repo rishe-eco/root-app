@@ -100,6 +100,18 @@ async function submit(title = 'A shop for our studio', body = 'We sell prints an
   return (data.submitRequest as { id: string }).id;
 }
 
+/**
+ * Hands a converted contract to the customer. `createContract` makes a new-road
+ * contract since J7, and handing one over needs a brief row (`BRIEF_MISSING`, J4)
+ * — these tests are about what the request and the customer's list do around the
+ * hand-over, not about the brief, so a bare one (kind, type, tier) is written first.
+ */
+async function handOver(contractId: string) {
+  const type = (await prisma.templateType.findFirst()) ?? (await prisma.templateType.create({ data: { slug: 'store', labelFa: 'فروشگاهی', labelEn: 'Store' } }));
+  await prisma.contractBrief.create({ data: { contractId, kind: 'NEW_SITE', templateTypeId: type.id, designTier: 'THEME_PICK' } });
+  ok(await exec(PUBLISH, { as: staff.SALES, variables: { c: contractId } }));
+}
+
 /** Sales converts a request into a contract. */
 async function convert(projectId: string, ref = 'RC-J2-001', as: User = staff.SALES) {
   const data = ok(
@@ -411,7 +423,7 @@ test('after conversion the request is linked from the contract to the customer a
   const id = await submit();
   ok(await exec(POST, { as: f.customer, variables: { p: id, b: 'The origin of step 1.' } }));
   const contract = await convert(id);
-  ok(await exec(PUBLISH, { as: staff.SALES, variables: { c: contract.id } }));
+  await handOver(contract.id);
   await prisma.contract.update({ where: { id: contract.id }, data: { designerId: staff.DESIGNER.id } });
 
   const Q = `query($c: ID!){ contract(id: $c) { id request { id status messages { body } contractId } } }`;
@@ -435,7 +447,7 @@ test('the customer\'s list keeps a converted request until a contract on it is p
   let mine = ok(await exec(MINE, { as: f.customer })).myRequests as Array<{ id: string; status: string; contractId: string | null }>;
   assert.deepEqual(mine.map((r) => [r.id, r.status, r.contractId]), [[id, 'ACTIVE', null]], 'converted, contract not yet openable: still shown, no link');
 
-  ok(await exec(PUBLISH, { as: staff.SALES, variables: { c: contract.id } }));
+  await handOver(contract.id);
   mine = ok(await exec(MINE, { as: f.customer })).myRequests as typeof mine;
   assert.deepEqual(mine, [], 'published: the contract is the row now');
   const one = ok(await exec(ONE, { as: f.customer, variables: { p: id } })).request as { contractId: string };

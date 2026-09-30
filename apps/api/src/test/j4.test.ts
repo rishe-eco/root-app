@@ -825,7 +825,10 @@ async function sensitiveArticles() {
   // Not through `publishContractRevision`: since J6 that has gates on this road
   // (a scope, a complete brief), and these tests are about what a published
   // article reveals, not about being allowed to publish one.
-  await publishDraftDirect(f.contract.id);
+  // A format-1 revision on purpose: this is the live-row rule J4 wrote for every
+  // revision that does not freeze the flag itself (J7's format 2 does, and
+  // `j7.test.ts` holds that side).
+  await publishDraftDirect(f.contract.id, { format: 1 });
 }
 const ARTICLES = `query($c: ID!, $as: Boolean){ contract(id: $c, asCustomer: $as) { articles { number titleEn sensitive bodyFa bodyEn } draft { articles { number bodyEn sensitive } } } }`;
 type Articles = { articles: Array<{ number: number; titleEn: string; sensitive: boolean; bodyFa: string | null; bodyEn: string | null }>; draft: { articles: Array<{ number: number; bodyEn: string | null }> } | null };

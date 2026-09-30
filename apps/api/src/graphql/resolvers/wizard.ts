@@ -544,27 +544,24 @@ export const wizardMutations = {
  * `assertStepOpen` (lib/steps.ts) over the database: the call every mutation
  * that edits a step's content makes before it writes. **S2's feedback
  * mutations call it** (submit, answer, approve and decline an answer — staff
- * cannot answer on a locked step either, journeys §3.1) **and J4's step-1
+ * cannot answer on a locked step either, journeys §3.1), **J4's step-1
  * writes** (`setBrief`, `setExtra`, `setPaymentPlan`, and the phase edits, all
- * REQUIREMENTS), each after `lockContract` where it writes. Nothing can lock
- * REQUIREMENTS until J7 writes the AGREEMENT approval, so those calls cannot
- * fire yet — they land now so J7 changes nothing here. **J5's** proposals,
- * decisions and `applyScopeTemplate` (SCOPE) and **J6's** `publishContractRevision`,
- * `setPlannedDates` and `applyContractTemplate` (DRAFT) are wired the same way.
- * The rest — the other draft edits (`setArticle`, `updateContractDraft`,
- * `deleteArticle`), the registry's own edits — are J7's, which the survey below
- * lists.
+ * REQUIREMENTS), **J5's** proposals, decisions and `applyScopeTemplate` (SCOPE),
+ * and **J6's and J7's** draft writes — `publishContractRevision`,
+ * `setPlannedDates`, `applyContractTemplate`, and (J7) `setArticle`,
+ * `updateContractDraft`, `deleteArticle` (DRAFT) — each after `lockContract`
+ * where it writes. **J7 is the stage that writes the AGREEMENT approval
+ * (`approveContract`, through `approveStepTx`), so from it on every one of
+ * those calls can fire**; `j7.test.ts` holds the table of them against
+ * `STEP_LOCKED`, and a source scan there fails when a guarded write is added
+ * without a row. J7 also guards what the scope *is* in the registry
+ * (`addScopeItem`, `updateScopeItem`, `deleteScopeItem`, in `admin/registry.ts`);
+ * the registry's status, flag, decision and order edits are how a project lives
+ * after the agreement and are not locked (see `inOpenScope` there).
  *
- * The survey J3 made, so the stages that wire it need not repeat it: three
- * groups of existing mutations edit content a `StepApproval` will one day lock.
- * (1) the contract draft — `admin/contracts.ts`'s article, title, fee and
- * template edits, which are DRAFT (locked by AGREEMENT's approval, J7);
- * (2) the scope registry — `admin/registry.ts`'s item edits and trades, which
- * are SCOPE (likewise); (3) the design — all of `admin/design.ts`, which is
- * DESIGN (J8). No mutation writes a `StepApproval` before J7, so a call added
- * now could never fire — it would be dead code guarding a state that cannot
- * exist. Each of those stages adds its calls in the same commit as the
- * approval that makes them reachable.
+ * The design (all of `admin/design.ts`, DESIGN) is J8's, the mockup J9's and a
+ * demo's J10's: each adds its calls in the same commit as the approval that makes
+ * them reachable.
  *
  * Takes a transaction client so the check and the write share a snapshot.
  */

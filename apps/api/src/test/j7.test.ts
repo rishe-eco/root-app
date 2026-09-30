@@ -242,7 +242,8 @@ test('BRIEF_INCOMPLETE: step 1 must be complete — and the refusal names what i
   );
   const refused = await approve();
   assert.equal(refused.code, 'BRIEF_INCOMPLETE');
-  assert.match(JSON.stringify(refused.errors), /BUDGET_CAP/);
+  // (What is missing rides in `extensions.missing`; the client-facing error format keeps only the code, so the
+  // list is proven where it is computed — `briefCompleteness`, brief.test.ts — and its wire form by the web.)
   // No brief row at all.
   await prisma.contractBrief.deleteMany({ where: { contractId: f.contract.id } });
   assert.equal((await approve()).code, 'BRIEF_INCOMPLETE');
@@ -505,7 +506,7 @@ const lockTable: LockRow[] = [
     as: () => staff.SALES,
     run: async () => {
       // Dirty first, so the refusal cannot be the quieter NO_CHANGES.
-      await prisma.article.updateMany({ where: { contractId: f.contract.id }, data: { bodyEn: 'edited after the lock' } });
+      await prisma.contract.update({ where: { id: f.contract.id }, data: { titleEn: 'Renamed after the lock' } });
       return publish();
     },
   },
@@ -786,6 +787,30 @@ test('a published article’s sensitivity is frozen into format 2: editing the l
   assert.deepEqual(await read(f.customer), { number: 4, sensitive: true, bodyEn: 'One hundred and eighty million' });
 });
 
+test('a format-1 revision keeps J4’s rule: its articles read sensitivity from the live row, and a deleted money article falls back to the template’s — the snapshot carries no flag', async () => {
+  await prisma.article.createMany({
+    data: [
+      { contractId: f.contract.id, number: 4, titleFa: 'حق‌الزحمه', titleEn: 'Fees', bodyFa: 'مبلغ', bodyEn: 'The fee', sensitive: true },
+      { contractId: f.contract.id, number: 5, titleFa: 'ب', titleEn: 'Payment Schedule', bodyFa: 'ب', bodyEn: 'Pay', sensitive: true },
+    ],
+  });
+  const revision = await publishDraftDirect(f.contract.id, { format: 1 });
+  assert.equal(readContractSnapshot(revision.snapshot)?.format, 1);
+  assert.ok(!JSON.stringify(revision.snapshot).includes('sensitive'));
+  const bodyOf = async (as: User, n: number) =>
+    (ok(await exec('query($c: ID!){ contract(id: $c) { articles { number sensitive bodyEn } } }', { as, variables: { c: f.contract.id } })).contract as {
+      articles: Array<{ number: number; sensitive: boolean; bodyEn: string | null }>;
+    }).articles.find((a) => a.number === n)!;
+  assert.deepEqual([(await bodyOf(staff.DESIGNER, 4)).sensitive, (await bodyOf(staff.DESIGNER, 4)).bodyEn], [true, null]);
+  assert.equal((await bodyOf(f.customer, 4)).bodyEn, 'The fee');
+  // The live row is the rule for format 1: clear the flag and the body is readable…
+  await prisma.article.update({ where: { contractId_number: { contractId: f.contract.id, number: 4 } }, data: { sensitive: false } });
+  assert.equal((await bodyOf(staff.DESIGNER, 4)).bodyEn, 'The fee');
+  // …and a deleted row falls back to the template’s own rule (Fees, Payment Schedule).
+  await prisma.article.delete({ where: { contractId_number: { contractId: f.contract.id, number: 5 } } });
+  assert.deepEqual([(await bodyOf(staff.DESIGNER, 5)).sensitive, (await bodyOf(staff.DESIGNER, 5)).bodyEn], [true, null]);
+});
+
 // =================================================================================
 // trap 1 — the customer signs the whole snapshot
 // =================================================================================
@@ -913,6 +938,8 @@ test('amendment bodies: a sensitive amendment’s text is withheld from the desi
   ok(await issue(null, true, 'A fee change with no article')); // explicit, and no article at all
   const rows = await prisma.amendment.findMany({ orderBy: { ordinal: 'asc' } });
   assert.deepEqual(rows.map((r) => r.sensitive), [true, false, true]);
+  // A customer reads published amendments only — publish them, so the comparison below is about the withholding.
+  await prisma.amendment.updateMany({ data: { publishedAt: new Date() } });
 
   const read = async (as: User, asCustomer = false) =>
     (ok(
@@ -932,9 +959,6 @@ test('amendment bodies: a sensitive amendment’s text is withheld from the desi
   assert.deepEqual(asDesigner.map((a) => a.contentHash), (await read(f.customer)).map((a) => a.contentHash));
   // Sales viewing as the customer is asked about the customer.
   assert.deepEqual(bodies(await read(staff.SALES, true)), bodies(await read(f.customer)));
-  // Published, the same: the withholding is on the field, not on a draft state.
-  await prisma.amendment.updateMany({ data: { publishedAt: new Date() } });
-  assert.deepEqual(bodies(await read(staff.DESIGNER)), [null, 'Plain scope wording', null]);
 
   // updateAmendment: an unpublished one re-pointed at a sensitive article never becomes readable; the desk can set it either way.
   const fresh = await prisma.amendment.create({
@@ -984,6 +1008,7 @@ test('the amendment sensitive migration backfilled exactly what a rule could hav
 test('approving tells sales and signing tells sales — email and SMS, in each recipient’s language', async () => {
   await ready();
   await prisma.user.update({ where: { id: staff.SALES.id }, data: { phone: '+989120000102', locale: 'fa' } });
+  await prisma.user.update({ where: { id: f.admin.id }, data: { locale: 'en' } });
   mail.length = 0;
   sms.length = 0;
 

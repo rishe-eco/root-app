@@ -104,3 +104,25 @@ test('every kind has a sentence in both locale files, and the SDL enum lists exa
   const block = /enum TimelineKind \{([^}]*)\}/.exec(sdl)?.[1] ?? '';
   assert.deepEqual(block.split(/\s+/).filter(Boolean), [...TIMELINE_KINDS]);
 });
+
+test('J7: one act, one line — a revision approved at the very instant of the agreement’s approval is not listed twice; a different instant is', () => {
+  const at = d(9, 10);
+  const same = timelineFor(
+    empty({
+      approvals: [{ id: 'a1', step: 'AGREEMENT', phaseNumber: null, approvedAt: at, approvedById: 'cust' }],
+      contractRevisions: [{ id: 'r1', version: 1, publishedAt: d(3), approvedAt: at, signedAt: d(10) }],
+    }),
+  );
+  assert.deepEqual(same.map((i) => i.kind), ['CONTRACT_SIGNED', 'STEP_APPROVED', 'REVISION_PUBLISHED']);
+  // The legacy road writes no such row, and its approval line is unchanged.
+  const legacy = timelineFor(empty({ contractRevisions: [{ id: 'r1', version: 1, publishedAt: d(3), approvedAt: at, signedAt: null }] }));
+  assert.deepEqual(legacy.map((i) => i.kind), ['REVISION_APPROVED', 'REVISION_PUBLISHED']);
+  // An earlier v1 approval and a later agreement approval are two events.
+  const two = timelineFor(
+    empty({
+      approvals: [{ id: 'a1', step: 'AGREEMENT', phaseNumber: null, approvedAt: d(9, 10), approvedById: 'cust' }],
+      contractRevisions: [{ id: 'r1', version: 1, publishedAt: d(3), approvedAt: d(8), signedAt: null }],
+    }),
+  );
+  assert.ok(two.some((i) => i.kind === 'REVISION_APPROVED'));
+});

@@ -150,7 +150,7 @@ function PhasesSection({ revision }: { revision: ContractRevision }) {
 }
 
 /** The payment plan as a schedule — rendered under Article 5's title, in place of a body. */
-function PaymentSchedule({ revision }: { revision: ContractRevision }) {
+export function PaymentSchedule({ revision }: { revision: ContractRevision }) {
   const { t } = useTranslation();
   const locale = useLocale();
   const plan = revision.agreement?.paymentPlan;

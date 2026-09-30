@@ -194,15 +194,15 @@ test('the migration backfills existing contracts DESIGN_FIRST and leaves new one
   assert.match(col.column_default, /AGREEMENT_FIRST/);
 });
 
-test('createContract states its sequence: DESIGN_FIRST until J7 builds the agreement gate', async () => {
+test('createContract states its sequence: AGREEMENT_FIRST — J7 flipped SEQUENCE_FOR_NEW_CONTRACTS once the gate existed', async () => {
   const data = ok(
     await exec(
       `mutation($i: CreateContractInput!){ createContract(input: $i) { id sequence } }`,
       { as: staff.SALES, variables: { i: { customerId: f.customer.id, ref: 'RC-J3-NEW', titleFa: 'ج', titleEn: 'J3' } } },
     ),
   );
-  assert.equal((data.createContract as { sequence: string }).sequence, 'DESIGN_FIRST');
-  // A row made straight through Prisma takes the schema's default.
+  assert.equal((data.createContract as { sequence: string }).sequence, 'AGREEMENT_FIRST');
+  // A row made straight through Prisma takes the schema's default — the same road, now that the resolver's stated value agrees with it.
   const direct = await prisma.contract.create({
     data: { ref: 'RC-J3-DIRECT', titleFa: 'م', titleEn: 'Direct', customerId: f.customer.id, projectId: f.contract.projectId },
   });
@@ -291,12 +291,14 @@ test('an AGREEMENT_FIRST contract starts at requirements, is Root’s move, and 
     data: { contractId: f.contract.id, step: 'AGREEMENT', approvedById: f.admin.id, approvedAt: new Date('2026-09-20T10:00:00Z') },
   });
   v = await view(f.customer);
+  // **Done means signed** (J7): approved-and-unsigned is locked, and still the
+  // current step — the customer signs next.
   assert.deepEqual(steps(v), [
     'REQUIREMENTS=DONE',
     'SCOPE=DONE',
     'DRAFT=DONE',
-    'AGREEMENT=DONE',
-    'DESIGN=CURRENT',
+    'AGREEMENT=CURRENT',
+    'DESIGN=UPCOMING',
     'DEMO=UPCOMING',
     'SUMMARY=UPCOMING',
   ]);
@@ -314,6 +316,16 @@ test('an AGREEMENT_FIRST contract starts at requirements, is Root’s move, and 
   v = await view(f.customer);
   assert.equal(v.statusSummary.started, true);
   assert.equal(v.statusSummary.startedAt, signature.signedAt.toISOString());
+  // …and the signature is what completes the agreement and moves the road on.
+  assert.deepEqual(steps(v), [
+    'REQUIREMENTS=DONE',
+    'SCOPE=DONE',
+    'DRAFT=DONE',
+    'AGREEMENT=DONE',
+    'DESIGN=CURRENT',
+    'DEMO=UPCOMING',
+    'SUMMARY=UPCOMING',
+  ]);
 });
 
 test('each contract’s road has the phases it delivers (J4, PD-5); one with none gets the placeholder demo', async () => {

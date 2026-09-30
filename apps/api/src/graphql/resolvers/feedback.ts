@@ -681,10 +681,13 @@ export const feedbackMutations = {
    * customer accepts a step, not items one by one, and nothing Root does can
    * close the loop for them.
    *
-   * Which steps: DESIGN, MOCKUP and DEMO. The agreement is J7's gate (the
-   * signature, the payment plan, the phases' dates) and a bare approval here
-   * would let a customer lock steps 1–3 without any of it; REQUIREMENTS,
-   * SCOPE and DRAFT are sealed by that approval, never approved alone. J8–J10
+   * Which steps: DESIGN, MOCKUP and DEMO. The agreement is J7's gate and has
+   * its own door — `approveContract` on an `AGREEMENT_FIRST` contract, which
+   * checks the scope, the payment plan, the phases' dates and the brief before
+   * calling `approveStepTx(AGREEMENT)` — and a bare approval here would let a
+   * customer lock steps 1–3 without any of it, so this **keeps refusing
+   * AGREEMENT** (J7 left it so on purpose); REQUIREMENTS, SCOPE and DRAFT are
+   * sealed by that approval, never approved alone. J8–J10
    * replace this door for their step with their own, passing their own
    * preconditions to the same `approveStepTx`. A `DESIGN_FIRST` contract
    * approves through its own gate and never through here.

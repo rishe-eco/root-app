@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
-import { buildContractSnapshot, contentHash } from '../lib/revision.js';
+import { buildContractSnapshot, contentHash, draftState } from '../lib/revision.js';
+import { agreedScopeSnapshot } from '../lib/scope.js';
 import { draftStateOn } from '../graphql/resolvers/agreement.js';
 import { loadContract } from '../graphql/resolvers/contracts.js';
 // The same singleton the resolvers use, deliberately — a second client would
@@ -228,13 +229,21 @@ export async function approveContract(fixture: Fixture) {
  * must not have to satisfy the new road's gates (J6: `SCOPE_UNCONFIRMED`,
  * `BRIEF_INCOMPLETE`) to get one. A test about the gates uses the mutation.
  */
-export async function publishDraftDirect(contractId: string) {
+export async function publishDraftDirect(contractId: string, opts: { format?: 1 } = {}) {
   // **In the road's own format** (J7): a new-road contract's draft is a format-2
   // snapshot, and one published as format 1 would read as stale to the agreement
   // gate the moment a test tried to approve it. `draftStateOn` is the very
   // computation `publishContractRevision` makes, minus the gates.
+  //
+  // `format: 1` asks for the old shape on purpose, for a test whose subject is what
+  // a *format-1* revision does (J4's sensitive-article rule reads the live row
+  // for one; a legacy contract's revision, and every revision published before J7,
+  // is one) — the fixture is on the new road, whose own revisions are format 2.
   const contract = (await loadContract(contractId))!;
-  const { snapshot, hash } = await draftStateOn(prisma, contract);
+  const { snapshot, hash } =
+    opts.format === 1
+      ? draftState(contract, contract.articles, contract.currentContractRevision, agreedScopeSnapshot(contract.project.scopeItems))
+      : await draftStateOn(prisma, contract);
   const latest = await prisma.contractRevision.findFirst({ where: { contractId }, orderBy: { version: 'desc' } });
   const now = new Date();
   const revision = await prisma.contractRevision.create({
