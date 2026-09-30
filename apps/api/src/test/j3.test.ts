@@ -302,10 +302,18 @@ test('an AGREEMENT_FIRST contract starts at requirements, is Root’s move, and 
   ]);
   assert.deepEqual(v.wizard.filter((w) => w.locked).map((w) => w.step), ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT']);
   assert.ok(v.wizard.filter((w) => w.locked).every((w) => w.lockedAt === approval.approvedAt.toISOString()));
-  assert.equal(v.statusSummary.started, true);
-  assert.equal(v.statusSummary.startedAt, approval.approvedAt.toISOString());
+  // Approved is not signed (J13 review): the steps lock, but "started" waits
+  // for the signature — `agreementSignedAt` reads only the revision's signature.
+  assert.equal(v.statusSummary.started, false);
   // The timeline names it, from the row itself (PD-17).
   assert.ok(v.timeline.some((t) => t.kind === 'STEP_APPROVED' && t.step === 'AGREEMENT' && t.by === 'ROOT'));
+
+  const signature = await prisma.signature.create({
+    data: { contractRevisionId: f.contractRevision.id, signerId: f.customer.id, typedName: 'Customer', signedHash: f.contractRevision.contentHash },
+  });
+  v = await view(f.customer);
+  assert.equal(v.statusSummary.started, true);
+  assert.equal(v.statusSummary.startedAt, signature.signedAt.toISOString());
 });
 
 test('each contract’s road has the phases it delivers (J4, PD-5); one with none gets the placeholder demo', async () => {
