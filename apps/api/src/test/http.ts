@@ -1,10 +1,20 @@
 import express from 'express';
+import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import { ApolloServer } from '@apollo/server';
+import { expressMiddleware } from '@apollo/server/express4';
 import type { Server } from 'node:http';
 import type { User } from '@prisma/client';
 
 import { filesRouter, filesErrorHandler } from '../routes/files.js';
 import { askRouter, askErrorHandler } from '../routes/ask.js';
+import { smsOutboxRouter } from '../routes/smsOutbox.js';
+import { mockupFence } from '../routes/mockups.js';
+import { typeDefs } from '../graphql/typeDefs.js';
+import { resolvers } from '../graphql/resolvers/index.js';
+import { buildContext, type Context } from '../context.js';
+import { errorLogging, formatError } from '../lib/logging.js';
+import { enforceTokenScope } from '../lib/tokenScope.js';
 import { signSession } from '../auth/tokens.js';
 import { env } from '../lib/env.js';
 import { originCheck } from '../lib/originCheck.js';
@@ -156,4 +166,57 @@ export async function upload(base: string, opts: UploadOpts = {}) {
   });
   const json = res.ok || res.status < 500 ? await res.json().catch(() => null) : null;
   return { status: res.status, body: json as Record<string, string> | null };
+}
+
+/**
+ * The whole application, wired in `index.ts`'s order — for the one thing that
+ * can only be shown against all of it at once: **that a request on the mockup
+ * host reaches none of it** (journeys build plan J9, trap 1). `/graphql`,
+ * `/upload`, `/files`, `/ask`, `/health` and the e2e route are all mounted here,
+ * exactly as `index.ts` mounts them, *after* the fence — so a test that sends a
+ * mockup `Host` to each of them is a test of the real ordering, and one that
+ * sends the portal's `Host` proves the routes were reachable to begin with.
+ *
+ * `index.ts` cannot be imported (it listens, and awaits a running Apollo), so
+ * this mirrors it, as `startFileServer` does; `j9a.test.ts` reads `index.ts` as
+ * text to keep the fence first there, which is the half this cannot prove.
+ */
+export async function startFullApp(): Promise<{ base: string; port: number; close: () => Promise<void> }> {
+  const app = express();
+  app.use(mockupFence);
+  app.set('trust proxy', env.TRUST_PROXY_HOPS);
+  app.use(cookieParser());
+  app.use(cors({ origin: env.APP_ORIGIN, credentials: true }));
+  app.use(originCheck);
+  app.use(filesRouter);
+  app.use(askRouter);
+  app.use(smsOutboxRouter);
+  app.get('/health', (_req, res) => {
+    res.json({ ok: true });
+  });
+
+  const apollo = new ApolloServer<Context>({ typeDefs, resolvers, plugins: [errorLogging, enforceTokenScope], formatError });
+  await apollo.start();
+  app.use(
+    '/graphql',
+    express.json({ limit: '1mb' }),
+    expressMiddleware(apollo, { context: async ({ req, res }) => buildContext(req, res) }),
+  );
+  app.use(filesErrorHandler);
+  app.use(askErrorHandler);
+
+  const server: Server = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const addr = server.address();
+  if (addr === null || typeof addr === 'string') throw new Error('no port');
+
+  return {
+    base: `http://127.0.0.1:${addr.port}`,
+    port: addr.port,
+    close: async () => {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await apollo.stop();
+    },
+  };
 }

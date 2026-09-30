@@ -62,7 +62,7 @@ async function seedDemo(opts: { decided?: boolean } = {}) {
   const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   const demo = await prisma.demo.create({
-    data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com', publishedAt: new Date() },
+    data: { projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com', publishedAt: new Date() },
   });
   const home = await prisma.demoPage.create({ data: { demoId: demo.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' } });
   const about = await prisma.demoPage.create({ data: { demoId: demo.id, key: 'about', labelFa: 'درباره', labelEn: 'About', canonicalPath: '/about' } });
@@ -629,7 +629,7 @@ test('the same demo page through the second contract of a project is not a threa
   const ownPhase = await prisma.phase.create({
     data: { projectId: f.contract.projectId, contractId: second.id, number: 1, titleFa: 'فاز دوم', titleEn: 'Own phase' },
   });
-  const ownDemo = await prisma.demo.create({ data: { phaseId: ownPhase.id, stagingUrl: 'https://own.example.com', publishedAt: new Date() } });
+  const ownDemo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: ownPhase.id, stagingUrl: 'https://own.example.com', publishedAt: new Date() } });
   const ownPage = await prisma.demoPage.create({
     data: { demoId: ownDemo.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' },
   });
@@ -835,7 +835,7 @@ test('the build queue is the demo step’s, on the phase: another step’s open 
   const requirements = await submitOk('REQUIREMENTS', { general: true }, 'a note on the brief');
   const design = await submitOk('DESIGN', { general: true }, 'a note on the design');
   const otherPhase = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 2, titleFa: 'فاز ۲', titleEn: 'Phase 2' } });
-  const otherDemo = await prisma.demo.create({ data: { phaseId: otherPhase.id, stagingUrl: 'https://two.example.com', publishedAt: new Date() } });
+  const otherDemo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: otherPhase.id, stagingUrl: 'https://two.example.com', publishedAt: new Date() } });
   const otherPage = await prisma.demoPage.create({ data: { demoId: otherDemo.id, key: 'p2', labelFa: 'ب', labelEn: 'p2', canonicalPath: '/p2' } });
   const phase2Item = await submitOk('DEMO', { demoId: otherDemo.id, demoPageId: otherPage.id }, 'phase two note', { phaseId: otherPhase.id });
 
@@ -1125,7 +1125,7 @@ test('the migration’s backfill and guard, run over a legacy-shaped row: projec
   // database has no composite key tying a phase's contract to its own project,
   // and the guard under test looks the project's primary contract up by project.)
   const orphanPhase = await prisma.phase.create({ data: { projectId: orphanProject.id, contractId: f.contract.id, number: 99, titleFa: 'ف', titleEn: 'p' } });
-  const orphanDemo = await prisma.demo.create({ data: { phaseId: orphanPhase.id, stagingUrl: 'https://o.example.com' } });
+  const orphanDemo = await prisma.demo.create({ data: { projectId: orphanProject.id, phaseId: orphanPhase.id, stagingUrl: 'https://o.example.com' } });
   const orphanPage = await prisma.demoPage.create({ data: { demoId: orphanDemo.id, key: 'o', labelFa: 'ا', labelEn: 'o', canonicalPath: '/o' } });
   await assert.rejects(
     () =>

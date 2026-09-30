@@ -142,8 +142,15 @@ export type PathMatch =
  * (creating or bumping a DemoUnmatchedPath row) calls this rather than
  * re-deriving "matched or not" itself.
  */
-export function matchDemoPath(rawPath: string, pages: DemoPageDeclaration[]): PathMatch {
-  const normalizedPath = normalizePath(rawPath);
-  const page = pages.find((p) => normalizePath(p.canonicalPath) === normalizedPath);
+export function matchDemoPath(
+  rawPath: string,
+  pages: DemoPageDeclaration[],
+  options: NormalizePathOptions = {},
+): PathMatch {
+  // Both sides go through the same options: a declared `/about.html` and a
+  // reported `/about` must meet in the same canonical form, or a MOCKUP page
+  // mapped with its extension could never be matched by the report.
+  const normalizedPath = normalizePath(rawPath, DEFAULT_LOCALES, options);
+  const page = pages.find((p) => normalizePath(p.canonicalPath, DEFAULT_LOCALES, options) === normalizedPath);
   return page ? { kind: 'MATCHED', pageId: page.id, normalizedPath } : { kind: 'UNMATCHED', normalizedPath };
 }

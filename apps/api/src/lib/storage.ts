@@ -12,12 +12,16 @@
  */
 
 import { createReadStream } from 'node:fs';
-import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 
 import { env } from './env.js';
+
+/** Beside `public/` and `private/`, never under either: Nginx serves the first
+ *  by location match alone, and an upload in flight is neither's. */
+const TEMP_DIR = 'tmp';
 
 /** Mirrors `FileVisibility` in the schema; kept as a string union so this
  *  module does not depend on the Prisma client. */
@@ -31,6 +35,19 @@ export type Storage = {
   url(key: string): string;
   /** An open stream for the bytes, for the private-serving route. */
   read(key: string): Readable;
+  /**
+   * A fresh path to receive an upload into (journeys build plan D-9): under
+   * `STORAGE_DIR/tmp`, so the rename in `adopt` stays on one filesystem and is
+   * atomic. The caller removes the file itself on every failure path; nothing
+   * else ever will.
+   */
+  tempPath(): Promise<string>;
+  /**
+   * Moves a finished temp file into place and returns the key — `put` for bytes
+   * that were streamed to disk instead of held in memory. The same key scheme,
+   * the same modes, the same atomic rename.
+   */
+  adopt(visibility: Visibility, tempFile: string, ext: string): Promise<string>;
   /** Absolute path on disk. Only for code that must hand a path to the OS. */
   path(key: string): string;
   remove(key: string): Promise<void>;
@@ -94,6 +111,29 @@ export function createLocalStorage(root: string, publicBase: string): Storage {
       return key;
     },
 
+    async tempPath() {
+      const dir = join(base, TEMP_DIR);
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      return join(dir, `${randomUUID()}.part`);
+    },
+
+    async adopt(visibility, tempFile, ext) {
+      const from = resolve(tempFile);
+      // Only files this layer handed out: an adopted path outside the temp
+      // directory would be a caller moving an arbitrary file into the store.
+      if (!from.startsWith(join(base, TEMP_DIR) + sep)) {
+        throw new Error(`Refusing to adopt a file outside STORAGE_DIR's temp directory: ${tempFile}`);
+      }
+      const key = makeKey(visibility, ext);
+      const full = resolveKey(base, key);
+      await mkdir(dirname(full), { recursive: true });
+      // Same reasoning as the modes in `put`: the receiver created the file
+      // 0600; a PUBLIC one must be readable by Nginx's user.
+      await chmod(from, visibility === 'PUBLIC' ? 0o644 : 0o600);
+      await rename(from, full);
+      return key;
+    },
+
     url(key) {
       if (!key.startsWith('public/')) {
         throw new Error(
@@ -137,6 +177,7 @@ export async function ensureStorageReady(): Promise<void> {
   // public/, and has no business in private/.
   await mkdir(join(base, 'public'), { recursive: true, mode: 0o755 });
   await mkdir(join(base, 'private'), { recursive: true, mode: 0o700 });
+  await mkdir(join(base, TEMP_DIR), { recursive: true, mode: 0o700 });
 }
 
 export { makeKey as __makeKeyForTests, resolveKey as __resolveKeyForTests };

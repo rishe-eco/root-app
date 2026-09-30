@@ -729,7 +729,7 @@ test('a developer’s claim on a phase is its own contract’s developer — not
 
   // And so does the queue: an item on the other contract's demo is not in this developer's.
   const item = async (contractId: string, phaseId: string, key: string) => {
-    const demo = await prisma.demo.create({ data: { phaseId, stagingUrl: `https://${key}.example.com`, publishedAt: new Date() } });
+    const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId, stagingUrl: `https://${key}.example.com`, publishedAt: new Date() } });
     const page = await prisma.demoPage.create({ data: { demoId: demo.id, key, labelFa: 'ا', labelEn: key, canonicalPath: `/${key}` } });
     return prisma.feedbackItem.create({
       data: { projectId: f.contract.projectId, contractId, step: 'DEMO', phaseId, demoId: demo.id, demoPageId: page.id },

@@ -35,6 +35,42 @@ export function defaultCookieName(nodeEnv: string): string {
 }
 
 /**
+ * Journeys build plan J9, PD-8/PD-9: the domain every mockup view is served
+ * under — `<grant-id>.<MOCKUP_BASE_DOMAIN>`. `mockup.localhost` in development
+ * and e2e, because every real browser resolves `*.localhost` to loopback with
+ * no DNS and no hosts-file entry; `mockup.m-root.com` in production, the
+ * wildcard PD-8 puts every mockup under (and the one `frame-src` in the portal's
+ * CSP names). A pure function of `NODE_ENV` for the same reason
+ * `defaultCookieName` is: a schema default cannot see a sibling field.
+ */
+export function defaultMockupBaseDomain(nodeEnv: string): string {
+  return nodeEnv === 'production' ? 'mockup.m-root.com' : 'mockup.localhost';
+}
+
+/** A bare host name: dotted labels, no scheme, port, path or wildcard. What
+ *  `grantIdFromHost` compares a request's `Host` against, so a value with a
+ *  port or a `*.` in it would silently match nothing at all. */
+const HOST_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+
+/**
+ * Refuses a `MOCKUP_BASE_DOMAIN` that could not work (not a bare host name) or
+ * that would be dangerous in production (`*.localhost` — a mockup URL nobody
+ * outside the machine can open). Exported and tested on its own
+ * (`env.test.ts`), like `assertCookieNameIsHardened`.
+ */
+export function assertMockupBaseDomain(nodeEnv: string, domain: string): void {
+  if (!HOST_NAME.test(domain)) {
+    throw new Error(
+      'Invalid environment:\n  - MOCKUP_BASE_DOMAIN must be a bare lowercase host name ' +
+        '(e.g. mockup.m-root.com) — no scheme, port, path or wildcard',
+    );
+  }
+  if (nodeEnv === 'production' && (domain === 'localhost' || domain.endsWith('.localhost'))) {
+    throw new Error('Invalid environment:\n  - MOCKUP_BASE_DOMAIN must not be a .localhost name in production');
+  }
+}
+
+/**
  * The trap changing the default alone would leave open: an operator's
  * existing `.env` (or `docker-compose.prod.yml`'s own `${COOKIE_NAME:-…}`
  * fallback, before this change) sets `COOKIE_NAME=root_session` explicitly,
@@ -82,6 +118,11 @@ const schema = z.object({
    * after `safeParse` returns.
    */
   COOKIE_NAME: z.string().optional(),
+  /**
+   * The mockup host's base domain (journeys build plan J9). No schema default —
+   * see `defaultMockupBaseDomain`; validated by `assertMockupBaseDomain` below.
+   */
+  MOCKUP_BASE_DOMAIN: z.preprocess(emptyToUndefined, z.string().optional()),
   SESSION_DAYS: z.coerce.number().default(14),
   INVITE_DAYS: z.coerce.number().default(14),
   RESET_HOURS: z.coerce.number().default(2),
@@ -247,9 +288,13 @@ if (parsed.data.NODE_ENV === 'production' && !parsed.data.SMS_PROVIDER) {
 const cookieName = parsed.data.COOKIE_NAME ?? defaultCookieName(parsed.data.NODE_ENV);
 assertCookieNameIsHardened(parsed.data.NODE_ENV, cookieName);
 
+const mockupBaseDomain = (parsed.data.MOCKUP_BASE_DOMAIN ?? defaultMockupBaseDomain(parsed.data.NODE_ENV)).toLowerCase();
+assertMockupBaseDomain(parsed.data.NODE_ENV, mockupBaseDomain);
+
 export const env = {
   ...parsed.data,
   COOKIE_NAME: cookieName,
+  MOCKUP_BASE_DOMAIN: mockupBaseDomain,
   // Development and test write beside the app, which is fine precisely because
   // nothing there is swapped out from under them.
   STORAGE_DIR: parsed.data.STORAGE_DIR ?? fileURLToPath(new URL('../../storage', import.meta.url)),

@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { grantIdFromHost, mockupUrl } from './mockupHost.js';
+import { grantIdFromHost, isMockupHost, mockupUrl } from './mockupHost.js';
 
 const BASE = 'mockup.m-root.com';
 const ID = 'abcdef0123456789abcdef0123456789'; // 32 lowercase hex characters
@@ -71,5 +71,45 @@ describe('mockupUrl', () => {
       mockupUrl(ID, 'mockup.localhost', { protocol: 'http', port: 4101 }),
       `http://${ID}.mockup.localhost:4101/`,
     );
+  });
+});
+
+describe('isMockupHost — the fence is wider than the parser', () => {
+  test('the base domain itself, and everything under it, is a mockup host', () => {
+    for (const host of [
+      BASE,
+      `${ID}.${BASE}`,
+      `${ID}.${BASE}:4101`,
+      `abc.${BASE}`, // one label, not a grant id
+      `a.b.${BASE}`, // two labels
+      `${ID.toUpperCase()}.${BASE.toUpperCase()}`,
+      `${ID}.${BASE}.`, // the DNS root label spelled out
+    ]) {
+      assert.equal(isMockupHost(host, BASE), true, host);
+    }
+  });
+
+  test('exactly the hosts grantIdFromHost refuses are still inside the fence', () => {
+    // The point of the second function: these all parse to null, and none of
+    // them may reach the portal.
+    for (const host of [BASE, `abc.${BASE}`, `a.b.${BASE}`, `${'z'.repeat(32)}.${BASE}`]) {
+      assert.equal(grantIdFromHost(host, BASE), null, host);
+      assert.equal(isMockupHost(host, BASE), true, host);
+    }
+  });
+
+  test('unrelated hosts, the portal, and look-alikes are outside it', () => {
+    for (const host of [
+      '',
+      'app.m-root.com',
+      'm-root.com',
+      `${ID}.staging.m-root.com`,
+      `x${BASE}`, // no separating dot
+      `${BASE}.evil.com`, // the base domain as a prefix of someone else's
+      'localhost:5173',
+      '127.0.0.1:4000',
+    ]) {
+      assert.equal(isMockupHost(host, BASE), false, host);
+    }
   });
 });

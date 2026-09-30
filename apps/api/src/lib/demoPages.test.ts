@@ -131,10 +131,9 @@ test('with the option, only a trailing ".html" is folded — one elsewhere in th
 
 test('the option composes with matchDemoPath, e.g. a declared "/about" matches a reported "/about.html"', () => {
   const mockupPages = [{ id: 'p1', canonicalPath: '/about' }];
-  // matchDemoPath itself does not take the option (it is demo-kind-agnostic
-  // today, per the file's own header comment) — this asserts the pieces the
-  // MOCKUP resolver (J9, later) will actually combine still agree once it
-  // normalizes both sides with the option itself.
+  // The pieces `matchDemoPath` combines when handed the option (J9a: it now
+  // takes one, and `reportDemoPath` passes it for MOCKUP demos only) agree once
+  // both sides are normalized with it.
   assert.equal(
     normalizePath('/about.html', undefined, { stripHtml: true }),
     normalizePath(mockupPages[0].canonicalPath, undefined, { stripHtml: true }),
@@ -174,4 +173,23 @@ test('matchDemoPath treats an undeclared pagination path as unmatched, not a fuz
 
 test('matchDemoPath with no declared pages always reports unmatched', () => {
   assert.equal(matchDemoPath('/anything', []).kind, 'UNMATCHED');
+});
+
+test('matchDemoPath with { stripHtml } folds .html on both sides — a mapped "/about" or "/about.html" matches a reported "/about.html", "/about" or "/about/index.html"', () => {
+  for (const declared of ['/about', '/about.html', '/about/index.html']) {
+    for (const reported of ['/about.html', '/about', '/about/', '/about/index.html', '/fa/about.html']) {
+      assert.deepEqual(
+        matchDemoPath(reported, [{ id: 'p', canonicalPath: declared }], { stripHtml: true }),
+        { kind: 'MATCHED', pageId: 'p', normalizedPath: '/about' },
+        `${declared} vs ${reported}`,
+      );
+    }
+  }
+});
+
+test('matchDemoPath without the option is untouched by it: "/about.html" and "/about" stay two pages (a SITE demo\'s own server decides)', () => {
+  const pages = [{ id: 'p', canonicalPath: '/about' }];
+  assert.equal(matchDemoPath('/about.html', pages).kind, 'UNMATCHED');
+  assert.equal(matchDemoPath('/about', pages).kind, 'MATCHED');
+  assert.equal(matchDemoPath('/about.html', pages, { stripHtml: false }).kind, 'UNMATCHED');
 });

@@ -43,6 +43,11 @@ COPY apps/web/package.json apps/web/
 RUN npm ci --workspace=apps/api --include-workspace-root
 
 COPY apps/api apps/api
+# The demo reporter snippet: the mockup router serves it at /__root/reporter.js
+# (journeys build plan J9). It lives at the repo root, outside apps/api, so it
+# does not come over with the line above — routes/mockups.ts finds it by walking
+# up from its own directory to /app/snippets/.
+COPY snippets snippets
 RUN npm run prisma:generate --workspace=apps/api
 
 # Check the header's claim rather than trusting it. Everything above can be

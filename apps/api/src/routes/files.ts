@@ -18,16 +18,19 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { rm } from 'node:fs/promises';
 
 import { prisma } from '../lib/prisma.js';
 import { buildContext } from '../context.js';
 import { storage } from '../lib/storage.js';
-import { UploadError, checkSize, policyFor, safeDownloadName, sniff } from '../lib/files.js';
+import { UploadError, checkSize, policyFor, safeDownloadName, sniff, type ClassPolicy } from '../lib/files.js';
+import { receiveFilePart } from '../lib/multipartStream.js';
+import { validateBundle } from '../lib/mockupBundle.js';
 import { can } from '../lib/capabilities.js';
-import { canAuthorDesign, contractVisibleTo } from '../lib/visibility.js';
+import { canAuthorDesign, contractVisibleTo, contractVisibleToStaff } from '../lib/visibility.js';
 import { hasToolGrant } from '../lib/toolGrants.js';
 import { canSeeThemePreview } from '../lib/themes.js';
-import type { LibraryEntry } from '@prisma/client';
+import type { FileClass, LibraryEntry, User } from '@prisma/client';
 
 export const filesRouter: Router = Router();
 
@@ -70,6 +73,98 @@ async function readBodyCapped(req: Request, cap: number): Promise<Buffer> {
  *  boundary — on top of the file itself. The file's own size is checked
  *  separately, after parsing, against the exact class limit. */
 const ENVELOPE_SLACK = 64 * 1024;
+
+/**
+ * The streamed upload (journeys build plan D-9) — for the one class whose
+ * ceiling is too large to buffer (`policy.streamed`, a 50 MB mockup bundle).
+ *
+ * The body goes to a temp file under `STORAGE_DIR` with a running byte count
+ * (`lib/multipartStream.ts` — refused at the cap with `FILE_TOO_LARGE`, the
+ * file removed), its first bytes are sniffed (a zip), `validateBundle` reads the
+ * central directory (`BUNDLE_*`), and only then is the file moved into place
+ * with the same atomic rename `storage.put` uses (`storage.adopt`). A file that
+ * fails any step is removed; nothing half-received is ever a stored file.
+ *
+ * The owner and uploader checks — the caller is `design.author` **and** this
+ * contract's designer (house rule 2) — already ran in the handler above, before
+ * a byte of the body was read: an upload that will be refused for who is
+ * sending it should not be received first.
+ */
+function discardRest(req: Request, ceiling: number): void {
+  let seen = 0;
+  req.on('data', (chunk: Buffer) => {
+    seen += chunk.length;
+    if (seen > ceiling) req.destroy();
+  });
+  req.on('error', () => undefined);
+  req.resume();
+}
+
+async function receiveStreamedUpload(
+  req: Request,
+  args: { user: User; fileClass: FileClass; policy: ClassPolicy; contractId: string; contentType: string },
+) {
+  const { user, fileClass, policy, contractId, contentType } = args;
+
+  // Same courtesy as `readBodyCapped`: an honest client that says its size up
+  // front is refused before the transfer, not after 50 MB of it.
+  const declared = Number(req.headers['content-length'] ?? NaN);
+  if (Number.isFinite(declared) && declared > policy.maxBytes + ENVELOPE_SLACK) {
+    throw new UploadError(413, 'FILE_TOO_LARGE', 'That upload is larger than this kind allows.');
+  }
+
+  const tempFile = await storage.tempPath();
+  let key: string;
+  let type: ReturnType<typeof sniff>;
+  let received: Awaited<ReturnType<typeof receiveFilePart>>;
+  try {
+    try {
+      received = await receiveFilePart(req as unknown as AsyncIterable<Buffer>, contentType, {
+        field: 'file',
+        destination: tempFile,
+        maxFileBytes: policy.maxBytes,
+        maxBodyBytes: policy.maxBytes + ENVELOPE_SLACK,
+      });
+    } catch (err) {
+      // The request may be half-read. `readBodyCapped` destroys it here, which
+      // also destroys the socket the refusal has to travel on — and a client
+      // still writing into a closed socket often never reads the answer at
+      // all (a reset discards it). So the answer goes out now and the rest of
+      // the body is read and thrown away, up to a ceiling past which the
+      // socket is cut: memory and disk see none of it, only bandwidth.
+      discardRest(req, policy.maxBytes * 2);
+      throw err;
+    }
+    checkSize(received.bytes, policy);
+    // What it *is*, from its own first bytes — then what it *holds*.
+    type = sniff(received.head, policy);
+    await validateBundle(tempFile);
+    key = await storage.adopt(policy.visibility, tempFile, type.ext);
+  } catch (err) {
+    await rm(tempFile, { force: true }).catch(() => undefined);
+    throw err;
+  }
+
+  try {
+    return await prisma.storedFile.create({
+      data: {
+        key,
+        class: fileClass,
+        visibility: policy.visibility,
+        mime: type.mime,
+        bytes: received.bytes,
+        originalName: safeDownloadName(received.filename, type.ext),
+        contractId,
+        uploadedById: user.id,
+      },
+    });
+  } catch (err) {
+    // The bytes are in place and no row points at them — same cleanup as the
+    // buffered path.
+    await storage.remove(key).catch(() => undefined);
+    throw err;
+  }
+}
 
 /**
  * POST /upload?class=DESIGN_IMAGE&contractId=… or ?class=RESEARCH_TEXT&entryId=…
@@ -220,6 +315,24 @@ filesRouter.post(
       );
     }
 
+    if (policy.streamed) {
+      // Only contract-owned classes stream today (MOCKUP_BUNDLE); a future
+      // streamed class with another owner needs its own owner handling below,
+      // and should fail here, loudly, rather than store a file no one can read.
+      if (policy.owner !== 'contract' || !contractId) {
+        throw new Error(`streamed upload class ${fileClass} must be contract-owned`);
+      }
+      const stored = await receiveStreamedUpload(req, { user, fileClass, policy, contractId, contentType });
+      res.status(201).json({
+        id: stored.id,
+        url: `/files/${stored.id}`,
+        mime: stored.mime,
+        bytes: stored.bytes,
+        originalName: stored.originalName,
+      });
+      return;
+    }
+
     const raw = await readBodyCapped(req, policy.maxBytes + ENVELOPE_SLACK);
 
     // Node parses multipart natively (>=20). A dependency here would buy
@@ -365,8 +478,17 @@ filesRouter.get(
       // plan L7) has no publishedAt-shaped gate to inherit — a project is
       // never "unpublished" the way a contract draft is — so its half is
       // ownership, or the services desk's `customers.manage`.
+      //
+      // A MOCKUP_BUNDLE (journeys build plan J9) is the one contract file the
+      // customer's edge does not open: they view a mockup through a grant on
+      // the mockup host, which shows only a *published* iteration, and this
+      // route would otherwise hand them a draft iteration's raw zip to anyone
+      // who learned its id. Staff — who upload it and check it — still read it.
       const visible =
-        (file.contract !== null && contractVisibleTo(ctx.user, file.contract)) ||
+        (file.contract !== null &&
+          (file.class === 'MOCKUP_BUNDLE'
+            ? contractVisibleToStaff(ctx.user, file.contract)
+            : contractVisibleTo(ctx.user, file.contract))) ||
         (file.project !== null && (file.project.customerId === ctx.user.id || can(ctx.user, 'customers.manage'))) ||
         // A theme preview is the catalogue's, and the catalogue is staff-only
         // (`canSeeThemePreview`): a customer holds none of those capabilities,

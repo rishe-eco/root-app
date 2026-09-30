@@ -47,6 +47,7 @@ import { contractDraftNoteFields } from './draftNotes.js';
 import { PlannedInvoice, invoiceQueries } from './invoices.js';
 import { contractDesignFields, designCustomerMutations } from './design.js';
 import { allowanceMutations } from './allowance.js';
+import { mockupQueries } from './mockups.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -142,6 +143,9 @@ export const resolvers = {
     // (issued only), contractsWithPaymentPlan is billing.manage — see
     // resolvers/invoices.ts.
     ...invoiceQueries,
+    // journeys build plan J9: mockupViewUrl mints a viewer's grant — see
+    // resolvers/mockups.ts and routes/mockups.ts.
+    ...mockupQueries,
   },
 
   Mutation: {

@@ -4,6 +4,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { POLICY } from './files.js';
+
 /**
  * No test can see an Nginx header — Nginx is never in the loop for `npm test`,
  * `test:integration` or e2e (the last runs against `vite preview`). That is
@@ -158,4 +160,86 @@ test('the two sandboxed file locations are exactly the ones this test expects', 
   // start silently accepting whatever replaced it. Pin the set by name.
   const sandboxedPresent = SANDBOXED_LOCATIONS.filter((p) => blocks.some((b) => b.path === p));
   assert.deepEqual(sandboxedPresent.sort(), [...SANDBOXED_LOCATIONS].sort());
+});
+
+// ---------------------------------------------------------------------------
+// Journeys build plan J9 — the mockup host's two Nginx facts. Neither can be
+// seen by any other test: a mockup is uploaded code on a sibling subdomain of
+// the portal's registrable domain, and the second fence (after the API's own,
+// which `j9a.test.ts` proves) is a server block that must stay a bare proxy.
+// ---------------------------------------------------------------------------
+
+const MOCKUP_CONF = 'deploy/nginx/mockup.conf';
+
+/** `26m`, `1k`, `2g`, `500` → bytes, the way Nginx reads `client_max_body_size`. */
+function nginxBytes(size: string): number {
+  const m = /^(\d+)([kKmMgG]?)$/.exec(size.trim());
+  assert.ok(m, `unparseable size "${size}"`);
+  const unit = { '': 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3 }[m[2].toLowerCase() as '' | 'k' | 'm' | 'g'];
+  return Number(m[1]) * unit;
+}
+
+const bodyLimit = (block: string): number => {
+  const m = /client_max_body_size\s+([^;\s]+);/.exec(block);
+  assert.ok(m, 'no client_max_body_size in that block');
+  return nginxBytes(m[1]);
+};
+
+test('/upload lets a whole mockup bundle through Nginx: its body limit is at or above the bundle cap plus the multipart envelope', () => {
+  // Trap 2 of J9. Nginx's 26m would answer a 30 MB bundle with a bare 413 no
+  // code of ours could describe; the per-class limit in lib/files.ts is the
+  // real check, and Nginx only has to not get in its way.
+  const upload = blocks.find((b) => b.path === '= /upload');
+  assert.ok(upload, 'no `location = /upload` block');
+  const envelope = 1024 * 1024; // generous room for boundaries and part headers
+  assert.ok(
+    bodyLimit(upload.body) >= POLICY.MOCKUP_BUNDLE.maxBytes + envelope,
+    `/upload allows ${bodyLimit(upload.body)} bytes; a ${POLICY.MOCKUP_BUNDLE.maxBytes}-byte bundle plus envelope needs more`,
+  );
+  // …and only there: the server-level default stays small.
+  const serverLevel = rootConf.slice(0, rootConf.indexOf('location'));
+  assert.ok(bodyLimit(serverLevel) <= 2 * 1024 * 1024, 'the server-level client_max_body_size was raised');
+});
+
+// Comments stripped first: this file explains itself at length, and the word
+// "location" in a comment would otherwise open a phantom block for the parser.
+const mockupConf = read(MOCKUP_CONF).replace(/#.*$/gm, '');
+const mockupBlocks = locationBlocks(mockupConf);
+
+test('the mockup server block answers for the mockup wildcard, and the portal block does not', () => {
+  assert.match(mockupConf, /server_name\s+\*\.mockup\.m-root\.com;/);
+  assert.doesNotMatch(rootConf, /server_name[^;]*mockup/);
+});
+
+test('the mockup server block has exactly one location, `/`, and it proxies only to the API on loopback', () => {
+  // No portal locations (J9 trap 1): /graphql, /upload, /files/, /ask, the
+  // static root. A second location here is a route a mockup's script could reach.
+  assert.deepEqual(mockupBlocks.map((b) => b.path), ['/']);
+  const body = mockupBlocks[0].body;
+  assert.match(body, /proxy_pass\s+http:\/\/127\.0\.0\.1:4000;/);
+  assert.match(body, /proxy_set_header\s+Host\s+\$host;/, "the API's fence reads Host — it must be passed");
+});
+
+test('the mockup server block serves nothing from disk and adds no headers of its own', () => {
+  // The API sends this origin's headers; a static root or alias here would
+  // serve uploaded bytes without the API's fence, and an add_header (or the
+  // shared snippet) would double the Content-Security-Policy.
+  assert.doesNotMatch(mockupConf, /^\s*(root|alias|try_files|autoindex)\b/m);
+  assert.doesNotMatch(mockupConf, /^\s*add_header\b/m);
+  assert.doesNotMatch(mockupConf, /^\s*include\s+\/etc\/nginx\/snippets\/root-security-headers\.conf/m);
+});
+
+test('the mockup server block strips cookies both ways and never forwards a client-chosen host', () => {
+  const body = mockupBlocks[0].body;
+  assert.match(body, /proxy_set_header\s+Cookie\s+"";/);
+  assert.match(body, /proxy_hide_header\s+Set-Cookie;/);
+  assert.match(body, /proxy_set_header\s+X-Forwarded-Host\s+"";/);
+});
+
+test('the mockup server block takes no request bodies to speak of', () => {
+  assert.ok(bodyLimit(mockupConf) <= 16 * 1024, 'a mockup view is read-only; its body limit should be tiny');
+});
+
+test("the portal's CSP still names the mockup wildcard in frame-src (the mockup host is what it frames)", () => {
+  assert.ok((directives.get('frame-src') ?? []).includes('https://*.mockup.m-root.com'));
 });

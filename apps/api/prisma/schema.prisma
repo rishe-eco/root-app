@@ -182,6 +182,10 @@ model User {
   allowanceExtensions AllowanceExtension[] @relation("AllowanceApprovedBy")
   internalNotes       InternalNote[]       @relation("InternalNoteAuthor")
 
+  /// Journeys build plan J9 — the mockup views this account was granted. Each
+  /// row is a subdomain that stops working when the row expires or goes.
+  mockupViewGrants MockupViewGrant[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -475,6 +479,9 @@ model Contract {
   brief       ContractBrief?
   paymentPlan PaymentPlan?
   phases      Phase[]
+  /// Journeys build plan J9 — the `MOCKUP` demos of this contract (step 5).
+  /// A `SITE` demo reaches its contract through its phase instead.
+  demos       Demo[]
 
   // ScopeItem re-parented to Project at L1 (build plan D1) — reached here via
   // `project.scopeItems`, never a direct relation. See Project and ScopeItem
@@ -896,6 +903,14 @@ enum FileClass {
   /// DESIGN_IMAGE when a theme is proposed, so a customer's file access stays
   /// on the contract edge.
   THEME_PREVIEW
+  /// Journeys build plan J9: a designer's static mockup, one zip per
+  /// iteration. Private, owned by a Contract like DESIGN_IMAGE (so **the
+  /// private-file CHECK needs no widening** — a contract is already an owner)
+  /// and 50 MB, the one class that is *streamed* to disk rather than buffered
+  /// (D-9; `routes/files.ts`). Never useful as a file: `GET /files/:id` would
+  /// hand it back as an opaque zip, and the only reader that opens it is the
+  /// mockup host (`routes/mockups.ts`), by way of a view grant.
+  MOCKUP_BUNDLE
 }
 
 model StoredFile {
@@ -957,6 +972,10 @@ model StoredFile {
   /// Journeys build plan T2 — the theme this file is the preview *of*, when
   /// it is the one the theme currently points at (Theme.previewFileId).
   themePreviewOf Theme?              @relation("ThemePreview")
+  /// Journeys build plan J9 — the mockup builds that serve this zip.
+  /// `Build.bundleFileId` is Restrict, so a bundle a build points at cannot be
+  /// deleted out from under it.
+  mockupBuilds   Build[]             @relation("BuildBundle")
 
   /// The Anthropic Files API id for this PDF's bytes (R4.md §2.3) — set the
   /// first time a `quotableFullText` entry is asked about, never re-uploaded
@@ -1038,6 +1057,8 @@ model Project {
   scopeItems    ScopeItem[]
   scopeTrades   ScopeTrade[]
   phases        Phase[]
+  /// Journeys build plan J9 — every demo of the project, of either kind.
+  demos         Demo[]
   builds        Build[]
   feedbackItems FeedbackItem[]
   /// Build plan L4 — nullable on the Ticket side; a project reads this as
@@ -1407,16 +1428,52 @@ model Phase {
   @@index([projectId])
 }
 
+/// What a demo shows: a live staging site (`SITE`, L2's original meaning) or
+/// an uploaded static mockup served by the mockup host (`MOCKUP`, journeys
+/// build plan J9). The kind decides which of `phaseId`/`stagingUrl` (site) or
+/// `contractId` (mockup) the row carries — see the CHECK in
+/// `20261001110000_j9_mockups`.
+enum DemoKind {
+  MOCKUP
+  SITE
+}
+
 /// The live staging site, embedded (D2) — never a set of captures, and never
 /// a rewriting proxy (D2 rejects that outright). `stagingUrl` must be HTTPS
 /// or a browser will not frame it at all (L2.2) — validated where this is
 /// written, not only read back.
+///
+/// **Since J9 a demo is either kind** (`kind`). A `SITE` demo is exactly what
+/// L2 built: it has a phase and a staging URL, both required by a CHECK. A
+/// `MOCKUP` demo has neither — it belongs to a contract (`contractId`), and
+/// what it shows is a bundle held by a `Build` of kind `MOCKUP`. That is why
+/// `phaseId` and `stagingUrl` are nullable here and why nothing may read
+/// either without first knowing the kind.
 model Demo {
-  id      String @id @default(cuid())
-  phaseId String
-  phase   Phase  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  id   String   @id @default(cuid())
+  kind DemoKind @default(SITE)
 
-  stagingUrl String
+  /// Journeys build plan J9: **the project the demo belongs to**, whichever
+  /// kind. Until J9 it was reachable only through `phase.projectId`, which a
+  /// mockup demo has no phase to supply. Backfilled from the phase; for a
+  /// `SITE` demo the mutations hold it equal to the phase's project (Postgres
+  /// cannot say so without a composite key nothing else needs).
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Journeys build plan J9: the contract a `MOCKUP` demo belongs to (the
+  /// custom-path contract whose step 5 it is). Null for a `SITE` demo, whose
+  /// contract is its phase's (`Phase.contractId`).
+  contractId String?
+  contract   Contract? @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  /// Null exactly for a `MOCKUP` demo (CHECK `Demo_site_has_phase_and_url`).
+  phaseId String?
+  phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  /// Null exactly for a `MOCKUP` demo — its "site" is served by this API at a
+  /// per-view subdomain (`lib/mockupHost.ts`), never at a stored URL.
+  stagingUrl String?
 
   /// D2's "record the build reference on the demo," kept deliberately
   /// trivial — a plain string, not yet an object. L3b grows this into a real
@@ -1444,11 +1501,16 @@ model Demo {
   pages          DemoPage[]
   unmatchedPaths DemoUnmatchedPath[]
   feedbackItems  FeedbackItem[]
+  /// Journeys build plan J9 — the mockup iterations of a `MOCKUP` demo (a
+  /// `SITE` demo's builds hang off its phase, not off the demo).
+  builds         Build[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([phaseId])
+  @@index([projectId])
+  @@index([contractId])
 }
 
 /// The page list a demo declares "from the registry" (L2.1) — what makes a
@@ -1841,6 +1903,16 @@ model FeedbackComment {
 // passing) — see BuildChangeEntry and DemoFrameLine.buildChangeEntryId.
 // ---------------------------------------------------------------------------
 
+/// What a build is a build *of* (journeys build plan J9): a state of the live
+/// staging site (`SITE`, L3b's original meaning) or one uploaded mockup
+/// iteration (`MOCKUP`). The two are numbered separately — "mockup 2" and
+/// "version 4" are different sentences, and neither consumes the other's
+/// numbers (L3b's "version 2 must mean one thing" rule, applied across kinds).
+enum BuildKind {
+  MOCKUP
+  SITE
+}
+
 /// A declared state of the staging site at a point in time, belonging to a
 /// phase (build plan L3b.1) — D2's bare `Demo.buildRef` string, grown
 /// straight into the object rather than kept alongside it. **Not a
@@ -1848,11 +1920,33 @@ model FeedbackComment {
 /// live site, sealed against nothing (L3b.3's first banked trap — the same
 /// naming collision as L3's `review`, one stage later). **Not a `ReviewRound`**
 /// either — that is the Review Room's own word for a different freeze.
+///
+/// **Since J9 a `MOCKUP` build is a pointer at a zip instead** (`bundleFileId`),
+/// belongs to a `MOCKUP` demo (`demoId`) and to no phase. Two CHECKs hold the
+/// shape in the database: a `SITE` build has a phase, a `MOCKUP` build has a
+/// bundle.
 model Build {
   id String @id @default(cuid())
 
-  phaseId String
-  phase   Phase  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  kind BuildKind @default(SITE)
+
+  /// Null exactly for a `MOCKUP` build (CHECK `Build_site_has_phase`) — an
+  /// iteration of a mockup is a step-5 fact, not a phase's.
+  phaseId String?
+  phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  /// Journeys build plan J9: the `MOCKUP` demo this iteration belongs to.
+  /// Null for a `SITE` build. Cascade: an iteration is meaningless without
+  /// the demo whose pages its feedback is anchored to.
+  demoId String?
+  demo   Demo?   @relation(fields: [demoId], references: [id], onDelete: Cascade)
+
+  /// Journeys build plan J9: the zip a `MOCKUP` build serves (CHECK
+  /// `Build_mockup_has_bundle`). **Restrict**: the bundle is the record of
+  /// what the customer was shown and approved, so the file row (and through
+  /// `StoredFile.contractId`, the contract) cannot be deleted from under it.
+  bundleFileId String?
+  bundleFile   StoredFile? @relation("BuildBundle", fields: [bundleFileId], references: [id], onDelete: Restrict)
 
   /// Denormalized off `phase.projectId` so the numbering below can be
   /// project-wide without a join through Phase on every read.
@@ -1860,11 +1954,13 @@ model Build {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   /// Latin figures, always (house rule 14) — a version, not a count.
-  /// **Project-wide and monotonic**, never reset per phase: a per-phase
-  /// counter makes "version 2" ambiguous the day a project has a second
-  /// phase with its own build, which is exactly the sentence a customer
-  /// repeats back to Root. See lib/build.ts's nextBuildNumber and
-  /// @@unique below, which is the backstop against two concurrent declares.
+  /// **Project-wide and monotonic per kind**, never reset per phase: a
+  /// per-phase counter makes "version 2" ambiguous the day a project has a
+  /// second phase with its own build, which is exactly the sentence a
+  /// customer repeats back to Root. Since J9 the counter is per
+  /// `(project, kind)`: the mockup's "iteration 2" and the site's "version 2"
+  /// are unrelated. See lib/build.ts's nextBuildNumber and @@unique below,
+  /// which is the backstop against two concurrent declares.
   number Int
 
   deployedAt   DateTime @default(now())
@@ -1886,11 +1982,48 @@ model Build {
 
   changes BuildChangeEntry[]
 
+  /// Journeys build plan J9 — the views granted onto this mockup build. Cascade
+  /// on the grant side: a grant to a build that is gone opens nothing.
+  mockupGrants MockupViewGrant[]
+
   createdAt    DateTime       @default(now())
   FeedbackItem FeedbackItem[]
 
-  @@unique([projectId, number])
+  @@unique([projectId, kind, number])
   @@index([phaseId])
+  @@index([demoId])
+  @@index([bundleFileId])
+}
+
+/// One person's view of one published mockup build, and the subdomain it is
+/// served at (journeys build plan J9, PD-9): `https://<id>.mockup.m-root.com/`.
+/// **The id is the credential** — 128 random bits as 32 lowercase hex
+/// characters, because a DNS label is case-insensitive and at most 63
+/// characters, which rules out a base64 token; a hex id that points at a row is
+/// short, revocable and auditable in a way an HMAC would not be. It is minted
+/// from `crypto.randomBytes` in `lib/mockupGrant.ts`, never by the database
+/// (the CHECK `MockupViewGrant_id_shape` holds the shape, so a hand-written
+/// insert cannot make a label the router would refuse to parse).
+///
+/// A grant is per *viewer*: one mockup's scripts on one viewer's origin cannot
+/// read another viewer's, and "who looked" stays answerable. The viewer's
+/// access to the contract is re-checked on every request, so a grant outlives
+/// nothing that matters — it expires at `expiresAt` and stops working sooner
+/// if the viewer loses sight of the contract.
+model MockupViewGrant {
+  id String @id
+
+  buildId String
+  build   Build  @relation(fields: [buildId], references: [id], onDelete: Cascade)
+
+  viewerId String
+  viewer   User   @relation(fields: [viewerId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([buildId, viewerId])
+  @@index([viewerId, expiresAt])
 }
 
 /// Which claim a change entry makes about a feedback item — never the
