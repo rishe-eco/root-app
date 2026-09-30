@@ -224,8 +224,8 @@ test('the mockup server block serves nothing from disk and adds no headers of it
   // The API sends this origin's headers; a static root or alias here would
   // serve uploaded bytes without the API's fence, and an add_header (or the
   // shared snippet) would double the Content-Security-Policy.
-  assert.doesNotMatch(mockupConf, /^\s*(root|alias|try_files|autoindex)/m);
-  assert.doesNotMatch(mockupConf, /^\s*add_header/m);
+  assert.doesNotMatch(mockupConf, /^\s*(root|alias|try_files|autoindex)\b/m);
+  assert.doesNotMatch(mockupConf, /^\s*add_header\b/m);
   assert.doesNotMatch(mockupConf, /^\s*include\s+\/etc\/nginx\/snippets\/root-security-headers\.conf/m);
 });
 

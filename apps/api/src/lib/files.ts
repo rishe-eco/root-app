@@ -74,7 +74,7 @@ const XLSX: AcceptedType = {
  *  classes cannot tell each other apart by sniffing and do not try: which one
  *  a file is decided by the class the caller named, and by `validateBundle`
  *  (an index.html and an extension allowlist) for this one. An empty archive
- *  starts `PK` instead and is deliberately not accepted: it has no
+ *  starts `PK\x05\x06` instead and is deliberately not accepted: it has no
  *  index to serve. */
 const ZIP: AcceptedType = {
   mime: 'application/zip',

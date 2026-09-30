@@ -104,6 +104,41 @@ describe('policyFor', () => {
   });
 });
 
+describe('MOCKUP_BUNDLE (journeys build plan J9)', () => {
+  const bundle = POLICY.MOCKUP_BUNDLE;
+
+  test('is the one streamed class: private, contract-owned, 50 MB, uploaded by design.author', () => {
+    assert.equal(bundle.streamed, true);
+    assert.equal(bundle.visibility, 'PRIVATE');
+    assert.equal(bundle.owner, 'contract');
+    assert.equal(bundle.uploader, 'design.author');
+    assert.equal(bundle.maxBytes, 50 * 1024 * 1024);
+    // Every other class keeps today's buffered path byte-for-byte.
+    for (const [name, policy] of Object.entries(POLICY)) {
+      if (name !== 'MOCKUP_BUNDLE') assert.equal(policy.streamed, undefined, name);
+    }
+  });
+
+  test('is a zip by its first bytes — and only a zip', () => {
+    assert.equal(sniff(Buffer.from('PK\x03\x04rest of the archive'), bundle).mime, 'application/zip');
+    assert.throws(() => sniff(pdf(), bundle), (err: UploadError) => err.code === 'UNSUPPORTED_TYPE');
+    assert.throws(() => sniff(Buffer.from('<html></html>'), bundle), (err: UploadError) => err.status === 415);
+    // An empty archive has no index to serve and starts differently.
+    assert.throws(() => sniff(Buffer.from('PK\x05\x06' + '\0'.repeat(18)), bundle), UploadError);
+  });
+
+  test('checkSize refuses past the 50 MB cap with FILE_TOO_LARGE', () => {
+    assert.doesNotThrow(() => checkSize(bundle.maxBytes, bundle));
+    assert.throws(() => checkSize(bundle.maxBytes + 1, bundle), (err: UploadError) => err.code === 'FILE_TOO_LARGE' && err.status === 413);
+  });
+
+  test('SVG stays refused as an upload class even though a bundle may contain one', () => {
+    // The rule is about whose origin serves the bytes: a bundle is served from
+    // the mockup origin (routes/mockups.ts), never from the portal's.
+    assert.ok(!bundle.accepted.some((t) => t.mime.includes('svg')));
+  });
+});
+
 describe('safeDownloadName', () => {
   test('keeps Persian names intact', () => {
     assert.equal(safeDownloadName('طرح-صفحه-اصلی.png', '.png'), 'طرح-صفحه-اصلی.png');
