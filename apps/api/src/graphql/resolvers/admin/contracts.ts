@@ -3,8 +3,7 @@ import type { ContractStatus } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { can, type Capability } from '../../../lib/capabilities.js';
-import { draftState } from '../../../lib/revision.js';
-import { agreedScopeSnapshot } from '../../../lib/scope.js';
+import { draftStateOn } from '../agreement.js';
 import { SEQUENCE_FOR_NEW_CONTRACTS, stepOnRoad } from '../../../lib/steps.js';
 import { lockContract } from '../../../lib/stepApproval.js';
 import { parseCalendarDay } from '../../../lib/calendarDay.js';
@@ -13,6 +12,7 @@ import {
   ARTICLES,
   SCOPE,
   CHECKLIST,
+  isPaymentScheduleArticle,
   isTemplateSensitiveArticle,
   partiesFor,
   renderArticleBody,
@@ -311,10 +311,31 @@ export const contractAdminMutations = {
   ) => {
     requireCapability(ctx, 'contracts.author');
     const { contractId, number, sensitive, ...rest } = args;
-    await prisma.article.upsert({
-      where: { contractId_number: { contractId, number } },
-      create: { contractId, number, ...rest, sensitive: sensitive ?? isTemplateSensitiveArticle(number, args.titleEn) },
-      update: { ...rest, ...(sensitive == null ? {} : { sensitive }) },
+    const contract = await prisma.contract.findUnique({ where: { id: contractId }, select: { id: true, sequence: true } });
+    if (!contract) throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
+    await prisma.$transaction(async (tx) => {
+      await lockContract(tx, contract.id);
+      await assertStepOpenOn(contract.id, 'DRAFT', null, tx);
+      // **The payment schedule is data, not prose, in format 2** (J7's second
+      // trap). On the new road the plan is rendered beneath Article 5's title
+      // from the snapshot's `paymentPlan`; a body typed here as well would be a
+      // second schedule that can disagree with the first, in a document somebody
+      // signs. Refused, whichever language it arrives in; an empty body (the
+      // template's own) and the legacy road (which has no plan to render) pass.
+      if (
+        contract.sequence === 'AGREEMENT_FIRST' &&
+        isPaymentScheduleArticle(number, args.titleEn) &&
+        (rest.bodyFa?.trim() || rest.bodyEn?.trim())
+      ) {
+        throw new GraphQLError('The payment schedule is generated from the payment plan — leave this article’s text empty.', {
+          extensions: { code: 'SCHEDULE_IS_GENERATED' },
+        });
+      }
+      await tx.article.upsert({
+        where: { contractId_number: { contractId, number } },
+        create: { contractId, number, ...rest, sensitive: sensitive ?? isTemplateSensitiveArticle(number, args.titleEn) },
+        update: { ...rest, ...(sensitive == null ? {} : { sensitive }) },
+      });
     });
     return reload(contractId);
   },
@@ -331,13 +352,17 @@ export const contractAdminMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
-    await prisma.contract.update({
-      where: { id: args.contractId },
-      data: {
-        titleFa: args.titleFa,
-        titleEn: args.titleEn,
-        amount: args.amount ? BigInt(args.amount) : null,
-      },
+    await prisma.$transaction(async (tx) => {
+      await lockContract(tx, args.contractId);
+      await assertStepOpenOn(args.contractId, 'DRAFT', null, tx);
+      await tx.contract.update({
+        where: { id: args.contractId },
+        data: {
+          titleFa: args.titleFa,
+          titleEn: args.titleEn,
+          amount: args.amount ? BigInt(args.amount) : null,
+        },
+      });
     });
     return reload(args.contractId);
   },
@@ -354,8 +379,12 @@ export const contractAdminMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
-    await prisma.article.deleteMany({
-      where: { contractId: args.contractId, number: args.number },
+    await prisma.$transaction(async (tx) => {
+      await lockContract(tx, args.contractId);
+      await assertStepOpenOn(args.contractId, 'DRAFT', null, tx);
+      await tx.article.deleteMany({
+        where: { contractId: args.contractId, number: args.number },
+      });
     });
     return reload(args.contractId);
   },
@@ -429,9 +458,9 @@ export const contractAdminMutations = {
             { extensions: { code: 'CONTRACT_SIGNED' } },
           );
         }
-        // Nothing can lock DRAFT until J7's agreement approval exists, but the
-        // call lands now so J7 changes nothing here (the legacy road is never
-        // locked: `assertStepOpen` ignores approvals on it).
+        // The agreement's approval locks DRAFT (J7), and after it there is no
+        // revision to publish — changes are amendments. (The legacy road is
+        // never locked: `assertStepOpen` ignores approvals on it.)
         await assertStepOpenOn(contract.id, 'DRAFT', null, tx);
 
         if (contract.sequence === 'AGREEMENT_FIRST') {
@@ -460,9 +489,9 @@ export const contractAdminMutations = {
         }
 
         // Appendix 1 as a view of the registry (L1) — the agreed-or-beyond set,
-        // in registry order, exactly as agreedScopeSnapshot defines "agreed".
-        const scopeItems = agreedScopeSnapshot(contract.project.scopeItems);
-        const { snapshot, hash, dirty } = draftState(contract, contract.articles, current, scopeItems);
+        // in registry order — and, on the new road, steps 1 and 2 beside it:
+        // `draftStateOn` picks the road's format (J7).
+        const { snapshot, hash, dirty } = await draftStateOn(tx, contract);
         if (!dirty) {
           throw new GraphQLError('Nothing has changed since the last revision.', {
             extensions: { code: 'NO_CHANGES' },

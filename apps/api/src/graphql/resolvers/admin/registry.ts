@@ -1,5 +1,5 @@
 import { GraphQLError } from 'graphql';
-import type { ScopeKind, ScopeStatus } from '@prisma/client';
+import type { Prisma, ScopeKind, ScopeStatus } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { buildAmendmentSnapshot, contentHash } from '../../../lib/revision.js';
@@ -13,6 +13,8 @@ import { scopeKindForKey } from '../../../lib/templates.js';
 import { reload } from '../contracts.js';
 import { assertProjectActive, contractOnProject, primaryContractId, reloadOnProject } from './shared.js';
 import { syncBriefDependencies } from '../brief.js';
+import { assertStepOpenOn } from '../wizard.js';
+import { lockContract } from '../../../lib/stepApproval.js';
 
 /**
  * The scope registry (build plan L1; spec §3): create/edit/reorder items, set
@@ -35,6 +37,38 @@ async function loadScopeItem(scopeItemId: string) {
   return item;
 }
 
+/**
+ * **The agreement locks what the scope *is*** (journeys build plan J7): adding,
+ * relabelling and deleting a registry item change what the customer agreed to,
+ * so once the contract that agreed the item has its AGREEMENT approved they are
+ * `STEP_LOCKED` — post-lock change is a scope trade or an amendment. Under the
+ * contract's row lock, like every other step-1–2 write.
+ *
+ * **What is deliberately not locked here**: the status, flags, decision, origin
+ * and order of an item. Those are how a project *lives* after the agreement —
+ * `IN_BUILD`, `IN_DEMO`, `ACCEPTED` are the build lifecycle's, and a decided
+ * note or a reorder does not change what was agreed. (`setScopeItemStatus` can
+ * still move an item to `DECLINED`; that is a hole the plan does not close and
+ * this stage records rather than papers over — J5+J6's owed desk Scope tab is
+ * where the whole registry gets sorted out for the new road.) The item's own
+ * `contractId` names the agreement that locks it; an item with none falls back to
+ * the contract the caller has open, and with neither there is nothing to lock.
+ */
+async function inOpenScope<T>(
+  item: { contractId: string | null },
+  openContractId: string | null | undefined,
+  write: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  const contractId = item.contractId ?? openContractId ?? null;
+  return prisma.$transaction(async (tx) => {
+    if (contractId) {
+      await lockContract(tx, contractId);
+      await assertStepOpenOn(contractId, 'SCOPE', null, tx);
+    }
+    return write(tx);
+  });
+}
+
 export const registryMutations = {
   /**
    * Created AGREED, not PROPOSED — Root typing this into the contract via the
@@ -53,21 +87,25 @@ export const registryMutations = {
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
     }
-    const count = await prisma.scopeItem.count({ where: { projectId: contract.projectId } });
-    await prisma.scopeItem.create({
-      data: {
-        projectId: contract.projectId,
-        key: args.key,
-        labelFa: args.labelFa,
-        labelEn: args.labelEn,
-        position: count,
-        status: 'AGREED',
-        // T1: an explicit kind wins; without one the key decides, by the same
-        // rule the migration classified existing rows with.
-        kind: args.kind ?? scopeKindForKey(args.key),
-        // Agreed by this contract — it is the one the desk typed it into.
-        contractId: contract.id,
-      },
+    await prisma.$transaction(async (tx) => {
+      await lockContract(tx, contract.id);
+      await assertStepOpenOn(contract.id, 'SCOPE', null, tx);
+      const count = await tx.scopeItem.count({ where: { projectId: contract.projectId } });
+      await tx.scopeItem.create({
+        data: {
+          projectId: contract.projectId,
+          key: args.key,
+          labelFa: args.labelFa,
+          labelEn: args.labelEn,
+          position: count,
+          status: 'AGREED',
+          // T1: an explicit kind wins; without one the key decides, by the same
+          // rule the migration classified existing rows with.
+          kind: args.kind ?? scopeKindForKey(args.key),
+          // Agreed by this contract — it is the one the desk typed it into.
+          contractId: contract.id,
+        },
+      });
     });
     return reload(args.contractId);
   },
@@ -84,17 +122,19 @@ export const registryMutations = {
   ) => {
     requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
-    await prisma.scopeItem.update({
-      where: { id: item.id },
-      data: { labelFa: args.labelFa, labelEn: args.labelEn },
-    });
+    await inOpenScope(item, args.contractId, (tx) =>
+      tx.scopeItem.update({
+        where: { id: item.id },
+        data: { labelFa: args.labelFa, labelEn: args.labelEn },
+      }),
+    );
     return reloadOnProject(item.projectId, args.contractId);
   },
 
   deleteScopeItem: async (_p: unknown, args: { scopeItemId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
-    await prisma.scopeItem.delete({ where: { id: item.id } });
+    await inOpenScope(item, args.contractId, (tx) => tx.scopeItem.delete({ where: { id: item.id } }));
     return reloadOnProject(item.projectId, args.contractId);
   },
 

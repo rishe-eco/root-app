@@ -1,6 +1,7 @@
 import { DateTimeResolver } from 'graphql-scalars';
 import {
   Contract as ContractFields,
+  Amendment,
   ContractRevision,
   DesignConcept,
   DesignDraft,
@@ -72,6 +73,7 @@ export const resolvers = {
     ...contractScopeFields,
     ...contractDraftNoteFields,
   },
+  Amendment,
   ContractRevision,
   DesignConcept,
   DesignDraft,

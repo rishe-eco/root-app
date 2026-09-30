@@ -657,6 +657,17 @@ model Amendment {
   /// exists to prevent.
   relatesToArticle Int?
 
+  /// Journeys build plan J7 (owed from J4): this amendment's prose is about
+  /// money — a fee, a price, a schedule — so its body is withheld, exactly as a
+  /// sensitive article's is, from staff without `money.read` who are not the
+  /// customer (`mayReadArticleBody`). **A column and not "derived from
+  /// `relatesToArticle`"**: an amendment that adds a paid extra usually relates
+  /// to no article at all, and a rule that read the money only where an article
+  /// pointed would hide the one place it is least expected. `issueAmendment`
+  /// defaults it from the article it relates to (sensitive → sensitive), and the
+  /// desk can set it either way. Not part of the amendment's snapshot or hash.
+  sensitive Boolean @default(false)
+
   publishedAt DateTime?
   approvedAt  DateTime?
 

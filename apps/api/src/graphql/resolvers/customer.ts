@@ -8,7 +8,15 @@ import {
   assertCanApproveAmendment,
   assertCanSignAmendment,
 } from '../../lib/gate.js';
-import { loadForActor, log, nudgeStatus, reload } from './contracts.js';
+import { approveStepTx, lockContract } from '../../lib/stepApproval.js';
+import { draftState } from '../../lib/revision.js';
+import { agreedScopeSnapshotFor } from '../../lib/scope.js';
+import { scopeStepDone } from '../../lib/scopeProposals.js';
+import { notify, recipientsHolding } from '../../lib/notify.js';
+import { env } from '../../lib/env.js';
+import { contractInclude, loadForActor, log, nudgeStatus, reload, type FullContract } from './contracts.js';
+import { loadAgreementParts } from './agreement.js';
+import { briefIncompleteOn } from './wizard.js';
 import { linkContractId } from './admin/shared.js';
 
 /**
@@ -23,6 +31,98 @@ import { linkContractId } from './admin/shared.js';
  * call them. An admin can act on a contract too, and `addComment` reads the
  * caller's role to decide whose court the ball lands in.
  */
+const deskUrl = (locale: string, contractId: string) =>
+  `${env.APP_ORIGIN}/${locale === 'en' ? 'en' : 'fa'}/desk/contracts/${contractId}/steps`;
+
+/**
+ * Tells sales the agreement moved (J7). Best-effort like every notification —
+ * `notify` never throws, and the lookup feeding it can, so it is wrapped: the
+ * approval or the signature it announces has already been written. Recipients
+ * are every active `contracts.author` holder (J5 and J6's choice: no sales
+ * assignee exists to prefer).
+ */
+async function tellSalesOfAgreement(kind: 'AGREEMENT_APPROVED' | 'AGREEMENT_SIGNED', contract: FullContract) {
+  try {
+    const recipients = await recipientsHolding('contracts.author');
+    await Promise.all(
+      recipients.map((r) =>
+        notify(r, {
+          kind,
+          params: {
+            recipientName: r.name,
+            customerName: contract.customer.name,
+            projectTitleFa: contract.project.titleFa,
+            projectTitleEn: contract.project.titleEn,
+            deskUrl: deskUrl(r.locale, contract.id),
+          },
+        }),
+      ),
+    );
+  } catch (err) {
+    console.error(`[customer] ${kind} notification failed`, err);
+  }
+}
+
+const notFound = (what: string) => new GraphQLError(`No such ${what}.`, { extensions: { code: 'NOT_FOUND' } });
+
+/**
+ * **Approving the agreement on the new road** (journeys build plan J7) — the
+ * lifecycle plan's owed L8. One transaction under the contract's row lock, so
+ * nothing about steps 1–3 can move between the gate reading them and the lock
+ * being written: `assertCanApproveContract`'s agreement branch (the gate),
+ * then `approveStepTx(AGREEMENT)` — which refuses on an unresolved note or a
+ * pending answer, accepts every resolved one and writes the `StepApproval`
+ * that locks REQUIREMENTS, SCOPE, DRAFT and AGREEMENT — and the revision's own
+ * `approvedAt`, the fact `assertCanSign` reads. The three are one act.
+ *
+ * The gate runs *before* `approveStepTx`, so its codes (`SCOPE_UNCONFIRMED`,
+ * `PLAN_TOTAL_MISMATCH`, …) come before the feedback ones; the plan does not
+ * order them and every one is a refusal.
+ */
+async function approveAgreement(contractId: string, customerId: string): Promise<void> {
+  await prisma.$transaction(
+    async (tx) => {
+      await lockContract(tx, contractId);
+      const contract = await tx.contract.findUnique({ where: { id: contractId }, include: contractInclude });
+      if (!contract) throw notFound('contract');
+
+      const proposals = await tx.scopeProposal.findMany({ where: { contractId }, select: { decidedAt: true } });
+      const parts = await loadAgreementParts(tx, contract);
+      const stale = draftState(
+        contract,
+        contract.articles,
+        contract.currentContractRevision,
+        agreedScopeSnapshotFor(contract.id, contract.project.scopeItems),
+        parts,
+      ).dirty;
+      const scopeOk = scopeStepDone({ items: contract.project.scopeItems, proposals, contractId });
+
+      assertCanApproveContract(contract, {
+        revision: contract.currentContractRevision,
+        scopeConfirmed: scopeOk,
+        undecidedProposals: proposals.filter((p) => p.decidedAt === null).length,
+        fee: contract.amount,
+        plan: parts.plan,
+        plannedStartAt: contract.plannedStartAt,
+        plannedEndAt: contract.plannedEndAt,
+        phases: parts.phases,
+        briefMissing: (await briefIncompleteOn(contract)).map((m) => m.code),
+        revisionStale: stale,
+      });
+
+      const { approval } = await approveStepTx(tx, { contractId, step: 'AGREEMENT', phaseId: null, approverId: customerId });
+      await tx.contractRevision.update({
+        where: { id: contract.currentContractRevision!.id },
+        data: { approvedAt: approval.approvedAt },
+      });
+      await log(contractId, customerId, 'APPROVED_CONTRACT', null, tx);
+    },
+    // A contract with dozens of notes reads and writes more than Prisma's five
+    // seconds allow on a busy database; late is better than failed half-way.
+    { timeout: 20_000 },
+  );
+}
+
 export const customerMutations = {
   chooseConcept: async (
     _p: unknown,
@@ -120,6 +220,21 @@ export const customerMutations = {
   approveContract: async (_p: unknown, args: { contractId: string }, ctx: Context) => {
     const user = requireUser(ctx);
     const contract = await loadForActor(args.contractId, user);
+
+    // **The new road has its own gate, and only the customer walks through it**
+    // (J7). Approving is the customer's act — it locks steps 1–3 and, with the
+    // signature, is what they are held to — so unlike the legacy road (where any
+    // reader `loadForActor` admits could press the button) a staff reader gets
+    // the answer a stranger does. Refused after the ownership check, so nobody
+    // learns which road a contract is on.
+    if (contract.sequence === 'AGREEMENT_FIRST') {
+      if (contract.customerId !== user.id) throw notFound('contract');
+      await approveAgreement(contract.id, user.id);
+      const after = await reload(contract.id);
+      await tellSalesOfAgreement('AGREEMENT_APPROVED', after);
+      return after;
+    }
+
     assertCanApproveContract(contract);
 
     // Approval attaches to the revision, never to the contract in the
@@ -197,6 +312,8 @@ export const customerMutations = {
   ) => {
     const user = requireUser(ctx);
     const contract = await loadForActor(args.contractId, user);
+    // Signing on the new road is the customer's own, as approving is (J7).
+    if (contract.sequence === 'AGREEMENT_FIRST' && contract.customerId !== user.id) throw notFound('contract');
     assertCanSign(contract);
 
     const typedName = args.typedName.trim();
@@ -224,7 +341,9 @@ export const customerMutations = {
 
     // Approved & signed -> the build is live. A default, not a rail.
     await nudgeStatus(contract, 'IN_PROGRESS');
-    return reload(contract.id);
+    const after = await reload(contract.id);
+    if (contract.sequence === 'AGREEMENT_FIRST') await tellSalesOfAgreement('AGREEMENT_SIGNED', after);
+    return after;
   },
 
   /**

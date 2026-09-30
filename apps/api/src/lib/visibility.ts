@@ -273,6 +273,18 @@ export function mayReadArticleBody(user: Viewer, c: { customerId: string }, arti
 }
 
 /**
+ * An amendment's body (journeys build plan J7, owed from J4): withheld exactly
+ * as a sensitive article's is — when `Amendment.sensitive` is set and the viewer
+ * may not read the contract's money. The customer always reads it: it is theirs
+ * to approve and sign, and the hash covers the whole text whatever a view
+ * shows. One function with the article's rule (house rule 3), so the two
+ * cannot drift; the name says what is being asked.
+ */
+export function mayReadAmendmentBody(user: Viewer, c: { customerId: string }, amendment: { sensitive: boolean }): boolean {
+  return mayReadArticleBody(user, c, amendment);
+}
+
+/**
  * Whose email and phone a viewer may read (J3 review). `User` rows reach
  * customers through several edges — a contract's designer and developer, a
  * comment's author — and until this rule each carried the staff member's

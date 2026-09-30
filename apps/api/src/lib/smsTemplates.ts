@@ -35,6 +35,9 @@ export { LOCALES, resolveLocale };
  *   - `scopeProposedSms`, `scopeProposalDecidedSms` (J5) and `draftPublishedSms`
  *     (J6): **one placeholder** each, the URL — a proposal's text and a
  *     decline's reason are free text and stay in the email.
+ *   - `agreementApprovedSms`, `agreementSignedSms` (journeys build plan J7): **one
+ *     placeholder** each, the URL — the customer's name and the project's title are
+ *     the email's.
  *   - `invoiceIssuedSms` (journeys build plan J13): **one placeholder**, the URL —
  *     no number, no amount.
  *
@@ -130,4 +133,20 @@ export function draftPublishedSms(locale: string | null | undefined, params: { p
     return { text: `Your contract draft is ready on Root: ${params.portalUrl}` };
   }
   return { text: `پیش‌نویسِ قرارداد تو در ریشه آماده است: ${params.portalUrl}` };
+}
+
+/** J7 — to sales, when the customer approves the agreement (they sign next, on the same screen). */
+export function agreementApprovedSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A customer approved their agreement on Root: ${params.deskUrl}` };
+  }
+  return { text: `مشتری توافق‌نامه‌اش را در ریشه تأیید کرد: ${params.deskUrl}` };
+}
+
+/** J7 — to sales, when the customer signs. */
+export function agreementSignedSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A customer signed their agreement on Root: ${params.deskUrl}` };
+  }
+  return { text: `مشتری توافق‌نامه‌اش را در ریشه امضا کرد: ${params.deskUrl}` };
 }

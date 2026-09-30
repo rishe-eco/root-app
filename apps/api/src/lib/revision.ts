@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { calendarDayString } from './calendarDay.js';
 
 /**
  * Snapshotting and hashing a contract revision.
@@ -13,8 +14,28 @@ import { createHash } from 'node:crypto';
  * and the backfill.
  */
 
-/** Bumped only when the snapshot *shape* changes, so old hashes stay readable. */
+/**
+ * Bumped only when the snapshot *shape* changes, so old hashes stay readable.
+ *
+ * **Format 1** is every `DESIGN_FIRST` contract revision, every amendment, and
+ * every revision published before J7 — and it is still what `buildContractSnapshot`
+ * produces when it is not given an agreement (below). **Format 2**
+ * (`AGREEMENT_FORMAT`) is the new road's: the same keys, plus the brief, the
+ * payment plan, the phases, the planned dates and the allowances (journeys build
+ * plan J7; C1's lesson — a version number that means two things means neither,
+ * so the new shape has its own). A format-2 snapshot is *by addition*: every
+ * format-1 key keeps its name and meaning, so nothing that reads a format-1
+ * snapshot's title, fee, articles or appendix has to know which it holds.
+ */
 export const SNAPSHOT_FORMAT = 1;
+
+/** The new road's snapshot format — see `SNAPSHOT_FORMAT`. */
+export const AGREEMENT_FORMAT = 2;
+
+/** The formats `readContractSnapshot` will hand back. A stored snapshot in any
+ *  other format is not something this code knows how to read, and saying so
+ *  (`null`, "unsealed") is honest where guessing would be a misreading. */
+const READABLE_FORMATS: readonly number[] = [SNAPSHOT_FORMAT, AGREEMENT_FORMAT];
 
 export type ArticleSnapshot = {
   number: number;
@@ -22,9 +43,74 @@ export type ArticleSnapshot = {
   titleEn: string;
   bodyFa: string | null;
   bodyEn: string | null;
+  /** Format 2 only (J7): this article's prose is about money (PD-14). Frozen
+   *  with the article, so a published article's sensitivity cannot be changed
+   *  by editing the live row afterwards. Absent in format 1 — read those from
+   *  the live row, as J4 did. */
+  sensitive?: boolean;
 };
 
-export type ScopeItemSnapshot = { key: string; labelFa: string; labelEn: string };
+export type ScopeKindName = 'PAGE' | 'FEATURE' | 'DELIVERABLE' | 'EXTRA';
+
+export type ScopeItemSnapshot = {
+  key: string;
+  labelFa: string;
+  labelEn: string;
+  /** Format 2 only (J7): Appendix 1 is grouped by kind. */
+  kind?: ScopeKindName;
+};
+
+/** Step 1 as frozen at publish (format 2). Money is a decimal string (rule 9),
+ *  a calendar day is `YYYY-MM-DD` (PD-19). The four allowances are not here —
+ *  they are `AgreementSnapshot.allowances`, so there is one copy of each. */
+export type BriefSnapshot = {
+  kind: 'NEW_SITE' | 'FEATURE_FOR_EXISTING';
+  existingSiteUrl: string | null;
+  /** Frozen labels, not an id: the type can be renamed or deactivated later
+   *  and a signed agreement must keep saying what it said. */
+  templateType: { slug: string; labelFa: string; labelEn: string };
+  designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+  /** The customer's own statement of a ceiling — not the fee (J4's trap). */
+  budgetCap: string | null;
+  idealDeadline: string | null;
+  hardDeadline: string | null;
+  domainName: string | null;
+  domainProvidedBy: 'CUSTOMER' | 'ROOT' | null;
+  hostProvidedBy: 'CUSTOMER' | 'ROOT' | null;
+  contentProvidedBy: 'CUSTOMER' | 'ROOT' | null;
+  supportMonths: number | null;
+};
+
+export type AllowancesSnapshot = {
+  premadeRounds: number | null;
+  wireframeIterations: number;
+  mockupIterations: number | null;
+  demoIterationsPerPhase: number | null;
+};
+
+/** The payment plan *as approved*. It records the rows and their terms — never
+ *  whether an invoice has been issued or paid (J13's business, and a fact that
+ *  changes after the signature the snapshot is sealed under). A row's phase is
+ *  named by its number, an id being meaningless outside the database. */
+export type PaymentPlanSnapshot = {
+  split: 'LUMP_SUM' | 'INSTALLMENTS' | 'MONTHLY';
+  invoices: Array<{
+    ordinal: number;
+    labelFa: string;
+    labelEn: string;
+    amount: string;
+    phaseNumber: number | null;
+    paymentTermDays: number;
+  }>;
+};
+
+export type PhaseSnapshot = {
+  number: number;
+  titleFa: string;
+  titleEn: string;
+  plannedEndAt: string | null;
+  milestoneLabel: string | null;
+};
 
 export type ContractSnapshot = {
   format: number;
@@ -51,6 +137,32 @@ export type ContractSnapshot = {
    */
   scopeItems: ScopeItemSnapshot[];
 };
+
+/**
+ * **Format 2** — what the customer approves and signs on the new road (journeys
+ * build plan J7): everything in format 1, plus steps 1 and 2 as they stood when
+ * the draft was published. `articles[].sensitive` and `scopeItems[].kind` ride
+ * on the format-1 keys; the rest are new keys.
+ *
+ * The customer signs *all* of it — the budget cap and the payment plan
+ * included. What `money.read` withholds is a *view* for other staff
+ * (`resolvers/fields.ts`), never a different document: the hash attests to the
+ * whole snapshot, and the customer's own screen and the print route render it
+ * whole.
+ */
+export type AgreementSnapshot = ContractSnapshot & {
+  format: typeof AGREEMENT_FORMAT;
+  brief: BriefSnapshot | null;
+  allowances: AllowancesSnapshot | null;
+  paymentPlan: PaymentPlanSnapshot | null;
+  phases: PhaseSnapshot[];
+  plannedStartAt: string | null;
+  plannedEndAt: string | null;
+};
+
+/** `snapshot` is a format-2 snapshot — the one place that says so. */
+export const isAgreementSnapshot = (snapshot: ContractSnapshot | null): snapshot is AgreementSnapshot =>
+  snapshot !== null && snapshot.format === AGREEMENT_FORMAT;
 
 export type AmendmentSnapshot = {
   format: number;
@@ -129,7 +241,59 @@ type ArticleDraft = {
   titleEn: string;
   bodyFa: string | null;
   bodyEn: string | null;
+  /** Read by format 2 only; a format-1 build copies the five keys above and
+   *  nothing else, whatever else the row carries. */
+  sensitive?: boolean;
 };
+
+/**
+ * Steps 1 and 2 as rows, for a format-2 build (journeys build plan J7). Plain
+ * structural types rather than Prisma's, like the rest of this file — the
+ * loader (`resolvers/agreement.ts`) fetches them and this only freezes them.
+ */
+export type AgreementParts = {
+  brief: {
+    kind: BriefSnapshot['kind'];
+    existingSiteUrl: string | null;
+    templateType: BriefSnapshot['templateType'];
+    designTier: BriefSnapshot['designTier'];
+    budgetCap: bigint | null;
+    idealDeadline: Date | null;
+    hardDeadline: Date | null;
+    domainName: string | null;
+    domainProvidedBy: BriefSnapshot['domainProvidedBy'];
+    hostProvidedBy: BriefSnapshot['hostProvidedBy'];
+    contentProvidedBy: BriefSnapshot['contentProvidedBy'];
+    supportMonths: number | null;
+    premadeRounds: number | null;
+    wireframeIterations: number;
+    mockupIterations: number | null;
+    demoIterationsPerPhase: number | null;
+  } | null;
+  plan: {
+    split: PaymentPlanSnapshot['split'];
+    invoices: Array<{
+      ordinal: number;
+      labelFa: string;
+      labelEn: string;
+      amount: bigint;
+      phaseId: string | null;
+      paymentTermDays: number;
+    }>;
+  } | null;
+  phases: Array<{
+    id: string;
+    number: number;
+    titleFa: string;
+    titleEn: string;
+    plannedEndAt: Date | null;
+    milestoneLabel: string | null;
+  }>;
+  plannedStartAt: Date | null;
+  plannedEndAt: Date | null;
+};
+
+const day = (d: Date | null): string | null => (d === null ? null : calendarDayString(d));
 
 /**
  * Freezes the editable draft — the contract's title and fee plus its `Article`
@@ -142,12 +306,23 @@ type ArticleDraft = {
  * reaches here. Every call site that predates L1 (and every already-published
  * revision) never passed a third argument at all; see the field's own doc
  * comment on `ContractSnapshot` for why that keeps old hashes intact.
+ *
+ * **`agreement` (J7) is what makes this format 2** — and the *only* thing that
+ * does. Given none, the output is byte-for-byte what it was before J7 (a test
+ * pins a golden hash), so `DESIGN_FIRST` and every amendment-era caller is
+ * untouched. Given one, the result is `buildAgreementSnapshot`'s: the same keys
+ * plus steps 1 and 2, every array in a total order (articles by number, scope in
+ * the registry's order as passed, phases by number, invoices by ordinal) and
+ * every absent value an explicit `null` — `canonicalize` has no `undefined`, and
+ * the same state must hash the same twice.
  */
 export function buildContractSnapshot(
   contract: ContractDraft,
   articles: ArticleDraft[],
   scopeItems: ScopeItemSnapshot[] = [],
+  agreement: AgreementParts | null = null,
 ): ContractSnapshot {
+  if (agreement) return buildAgreementSnapshot(contract, articles, scopeItems, agreement);
   return {
     format: SNAPSHOT_FORMAT,
     ref: contract.ref,
@@ -164,6 +339,95 @@ export function buildContractSnapshot(
         bodyEn: a.bodyEn,
       })),
     scopeItems,
+  };
+}
+
+/** Format 2 — see `AgreementSnapshot`. Exported for its own unit tests; callers
+ *  go through `buildContractSnapshot` so there is one entry point. */
+export function buildAgreementSnapshot(
+  contract: ContractDraft,
+  articles: ArticleDraft[],
+  scopeItems: ScopeItemSnapshot[],
+  parts: AgreementParts,
+): AgreementSnapshot {
+  const { brief, plan } = parts;
+  const phases = [...parts.phases].sort((a, b) => a.number - b.number);
+  const phaseNumber = new Map(phases.map((p) => [p.id, p.number]));
+  return {
+    format: AGREEMENT_FORMAT,
+    ref: contract.ref,
+    titleFa: contract.titleFa,
+    titleEn: contract.titleEn,
+    amount: contract.amount === null ? null : contract.amount.toString(),
+    articles: [...articles]
+      .sort((a, b) => a.number - b.number)
+      .map((a) => ({
+        number: a.number,
+        titleFa: a.titleFa,
+        titleEn: a.titleEn,
+        bodyFa: a.bodyFa,
+        bodyEn: a.bodyEn,
+        sensitive: a.sensitive === true,
+      })),
+    scopeItems: scopeItems.map((s) => {
+      // A format-2 appendix is grouped by kind; an item with none is a caller
+      // that forgot `agreedScopeSnapshotFor`, and guessing one would
+      // put a page under "features" in a document somebody signs.
+      if (!s.kind) throw new Error(`Scope item "${s.key}" has no kind — a format-2 snapshot needs one.`);
+      return { key: s.key, labelFa: s.labelFa, labelEn: s.labelEn, kind: s.kind };
+    }),
+    brief: brief
+      ? {
+          kind: brief.kind,
+          existingSiteUrl: brief.existingSiteUrl,
+          templateType: {
+            slug: brief.templateType.slug,
+            labelFa: brief.templateType.labelFa,
+            labelEn: brief.templateType.labelEn,
+          },
+          designTier: brief.designTier,
+          budgetCap: brief.budgetCap === null ? null : brief.budgetCap.toString(),
+          idealDeadline: day(brief.idealDeadline),
+          hardDeadline: day(brief.hardDeadline),
+          domainName: brief.domainName,
+          domainProvidedBy: brief.domainProvidedBy,
+          hostProvidedBy: brief.hostProvidedBy,
+          contentProvidedBy: brief.contentProvidedBy,
+          supportMonths: brief.supportMonths,
+        }
+      : null,
+    allowances: brief
+      ? {
+          premadeRounds: brief.premadeRounds,
+          wireframeIterations: brief.wireframeIterations,
+          mockupIterations: brief.mockupIterations,
+          demoIterationsPerPhase: brief.demoIterationsPerPhase,
+        }
+      : null,
+    paymentPlan: plan
+      ? {
+          split: plan.split,
+          invoices: [...plan.invoices]
+            .sort((a, b) => a.ordinal - b.ordinal)
+            .map((i) => ({
+              ordinal: i.ordinal,
+              labelFa: i.labelFa,
+              labelEn: i.labelEn,
+              amount: i.amount.toString(),
+              phaseNumber: i.phaseId === null ? null : (phaseNumber.get(i.phaseId) ?? null),
+              paymentTermDays: i.paymentTermDays,
+            })),
+        }
+      : null,
+    phases: phases.map((p) => ({
+      number: p.number,
+      titleFa: p.titleFa,
+      titleEn: p.titleEn,
+      plannedEndAt: day(p.plannedEndAt),
+      milestoneLabel: p.milestoneLabel,
+    })),
+    plannedStartAt: day(parts.plannedStartAt),
+    plannedEndAt: day(parts.plannedEndAt),
   };
 }
 
@@ -193,14 +457,21 @@ export type DraftState = {
  * agreed, nothing else changed" register as dirty: without it, moving an item
  * to `agreed` would never be publishable on its own, because the comparison
  * this function makes would not have seen it move.
+ *
+ * `agreement` (J7) is a fifth, optional argument for the same reason: given
+ * one, the draft is a *format-2* draft, so "dirty" also notices a changed
+ * brief, plan, phase or planned date — which is what lets the agreement gate
+ * refuse to approve a revision the live steps have moved on from
+ * (`REVISION_STALE`).
  */
 export function draftState(
   contract: ContractDraft,
   articles: ArticleDraft[],
   current: { contentHash: string | null } | null,
   scopeItems: ScopeItemSnapshot[] = [],
+  agreement: AgreementParts | null = null,
 ): DraftState {
-  const snapshot = buildContractSnapshot(contract, articles, scopeItems);
+  const snapshot = buildContractSnapshot(contract, articles, scopeItems, agreement);
   const hash = contentHash(snapshot);
   const dirty = current === null || current.contentHash === null || current.contentHash !== hash;
   return { snapshot, hash, dirty };
@@ -231,6 +502,11 @@ export function buildAmendmentSnapshot(a: {
  */
 export function readContractSnapshot(value: unknown): ContractSnapshot | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  // Formats 1 and 2 (J7). Anything else is a shape this code was not written
+  // for — reported as unsealed rather than half-rendered. (A stored snapshot
+  // always carries its `format`: `buildContractSnapshot` has written one since
+  // the first publish.)
+  if (!READABLE_FORMATS.includes((value as { format?: unknown }).format as number)) return null;
   return value as ContractSnapshot;
 }
 

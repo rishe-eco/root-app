@@ -24,8 +24,11 @@ import type { ContractSequence, StepKind } from '@prisma/client';
  *   the only place that says which other steps ride on AGREEMENT's.
  * - **A mutation that edits step content** calls `assertStepOpenOn` (the
  *   database-backed wrapper in `resolvers/wizard.ts`) before it writes.
- *   *Nothing calls it yet* — see that function for the survey of the mutations
- *   that will.
+ *   Since J7 every step 1–3 write does (`j7.test.ts` holds the table); the
+ *   design, mockup and demo mutations join it in J8–J10.
+ * - **AGREEMENT's "done" is the signature, its lock is the approval** (J7): the
+ *   two are different moments on the new road, so `state.finished` carries the
+ *   signature for AGREEMENT and `state.approvals` the approval.
  * - **The design path** (J8, PD-13): pass `'CUSTOM'` as `designPath` and
  *   MOCKUP joins the road; today no column exists, so callers pass `null`.
  */
@@ -35,22 +38,22 @@ import type { ContractSequence, StepKind } from '@prisma/client';
 export type DesignPath = 'PREMADE' | 'CUSTOM';
 
 /**
- * The sequence `createContract` gives a new contract — **not yet the column's
- * own default**. PD-7 says every new contract is `AGREEMENT_FIRST`, and the
- * schema's default says so; but until J7 lands the agreement gate an
- * `AGREEMENT_FIRST` contract cannot be taken to signature (J4–J7 build its
- * panels), and the legacy flow — `02-contract-flow`, `04-workspace`, and every
- * integration file that creates a contract through the API and drives it to a
- * signature — creates contracts *through this resolver*. So the resolver states
- * its value here, in one place, and **J7 — which builds the agreement gate, the
- * first point at which an `AGREEMENT_FIRST` contract can be approved and signed
- * — flips this line.** (J3's note said J4 would; J4 built step 1 and left it: a
- * contract that cannot get past its own agreement is not yet one anybody should
- * be able to create by default.) Contracts made directly through Prisma (the
- * seed's second contract, `j3.test.ts`, `j4.test.ts`) take the schema default
- * and are `AGREEMENT_FIRST`.
+ * The sequence `createContract` gives a new contract — **`AGREEMENT_FIRST`, the
+ * column's own default and PD-7's rule**, flipped by J7. Until then this stood at
+ * `DESIGN_FIRST`: an `AGREEMENT_FIRST` contract could not be taken to signature
+ * (J4–J6 built its steps, J7 builds the agreement gate that ends them), and the
+ * legacy flow — every integration file and e2e spec that created a contract
+ * through the API and drove it on — would have stranded. (J3's note said J4
+ * would flip it; J4 built step 1 and left it, as did J5 and J6.)
+ *
+ * The resolver still *states* its value from here rather than leaving the
+ * column's default to decide, so the choice is made in one visible place and a
+ * later change of the default cannot silently change what a desk-made contract
+ * is. The legacy road is not created through the API any more; a test or a
+ * fixture that is *about* it makes one directly (`seedFixture({ sequence:
+ * 'DESIGN_FIRST' })`, or an insert).
  */
-export const SEQUENCE_FOR_NEW_CONTRACTS: ContractSequence = 'DESIGN_FIRST';
+export const SEQUENCE_FOR_NEW_CONTRACTS: ContractSequence = 'AGREEMENT_FIRST';
 
 /** The three steps that lock when AGREEMENT is approved (plan J3): what the
  *  customer agreed to is the brief, the scope and the draft, so none of them
@@ -157,7 +160,9 @@ const sameSlot = (a: { step: StepKind; phaseId: string | null }, b: { step: Step
  *   locked: the legacy flow has no `StepApproval` rows and must behave exactly
  *   as it did, so any that exist on such a contract are ignored.
  * - A step is **done** when it is locked, or when something else says its work
- *   is complete (`state.finished`).
+ *   is complete (`state.finished`) — **except AGREEMENT on the new road, which
+ *   is done only when signed** (`finished`): approved-and-unsigned is locked
+ *   and current, so the status area says "sign it", not "done".
  * - **Current is the first step that is not done.** For a new-road contract
  *   whose steps have no data yet (SCOPE and DRAFT until J5–J6; REQUIREMENTS
  *   is done once `briefCompleteness` is empty, J4) that is simply the first
@@ -176,7 +181,12 @@ export function computeWizard(state: WizardState): WizardStep[] {
     const own = legacy ? undefined : state.approvals.find((a) => sameSlot(a, s));
     const sealing = LOCKS_WITH_AGREEMENT.has(s.step) ? agreement : own;
     const finished = state.finished.find((f) => sameSlot(f, s));
-    const done = sealing !== undefined || finished !== undefined;
+    // **AGREEMENT is done when it is signed, not when it is approved** (J7): on the
+    // new road the customer approves and then signs on one screen, and between the
+    // two the step is locked (nothing about it can change) but still theirs to
+    // finish. Every other step is done when it is locked or its own data says so.
+    const done =
+      s.step === 'AGREEMENT' && !legacy ? finished !== undefined : sealing !== undefined || finished !== undefined;
     return {
       ...s,
       status: (done ? 'DONE' : 'UPCOMING') as WizardStatus,

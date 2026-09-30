@@ -745,6 +745,78 @@ export function draftPublishedEmail(
   };
 }
 
+/**
+ * Journeys build plan J7 — to sales, the two moments the agreement moves: the
+ * customer **approved** it (steps 1–3 are locked from this instant), and then
+ * **signed** it (the invoice plan can start issuing, J13). Two events, not one,
+ * because the customer does them one after the other on a single screen and may
+ * stop between — an approved-and-unsigned agreement is a thing sales wants to
+ * hear about, and can chase.
+ *
+ * Both go to whoever holds `contracts.author` (J5/J6's choice: no sales
+ * assignee exists), so they name the customer — the one thing a recipient cannot
+ * infer from a link.
+ */
+export function agreementApprovedEmail(
+  locale: string | null | undefined,
+  params: { recipientName: string; customerName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string },
+): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const customer = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `Agreement approved — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${customer} approved the agreement for <strong>${title}</strong>. Steps 1 to 3 are now locked; further changes go through an amendment or a scope trade. They sign next.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\n${params.customerName} approved the agreement for "${params.projectTitleEn}". Steps 1 to 3 are now locked; further changes go through an amendment or a scope trade. They sign next.\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  return {
+    subject: `توافق‌نامه تأیید شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${customer} توافق‌نامه‌ی «${title}» را تأیید کرد. گام‌های ۱ تا ۳ از همین لحظه قفل شدند؛ تغییرِ بعدی از راهِ الحاقیه یا معاوضه‌ی دامنه انجام می‌شود. مشتری در ادامه امضا می‌کند.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\n${params.customerName} توافق‌نامه‌ی «${params.projectTitleFa}» را تأیید کرد. گام‌های ۱ تا ۳ از همین لحظه قفل شدند؛ تغییرِ بعدی از راهِ الحاقیه یا معاوضه‌ی دامنه انجام می‌شود. مشتری در ادامه امضا می‌کند.\n\n${params.deskUrl}`,
+  };
+}
+
+export function agreementSignedEmail(
+  locale: string | null | undefined,
+  params: { recipientName: string; customerName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string },
+): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const customer = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `Agreement signed — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${customer} signed the agreement for <strong>${title}</strong>. The payment plan can now be issued invoice by invoice.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\n${params.customerName} signed the agreement for "${params.projectTitleEn}". The payment plan can now be issued invoice by invoice.\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  return {
+    subject: `توافق‌نامه امضا شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${customer} توافق‌نامه‌ی «${title}» را امضا کرد. حالا صورت‌حساب‌های برنامه‌ی پرداخت را می‌شود یکی‌یکی صادر کرد.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\n${params.customerName} توافق‌نامه‌ی «${params.projectTitleFa}» را امضا کرد. حالا صورت‌حساب‌های برنامه‌ی پرداخت را می‌شود یکی‌یکی صادر کرد.\n\n${params.deskUrl}`,
+  };
+}
+
 /** A Toman amount (a decimal string) in the locale's own digits. */
 function tomanText(amount: string, locale: Locale): string {
   const n = new Intl.NumberFormat(locale === 'fa' ? 'fa-IR' : 'en-US').format(Number(amount));

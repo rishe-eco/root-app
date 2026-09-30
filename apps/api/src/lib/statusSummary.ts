@@ -43,8 +43,11 @@ export type StatusSummaryInput = {
   wizard: WizardStep[];
   /** Already filtered to what the viewer may see. */
   attention: AttentionItem[];
-  /** The agreement's approval, or the legacy signature. */
+  /** The current revision's signature, on both roads (`agreementSignedAt`). */
   signedAt: Date | null;
+  /** The AGREEMENT approval (J7) — the customer approved, whether or not they
+   *  have signed yet. Null on the legacy road, which never writes one. */
+  agreementApprovedAt: Date | null;
   /** Null when the contract has no payment plan (every legacy contract);
    *  otherwise when its first planned invoice was paid, or null if it has not
    *  been (issued and paid — `firstInvoicePaidAt`, lib/invoice.ts). */
@@ -68,6 +71,10 @@ export type MoveFacts = {
 export type StatusSummary = {
   started: boolean;
   startedAt: Date | null;
+  /** J7: the agreement's two moments, which the status area names separately —
+   *  "approved on …" (steps 1–3 locked) and "signed on …". */
+  agreementApprovedAt: Date | null;
+  signedAt: Date | null;
   currentStep: StepKind | null;
   currentPhaseId: string | null;
   currentPhaseNumber: number | null;
@@ -89,15 +96,18 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Whose move the current step is. The legacy road is read off what has been
  * published: the design is the customer's to choose and approve once a design
  * revision exists, and Root's before; the agreement likewise on the contract
- * text; a demo is the customer's to review once it is published. **Every
- * new-road step is Root's** until its stage adds a case (J4 REQUIREMENTS … J11
+ * text (and, since J7, the new road's too); a demo is the customer's to review once it is published. **Every
+ * other new-road step is Root's** until its stage adds a case (J4 REQUIREMENTS … J11
  * SUMMARY): with no data behind the step there is nothing for the customer to
  * do, and saying so is the honest reading.
  */
 export function nextMoveOn(sequence: ContractSequence, step: WizardStep, facts: MoveFacts): WaitingOn {
+  // The agreement (J7), on both roads: once Root has published the text it is
+  // the customer's to approve and sign — and the step is current until they
+  // have signed (approved-and-unsigned is still theirs).
+  if (step.step === 'AGREEMENT') return facts.contractPublished ? 'CUSTOMER' : 'ROOT';
   if (sequence === 'DESIGN_FIRST') {
     if (step.step === 'DESIGN') return facts.designPublished ? 'CUSTOMER' : 'ROOT';
-    if (step.step === 'AGREEMENT') return facts.contractPublished ? 'CUSTOMER' : 'ROOT';
     if (step.step === 'DEMO') {
       return step.phaseId !== null && facts.publishedDemoPhaseIds.includes(step.phaseId) ? 'CUSTOMER' : 'ROOT';
     }
@@ -127,6 +137,8 @@ export function computeStatusSummary(input: StatusSummaryInput): StatusSummary {
   return {
     started,
     startedAt,
+    agreementApprovedAt: input.agreementApprovedAt,
+    signedAt: input.signedAt,
     currentStep: current?.step ?? null,
     currentPhaseId: current?.phaseId ?? null,
     currentPhaseNumber: current?.phaseNumber ?? null,

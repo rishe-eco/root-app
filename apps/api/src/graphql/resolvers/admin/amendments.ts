@@ -1,8 +1,32 @@
 import { GraphQLError } from 'graphql';
 import { requireCapability, type Context } from '../../../context.js';
-import { buildAmendmentSnapshot, contentHash } from '../../../lib/revision.js';
+import { buildAmendmentSnapshot, contentHash, readContractSnapshot } from '../../../lib/revision.js';
 import { prisma } from '../../../lib/prisma.js';
 import { loadContract, log, nudgeStatus, reload } from '../contracts.js';
+
+/**
+ * Whether an amendment that relates to this article should start out sensitive
+ * (J7, owed from J4): the article it points at is about money. Read from the
+ * signed revision's own snapshot when that carries the flag (format 2 freezes
+ * `articles[].sensitive`), else from the live row with the same number (format
+ * 1 — J4's rule for the published article). A default only: `sensitive` is a
+ * column the desk can set either way, because an amendment that adds a paid
+ * extra usually points at no article at all.
+ */
+async function relatesToSensitiveArticle(
+  contractId: string,
+  revisionSnapshot: unknown,
+  relatesToArticle: number | null | undefined,
+): Promise<boolean> {
+  if (relatesToArticle == null) return false;
+  const frozen = readContractSnapshot(revisionSnapshot)?.articles.find((a) => a.number === relatesToArticle);
+  if (frozen?.sensitive !== undefined) return frozen.sensitive;
+  const live = await prisma.article.findUnique({
+    where: { contractId_number: { contractId, number: relatesToArticle } },
+    select: { sensitive: true },
+  });
+  return live?.sensitive ?? false;
+}
 
 /** The amendment lifecycle — issue, edit, publish, all against a signed base
  *  contract (schema.prisma's note on `Amendment`). Part of the L1 split of
@@ -24,6 +48,9 @@ export const amendmentMutations = {
       bodyFa: string;
       bodyEn: string;
       relatesToArticle?: number | null;
+      /** Journeys build plan J7: this amendment's prose is about money. Omitted,
+       *  it follows the article it relates to. */
+      sensitive?: boolean | null;
     },
     ctx: Context,
   ) => {
@@ -61,6 +88,7 @@ export const amendmentMutations = {
         bodyFa: args.bodyFa,
         bodyEn: args.bodyEn,
         relatesToArticle: args.relatesToArticle ?? null,
+        sensitive: args.sensitive ?? (await relatesToSensitiveArticle(contract.id, current.snapshot, args.relatesToArticle)),
         contentHash: contentHash(snapshot),
       },
     });
@@ -82,13 +110,14 @@ export const amendmentMutations = {
       bodyFa: string;
       bodyEn: string;
       relatesToArticle?: number | null;
+      sensitive?: boolean | null;
     },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
     const amendment = await prisma.amendment.findUnique({
       where: { id: args.amendmentId },
-      include: { contractRevision: { select: { contractId: true } } },
+      include: { contractRevision: { select: { contractId: true, snapshot: true } } },
     });
     if (!amendment) {
       throw new GraphQLError('No such amendment.', { extensions: { code: 'NOT_FOUND' } });
@@ -114,6 +143,16 @@ export const amendmentMutations = {
         bodyFa: args.bodyFa,
         bodyEn: args.bodyEn,
         relatesToArticle: args.relatesToArticle ?? null,
+        // Omitted keeps what the desk chose — but re-pointing the amendment at a
+        // sensitive article never leaves it readable.
+        sensitive:
+          args.sensitive ??
+          (amendment.sensitive ||
+            (await relatesToSensitiveArticle(
+              amendment.contractRevision.contractId,
+              amendment.contractRevision.snapshot,
+              args.relatesToArticle,
+            ))),
         contentHash: contentHash(snapshot),
       },
     });

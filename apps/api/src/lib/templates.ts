@@ -91,6 +91,24 @@ export function isTemplateSensitiveArticle(number: number, titleEn: string): boo
   return SENSITIVE_ARTICLES.some(([n, title]) => n === number && title === titleEn);
 }
 
+/**
+ * **The article the payment plan renders** (journeys build plan J7, trap 2):
+ * *Payment Schedule*, article 5, matched by number and English title exactly as
+ * the sensitive flag is — J4's matching, not a second one. On the new road that
+ * article's body stays empty in the template, and the renderer shows the plan
+ * (structured data, in the snapshot) beneath its title. A body typed into it as
+ * well would be two schedules that can disagree, in a document somebody signs —
+ * so `setArticle` refuses one on a new-road contract (`SCHEDULE_IS_GENERATED`).
+ * The web renderer asks this same function (mirrored in `apps/web/src/lib/`,
+ * pinned by a test reading both), not a hard-coded 5.
+ *
+ * *Fees* (article 4) is sensitive too but is prose about the fee, which is one
+ * number and not a schedule; it keeps its body.
+ */
+export function isPaymentScheduleArticle(number: number, titleEn: string): boolean {
+  return number === 5 && titleEn === 'Payment Schedule';
+}
+
 /** [key, labelFa, labelEn] */
 export const SCOPE: Array<[string, string, string]> = [
   ['bilingual', 'دوزبانه (فارسی-اول) با چیدمانِ راست‌به‌چپ', 'Bilingual (Persian-first) with full RTL'],

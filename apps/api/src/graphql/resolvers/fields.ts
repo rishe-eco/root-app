@@ -6,6 +6,7 @@ import {
   isContractReader,
   mayReadContactOf,
   mayReadArticleBody,
+  mayReadAmendmentBody,
   mayReadMoney,
   requestVisibleTo,
   visibleComment,
@@ -13,8 +14,7 @@ import {
   invoiceVisibleTo,
 } from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
-import { diffSnapshots, draftState, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
-import { agreedScopeSnapshot } from '../../lib/scope.js';
+import { diffSnapshots, isAgreementSnapshot, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
 import { carryForward, diffDesign, type PageChange } from '../../lib/design.js';
 import { computeProjectProgress } from '../../lib/phase.js';
 import { isOverdue } from '../../lib/dependency.js';
@@ -23,6 +23,7 @@ import { summarizeRows } from '../../lib/serviceImport.js';
 import { conceptsInclude, type FullContract } from './contracts.js';
 import { feedbackItemInclude } from './feedback.js';
 import { withArticleSensitivity } from './articleSensitivity.js';
+import { agreementView, draftStateOn } from './agreement.js';
 import { isTemplateSensitiveArticle } from '../../lib/templates.js';
 
 /**
@@ -124,13 +125,16 @@ export const Contract = {
     if (!snapshot) return [];
     const viewer = viewerOf(ctx);
     return snapshot.articles.map((a) => {
-      // Sensitivity (PD-14, J4) is read from the live row with the same number
-      // — the snapshot carries no such flag and its bytes must not change. A
-      // row that has since been deleted falls back to the template's own rule
-      // (Fees, Payment Schedule), so deleting a money article from the draft
-      // cannot un-hide the published one.
+      // Sensitivity (PD-14, J4). **A format-2 snapshot carries it** (J7 froze
+      // `articles[].sensitive` into the bytes), so it is read from there and no
+      // later edit of the live row can un-hide a published article. A format-1
+      // snapshot carries no such flag and its bytes must not change, so J4's
+      // rule stands for those: the live row with the same number, and, for a row
+      // since deleted, the template's own rule (Fees, Payment Schedule) — so
+      // deleting a money article from the draft cannot un-hide the published one.
       const live = c.articles.find((row) => row.number === a.number);
-      const sensitive = live ? live.sensitive : isTemplateSensitiveArticle(a.number, a.titleEn);
+      const sensitive =
+        a.sensitive !== undefined ? a.sensitive : live ? live.sensitive : isTemplateSensitiveArticle(a.number, a.titleEn);
       const readable = mayReadArticleBody(viewer, c, { sensitive });
       return {
         id: `${c.currentContractRevisionId}:${a.number}`,
@@ -156,15 +160,21 @@ export const Contract = {
     const revision = c.currentContractRevision;
     const snapshot = readContractSnapshot(revision?.snapshot ?? null);
     if (!revision || !snapshot) return null;
+    const money = mayReadMoney(viewerOf(ctx), c);
     return {
       ...revision,
       titleFa: snapshot.titleFa,
       titleEn: snapshot.titleEn,
+      format: snapshot.format,
+      // Steps 1 and 2 as approved (format 2 only, J7): what the customer signs
+      // and what the print route renders — never the redacted projection *for the
+      // customer*; `agreementView` withholds money from other staff only.
+      agreement: isAgreementSnapshot(snapshot) ? agreementView(snapshot, money) : null,
       // The frozen fee, withheld the same way as the draft's (PD-14). The
       // customer — who signs this — always reads it; `contentHash` still
       // attests to the full snapshot, so redacting one field of the *view*
       // changes nothing about what the hash covers.
-      amount: mayReadMoney(viewerOf(ctx), c) ? snapshot.amount : null,
+      amount: money ? snapshot.amount : null,
     };
   },
 
@@ -173,16 +183,18 @@ export const Contract = {
    * refusal, so a query that also asks for `id` and `titleFa` still succeeds.
    * No query of its own: `articles` is already on `c` via `contractInclude`.
    */
-  draft: (c: FullContract, _a: unknown, ctx: Context) => {
+  draft: async (c: FullContract, _a: unknown, ctx: Context) => {
     const user = viewerOf(ctx);
     // The author's working copy — the fee included, which is why readers
     // without `contracts.author` (design, development) get null here.
     if (!can(user, 'contracts.author')) return null;
     // The registry's agreed set is part of what publishing would produce
     // (L1) — without it here, marking one more item agreed would never
-    // register as "dirty" until some unrelated field also changed.
-    const scopeItems = agreedScopeSnapshot(c.project.scopeItems);
-    const { hash, dirty } = draftState(c, c.articles, c.currentContractRevision, scopeItems);
+    // register as "dirty" until some unrelated field also changed. And since J7
+    // the new road's draft also includes steps 1 and 2 (format 2), so a changed
+    // brief, plan or planned date reads dirty too: `draftStateOn` is the one
+    // computation the publish path and the agreement gate ask as well.
+    const { hash, dirty } = await draftStateOn(prisma, c);
     return {
       titleFa: c.titleFa,
       titleEn: c.titleEn,
@@ -416,6 +428,43 @@ export const ContractRevision = {
     if (isContractReader(user)) return r.amendments;
     return r.amendments.filter((a) => a.publishedAt !== null);
   },
+};
+
+/**
+ * An amendment's body is withheld like a sensitive article's (journeys build
+ * plan J7, owed from J4): null for staff without `money.read` who are not the
+ * customer when `Amendment.sensitive` is set — **checked on the field**, so every
+ * edge that returns an amendment (`ContractRevision.amendments`, `Contract.
+ * pending.amendment`) is covered at once, the way `User.email` is. The title and
+ * ordinal stay: that an amendment exists is not the secret. The contract's
+ * customer is read from the amendment's own revision when the parent row did not
+ * bring it (no include carries it, and it is only asked for on the rare
+ * sensitive one).
+ */
+async function amendmentBodyVisible(
+  a: { sensitive: boolean; contractRevisionId: string },
+  ctx: Context,
+): Promise<boolean> {
+  if (!a.sensitive) return true;
+  const revision = await prisma.contractRevision.findUnique({
+    where: { id: a.contractRevisionId },
+    select: { contract: { select: { customerId: true } } },
+  });
+  if (!revision) return false;
+  return mayReadAmendmentBody(viewerOf(ctx), revision.contract, a);
+}
+
+export const Amendment = {
+  bodyFa: async (
+    a: { bodyFa: string; sensitive: boolean; contractRevisionId: string },
+    _args: unknown,
+    ctx: Context,
+  ) => ((await amendmentBodyVisible(a, ctx)) ? a.bodyFa : null),
+  bodyEn: async (
+    a: { bodyEn: string; sensitive: boolean; contractRevisionId: string },
+    _args: unknown,
+    ctx: Context,
+  ) => ((await amendmentBodyVisible(a, ctx)) ? a.bodyEn : null),
 };
 
 export const DesignConcept = {

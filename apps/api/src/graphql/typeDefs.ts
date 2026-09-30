@@ -228,6 +228,8 @@ export const typeDefs = /* GraphQL */ `
     key: String!
     labelFa: String!
     labelEn: String!
+    "Journeys build plan J7: format-2 snapshots freeze each item's kind so Appendix 1 can be grouped. Null for a format-1 revision."
+    kind: ScopeKind
   }
 
   """
@@ -993,8 +995,11 @@ export const typeDefs = /* GraphQL */ `
     ordinal: Int!
     titleFa: String!
     titleEn: String!
-    bodyFa: String!
-    bodyEn: String!
+    "Null for a sensitive amendment when the viewer may not read the contract's money (J7, PD-14) — the hash still covers the whole text."
+    bodyFa: String
+    bodyEn: String
+    "Journeys build plan J7: this amendment's prose is about money."
+    sensitive: Boolean!
     contentHash: String!
     "An optional, non-authoritative display hint — never a supersede. See schema.prisma."
     relatesToArticle: Int
@@ -1033,6 +1038,83 @@ export const typeDefs = /* GraphQL */ `
     signature: Signature
     "Published amendments, in order. Root's unpublished drafts are admin-only."
     amendments: [Amendment!]!
+    "The snapshot's format: 1 for the legacy road and everything before J7, 2 for the new road's agreement."
+    format: Int!
+    "Journeys build plan J7: steps 1 and 2 as frozen into a format-2 snapshot — what the customer approves and signs. Null for format 1."
+    agreement: AgreementSnapshot
+  }
+
+  """
+  A format-2 snapshot's steps 1 and 2 (journeys build plan J7) — the brief,
+  the allowances, the payment plan, the phases and the planned dates as they
+  stood when the draft was published. **Money varies by viewer, and only for
+  other staff**: budgetCap and paymentPlan are null for staff without money.read
+  who are not the customer (the customer signs all of it).
+  """
+  type AgreementSnapshot {
+    brief: SnapshotBrief
+    allowances: SnapshotAllowances
+    paymentPlan: SnapshotPaymentPlan
+    phases: [SnapshotPhase!]!
+    "Calendar days (PD-19) — render in UTC."
+    plannedStartAt: DateTime
+    plannedEndAt: DateTime
+  }
+
+  "The template type as it was named when the draft was published — a signed agreement keeps saying what it said."
+  type SnapshotTemplateType {
+    slug: String!
+    labelFa: String!
+    labelEn: String!
+  }
+
+  type SnapshotBrief {
+    kind: BriefKind!
+    existingSiteUrl: String
+    templateType: SnapshotTemplateType!
+    designTier: DesignTier!
+    "Toman, decimal string. Null for staff without money.read who are not the customer."
+    budgetCap: String
+    idealDeadline: DateTime
+    hardDeadline: DateTime
+    domainName: String
+    domainProvidedBy: DependencySide
+    hostProvidedBy: DependencySide
+    contentProvidedBy: DependencySide
+    supportMonths: Int
+  }
+
+  type SnapshotAllowances {
+    premadeRounds: Int
+    wireframeIterations: Int!
+    mockupIterations: Int
+    demoIterationsPerPhase: Int
+  }
+
+  "The plan as approved — rows and terms, never whether an invoice has been issued or paid."
+  type SnapshotPaymentPlan {
+    split: PaymentSplit!
+    "Toman, decimal string — the sum of the rows."
+    total: String!
+    invoices: [SnapshotInvoice!]!
+  }
+
+  type SnapshotInvoice {
+    ordinal: Int!
+    labelFa: String!
+    labelEn: String!
+    "Toman, decimal string."
+    amount: String!
+    phaseNumber: Int
+    paymentTermDays: Int!
+  }
+
+  type SnapshotPhase {
+    number: Int!
+    titleFa: String!
+    titleEn: String!
+    plannedEndAt: DateTime
+    milestoneLabel: String
   }
 
   """
@@ -1521,6 +1603,10 @@ export const typeDefs = /* GraphQL */ `
     "Signed. J13 adds 'and the first invoice is paid'."
     started: Boolean!
     startedAt: DateTime
+    "Journeys build plan J7: when the customer approved the agreement (steps 1 to 3 locked from then). Null before, and on the legacy road."
+    agreementApprovedAt: DateTime
+    "When the current revision was signed, on both roads. Approval is not signing."
+    signedAt: DateTime
     currentStep: StepKind
     currentPhaseId: ID
     currentPhaseNumber: Int
@@ -2439,6 +2525,15 @@ export const typeDefs = /* GraphQL */ `
     # --- customer actions on a contract ---
     chooseConcept(contractId: ID!, conceptId: ID!): Contract!
     setPageApproval(pageDesignId: ID!, approved: Boolean!): Contract!
+    """
+    Approve the contract text. On an AGREEMENT_FIRST contract (journeys build plan
+    J7) this is the agreement gate — the contract's own customer only — and it
+    locks steps 1 to 3 in the same transaction. Refused: ALREADY_APPROVED,
+    NO_PUBLISHED_REVISION, SCOPE_UNCONFIRMED, PLAN_TOTAL_MISMATCH,
+    DATES_INCOMPLETE, BRIEF_INCOMPLETE, REVISION_STALE (the steps have changed
+    since the draft was published), STEP_HAS_OPEN_FEEDBACK,
+    STEP_HAS_PENDING_ANSWERS. The legacy road keeps GATE_DESIGN_INCOMPLETE.
+    """
     approveContract(contractId: ID!): Contract!
     """
     The legacy checklist tick. NOT_APPLICABLE on an AGREEMENT_FIRST contract
@@ -2446,6 +2541,7 @@ export const typeDefs = /* GraphQL */ `
     written.
     """
     setScopeItem(scopeItemId: ID!, checked: Boolean!, contractId: ID): Contract!
+    "On an AGREEMENT_FIRST contract, the contract's own customer only; sales is told."
     signContract(contractId: ID!, typedName: String!): Contract!
     """
     The legacy free thread. USE_FEEDBACK on an AGREEMENT_FIRST contract (J6):
@@ -2556,9 +2652,9 @@ export const typeDefs = /* GraphQL */ `
     STEP_NOT_ON_ROAD, STEP_LOCKED.
     """
     setPlannedDates(contractId: ID!, plannedStartAt: String, plannedEndAt: String): Contract!
-    "The title and fee half of the draft. ref is not editable — see T1 in V2.md."
+    "The title and fee half of the draft. ref is not editable — see T1 in V2.md. STEP_LOCKED once the agreement is approved (J7)."
     updateContractDraft(contractId: ID!, titleFa: String!, titleEn: String!, amount: String): Contract!
-    "Legal even when this article is inside the current published snapshot; the snapshot does not move."
+    "Legal even when this article is inside the current published snapshot; the snapshot does not move. STEP_LOCKED once the agreement is approved (J7)."
     deleteArticle(contractId: ID!, number: Int!): Contract!
     addConcept(contractId: ID!, key: String!, labelFa: String!, labelEn: String!, imageUrl: String): Contract!
     "labelFa/labelEn only — key never changes; lib/design.ts matches on it for carry-forward."
@@ -2910,7 +3006,7 @@ export const typeDefs = /* GraphQL */ `
     """
     createServiceRunBillingEntry(runId: ID!, amount: String!, descriptionFa: String!, descriptionEn: String!): ServiceRun!
 
-    "sensitive (J4, PD-14): omitted, a new article takes the template's rule and an existing one keeps its flag."
+    "sensitive (J4, PD-14): omitted, a new article takes the template's rule and an existing one keeps its flag. J7: STEP_LOCKED once the agreement is approved; SCHEDULE_IS_GENERATED for a body on Payment Schedule (article 5) of an AGREEMENT_FIRST contract — the plan is rendered there instead."
     setArticle(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, bodyFa: String, bodyEn: String, sensitive: Boolean): Contract!
 
     """
@@ -2973,9 +3069,9 @@ export const typeDefs = /* GraphQL */ `
     addInternalNote(contractId: ID!, body: String!): Contract!
 
     "The current contract revision must be signed."
-    issueAmendment(contractId: ID!, titleFa: String!, titleEn: String!, bodyFa: String!, bodyEn: String!, relatesToArticle: Int): Contract!
+    issueAmendment(contractId: ID!, titleFa: String!, titleEn: String!, bodyFa: String!, bodyEn: String!, relatesToArticle: Int, sensitive: Boolean): Contract!
     "Refused once published — the hash is recomputed on every write."
-    updateAmendment(amendmentId: ID!, titleFa: String!, titleEn: String!, bodyFa: String!, bodyEn: String!, relatesToArticle: Int): Contract!
+    updateAmendment(amendmentId: ID!, titleFa: String!, titleEn: String!, bodyFa: String!, bodyEn: String!, relatesToArticle: Int, sensitive: Boolean): Contract!
     "Refused once published."
     deleteAmendment(amendmentId: ID!): Contract!
     "Logs CONTRACT_AMENDED and nudges WAITING_ON_CUSTOMER."

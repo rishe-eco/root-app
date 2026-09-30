@@ -29,15 +29,21 @@ export function isAgreedOrBeyond(status: ScopeStatusLike): boolean {
   return AGREED_STATUSES.includes(status);
 }
 
+export type ScopeKindLike = 'PAGE' | 'FEATURE' | 'DELIVERABLE' | 'EXTRA';
+
 export type ScopeItemLike = {
   key: string;
   labelFa: string;
   labelEn: string;
   status: ScopeStatusLike;
   position: number;
+  /** Read only by `agreedScopeSnapshotFor` (format 2). */
+  kind?: ScopeKindLike;
+  /** Read only by `agreedScopeSnapshotFor` (format 2). */
+  contractId?: string | null;
 };
 
-export type ScopeItemSnapshot = { key: string; labelFa: string; labelEn: string };
+export type ScopeItemSnapshot = { key: string; labelFa: string; labelEn: string; kind?: ScopeKindLike };
 
 /**
  * What Appendix 1 freezes into a contract snapshot, generated from the
@@ -56,6 +62,27 @@ export function agreedScopeSnapshot(items: ScopeItemLike[]): ScopeItemSnapshot[]
     .filter((i) => isAgreedOrBeyond(i.status))
     .sort((a, b) => a.position - b.position)
     .map((i) => ({ key: i.key, labelFa: i.labelFa, labelEn: i.labelEn }));
+}
+
+/**
+ * **Format 2's appendix** (journeys build plan J7): the same agreed-or-beyond
+ * set in the same order, each item carrying its `kind` so the appendix can be
+ * grouped, and **narrowed to this contract**. A project can hold several
+ * contracts (PD-5) and the registry is the project's, so the format-1 rule —
+ * "every agreed item on the project" — would put a sibling contract's pages
+ * into an agreement this one's customer signs. A page, feature or deliverable
+ * belongs to the contract that agreed it (`ScopeItem.contractId`, T1); the
+ * completeness checklist's `EXTRA` rows are the project's own standing
+ * questions, seeded once, and stay in every contract's appendix as their
+ * agreed state. A separate function rather than a flag on the one above,
+ * because the two produce different documents and a flag would make the
+ * format-1 caller's output depend on an argument it never passes.
+ */
+export function agreedScopeSnapshotFor(contractId: string, items: ScopeItemLike[]): ScopeItemSnapshot[] {
+  return [...items]
+    .filter((i) => isAgreedOrBeyond(i.status) && (i.kind === 'EXTRA' || i.contractId === contractId))
+    .sort((a, b) => a.position - b.position)
+    .map((i) => ({ key: i.key, labelFa: i.labelFa, labelEn: i.labelEn, kind: i.kind }));
 }
 
 /** Which neighbour a reorder move targets, or null when the item is already

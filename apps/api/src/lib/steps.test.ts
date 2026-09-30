@@ -119,8 +119,28 @@ test('a new-road contract with no data: the first step is current, everything af
   ]);
 });
 
-test('the agreement approved: the three steps that lock with it are done, design is current', () => {
+/** The signature as the loader supplies it (J7): AGREEMENT's "done" signal. */
+const signed = (day: number): Finished => ({ step: 'AGREEMENT', phaseId: null, at: T(day) });
+
+test('the agreement approved but not signed (J7): the steps that lock with it are done, the agreement itself is locked and still current', () => {
   const w = computeWizard(state({ approvals: [approval('AGREEMENT', 5)] }));
+  assert.deepEqual(w.map((s) => `${s.step}=${s.status}/${s.locked}`), [
+    'REQUIREMENTS=DONE/true',
+    'SCOPE=DONE/true',
+    'DRAFT=DONE/true',
+    'AGREEMENT=CURRENT/true',
+    'DESIGN=UPCOMING/false',
+    'DEMO=UPCOMING/false',
+    'SUMMARY=UPCOMING/false',
+  ]);
+  // Locked with the agreement's own moment, for all four.
+  for (const s of w.slice(0, 4)) assert.deepEqual(s.lockedAt, T(5), s.step);
+  // Not done, so no finished time — the approval is a lock, not a completion.
+  assert.equal(w[3].finishedAt, null);
+});
+
+test('the agreement approved and signed (J7): AGREEMENT is done — done means signed — and design is current', () => {
+  const w = computeWizard(state({ approvals: [approval('AGREEMENT', 5)], finished: [signed(6)] }));
   assert.deepEqual(w.map((s) => `${s.step}=${s.status}/${s.locked}`), [
     'REQUIREMENTS=DONE/true',
     'SCOPE=DONE/true',
@@ -130,8 +150,19 @@ test('the agreement approved: the three steps that lock with it are done, design
     'DEMO=UPCOMING/false',
     'SUMMARY=UPCOMING/false',
   ]);
-  // Locked with the agreement's own moment, for all four.
-  for (const s of w.slice(0, 4)) assert.deepEqual(s.lockedAt, T(5), s.step);
+  assert.deepEqual(w[3].finishedAt, T(6));
+});
+
+test('a signature without an approval (a direct insert, J13’s tests) makes AGREEMENT done but locks nothing', () => {
+  const w = computeWizard(state({ finished: [signed(6)] }));
+  const agreement = w.find((s) => s.step === 'AGREEMENT')!;
+  assert.deepEqual([agreement.status, agreement.locked], ['DONE', false]);
+  assert.equal(w.find((s) => s.step === 'REQUIREMENTS')!.locked, false);
+});
+
+test('the legacy road’s AGREEMENT is done when signed, as it always was — J7 changed only the new road', () => {
+  const w = computeWizard(state({ sequence: 'DESIGN_FIRST', finished: [{ step: 'AGREEMENT', phaseId: null, at: T(4) }] }));
+  assert.equal(w.find((s) => s.step === 'AGREEMENT')!.status, 'DONE');
 });
 
 test('LOCKS_WITH_AGREEMENT is exactly the brief, the scope and the draft', () => {
@@ -142,6 +173,7 @@ test('a step with its own approval locks with that approval alone', () => {
   const w = computeWizard(
     state({
       approvals: [approval('AGREEMENT', 5), approval('DESIGN', 9)],
+      finished: [signed(6)],
       phases: [P1],
     }),
   );
@@ -158,6 +190,7 @@ test('a demo locks per phase: approving phase 1 leaves phase 2 open and current'
     state({
       phases: [P1, P2],
       approvals: [approval('AGREEMENT', 1), approval('DESIGN', 2), approval('DEMO', 3, 'p1')],
+      finished: [signed(1)],
     }),
   );
   const demos = w.filter((s) => s.step === 'DEMO');
@@ -208,7 +241,7 @@ test('every step done: no current step', () => {
     state({
       phases: [P1],
       approvals: [approval('AGREEMENT', 1), approval('DESIGN', 2), approval('DEMO', 3, 'p1')],
-      finished: [{ step: 'SUMMARY', phaseId: null, at: T(4) }],
+      finished: [signed(1), { step: 'SUMMARY', phaseId: null, at: T(4) }],
     }),
   );
   assert.equal(currentStepOf(w), null);
@@ -335,15 +368,13 @@ test('assertStepOpen: the legacy road is never locked, whatever rows exist', () 
 
 // ---- the constant ---------------------------------------------------------------------
 
-test('SEQUENCE_FOR_NEW_CONTRACTS stays DESIGN_FIRST until J7 builds the agreement gate', () => {
-  // A tripwire, not a spec: **J7 flips it**, once an AGREEMENT_FIRST contract
-  // can be approved and signed (J4 built step 1 and did not flip it — an
-  // AGREEMENT_FIRST contract still cannot get past its own agreement, and the
-  // legacy e2e specs and the integration files that create a contract through
-  // the API and take it to signature would strand). The day J7 flips it, this
-  // test is the line to change — and its failure is the reminder that
-  // createContract's callers are now on the new road.
-  assert.equal(SEQUENCE_FOR_NEW_CONTRACTS, 'DESIGN_FIRST');
+test('SEQUENCE_FOR_NEW_CONTRACTS is AGREEMENT_FIRST — J7 flipped it, PD-7 and the column default agree', () => {
+  // The tripwire this test was until J7 (it asserted DESIGN_FIRST, and said the
+  // day J7 flips it, this is the line to change). J7 builds the agreement gate —
+  // the first point at which an AGREEMENT_FIRST contract can be approved and
+  // signed — so every contract `createContract` makes is now on the new road,
+  // and a test or fixture that is *about* the legacy road makes one directly.
+  assert.equal(SEQUENCE_FOR_NEW_CONTRACTS, 'AGREEMENT_FIRST');
 });
 
 test('agreementSignedAt (J13): the signature, on both roads — an AGREEMENT approval alone is not signed', () => {

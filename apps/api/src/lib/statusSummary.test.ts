@@ -42,6 +42,7 @@ const input = (over: Partial<StatusSummaryInput> = {}): StatusSummaryInput => ({
   wizard: wizardOf(),
   attention: [],
   signedAt: null,
+  agreementApprovedAt: null,
   invoicePlan: null,
   plannedStartAt: null,
   plannedEndAt: null,
@@ -54,6 +55,8 @@ test('a fresh new-road contract: at the first step, Root’s move, not started, 
   assert.deepEqual(computeStatusSummary(input()), {
     started: false,
     startedAt: null,
+    agreementApprovedAt: null,
+    signedAt: null,
     currentStep: 'REQUIREMENTS',
     currentPhaseId: null,
     currentPhaseNumber: null,
@@ -161,6 +164,7 @@ test('the current step and phase come from the wizard, and nothing current means
       wizard: wizardOf({
         approvals: [{ step: 'AGREEMENT', phaseId: null, approvedAt: ago(9) }],
         finished: [
+          { step: 'AGREEMENT', phaseId: null, at: ago(8) },
           { step: 'DESIGN', phaseId: null, at: null },
           { step: 'DEMO', phaseId: null, at: null },
           { step: 'SUMMARY', phaseId: null, at: null },
@@ -195,9 +199,36 @@ test('nextMoveOn: the legacy road, read off what has been published', () => {
   }
 });
 
-test('nextMoveOn: every new-road step is Root’s until its own stage says otherwise', () => {
+test('nextMoveOn: every new-road step but the agreement is Root’s until its own stage says otherwise', () => {
   const everything = facts({ designPublished: true, contractPublished: true, publishedDemoPhaseIds: ['p1'] });
-  for (const name of ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT', 'DESIGN', 'MOCKUP', 'DEMO', 'SUMMARY']) {
+  for (const name of ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'DESIGN', 'MOCKUP', 'DEMO', 'SUMMARY']) {
     assert.equal(nextMoveOn('AGREEMENT_FIRST', step(name, name === 'DEMO' ? 'p1' : null), everything), 'ROOT', name);
   }
+});
+
+test('nextMoveOn (J7): the new road’s agreement is the customer’s once the text is published, Root’s before', () => {
+  assert.equal(nextMoveOn('AGREEMENT_FIRST', step('AGREEMENT'), facts()), 'ROOT');
+  assert.equal(nextMoveOn('AGREEMENT_FIRST', step('AGREEMENT'), facts({ contractPublished: true })), 'CUSTOMER');
+});
+
+test('J7: the status area names approval and signature separately — approved-and-unsigned is not signed, and the step is still current', () => {
+  const approvedAt = ago(3);
+  const wizard = wizardOf({ approvals: [{ step: 'AGREEMENT', phaseId: null, approvedAt }] });
+  const s = computeStatusSummary(input({ wizard, agreementApprovedAt: approvedAt, signedAt: null, facts: facts({ contractPublished: true }) }));
+  assert.deepEqual([s.agreementApprovedAt, s.signedAt, s.started], [approvedAt, null, false]);
+  // The step is locked but not done: the customer's next move is to sign.
+  assert.deepEqual([s.currentStep, s.nextMoveOn], ['AGREEMENT', 'CUSTOMER']);
+
+  const signedAt = ago(2);
+  const signed = computeStatusSummary(
+    input({
+      wizard: wizardOf({
+        approvals: [{ step: 'AGREEMENT', phaseId: null, approvedAt }],
+        finished: [{ step: 'AGREEMENT', phaseId: null, at: signedAt }],
+      }),
+      agreementApprovedAt: approvedAt,
+      signedAt,
+    }),
+  );
+  assert.deepEqual([signed.agreementApprovedAt, signed.signedAt, signed.started, signed.currentStep], [approvedAt, signedAt, true, 'DESIGN']);
 });

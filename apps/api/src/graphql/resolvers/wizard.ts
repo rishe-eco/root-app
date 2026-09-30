@@ -273,6 +273,12 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
       const latest = Math.max(...facts.contractRevisions.map((r) => r.publishedAt!.getTime()));
       finished.push({ step: 'DRAFT', phaseId: null, at: new Date(latest) });
     }
+    // AGREEMENT (J7) is done when it is *signed* — the current revision's
+    // signature, `agreementSignedAt`'s one rule. Its lock is the approval, which
+    // arrives in `facts.approvals`; between the two the step is locked and still
+    // current, and the status area says so.
+    const signedAt = agreementSignedAt({ signatureSignedAt: c.currentContractRevision?.signature?.signedAt ?? null });
+    if (signedAt) finished.push({ step: 'AGREEMENT', phaseId: null, at: signedAt });
   }
   return {
     sequence: c.sequence,
@@ -433,6 +439,9 @@ export const contractWizardFields = {
       // The current revision's signature, on both roads — approval is not
       // signing. `agreementSignedAt` is the one rule; invoice issuing reads it too.
       signedAt: agreementSignedAt({ signatureSignedAt: revision?.signature?.signedAt ?? null }),
+      // The approval, separately (J7): "approved on …" is a state of its own on
+      // the new road, between the draft and the signature.
+      agreementApprovedAt: facts.approvals.find((a) => a.step === 'AGREEMENT' && a.phaseId === null)?.approvedAt ?? null,
       invoicePlan:
         planRows.length === 0
           ? null

@@ -23,6 +23,8 @@ import {
   scopeProposalDecidedEmail,
   draftPublishedEmail,
   invoiceIssuedEmail,
+  agreementApprovedEmail,
+  agreementSignedEmail,
   type MailContent,
 } from './mailTemplates.js';
 import {
@@ -35,6 +37,8 @@ import {
   scopeProposalDecidedSms,
   draftPublishedSms,
   invoiceIssuedSms,
+  agreementApprovedSms,
+  agreementSignedSms,
 } from './smsTemplates.js';
 
 /**
@@ -55,7 +59,8 @@ import {
  * (`REQUEST_SUBMITTED`, `REQUEST_MESSAGE`, `REQUEST_ARCHIVED`) and, since J4,
  * `BRIEF_SHARED` (step 1 handed over), since J5 and J6 `SCOPE_PROPOSED`,
  * `SCOPE_PROPOSAL_DECIDED` and `DRAFT_PUBLISHED`, and since J13
- * `INVOICE_ISSUED`: a customer who
+ * `INVOICE_ISSUED`, and since J7 `AGREEMENT_APPROVED` and `AGREEMENT_SIGNED` (to
+ * sales — the moments an agreement moves): a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
@@ -171,6 +176,16 @@ export type NotifyEvent =
   | {
       kind: 'INVOICE_ISSUED';
       params: { customerName: string; invoiceNumber: string; amount: string; dueOn: string; portalUrl: string };
+    }
+  // Journeys build plan J7 — the customer approved the agreement (steps 1–3 lock),
+  // and then signed it. Both go to sales.
+  | {
+      kind: 'AGREEMENT_APPROVED';
+      params: { recipientName: string; customerName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string };
+    }
+  | {
+      kind: 'AGREEMENT_SIGNED';
+      params: { recipientName: string; customerName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string };
     };
 
 /** Every event's email rendering — always defined, since every event this
@@ -215,6 +230,10 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return draftPublishedEmail(locale, event.params);
     case 'INVOICE_ISSUED':
       return invoiceIssuedEmail(locale, event.params);
+    case 'AGREEMENT_APPROVED':
+      return agreementApprovedEmail(locale, event.params);
+    case 'AGREEMENT_SIGNED':
+      return agreementSignedEmail(locale, event.params);
   }
 }
 
@@ -254,6 +273,11 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
     // carries only the link; the amount and the due day are the email's.
     case 'INVOICE_ISSUED':
       return invoiceIssuedSms(locale, event.params);
+    // J7: sales is waiting on the agreement — a line each, pointing at the desk.
+    case 'AGREEMENT_APPROVED':
+      return agreementApprovedSms(locale, { deskUrl: event.params.deskUrl });
+    case 'AGREEMENT_SIGNED':
+      return agreementSignedSms(locale, { deskUrl: event.params.deskUrl });
     default:
       return null;
   }
