@@ -90,9 +90,18 @@ const ENVELOPE_SLACK = 64 * 1024;
  * a byte of the body was read: an upload that will be refused for who is
  * sending it should not be received first.
  */
+function discardRest(req: Request, ceiling: number): void {
+  let seen = 0;
+  req.on('data', (chunk: Buffer) => {
+    seen += chunk.length;
+    if (seen > ceiling) req.destroy();
+  });
+  req.on('error', () => undefined);
+  req.resume();
+}
+
 async function receiveStreamedUpload(
   req: Request,
-  res: Response,
   args: { user: User; fileClass: FileClass; policy: ClassPolicy; contractId: string; contentType: string },
 ) {
   const { user, fileClass, policy, contractId, contentType } = args;
@@ -118,9 +127,12 @@ async function receiveStreamedUpload(
       });
     } catch (err) {
       // The request may be half-read. `readBodyCapped` destroys it here, which
-      // also destroys the socket the refusal has to travel on; this asks the
-      // server to close the connection *after* the answer instead.
-      res.setHeader('Connection', 'close');
+      // also destroys the socket the refusal has to travel on — and a client
+      // still writing into a closed socket often never reads the answer at
+      // all (a reset discards it). So the answer goes out now and the rest of
+      // the body is read and thrown away, up to a ceiling past which the
+      // socket is cut: memory and disk see none of it, only bandwidth.
+      discardRest(req, policy.maxBytes * 2);
       throw err;
     }
     checkSize(received.bytes, policy);
@@ -310,7 +322,7 @@ filesRouter.post(
       if (policy.owner !== 'contract' || !contractId) {
         throw new Error(`streamed upload class ${fileClass} must be contract-owned`);
       }
-      const stored = await receiveStreamedUpload(req, res, { user, fileClass, policy, contractId, contentType });
+      const stored = await receiveStreamedUpload(req, { user, fileClass, policy, contractId, contentType });
       res.status(201).json({
         id: stored.id,
         url: `/files/${stored.id}`,

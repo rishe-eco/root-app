@@ -287,18 +287,19 @@ test('a mockup path on the portal host is never a bundle', async () => {
     const res = await raw(path, { host: portal });
     assert.equal(res.status, 404, path);
     assert.doesNotMatch(res.text, /About|about page|console\.log|__root\/reporter/, path);
-    assert.equal(res.headers['content-security-policy'], undefined, path);
+    // (Express's own 404 page sends a `default-src 'none'`; the mockup policy is what must be absent.)
+    assert.doesNotMatch(String(res.headers['content-security-policy'] ?? ''), /frame-ancestors/, path);
   }
   // A grant id in the *path* of the portal host opens nothing either.
   assert.equal((await raw(`/${id}/index.html`, { host: portal })).status, 404);
   // Nor does a look-alike domain: a host is a mockup host only under the configured base.
   const other = await raw('/', { host: `${id}.mockup.evil.example` });
   assert.equal(other.status, 404);
-  assert.equal(other.headers['content-security-policy'], undefined);
+  assert.doesNotMatch(String(other.headers['content-security-policy'] ?? ''), /frame-ancestors/);
 });
 
 test('the fence is the first thing index.ts mounts — ahead of cookieParser, cors, originCheck and every router', () => {
-  const source = readFileSync(fileURLToPath(new URL('../index.ts', import.meta.url)), 'utf8');
+  const source = readFileSync(fileURLToPath(new URL('../index.ts', import.meta.url)), 'utf8').replaceAll(String.fromCharCode(13, 10), String.fromCharCode(10));
   const mounts = [...source.matchAll(/^app\.use\(([^\n]*)/gm)].map((m) => m[1]);
   assert.ok(mounts.length >= 6, 'index.ts wiring changed shape — re-read it');
   assert.equal(mounts[0], 'mockupFence);', `the first app.use is ${mounts[0]}`);
