@@ -16,8 +16,20 @@ import { originCheck } from './lib/originCheck.js';
 import { filesRouter, filesErrorHandler } from './routes/files.js';
 import { askRouter, askErrorHandler } from './routes/ask.js';
 import { smsOutboxRouter } from './routes/smsOutbox.js';
+import { mockupFence } from './routes/mockups.js';
 
 const app = express();
+
+// **The fence (journeys build plan J9, trap 1) — the first thing mounted, on
+// purpose, ahead of cookieParser, CORS, the origin check and every router.** A
+// request on the mockup host (`*.mockup.m-root.com`) is uploaded code's
+// origin: it is answered by the mockup router or by its 404 and is never
+// passed on, so `/graphql`, `/upload`, `/files`, `/ask`, `/health`, the e2e
+// routes and the SPA do not exist there. Nginx's mockup server block is the
+// second fence; this is the one that holds when it is misconfigured. Anything
+// mounted above this line would be reachable from a mockup — see
+// routes/mockups.ts, and `j9a.test.ts`, which reads this file to keep it first.
+app.use(mockupFence);
 
 // Not a constant, because the right number depends on the deployment shape
 // and getting it wrong corrupts `Signature.ip` silently. See env.ts.

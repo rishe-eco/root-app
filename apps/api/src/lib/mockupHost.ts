@@ -58,6 +58,27 @@ export function grantIdFromHost(host: string, baseDomain: string): string | null
   return GRANT_ID_PATTERN.test(label) ? label : null;
 }
 
+/**
+ * Whether `host` is the mockup base domain **or anything under it** — the
+ * question the fence at the top of `index.ts` asks (build plan J9, trap 1),
+ * which is wider than `grantIdFromHost`'s on purpose.
+ *
+ * `grantIdFromHost` answers "is this a well-formed grant label", and returns
+ * null for the bare base domain, for `abc.mockup.m-root.com`, for two labels
+ * and for uppercase-that-is-not-hex. Every one of those is still a request
+ * that arrived on the mockup wildcard, and none of them may fall through to the
+ * portal: a fence keyed on `grantIdFromHost` alone would serve the whole app
+ * (the SPA, `/graphql`) to `mockup.m-root.com` itself and to any malformed
+ * label. So the fence keys on this — the whole subtree — and the mockup router
+ * answers 404 for the ones that do not parse to a grant.
+ */
+export function isMockupHost(host: string, baseDomain: string): boolean {
+  if (!host) return false;
+  const normalized = host.replace(/:\d+$/, '').toLowerCase().replace(/\.$/, '');
+  const base = baseDomain.toLowerCase().replace(/\.$/, '');
+  return normalized === base || normalized.endsWith(`.${base}`);
+}
+
 export type MockupUrlOptions = {
   /** Defaults to `'https'` — production's only form (PD-8's wildcard cert). */
   protocol?: string;

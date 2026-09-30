@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultCookieName, assertCookieNameIsHardened } from './env.js';
+import { defaultCookieName, assertCookieNameIsHardened, defaultMockupBaseDomain, assertMockupBaseDomain } from './env.js';
 
 /**
  * P0-7 (defect D-8): the cookie name's production default and the refusal
@@ -45,4 +45,21 @@ test('assertCookieNameIsHardened: development and test are never checked, whatev
   assert.doesNotThrow(() => assertCookieNameIsHardened('development', 'root_session'));
   assert.doesNotThrow(() => assertCookieNameIsHardened('test', 'root_session'));
   assert.doesNotThrow(() => assertCookieNameIsHardened('development', 'anything-at-all'));
+});
+
+test('defaultMockupBaseDomain: mockup.localhost outside production, mockup.m-root.com in it', () => {
+  for (const nodeEnv of ['development', 'test']) assert.equal(defaultMockupBaseDomain(nodeEnv), 'mockup.localhost');
+  assert.equal(defaultMockupBaseDomain('production'), 'mockup.m-root.com');
+});
+
+test('assertMockupBaseDomain: only a bare host name passes', () => {
+  assert.doesNotThrow(() => assertMockupBaseDomain('production', 'mockup.m-root.com'));
+  assert.doesNotThrow(() => assertMockupBaseDomain('development', 'mockup.localhost'));
+  for (const bad of ['', 'https://mockup.m-root.com', 'mockup.m-root.com:4101', '*.mockup.m-root.com', 'mockup.m-root.com/', 'localhost', 'Mockup_Host.example.com']) {
+    assert.throws(() => assertMockupBaseDomain('development', bad), /MOCKUP_BASE_DOMAIN/, bad);
+  }
+});
+
+test('assertMockupBaseDomain: a .localhost name is refused in production — a mockup URL only this machine could open', () => {
+  assert.throws(() => assertMockupBaseDomain('production', 'mockup.localhost'), /localhost/);
 });

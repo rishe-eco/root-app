@@ -2439,6 +2439,15 @@ export const typeDefs = /* GraphQL */ `
     myInvoices: [BillingEntry!]!
     "One of the caller's own issued invoices. NOT_FOUND for anything else — a draft, someone else's, a missing id alike."
     invoice(id: ID!): BillingEntry!
+    """
+    Journeys build plan J9 (PD-9). The subdomain the caller's own copy of a
+    mockup is served at — https://<grant-id>.<MOCKUP_BASE_DOMAIN>/ — for the
+    demo's current **published** mockup build. Reuses the caller's unexpired
+    grant or mints a 12-hour one. NOT_FOUND for a demo that is not a mockup or
+    a contract the caller cannot see; NO_PUBLISHED_MOCKUP before the first
+    iteration is published.
+    """
+    mockupViewUrl(demoId: ID!): String!
     "The caller's own spend report (spec §8)."
     myBillingReport: BillingReport!
     "The caller's own subscriptions."
