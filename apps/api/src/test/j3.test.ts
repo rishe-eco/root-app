@@ -539,7 +539,7 @@ test('the pending banner becomes DRAFT_TO_REVIEW and ROUND_PUBLISHED attention, 
 
 test('demo items addressed in a published build are the customer’s to accept — one line per phase, only once the build is published', async () => {
   const phase = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
-  const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com', publishedAt: new Date('2026-09-10T08:00:00Z') } });
+  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com', publishedAt: new Date('2026-09-10T08:00:00Z') } });
   const page = (key: string) =>
     prisma.demoPage.create({ data: { demoId: demo.id, key, labelFa: key, labelEn: key, canonicalPath: `/${key}` } });
   const build = await prisma.build.create({
@@ -779,8 +779,8 @@ async function enrich() {
 
   // A phase with a published demo and a draft demo, and an addressed item in a published build.
   const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'ف۱', titleEn: 'Phase 1' } });
-  const published = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://one.example.com', publishedAt: new Date() } });
-  await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://DRAFT.example.com' } });
+  const published = await prisma.demo.create({ data: { projectId, phaseId: phase.id, stagingUrl: 'https://one.example.com', publishedAt: new Date() } });
+  await prisma.demo.create({ data: { projectId, phaseId: phase.id, stagingUrl: 'https://DRAFT.example.com' } });
   const build = await prisma.build.create({
     data: { phaseId: phase.id, projectId, number: 1, declaredById: staff.DEVELOPER.id, publishedAt: new Date('2026-09-15T00:00:00Z') },
   });

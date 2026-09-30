@@ -3,7 +3,7 @@ import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { reload } from '../contracts.js';
 import { reloadOnProject } from './shared.js';
-import { requireBuildAuthorOnPhase } from '../access.js';
+import { requireBuildAuthorOnPhase, siteDemo } from '../access.js';
 import { assertStepOpenOn } from '../wizard.js';
 import { lockContract } from '../../../lib/stepApproval.js';
 import { parseCalendarDay } from '../../../lib/calendarDay.js';
@@ -72,7 +72,8 @@ async function loadDemo(demoId: string) {
   if (!demo) {
     throw new GraphQLError('No such demo.', { extensions: { code: 'NOT_FOUND' } });
   }
-  return demo;
+  // J9: a MOCKUP demo has no phase and is not this surface's (`siteDemo`).
+  return siteDemo(demo);
 }
 
 async function loadDemoPage(demoPageId: string) {
@@ -83,7 +84,8 @@ async function loadDemoPage(demoPageId: string) {
   if (!page) {
     throw new GraphQLError('No such demo page.', { extensions: { code: 'NOT_FOUND' } });
   }
-  return page;
+  // J9: as `loadDemo` — a page of a MOCKUP demo is not this surface's either.
+  return { ...page, demo: siteDemo(page.demo) };
 }
 
 /**
@@ -262,7 +264,10 @@ export const phaseMutations = {
     const phase = await loadPhase(args.phaseId);
     await requireBuildAuthorOnPhase(ctx, phase.id);
     await prisma.demo.create({
-      data: { phaseId: phase.id, stagingUrl: args.stagingUrl, buildRef: args.buildRef ?? null },
+      // `kind` is SITE by the column's default; `projectId` is the phase's
+      // (J9 — a demo names its project directly, because a MOCKUP demo has no
+      // phase to reach it through).
+      data: { kind: 'SITE', projectId: phase.projectId, phaseId: phase.id, stagingUrl: args.stagingUrl, buildRef: args.buildRef ?? null },
     });
     return reloadOnProject(phase.projectId, args.contractId ?? phase.contractId);
   },

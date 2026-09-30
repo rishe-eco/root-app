@@ -75,7 +75,7 @@ beforeEach(async () => {
   const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
   phaseId = phase.id;
-  const demo = await prisma.demo.create({ data: { phaseId, stagingUrl: 'https://nahal.staging.m-root.com' } });
+  const demo = await prisma.demo.create({ data: { projectId, phaseId, stagingUrl: 'https://nahal.staging.m-root.com' } });
   demoId = demo.id;
   const dep = await prisma.dependency.create({
     data: {

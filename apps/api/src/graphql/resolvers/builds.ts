@@ -148,7 +148,11 @@ export const buildQueries = {
   projectBuilds: async (_p: unknown, args: { projectId: string }, ctx: Context) => {
     const user = await requireBuildAuthorOnProject(ctx, args.projectId);
     return prisma.build.findMany({
-      where: { projectId: args.projectId, phase: buildPhaseScope(user) },
+      // SITE only: this is the developer's queue of staging-site versions. A
+      // MOCKUP build (J9) has no phase, so the phase scope below would already
+      // leave it out — `kind` says so out loud rather than leaving it to how
+      // Prisma reads a relation filter on a nullable column.
+      where: { projectId: args.projectId, kind: 'SITE', phase: buildPhaseScope(user) },
       include: buildInclude,
       orderBy: { number: 'desc' },
     });
@@ -267,11 +271,23 @@ export const buildMutations = {
     let buildId: string;
     try {
       buildId = await prisma.$transaction(async (tx) => {
-        const highest = await tx.build.aggregate({ where: { projectId: phase.projectId }, _max: { number: true } });
+        // Numbered per (project, kind) since J9: a site's "version 4" must not
+        // count the mockup's iterations (the unique index says the same).
+        const highest = await tx.build.aggregate({
+          where: { projectId: phase.projectId, kind: 'SITE' },
+          _max: { number: true },
+        });
         const number = nextBuildNumber(highest._max.number);
 
         const created = await tx.build.create({
-          data: { phaseId: phase.id, projectId: phase.projectId, number, declaredById: developer.id, ref: args.ref ?? null },
+          data: {
+            kind: 'SITE',
+            phaseId: phase.id,
+            projectId: phase.projectId,
+            number,
+            declaredById: developer.id,
+            ref: args.ref ?? null,
+          },
         });
 
         for (const change of args.changes) {
@@ -345,6 +361,11 @@ export const buildMutations = {
       include: { project: { include: { customer: true } }, phase: { select: { contractId: true } } },
     });
     if (!build) throw notFound('build');
+    // A MOCKUP build (J9) has no phase and is the designer's, not the
+    // developer's: this mutation is the SITE builds' publish. J9b widens it
+    // (the mockup branch, and the allowance check) rather than this file
+    // guessing at a designer guard now.
+    if (build.phaseId === null || !build.phase) throw notFound('build');
     await requireBuildAuthorOnPhase(ctx, build.phaseId);
     if (build.publishedAt) {
       throw new GraphQLError('This build is already published.', { extensions: { code: 'ALREADY_PUBLISHED' } });

@@ -68,7 +68,7 @@ const SUBMIT_ON_PAGE = `
 async function seedOpenFeedback() {
   const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
-  const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
+  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
   const page = await prisma.demoPage.create({
     data: { demoId: demo.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' },
   });
@@ -349,7 +349,7 @@ test('an unprompted (no-origin) change entry surfaces on the next demo\'s frame 
   );
   const entryId = (declared.declareBuild as { changes: Array<{ id: string }> }).changes[0].id;
 
-  const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
+  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
   ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 
   const UNPROMPTED_QUERY = `
@@ -390,7 +390,7 @@ test('unpromptedChanges is empty for a customer — staff-only, and empty is not
       variables: { phaseId: phase.id, changes: [{ note: 'internal refactor', noteLang: 'en' }] },
     }),
   );
-  const demo = await prisma.demo.create({ data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
+  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
   ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
   ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 

@@ -6,7 +6,7 @@ import { deriveFrameLines } from '../../../lib/demoFrame.js';
 import { notify } from '../../../lib/notify.js';
 import { env } from '../../../lib/env.js';
 import { linkContractId, reloadOnProject } from './shared.js';
-import { requireBuildAuthorOnPhase } from '../access.js';
+import { requireBuildAuthorOnPhase, siteDemo } from '../access.js';
 
 /**
  * Authoring the review frame, and the publish gate it exists to hold (build
@@ -29,7 +29,8 @@ async function loadDemo(demoId: string) {
   if (!demo) {
     throw new GraphQLError('No such demo.', { extensions: { code: 'NOT_FOUND' } });
   }
-  return demo;
+  // J9: a MOCKUP demo has no phase and is not the developer's (`siteDemo`).
+  return siteDemo(demo);
 }
 
 async function loadLine(lineId: string) {
@@ -40,7 +41,8 @@ async function loadLine(lineId: string) {
   if (!line) {
     throw new GraphQLError('No such frame line.', { extensions: { code: 'NOT_FOUND' } });
   }
-  return line;
+  // J9: as `loadDemo` — a line of a MOCKUP demo's frame is not this surface's.
+  return { ...line, frame: { ...line.frame, demo: siteDemo(line.frame.demo) } };
 }
 
 /** Idempotent — a demo has at most one frame (schema.prisma's unique

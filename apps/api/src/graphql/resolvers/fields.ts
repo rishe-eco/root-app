@@ -498,7 +498,10 @@ export const DemoFrame = {
     const demo = await prisma.demo.findUniqueOrThrow({ where: { id: f.demoId }, select: { phaseId: true } });
     return prisma.buildChangeEntry.findMany({
       where: {
-        build: { phaseId: demo.phaseId },
+        // A SITE demo's changes are its phase's builds'. A MOCKUP demo has no
+        // phase (J9) — and `phaseId: null` would match *every* MOCKUP build of
+        // every project, so it names its own iterations by demo instead.
+        build: demo.phaseId === null ? { demoId: f.demoId } : { phaseId: demo.phaseId },
         feedbackItemId: null,
         scopeItemId: null,
         frameLine: { is: null },

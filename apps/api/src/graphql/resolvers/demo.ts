@@ -28,17 +28,15 @@ export async function loadDemoForActor(demoId: string, user: { id: string; roles
     where: { id: demoId },
     include: {
       pages: true,
-      phase: {
-        include: {
-          project: { include: { customer: true, contracts: { select: { status: true } } } },
-        },
-      },
+      // The demo's own project (J9): a MOCKUP demo has no phase to reach it
+      // through, and `Demo.projectId` is the phase's project for a SITE one.
+      project: { include: { customer: true, contracts: { select: { status: true } } } },
     },
   });
   if (!demo) {
     throw new GraphQLError('No such demo.', { extensions: { code: 'NOT_FOUND' } });
   }
-  if (!projectVisibleTo(user as Parameters<typeof projectVisibleTo>[0], demo.phase.project)) {
+  if (!projectVisibleTo(user as Parameters<typeof projectVisibleTo>[0], demo.project)) {
     // House rule 13: "no such thing," not "not allowed" — a demo belonging
     // to someone else is indistinguishable from one that does not exist.
     throw new GraphQLError('No such demo.', { extensions: { code: 'NOT_FOUND' } });
@@ -59,7 +57,10 @@ export const demoMutations = {
     const user = requireUser(ctx);
     const demo = await loadDemoForActor(args.demoId, user);
 
-    const result = matchDemoPath(args.path, demo.pages);
+    // A MOCKUP demo is served by this app out of a zip, so its `.html` is a
+    // fact about the bundle and the mapping folds it away (`stripHtml`); a
+    // SITE demo's server decides that for itself and never opts in.
+    const result = matchDemoPath(args.path, demo.pages, { stripHtml: demo.kind === 'MOCKUP' });
     if (result.kind === 'MATCHED') {
       const page = demo.pages.find((p) => p.id === result.pageId) ?? null;
       return { matched: true, page, normalizedPath: result.normalizedPath };

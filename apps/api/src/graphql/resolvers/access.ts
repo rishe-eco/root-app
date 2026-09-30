@@ -46,6 +46,33 @@ export async function requireDesignAuthorOn(ctx: Context, contractId: string): P
 }
 
 /**
+ * The developer surface's view of a demo: a **SITE** demo, with its phase.
+ *
+ * Journeys build plan J9 made `Demo.phaseId` nullable — a `MOCKUP` demo has
+ * no phase, and the database says so (`Demo_site_has_phase_and_url`: a SITE
+ * demo always has one). Every `builds.author` mutation on a demo reads its
+ * phase (for the assignment edge and for the contract it returns), so this is
+ * the one place that turns "no phase" into an answer instead of a null
+ * dereference or a `!` that would hide it: a MOCKUP demo is not on this
+ * surface at all, and "no such demo" is the honest reply — a designer's
+ * mockup is authored through J9b's own mutations, under `design.author`.
+ *
+ * Returns the demo with `phase` and `phaseId` narrowed to non-null, so a
+ * caller reads `demo.phase.projectId` exactly as it did before J9.
+ */
+export function siteDemo<T extends { phase: unknown; phaseId: string | null }>(
+  demo: T,
+): Omit<T, 'phase' | 'phaseId'> & { phase: NonNullable<T['phase']>; phaseId: string } {
+  if (!demo.phase || demo.phaseId === null) {
+    throw new GraphQLError('No such demo.', { extensions: { code: 'NOT_FOUND' } });
+  }
+  return { ...demo, phase: demo.phase, phaseId: demo.phaseId } as Omit<T, 'phase' | 'phaseId'> & {
+    phase: NonNullable<T['phase']>;
+    phaseId: string;
+  };
+}
+
+/**
  * Build work on one phase (journeys build plan J4): a phase belongs to a
  * contract, so the claim is that contract's own developer — `canAuthorBuildOnPhase`.
  * The staff half of visibility only: a customer is never a build author, so

@@ -38,7 +38,7 @@ async function seedDemo(opts: { temporary?: boolean; decided?: boolean } = {}) {
     data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' },
   });
   const demo = await prisma.demo.create({
-    data: { phaseId: phase.id, stagingUrl: 'https://staging.example.com' },
+    data: { projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com' },
   });
   const page = await prisma.demoPage.create({
     data: { demoId: demo.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' },
