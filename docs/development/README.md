@@ -106,6 +106,7 @@ J5    step 2a — pages, features and deliverables        ✔ 2026-09-30 [J56.md
 J6    step 2b — the draft and its anchored notes        ✔ 2026-09-30 [J56.md]
 J7    step 3 — approve and sign; the gate; format 2; the flip  ✔ 2026-10-01 [J7.md]
 J13   invoices — drafts, numbers, due dates, plan issuing  ✔ 2026-09-30 [J13.md] (built before J7)
+      ── M3 (J4 · J5 · J6 · J7 · J13) full suites green 2026-10-01: unit 787+281 · integration 880 · e2e 86
 T2+J8 step 4 — theme catalogue, wireframes and palette      ◐ T2 catalogue ✔ 2026-09-29 [T2.md] · J8 after J7
 J9    step 5 — the mockup host, streamed bundle upload
 J10   step 6 — demo submission, readiness, per-phase approval
