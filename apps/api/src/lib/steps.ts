@@ -37,6 +37,19 @@ import type { ContractSequence, StepKind } from '@prisma/client';
  *  `SENIOR_DESIGNER` are the custom one. J8 stores the tier and derives this. */
 export type DesignPath = 'PREMADE' | 'CUSTOM';
 
+export type DesignTierName = 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+
+/**
+ * **The one place a brief's design tier becomes a path** (PD-13; journeys build
+ * plan J8). `THEME_PICK` is the pre-made path, the other two the custom one.
+ * The brief's completeness (which allowance step 1 must set), the wizard's road
+ * (whether MOCKUP is on it), the allowance a design round counts against and
+ * the design step's own completeness all ask here, so a tier cannot be
+ * pre-made to one of them and custom to another. (J4 wrote the comparison
+ * inline in `briefCompleteness`; that call comes here now.)
+ */
+export const designPathOf = (tier: DesignTierName): DesignPath => (tier === 'THEME_PICK' ? 'PREMADE' : 'CUSTOM');
+
 /**
  * The sequence `createContract` gives a new contract — **`AGREEMENT_FIRST`, the
  * column's own default and PD-7's rule**, flipped by J7. Until then this stood at
@@ -122,14 +135,22 @@ export type Approval = { step: StepKind; phaseId: string | null; approvedAt: Dat
  *  completion is a count of approved pages, not an event). */
 export type Finished = { step: StepKind; phaseId: string | null; at: Date | null };
 
+/** Rounds used against an allowance (`lib/allowance.ts`), for the steps that
+ *  have one. Optional and empty by default: a step nobody counts yet (MOCKUP
+ *  before J9, a phase's DEMO before J10) has no entry and reads `null`. */
+export type IterationCount = { step: StepKind; phaseId: string | null; used: number; allowance: number | null };
+
 export type WizardState = {
   sequence: ContractSequence;
+  /** From the brief's design tier (`designPathOf`, J8); null when there is no
+   *  brief yet, and for a `DESIGN_FIRST` contract, which has none. */
   designPath: DesignPath | null;
   /** This contract's phases — the ones whose `Phase.contractId` names it (J4). */
   phases: PhaseRef[];
   /** Ignored for `DESIGN_FIRST`, which is never locked. */
   approvals: Approval[];
   finished: Finished[];
+  iterations?: IterationCount[];
 };
 
 export type WizardStatus = 'DONE' | 'CURRENT' | 'UPCOMING';
@@ -141,8 +162,8 @@ export type WizardStep = StepSlot & {
   /** False only for SUMMARY, which "never takes input" (plan J3) — a step no
    *  mutation edits, so `assertStepOpen` refuses it whatever its lock says. */
   takesInput: boolean;
-  /** Filled by J8–J10 (rounds of changes used against the allowance); null
-   *  until a step has an allowance to count against. */
+  /** Rounds published against the allowance — DESIGN since J8; MOCKUP and DEMO
+   *  are J9's and J10's. Null for a step nobody counts (yet). */
   iterationsUsed: number | null;
   allowance: number | null;
   /** When the step was completed, where the data knows. */
@@ -181,6 +202,7 @@ export function computeWizard(state: WizardState): WizardStep[] {
     const own = legacy ? undefined : state.approvals.find((a) => sameSlot(a, s));
     const sealing = LOCKS_WITH_AGREEMENT.has(s.step) ? agreement : own;
     const finished = state.finished.find((f) => sameSlot(f, s));
+    const counted = state.iterations?.find((i) => sameSlot(i, s));
     // **AGREEMENT is done when it is signed, not when it is approved** (J7): on the
     // new road the customer approves and then signs on one screen, and between the
     // two the step is locked (nothing about it can change) but still theirs to
@@ -193,8 +215,8 @@ export function computeWizard(state: WizardState): WizardStep[] {
       locked: sealing !== undefined,
       lockedAt: sealing?.approvedAt ?? null,
       takesInput: s.step !== 'SUMMARY',
-      iterationsUsed: null,
-      allowance: null,
+      iterationsUsed: counted?.used ?? null,
+      allowance: counted?.allowance ?? null,
       finishedAt: done ? (finished?.at ?? sealing?.approvedAt ?? null) : null,
     } satisfies WizardStep;
   });
@@ -263,4 +285,53 @@ export function legacyFinished(input: {
  */
 export function agreementSignedAt(input: { signatureSignedAt: Date | null }): Date | null {
   return input.signatureSignedAt;
+}
+
+// --- the design step's own completeness (journeys build plan J8) ---------------
+
+/** What the design step still lacks. `NO_ROUND`: nothing has been published to
+ *  the customer. `BRIEF_MISSING`: without a brief there is no path to be
+ *  complete on (unreachable on a real contract — the agreement gate refuses
+ *  first — and refused rather than guessed). Pre-made: `CONCEPT_NOT_CHOSEN`.
+ *  Custom: `NO_PAGES`, `PAGE_NOT_APPROVED`, `PALETTE_EMPTY`. */
+export type DesignMissing =
+  | 'NO_ROUND'
+  | 'BRIEF_MISSING'
+  | 'CONCEPT_NOT_CHOSEN'
+  | 'NO_PAGES'
+  | 'PAGE_NOT_APPROVED'
+  | 'PALETTE_EMPTY';
+
+/**
+ * **Design completeness on the new road** — a new function beside the legacy
+ * gate, not an edit of it (PD-7): `computeGate`'s `designComplete` and every
+ * `DESIGN_FIRST` path are untouched, and `gate.test.ts` still holds them.
+ *
+ * - **Pre-made**: a concept is chosen — one of the published round's themes.
+ * - **Custom**: every page of the round is approved, there is at least one page
+ *   (an empty design is not a complete one), and the palette is not empty.
+ *
+ * It reads the **current published revision** — what the customer is looking at
+ * and can approve — and never the designer's draft. Empty means complete, and
+ * `approveDesign` uses this very list as its precondition (`DESIGN_INCOMPLETE`),
+ * so the button and the refusal cannot disagree.
+ */
+export function designMissing(input: {
+  path: DesignPath | null;
+  /** A design revision has been published and is current. */
+  hasRound: boolean;
+  concepts: ReadonlyArray<{ chosenAt: Date | null; pages: ReadonlyArray<{ approvedAt: Date | null }> }>;
+  paletteCount: number;
+}): DesignMissing[] {
+  if (!input.hasRound) return ['NO_ROUND'];
+  if (input.path === null) return ['BRIEF_MISSING'];
+  if (input.path === 'PREMADE') {
+    return input.concepts.some((c) => c.chosenAt !== null) ? [] : ['CONCEPT_NOT_CHOSEN'];
+  }
+  const pages = input.concepts.flatMap((c) => c.pages);
+  const missing: DesignMissing[] = [];
+  if (pages.length === 0) missing.push('NO_PAGES');
+  else if (pages.some((p) => p.approvedAt === null)) missing.push('PAGE_NOT_APPROVED');
+  if (input.paletteCount === 0) missing.push('PALETTE_EMPTY');
+  return missing;
 }

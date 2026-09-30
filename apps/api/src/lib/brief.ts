@@ -1,4 +1,5 @@
 import type { DependencySide } from '@prisma/client';
+import { designPathOf } from './steps.js';
 
 /**
  * Step 1's own rules (journeys build plan J4, house rule 3): what the brief
@@ -295,7 +296,7 @@ export function briefCompleteness(input: {
     if (!brief.hostProvidedBy) add('HOST_PROVIDER');
     if (!brief.contentProvidedBy) add('CONTENT_PROVIDER');
     if (brief.supportMonths === null) add('SUPPORT_MONTHS');
-    if (brief.designTier === 'THEME_PICK') {
+    if (designPathOf(brief.designTier) === 'PREMADE') {
       if (brief.premadeRounds === null) add('PREMADE_ROUNDS');
     } else if (brief.mockupIterations === null) {
       add('MOCKUP_ITERATIONS');

@@ -1,6 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { carryForward, diffDesign, type ConceptShape } from './design.js';
+import {
+  carryForward,
+  designChanged,
+  diffDesign,
+  readThemeSnapshot,
+  roundPublishedAnswer,
+  snapshotTheme,
+  themeConceptKey,
+  type ConceptShape,
+  type PaletteShape,
+} from './design.js';
 
 const APPROVED = new Date('2026-07-30T10:00:00Z');
 const CHOSEN = new Date('2026-07-29T10:00:00Z');
@@ -108,4 +118,95 @@ test('diffDesign never produces a kind outside the four known literals', () => {
       `unexpected kind: ${k}`,
     );
   }
+});
+
+// ---- the palette (journeys build plan J8) -----------------------------------------
+
+const swatch = (role: string, value: string, over: Partial<PaletteShape> = {}): PaletteShape => ({
+  kind: 'COLOR',
+  role,
+  value,
+  labelFa: role,
+  labelEn: role,
+  imageFileId: null,
+  ...over,
+});
+
+test('a palette-only edit is a change — a round that only moves a colour must still be publishable', () => {
+  const concepts = revision([page('home', '/a.png', APPROVED)]);
+  const before = { concepts, palette: [swatch('primary', '#112233')] };
+  assert.equal(designChanged(before, { concepts, palette: [swatch('primary', '#112233')] }), false, 'nothing moved');
+  assert.equal(designChanged(before, { concepts, palette: [swatch('primary', '#445566')] }), true, 'a colour moved');
+  assert.equal(designChanged(before, { concepts, palette: [swatch('primary', '#112233'), swatch('accent', '#ffffff')] }), true, 'an item added');
+  assert.equal(designChanged(before, { concepts, palette: [] }), true, 'an item removed');
+  assert.equal(designChanged(before, { concepts, palette: [swatch('primary', '#112233', { labelEn: 'Brand blue' })] }), true, 'a label changed');
+  assert.equal(designChanged(before, { concepts, palette: [swatch('primary', '#112233', { imageFileId: 'f1' })] }), true, 'a picture attached');
+});
+
+test('the same role under a different kind is a different item', () => {
+  const concepts = revision([]);
+  const before = { concepts, palette: [swatch('primary', '#112233')] };
+  const after = { concepts, palette: [swatch('primary', 'Vazirmatn', { kind: 'FONT' })] };
+  assert.equal(designChanged(before, after), true);
+});
+
+test('designChanged still says what diffDesign says about concepts and pages — and a new concept key is a change even with no pages', () => {
+  const palette: PaletteShape[] = [];
+  const a = revision([page('home', '/a.png')]);
+  assert.equal(designChanged({ concepts: a, palette }, { concepts: revision([page('home', '/a.png')]), palette }), false);
+  assert.equal(designChanged({ concepts: a, palette }, { concepts: revision([page('home', '/b.png')]), palette }), true);
+  const themeRound = (...keys: string[]): ConceptShape[] => keys.map((key) => ({ key, chosenAt: null, pages: [] }));
+  assert.equal(designChanged({ concepts: themeRound('theme-1'), palette }, { concepts: themeRound('theme-1'), palette }), false, 'the same themes again is nothing new');
+  assert.equal(designChanged({ concepts: themeRound('theme-1'), palette }, { concepts: themeRound('theme-2'), palette }), true);
+  assert.equal(designChanged({ concepts: themeRound('theme-1'), palette }, { concepts: themeRound('theme-1', 'theme-2'), palette }), true);
+});
+
+// ---- theme rounds (journeys build plan J8) ----------------------------------------
+
+test('a theme snapshot holds name, vendor and demo URL — and nothing else, whatever it is handed', () => {
+  const theme = {
+    id: 't1',
+    name: 'Astra',
+    vendor: 'ThemeForest',
+    demoUrl: 'https://astra.example/demo',
+    licenseCost: 4_500_000n,
+    notesFa: 'یادداشت داخلی',
+    notesEn: 'internal note',
+    previewFileId: 'f1',
+    active: true,
+  };
+  const snapshot = snapshotTheme(theme);
+  assert.deepEqual(snapshot, { name: 'Astra', vendor: 'ThemeForest', demoUrl: 'https://astra.example/demo' });
+  assert.deepEqual(Object.keys(snapshot).sort(), ['demoUrl', 'name', 'vendor']);
+  assert.ok(!JSON.stringify(snapshot).includes('4500000'), 'no licence cost');
+  assert.ok(!JSON.stringify(snapshot).includes('internal'), 'no notes');
+});
+
+test('a stored snapshot reads back as the three known keys or nothing', () => {
+  assert.deepEqual(readThemeSnapshot({ name: 'Astra', vendor: null, demoUrl: null }), { name: 'Astra', vendor: null, demoUrl: null });
+  // Whatever else the JSON column happens to hold is dropped — a licence cost written by a bug never reaches a reader.
+  assert.deepEqual(readThemeSnapshot({ name: 'Astra', vendor: 'V', demoUrl: 'https://x.example', licenseCost: '4500000' }), {
+    name: 'Astra',
+    vendor: 'V',
+    demoUrl: 'https://x.example',
+  });
+  for (const bad of [null, undefined, 'x', 3, {}, { vendor: 'V' }, { name: 5 }]) assert.equal(readThemeSnapshot(bad), null, JSON.stringify(bad));
+});
+
+test('a theme’s concept key is stable and unique per theme, so a re-proposed theme is the same concept to carry-forward', () => {
+  assert.equal(themeConceptKey('abc'), 'theme-abc');
+  assert.notEqual(themeConceptKey('abc'), themeConceptKey('abd'));
+  const round1: ConceptShape[] = [{ key: themeConceptKey('abc'), chosenAt: CHOSEN, pages: [] }];
+  const round2: ConceptShape[] = [
+    { key: themeConceptKey('abc'), chosenAt: null, pages: [] },
+    { key: themeConceptKey('xyz'), chosenAt: null, pages: [] },
+  ];
+  assert.equal(carryForward(round1, round2).chosenConceptKey, 'theme-abc');
+});
+
+test('the answer that closes "show me other options" is in the customer’s language and names the round', () => {
+  assert.match(roundPublishedAnswer('en', 2), /Round 2/);
+  assert.match(roundPublishedAnswer('fa', 2), /دورِ ۲/);
+  assert.notEqual(roundPublishedAnswer('en', 2), roundPublishedAnswer('fa', 2));
+  assert.equal(roundPublishedAnswer(null, 3), roundPublishedAnswer('fa', 3), 'Persian is the default');
 });

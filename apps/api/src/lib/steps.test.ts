@@ -8,6 +8,8 @@ import {
   assertStepOpen,
   computeWizard,
   currentStepOf,
+  designMissing,
+  designPathOf,
   legacyFinished,
   stepsFor,
   type Approval,
@@ -253,11 +255,67 @@ test('SUMMARY never takes input; every other step does', () => {
   assert.deepEqual(w.filter((s) => !s.takesInput).map((s) => s.step), ['SUMMARY']);
 });
 
-test('iterationsUsed and allowance are null until J8–J10 give a step an allowance', () => {
+test('iterationsUsed and allowance are null for a step nobody counts', () => {
   for (const s of computeWizard(state())) {
     assert.equal(s.iterationsUsed, null);
     assert.equal(s.allowance, null);
   }
+});
+
+test('J8: the design step carries its rounds used and its allowance; a step with no entry still reads null', () => {
+  const w = computeWizard(state({ designPath: 'PREMADE', iterations: [{ step: 'DESIGN', phaseId: null, used: 2, allowance: 3 }] }));
+  const design = w.find((s) => s.step === 'DESIGN')!;
+  assert.equal(design.iterationsUsed, 2);
+  assert.equal(design.allowance, 3);
+  for (const s of w.filter((x) => x.step !== 'DESIGN')) assert.equal(s.iterationsUsed, null, s.step);
+  // A demo's count is per phase: only the phase it names carries it.
+  const withDemo = computeWizard(
+    state({ phases: [P1, P2], iterations: [{ step: 'DEMO', phaseId: 'p2', used: 1, allowance: 2 }] }),
+  );
+  assert.deepEqual(
+    withDemo.filter((s) => s.step === 'DEMO').map((s) => [s.phaseId, s.iterationsUsed, s.allowance]),
+    [
+      ['p1', null, null],
+      ['p2', 1, 2],
+    ],
+  );
+});
+
+test('J8: designPathOf is the one place a tier becomes a path — the pre-made tier and the two custom ones', () => {
+  assert.equal(designPathOf('THEME_PICK'), 'PREMADE');
+  assert.equal(designPathOf('CLAUDE_ASSISTED'), 'CUSTOM');
+  assert.equal(designPathOf('SENIOR_DESIGNER'), 'CUSTOM');
+});
+
+test('J8: the custom path puts MOCKUP on the road and the pre-made path does not — from the tier, through the same function', () => {
+  const road = (tier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER') =>
+    stepsFor('AGREEMENT_FIRST', designPathOf(tier), []).map((s) => s.step);
+  assert.equal(road('THEME_PICK').includes('MOCKUP'), false);
+  assert.equal(road('CLAUDE_ASSISTED').includes('MOCKUP'), true);
+  assert.equal(road('SENIOR_DESIGNER').includes('MOCKUP'), true);
+});
+
+// ---- designMissing: the new road's design completeness (J8) ---------------------------
+
+test('J8 designMissing: pre-made needs a chosen concept; custom needs every page approved, one page at least, and a palette', () => {
+  const concept = (chosen: boolean, ...pages: boolean[]) => ({
+    chosenAt: chosen ? T(1) : null,
+    pages: pages.map((approved) => ({ approvedAt: approved ? T(1) : null })),
+  });
+  const table: Array<{ name: string; input: Parameters<typeof designMissing>[0]; want: string[] }> = [
+    { name: 'nothing published yet', input: { path: 'PREMADE', hasRound: false, concepts: [], paletteCount: 0 }, want: ['NO_ROUND'] },
+    { name: 'a round but no brief, so no path', input: { path: null, hasRound: true, concepts: [concept(true)], paletteCount: 3 }, want: ['BRIEF_MISSING'] },
+    { name: 'pre-made, nothing chosen', input: { path: 'PREMADE', hasRound: true, concepts: [concept(false), concept(false)], paletteCount: 0 }, want: ['CONCEPT_NOT_CHOSEN'] },
+    { name: 'pre-made, one chosen — a palette is not asked for', input: { path: 'PREMADE', hasRound: true, concepts: [concept(false), concept(true)], paletteCount: 0 }, want: [] },
+    { name: 'pre-made: page approvals are not asked for', input: { path: 'PREMADE', hasRound: true, concepts: [concept(true, false)], paletteCount: 0 }, want: [] },
+    { name: 'custom, no pages at all', input: { path: 'CUSTOM', hasRound: true, concepts: [concept(true)], paletteCount: 2 }, want: ['NO_PAGES'] },
+    { name: 'custom, a page unapproved', input: { path: 'CUSTOM', hasRound: true, concepts: [concept(true, true, false)], paletteCount: 2 }, want: ['PAGE_NOT_APPROVED'] },
+    { name: 'custom, pages approved, palette empty', input: { path: 'CUSTOM', hasRound: true, concepts: [concept(true, true, true)], paletteCount: 0 }, want: ['PALETTE_EMPTY'] },
+    { name: 'custom, both missing', input: { path: 'CUSTOM', hasRound: true, concepts: [concept(true, false)], paletteCount: 0 }, want: ['PAGE_NOT_APPROVED', 'PALETTE_EMPTY'] },
+    { name: 'custom, complete', input: { path: 'CUSTOM', hasRound: true, concepts: [concept(true, true, true)], paletteCount: 1 }, want: [] },
+    { name: 'custom: the concept need not be chosen (there is one direction to approve)', input: { path: 'CUSTOM', hasRound: true, concepts: [concept(false, true)], paletteCount: 1 }, want: [] },
+  ];
+  for (const { name, input, want } of table) assert.deepEqual(designMissing(input), want, name);
 });
 
 // ---- computeWizard: the legacy road -----------------------------------------------

@@ -40,6 +40,9 @@ export { LOCALES, resolveLocale };
  *     the email's.
  *   - `invoiceIssuedSms` (journeys build plan J13): **one placeholder**, the URL —
  *     no number, no amount.
+ *   - `designRoundPublishedSms`, `designConceptChosenSms`, `designOtherOptionsSms`,
+ *     `designApprovedSms`, `allowanceExhaustedSms` (journeys build plan J8): **one
+ *     placeholder** each, the URL — the round count and the names are the email's.
  *
  * Codes are printed in Latin digits in both languages, never through
  * `toPersianDigits` — house rule 14's own exception for an identifier
@@ -149,4 +152,45 @@ export function agreementSignedSms(locale: string | null | undefined, params: { 
     return { text: `A customer signed their agreement on Root: ${params.deskUrl}` };
   }
   return { text: `مشتری توافق‌نامه‌اش را در ریشه امضا کرد: ${params.deskUrl}` };
+}
+
+/** J8 — to the customer, when a design round is published. No count, no
+ *  title: the email carries "round 2 of 3", the SMS points at the page. */
+export function designRoundPublishedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A new design round is ready on Root: ${params.portalUrl}` };
+  }
+  return { text: `دورِ تازه‌ی طراحی در ریشه آماده است: ${params.portalUrl}` };
+}
+
+/** J8 — to the designer, when the customer chooses a design. */
+export function designConceptChosenSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A customer chose a design on Root: ${params.deskUrl}` };
+  }
+  return { text: `مشتری در ریشه یک طرح را انتخاب کرد: ${params.deskUrl}` };
+}
+
+/** J8 — to the designer, when the customer asks for other options. */
+export function designOtherOptionsSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A customer asked for other design options on Root: ${params.deskUrl}` };
+  }
+  return { text: `مشتری در ریشه گزینه‌های دیگری برای طراحی خواست: ${params.deskUrl}` };
+}
+
+/** J8 — to the designer, when the customer approves the design. */
+export function designApprovedSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A customer approved their design on Root: ${params.deskUrl}` };
+  }
+  return { text: `مشتری طراحی‌اش را در ریشه تأیید کرد: ${params.deskUrl}` };
+}
+
+/** J8 — to sales, when a step's rounds are used up and another is wanted. */
+export function allowanceExhaustedSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A step has used up its rounds on Root — extend it? ${params.deskUrl}` };
+  }
+  return { text: `یک مرحله در ریشه دورهای مجازش را مصرف کرد؛ افزایش می‌دهید؟ ${params.deskUrl}` };
 }

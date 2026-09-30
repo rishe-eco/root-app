@@ -18,6 +18,11 @@ import {
   invoiceIssuedEmail,
   agreementApprovedEmail,
   agreementSignedEmail,
+  designRoundPublishedEmail,
+  designConceptChosenEmail,
+  designOtherOptionsEmail,
+  designApprovedEmail,
+  allowanceExhaustedEmail,
   feedbackSubmittedEmail,
   answerPendingEmail,
   answerPublishedEmail,
@@ -194,6 +199,47 @@ const builders: Array<{ name: string; build: (locale: string) => MailContent; li
         customerName: 'نهال',
         projectTitleFa: 'فروشگاه نهال',
         projectTitleEn: 'Nahal shop',
+        deskUrl: DESK_STEPS_URL,
+      }),
+    link: DESK_STEPS_URL,
+  },
+  // Journeys build plan J8 — the design step.
+  {
+    name: 'design-round-published',
+    build: (l) =>
+      designRoundPublishedEmail(l, {
+        customerName: 'نهال',
+        projectTitleFa: 'فروشگاه نهال',
+        projectTitleEn: 'Nahal shop',
+        round: 2,
+        allowance: 3,
+        premade: true,
+        portalUrl: PORTAL_CONTRACT_URL,
+      }),
+    link: PORTAL_CONTRACT_URL,
+  },
+  ...(['concept-chosen', 'other-options', 'approved'] as const).map((which) => ({
+    name: `design-${which}`,
+    build: (l: string) =>
+      (which === 'concept-chosen' ? designConceptChosenEmail : which === 'other-options' ? designOtherOptionsEmail : designApprovedEmail)(l, {
+        recipientName: 'طراح',
+        customerName: 'نهال',
+        projectTitleFa: 'فروشگاه نهال',
+        projectTitleEn: 'Nahal shop',
+        deskUrl: DESK_STEPS_URL,
+      }),
+    link: DESK_STEPS_URL,
+  })),
+  {
+    name: 'allowance-exhausted',
+    build: (l) =>
+      allowanceExhaustedEmail(l, {
+        recipientName: 'فروش',
+        projectTitleFa: 'فروشگاه نهال',
+        projectTitleEn: 'Nahal shop',
+        step: 'DESIGN',
+        used: 3,
+        allowance: 3,
         deskUrl: DESK_STEPS_URL,
       }),
     link: DESK_STEPS_URL,
@@ -433,4 +479,58 @@ test('J7: an approved agreement says steps 1 to 3 are locked and that the signat
   assert.match(agreementSignedEmail('en', agreementParams).text, /invoice by invoice/);
   assert.match(agreementApprovedEmail('fa', agreementParams).text, /قفل/);
   assert.match(agreementSignedEmail('fa', agreementParams).text, /یکی‌یکی/);
+});
+
+const roundParams = {
+  customerName: 'Nahal & Co',
+  projectTitleFa: 'فروشگاه نهال',
+  projectTitleEn: 'Nahal <shop>',
+  round: 2,
+  allowance: 3 as number | null,
+  premade: true,
+  portalUrl: PORTAL_CONTRACT_URL,
+};
+
+test('J8: a published round says which round of how many, in the locale’s own digits, and what the customer has to look at', () => {
+  const en = designRoundPublishedEmail('en', roundParams);
+  assert.match(en.subject, /Round 2 of 3/);
+  assert.match(en.text, /new set of themes/);
+  assert.ok(en.html.includes('Nahal &amp; Co') && en.html.includes('Nahal &lt;shop&gt;'), 'a name is text, not markup');
+  const fa = designRoundPublishedEmail('fa', roundParams);
+  // House rule 14: a round is a count, so Persian digits — not the Latin ones an identifier would keep.
+  assert.match(fa.subject, /دورِ ۲ از ۳/);
+  assert.ok(!/[0-9]/.test(fa.subject.replace('Nahal', '')), 'no Latin digit in the Persian subject');
+  assert.match(fa.text, /پوسته/);
+  // A custom round talks about the wireframes and palette, not themes.
+  assert.match(designRoundPublishedEmail('en', { ...roundParams, premade: false }).text, /wireframes and palette/);
+  assert.match(designRoundPublishedEmail('fa', { ...roundParams, premade: false }).text, /وایرفریم/);
+  // No allowance recorded: the sentence drops the "of".
+  assert.match(designRoundPublishedEmail('en', { ...roundParams, allowance: null }).subject, /Round 2 of the design/);
+});
+
+test('J8: the customer’s Persian is «تو», the desk’s is formal', () => {
+  // Customer: the imperative singular. Desk: the formal plural.
+  assert.match(designRoundPublishedEmail('fa', roundParams).text, /نگاهی بینداز/);
+  const desk = designOtherOptionsEmail('fa', { ...agreementParams, recipientName: 'طراح' });
+  assert.match(desk.text, /پیشنهاد دهید/);
+  assert.ok(!/بینداز|بگذار/.test(desk.text), 'the desk is not addressed as «تو»');
+});
+
+test('J8: the three designer emails say what the customer did, in each locale', () => {
+  assert.match(designConceptChosenEmail('en', agreementParams).subject, /A design was chosen/);
+  assert.match(designOtherOptionsEmail('en', agreementParams).text, /publish the next round/);
+  assert.match(designApprovedEmail('en', agreementParams).text, /locked/);
+  assert.match(designConceptChosenEmail('fa', agreementParams).subject, /انتخاب شد/);
+  assert.match(designOtherOptionsEmail('fa', agreementParams).text, /دور بعد/);
+  assert.match(designApprovedEmail('fa', agreementParams).text, /قفل/);
+  for (const build of [designConceptChosenEmail, designOtherOptionsEmail, designApprovedEmail]) {
+    const en = build('en', agreementParams);
+    assert.ok(en.html.includes('Nahal &amp; Co') && !en.html.includes('<b>'), 'escaped');
+  }
+});
+
+test('J8: the exhausted-allowance email names the step and how many rounds it had', () => {
+  const params = { recipientName: 'Sara', projectTitleFa: 'فروشگاه نهال', projectTitleEn: 'Nahal shop', step: 'DESIGN', used: 3, allowance: 3, deskUrl: DESK_STEPS_URL };
+  assert.match(allowanceExhaustedEmail('en', params).text, /"Design" step .*all 3 of its rounds/s);
+  assert.match(allowanceExhaustedEmail('fa', params).text, /هر ۳ دورِ مجاز/);
 });

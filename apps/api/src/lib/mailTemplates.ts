@@ -874,3 +874,194 @@ export function invoiceIssuedEmail(
     text: `${params.customerName} عزیز،\n\nریشه صورت‌حساب ${params.invoiceNumber} را به مبلغ ${amount} صادر کرد. سررسید آن ${due} است.\n\nمی‌توانید آن را همین‌جا ببینید و چاپ کنید:\n${params.portalUrl}\n\nپرداخت از راه پرتال انجام نمی‌شود. مبلغ را مستقیماً به ریشه بپردازید؛ پس از رسیدنِ آن، ریشه صورت‌حساب را همین‌جا «پرداخت‌شده» علامت می‌زند. اگر به مشخصات پرداخت ریشه نیاز دارید، از رابطِ خود در ریشه بپرسید.`,
   };
 }
+
+/** A whole count in the locale's own digits (house rule 14) — a round is a
+ *  count, not an identifier. */
+function countText(n: number, locale: Locale): string {
+  return new Intl.NumberFormat(locale === 'fa' ? 'fa-IR' : 'en-US').format(n);
+}
+
+/**
+ * Journeys build plan J8 — a design round was published: the customer's cue to
+ * look, choose or comment. "Round 2 of 3" is in the subject line's body because
+ * the allowance is a promise the customer has been told about (journeys §7.4),
+ * and the count is the fastest way to see it move. `allowance` is null when the
+ * brief set none (unreachable on a real contract — see `lib/allowance.ts`); the
+ * sentence then drops the "of".
+ */
+export function designRoundPublishedEmail(
+  locale: string | null | undefined,
+  params: {
+    customerName: string;
+    projectTitleFa: string;
+    projectTitleEn: string;
+    round: number;
+    allowance: number | null;
+    premade: boolean;
+    portalUrl: string;
+  },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    const which = params.allowance === null ? `Round ${params.round}` : `Round ${params.round} of ${params.allowance}`;
+    const what = params.premade ? 'a new set of themes to choose from' : 'a new version of the wireframes and palette';
+    return {
+      subject: `${which} of the design is ready — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${which} of the design for <strong>${title}</strong> is ready: ${what}. Take a look, leave a note on anything that is not right, and approve the design when you are happy with it.</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\n${which} of the design for "${params.projectTitleEn}" is ready: ${what}. Take a look, leave a note on anything that is not right, and approve the design when you are happy with it.\n\n${params.portalUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const round = countText(params.round, 'fa');
+  const which =
+    params.allowance === null ? `دورِ ${round}` : `دورِ ${round} از ${countText(params.allowance, 'fa')}`;
+  const what = params.premade ? 'مجموعه‌ی تازه‌ای از پوسته‌ها برای انتخاب' : 'نسخه‌ی تازه‌ای از وایرفریم‌ها و پالت رنگ';
+  return {
+    subject: `${which} طراحی آماده است — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${which} طراحیِ «${title}» آماده است: ${what}. نگاهی بینداز، هر جا درست نیست نظر بگذار و وقتی راضی بودی طراحی را تأیید کن.</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\n${which} طراحیِ «${params.projectTitleFa}» آماده است: ${what}. نگاهی بینداز، هر جا درست نیست نظر بگذار و وقتی راضی بودی طراحی را تأیید کن.\n\n${params.portalUrl}`,
+  };
+}
+
+type DesignerMailParams = {
+  recipientName: string;
+  customerName: string;
+  projectTitleFa: string;
+  projectTitleEn: string;
+  deskUrl: string;
+};
+
+/**
+ * Journeys build plan J8 — to the contract's designer, the three things the
+ * customer does in the design step that the designer is waiting on: a concept
+ * chosen, "show me other options", the design approved (the step is locked from
+ * this instant). One template each, on the shape J7 gave sales, because each
+ * asks the designer for something different.
+ */
+export function designConceptChosenEmail(locale: string | null | undefined, params: DesignerMailParams): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const customer = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `A design was chosen — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${customer} chose a design for <strong>${title}</strong>. They may still leave notes before approving it.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\n${params.customerName} chose a design for "${params.projectTitleEn}". They may still leave notes before approving it.\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  return {
+    subject: `یک طرح انتخاب شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${customer} برای «${title}» یک طرح را انتخاب کرد. ممکن است پیش از تأیید هنوز نکته‌ای بنویسد.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\n${params.customerName} برای «${params.projectTitleFa}» یک طرح را انتخاب کرد. ممکن است پیش از تأیید هنوز نکته‌ای بنویسد.\n\n${params.deskUrl}`,
+  };
+}
+
+export function designOtherOptionsEmail(locale: string | null | undefined, params: DesignerMailParams): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const customer = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `New options requested — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${customer} asked to see other options for <strong>${title}</strong>. Propose a new set of themes and publish the next round; that answers the request.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\n${params.customerName} asked to see other options for "${params.projectTitleEn}". Propose a new set of themes and publish the next round; that answers the request.\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  return {
+    subject: `گزینه‌های تازه خواسته شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${customer} برای «${title}» گزینه‌های دیگری خواست. مجموعه‌ی تازه‌ای از پوسته‌ها را پیشنهاد دهید و دور بعد را منتشر کنید؛ همین پاسخ درخواست است.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\n${params.customerName} برای «${params.projectTitleFa}» گزینه‌های دیگری خواست. مجموعه‌ی تازه‌ای از پوسته‌ها را پیشنهاد دهید و دور بعد را منتشر کنید؛ همین پاسخ درخواست است.\n\n${params.deskUrl}`,
+  };
+}
+
+export function designApprovedEmail(locale: string | null | undefined, params: DesignerMailParams): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const customer = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `Design approved — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${customer} approved the design for <strong>${title}</strong>. The design step is now locked; the next step can begin.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\n${params.customerName} approved the design for "${params.projectTitleEn}". The design step is now locked; the next step can begin.\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  return {
+    subject: `طراحی تأیید شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${customer} طراحیِ «${title}» را تأیید کرد. مرحله‌ی طراحی از همین لحظه قفل شد و مرحله‌ی بعد می‌تواند آغاز شود.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\n${params.customerName} طراحیِ «${params.projectTitleFa}» را تأیید کرد. مرحله‌ی طراحی از همین لحظه قفل شد و مرحله‌ی بعد می‌تواند آغاز شود.\n\n${params.deskUrl}`,
+  };
+}
+
+/**
+ * Journeys build plan J8 (plan §6.2, "allowance exhausted → sales") — the
+ * designer tried to publish another round and the brief's allowance, and any
+ * extension, is used up. Sales is the only one who can extend it (Q-S5), and
+ * the designer cannot proceed until they do, so this is the nudge.
+ */
+export function allowanceExhaustedEmail(
+  locale: string | null | undefined,
+  params: { recipientName: string; projectTitleFa: string; projectTitleEn: string; step: string; used: number; allowance: number; deskUrl: string },
+): MailContent {
+  const name = escapeHtml(params.recipientName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    const step = stepName(params.step, 'en');
+    return {
+      subject: `Rounds used up — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>The “${escapeHtml(step)}” step of <strong>${title}</strong> has used all ${params.allowance} of its rounds, and the designer needs another. Extending the allowance — with or without a charge — is yours to approve.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\nThe "${step}" step of "${params.projectTitleEn}" has used all ${params.allowance} of its rounds, and the designer needs another. Extending the allowance — with or without a charge — is yours to approve.\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const step = stepName(params.step, 'fa');
+  const allowance = countText(params.allowance, 'fa');
+  return {
+    subject: `دورهای مجاز تمام شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>مرحله‌ی «${escapeHtml(step)}» در «${title}» هر ${allowance} دورِ مجاز را مصرف کرده و طراح به دورِ دیگری نیاز دارد. افزایش سهمیه — با هزینه یا بی‌هزینه — با تأیید شماست.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\nمرحله‌ی «${step}» در «${params.projectTitleFa}» هر ${allowance} دورِ مجاز را مصرف کرده و طراح به دورِ دیگری نیاز دارد. افزایش سهمیه — با هزینه یا بی‌هزینه — با تأیید شماست.\n\n${params.deskUrl}`,
+  };
+}

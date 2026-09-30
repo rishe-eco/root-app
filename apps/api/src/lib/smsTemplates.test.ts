@@ -15,6 +15,11 @@ import {
   invoiceIssuedSms,
   agreementApprovedSms,
   agreementSignedSms,
+  designRoundPublishedSms,
+  designConceptChosenSms,
+  designOtherOptionsSms,
+  designApprovedSms,
+  allowanceExhaustedSms,
   type SmsContent,
 } from './smsTemplates.js';
 
@@ -45,6 +50,12 @@ const builders: Array<{ name: string; build: (locale: string) => SmsContent; mus
   { name: 'agreement-signed', build: (l) => agreementSignedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
   // Journeys build plan J13 — one placeholder, the URL; no number, no amount.
   { name: 'invoice-issued', build: (l) => invoiceIssuedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  // Journeys build plan J8 — the design step; one placeholder each, the URL.
+  { name: 'design-round-published', build: (l) => designRoundPublishedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  { name: 'design-concept-chosen', build: (l) => designConceptChosenSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  { name: 'design-other-options', build: (l) => designOtherOptionsSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  { name: 'design-approved', build: (l) => designApprovedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  { name: 'allowance-exhausted', build: (l) => allowanceExhaustedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
 ];
 
 for (const { name, build, mustInclude } of builders) {
@@ -97,6 +108,11 @@ test('the request SMS bodies carry no free text — only fixed words and the URL
     (l: string) => invoiceIssuedSms(l, { portalUrl: REQUEST_URL }),
     (l: string) => agreementApprovedSms(l, { deskUrl: REQUEST_URL }),
     (l: string) => agreementSignedSms(l, { deskUrl: REQUEST_URL }),
+    (l: string) => designRoundPublishedSms(l, { portalUrl: REQUEST_URL }),
+    (l: string) => designConceptChosenSms(l, { deskUrl: REQUEST_URL }),
+    (l: string) => designOtherOptionsSms(l, { deskUrl: REQUEST_URL }),
+    (l: string) => designApprovedSms(l, { deskUrl: REQUEST_URL }),
+    (l: string) => allowanceExhaustedSms(l, { deskUrl: REQUEST_URL }),
   ]) {
     for (const locale of LOCALES) {
       const words = build(locale).text.replace(REQUEST_URL, '');

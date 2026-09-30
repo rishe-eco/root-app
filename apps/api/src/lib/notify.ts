@@ -25,6 +25,11 @@ import {
   invoiceIssuedEmail,
   agreementApprovedEmail,
   agreementSignedEmail,
+  designRoundPublishedEmail,
+  designConceptChosenEmail,
+  designOtherOptionsEmail,
+  designApprovedEmail,
+  allowanceExhaustedEmail,
   type MailContent,
 } from './mailTemplates.js';
 import {
@@ -39,6 +44,11 @@ import {
   invoiceIssuedSms,
   agreementApprovedSms,
   agreementSignedSms,
+  designRoundPublishedSms,
+  designConceptChosenSms,
+  designOtherOptionsSms,
+  designApprovedSms,
+  allowanceExhaustedSms,
 } from './smsTemplates.js';
 
 /**
@@ -60,7 +70,9 @@ import {
  * `BRIEF_SHARED` (step 1 handed over), since J5 and J6 `SCOPE_PROPOSED`,
  * `SCOPE_PROPOSAL_DECIDED` and `DRAFT_PUBLISHED`, and since J13
  * `INVOICE_ISSUED`, and since J7 `AGREEMENT_APPROVED` and `AGREEMENT_SIGNED` (to
- * sales — the moments an agreement moves): a customer who
+ * sales — the moments an agreement moves), and since J8 the design step's five
+ * (`DESIGN_ROUND_PUBLISHED`, `DESIGN_CONCEPT_CHOSEN`, `DESIGN_OTHER_OPTIONS_ASKED`,
+ * `DESIGN_APPROVED`, `ALLOWANCE_EXHAUSTED`): a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
@@ -186,6 +198,37 @@ export type NotifyEvent =
   | {
       kind: 'AGREEMENT_SIGNED';
       params: { recipientName: string; customerName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string };
+    }
+  // Journeys build plan J8 — step 4, design. A round published (to the
+  // customer); a concept chosen, other options asked for, the design approved
+  // (to the contract's designer); a step's rounds used up (to sales).
+  | {
+      kind: 'DESIGN_ROUND_PUBLISHED';
+      params: {
+        customerName: string;
+        projectTitleFa: string;
+        projectTitleEn: string;
+        round: number;
+        allowance: number | null;
+        premade: boolean;
+        portalUrl: string;
+      };
+    }
+  | {
+      kind: 'DESIGN_CONCEPT_CHOSEN' | 'DESIGN_OTHER_OPTIONS_ASKED' | 'DESIGN_APPROVED';
+      params: { recipientName: string; customerName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string };
+    }
+  | {
+      kind: 'ALLOWANCE_EXHAUSTED';
+      params: {
+        recipientName: string;
+        projectTitleFa: string;
+        projectTitleEn: string;
+        step: string;
+        used: number;
+        allowance: number;
+        deskUrl: string;
+      };
     };
 
 /** Every event's email rendering — always defined, since every event this
@@ -234,6 +277,16 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return agreementApprovedEmail(locale, event.params);
     case 'AGREEMENT_SIGNED':
       return agreementSignedEmail(locale, event.params);
+    case 'DESIGN_ROUND_PUBLISHED':
+      return designRoundPublishedEmail(locale, event.params);
+    case 'DESIGN_CONCEPT_CHOSEN':
+      return designConceptChosenEmail(locale, event.params);
+    case 'DESIGN_OTHER_OPTIONS_ASKED':
+      return designOtherOptionsEmail(locale, event.params);
+    case 'DESIGN_APPROVED':
+      return designApprovedEmail(locale, event.params);
+    case 'ALLOWANCE_EXHAUSTED':
+      return allowanceExhaustedEmail(locale, event.params);
   }
 }
 
@@ -278,6 +331,18 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
       return agreementApprovedSms(locale, { deskUrl: event.params.deskUrl });
     case 'AGREEMENT_SIGNED':
       return agreementSignedSms(locale, { deskUrl: event.params.deskUrl });
+    // J8: a round is the customer's cue, and the three things the customer does
+    // in the design step are the designer's; the rounds running out is sales'.
+    case 'DESIGN_ROUND_PUBLISHED':
+      return designRoundPublishedSms(locale, { portalUrl: event.params.portalUrl });
+    case 'DESIGN_CONCEPT_CHOSEN':
+      return designConceptChosenSms(locale, { deskUrl: event.params.deskUrl });
+    case 'DESIGN_OTHER_OPTIONS_ASKED':
+      return designOtherOptionsSms(locale, { deskUrl: event.params.deskUrl });
+    case 'DESIGN_APPROVED':
+      return designApprovedSms(locale, { deskUrl: event.params.deskUrl });
+    case 'ALLOWANCE_EXHAUSTED':
+      return allowanceExhaustedSms(locale, { deskUrl: event.params.deskUrl });
     default:
       return null;
   }
