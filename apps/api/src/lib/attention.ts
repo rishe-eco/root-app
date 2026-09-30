@@ -39,6 +39,12 @@ import { attentionVisibleTo } from './visibility.js';
  * (`FEEDBACK_UNRESOLVED`), an answer waits for sales (`ANSWER_PENDING_APPROVAL`,
  * Root's housekeeping — staff only), Root has answered and the customer's
  * move is to reopen or approve (`ANSWER_PUBLISHED`).
+ * J5 ships `PROPOSAL_TO_DECIDE` (proposals waiting for Root) and
+ * `TRADE_TO_CONFIRM` (a scope trade waiting on the customer, on Root, or on
+ * Root carrying it out). `PROPOSAL_DECIDED` is *not* shipped: it would need a
+ * "seen" state to know when the customer has read a decision, and the derived-
+ * never-stored rule above forbids inventing one for it — the notification is
+ * what tells them, and the proposal itself shows its fate.
  * Not shipped though the data exists: `TICKET_REPLY` and `REQUEST_MESSAGE`
  * (J3 names the three above), `ASSIGNEE_INACTIVE` (J4 decides who sees it).
  */
@@ -109,6 +115,11 @@ export const ATTENTION_SENTENCES: Partial<Record<AttentionKind, Record<string, r
   FEEDBACK_UNRESOLVED: { default: BOTH },
   ANSWER_PENDING_APPROVAL: { default: ['staff'] },
   COMMITMENT_OVERDUE: { customer: BOTH, root: ['staff'] },
+  // J5: proposals waiting for Root's decision, and a scope trade waiting on
+  // one side or the other — the customer's confirmation, Root's confirmation,
+  // or Root carrying out a trade both have confirmed.
+  PROPOSAL_TO_DECIDE: { default: BOTH },
+  TRADE_TO_CONFIRM: { customer: BOTH, root: BOTH, execute: BOTH },
 };
 
 /** What `Contract.pending` (fields.ts) says, reduced to the facts attention
@@ -137,6 +148,15 @@ export type AttentionInput = {
   /** Feedback on every step (S2), reduced to three lists of facts — the loader
    *  decides membership, this file only groups and words them. */
   feedback: FeedbackFacts;
+  /** Step 2a (J5). Optional so fixtures that predate it need not name it. */
+  scope?: ScopeFacts;
+};
+
+/** What the scope step is waiting on. A trade is open until it executes; who it
+ *  waits on is read off which halves are confirmed. */
+export type ScopeFacts = {
+  undecidedProposals: Array<{ since: Date }>;
+  openTrades: Array<{ id: string; proposedAt: Date; rootConfirmedAt: Date | null; customerConfirmedAt: Date | null }>;
 };
 
 /** One item's worth of a feedback fact. `money` is PD-21's flag (the item is
@@ -272,6 +292,47 @@ function allItems(input: AttentionInput): AttentionItem[] {
       money: g.money,
       params: { count: g.count, step: g.step },
     });
+  }
+
+  // Step 2a (J5). Proposals waiting for Root are one line, not one per proposal
+  // ("three things you asked for are waiting" is the fact). A scope trade is
+  // the post-lock way to change a scope, so it is what the customer is told to
+  // confirm — and Root to confirm or carry out.
+  const scope = input.scope;
+  if (scope && scope.undecidedProposals.length > 0) {
+    items.push({
+      ...base,
+      kind: 'PROPOSAL_TO_DECIDE',
+      variant: 'default',
+      waitingOn: 'ROOT',
+      role: 'SALES',
+      since: scope.undecidedProposals.reduce((a, p) => (p.since < a ? p.since : a), scope.undecidedProposals[0].since),
+      params: { count: scope.undecidedProposals.length },
+    });
+  }
+  for (const trade of scope?.openTrades ?? []) {
+    const both = trade.rootConfirmedAt !== null && trade.customerConfirmedAt !== null;
+    if (trade.customerConfirmedAt === null) {
+      items.push({
+        ...base,
+        kind: 'TRADE_TO_CONFIRM',
+        variant: 'customer',
+        waitingOn: 'CUSTOMER',
+        since: trade.proposedAt,
+        params: { tradeId: trade.id },
+      });
+    }
+    if (trade.rootConfirmedAt === null || both) {
+      items.push({
+        ...base,
+        kind: 'TRADE_TO_CONFIRM',
+        variant: both ? 'execute' : 'root',
+        waitingOn: 'ROOT',
+        role: 'SALES',
+        since: trade.proposedAt,
+        params: { tradeId: trade.id },
+      });
+    }
   }
 
   return items;

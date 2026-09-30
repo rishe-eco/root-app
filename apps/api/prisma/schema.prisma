@@ -122,6 +122,8 @@ model User {
   archivedProjects      Project[]        @relation("ProjectArchivedBy")
   requestMessages       RequestMessage[]
   scopeTrades           ScopeTrade[]
+  scopeProposalsMade    ScopeProposal[]  @relation("ScopeProposalProposer")
+  scopeProposalsDecided ScopeProposal[]  @relation("ScopeProposalDecider")
   comments              Comment[]
   changeLogs            ChangeLog[]
   signatures            Signature[]
@@ -447,6 +449,10 @@ model Contract {
   /// The registry rows this contract agreed (T1, PD-5). The registry itself is
   /// still read through `project.scopeItems`.
   agreedItems ScopeItem[] @relation("ContractScopeItems")
+
+  /// Journeys build plan J5 — the customer's proposals on this contract's
+  /// scope (step 2a), and Root's decision on each.
+  scopeProposals ScopeProposal[]
 
   /// Journeys build plan J3 — the locks (`StepApproval`) and Root's private
   /// notes (`InternalNote`, never read by a customer).
@@ -993,7 +999,10 @@ enum ScopeKind {
 /// is being true (build plan L1, banked trap #1).
 ///
 /// Never gated — the customer can tick `checkedAt` at any point, whatever
-/// `status` says.
+/// `status` says. **On the legacy road only** (journeys build plan J5): a
+/// new-road contract's customer proposes changes (`ScopeProposal`) instead, the
+/// tick is refused there (`NOT_APPLICABLE`), and `checkedAt` is never written
+/// for such a contract — nor cleared for a legacy one.
 model ScopeItem {
   id        String  @id @default(cuid())
   projectId String
@@ -1062,6 +1071,11 @@ model ScopeItem {
   tradedOut ScopeTrade? @relation("TradeOut")
   tradedIn  ScopeTrade? @relation("TradeIn")
 
+  /// J5: proposals to remove or restore this item, and the proposal (at most
+  /// one) that Root confirmed into existence as this item.
+  proposals         ScopeProposal[] @relation("ScopeProposalTarget")
+  createdByProposal ScopeProposal?  @relation("ScopeProposalCreated")
+
   /// Which phase (L2) is building this item. Nullable — an item can be
   /// agreed long before a phase exists to carry it, and the registry must
   /// not force an assignment just to be editable.
@@ -1098,10 +1112,10 @@ model ScopeItem {
 /// comparable weight"). Both parties confirm before it executes and the
 /// contract view updates via a paired amendment.
 ///
-/// **The customer-confirm half is not wired to a mutation this stage** — see
-/// docs/development/L1.md. `customerConfirmedAt` exists so executing a trade
-/// is already gated on both signatures the day the portal side lands, rather
-/// than becoming a second migration.
+/// The customer's half is `confirmScopeTradeCustomer` (journeys build plan J5;
+/// L1 left it as a marked TODO, and `customerConfirmedAt` was here so executing
+/// a trade was already gated on both signatures the day it landed). It is the
+/// post-lock way to change a scope, so it works when the SCOPE step is locked.
 model ScopeTrade {
   id        String  @id @default(cuid())
   projectId String
@@ -1129,6 +1143,78 @@ model ScopeTrade {
   createdAt DateTime @default(now())
 
   @@index([projectId])
+}
+
+// ---------------------------------------------------------------------------
+// Scope proposals (journeys build plan J5, step 2a)
+// ---------------------------------------------------------------------------
+
+/// What a customer wants done to a contract's scope, in their own words and one
+/// language: add a page, feature or deliverable, take one away, bring a declined
+/// one back. **A proposal, not a `PROPOSED` scope item**: a registry item needs
+/// both labels (`labelFa`, `labelEn` are required) and a customer writes one
+/// sentence in one language. The proposal holds their words; the item — bilingual,
+/// keyed in Latin — is created by sales at confirmation, and "the scope is
+/// confirmed" is derived: no proposal is left undecided (`scopeConfirmed`,
+/// lib/scopeProposals.ts).
+///
+/// Two hand-written CHECKs, both proven by direct insert in `j5.test.ts`:
+/// `ScopeProposal_declined_has_reason` (a decline says why — the customer reads
+/// it) and `ScopeProposal_target_required` (only an ADD names no item yet).
+/// `decision` and `decidedAt` are written together by `decideScopeProposal`; a
+/// CHECK on that pairing would be a third guard for one writer, so the resolver
+/// holds it.
+model ScopeProposal {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  kind ScopeProposalKind
+
+  /// The item a REMOVE or RESTORE is about. Cascade: a proposal about an item
+  /// that has been deleted from the registry is moot, and the CHECK forbids the
+  /// alternative (a null target on a REMOVE).
+  scopeItemId String?
+  scopeItem   ScopeItem? @relation("ScopeProposalTarget", fields: [scopeItemId], references: [id], onDelete: Cascade)
+
+  /// What an ADD is: a page, a feature or a deliverable — never `EXTRA`, which
+  /// is step 1's checklist. Null for REMOVE and RESTORE. The resolver refuses
+  /// `EXTRA`; the enum is shared with the registry, which does hold it.
+  requestedKind ScopeKind?
+
+  /// The customer's words — what to add, or why to remove or restore.
+  text String
+  /// The language they wrote it in (`fa` | `en`), so sales knows which label
+  /// they still have to write.
+  lang String
+
+  proposedById String
+  proposedBy   User     @relation("ScopeProposalProposer", fields: [proposedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  decidedAt     DateTime?
+  decidedById   String?
+  decidedBy     User?                  @relation("ScopeProposalDecider", fields: [decidedById], references: [id])
+  decision      ScopeProposalDecision?
+  declineReason String?
+
+  /// For an accepted ADD: the registry item sales created from it.
+  createdItemId String?    @unique
+  createdItem   ScopeItem? @relation("ScopeProposalCreated", fields: [createdItemId], references: [id], onDelete: SetNull)
+
+  @@index([contractId, createdAt])
+  @@index([scopeItemId])
+}
+
+enum ScopeProposalKind {
+  ADD
+  REMOVE
+  RESTORE
+}
+
+enum ScopeProposalDecision {
+  ACCEPTED
+  DECLINED
 }
 
 // ---------------------------------------------------------------------------
@@ -1784,7 +1870,11 @@ enum CommentTarget {
   CONTRACT
 }
 
-/// Free at all times, on designs and on the contract. Never gated.
+/// Free at all times, on designs and on the contract. Never gated — **on the
+/// legacy (`DESIGN_FIRST`) road.** A new-road contract has no free thread:
+/// `addComment` refuses `USE_FEEDBACK` there and its notes are `FeedbackItem`s,
+/// anchored, answered and locked at approval (journeys build plan J6, the first
+/// of §3.1's three reversals).
 model Comment {
   id         String   @id @default(cuid())
   contractId String

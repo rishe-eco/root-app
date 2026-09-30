@@ -19,9 +19,21 @@ import {
   requestMessageEmail,
   requestArchivedEmail,
   briefSharedEmail,
+  scopeProposedEmail,
+  scopeProposalDecidedEmail,
+  draftPublishedEmail,
   type MailContent,
 } from './mailTemplates.js';
-import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms, briefSharedSms } from './smsTemplates.js';
+import {
+  inviteSms,
+  requestSubmittedSms,
+  requestMessageSms,
+  requestArchivedSms,
+  briefSharedSms,
+  scopeProposedSms,
+  scopeProposalDecidedSms,
+  draftPublishedSms,
+} from './smsTemplates.js';
 
 /**
  * The notification router (journeys build plan J1). One call, `notify(user,
@@ -39,7 +51,8 @@ import { inviteSms, requestSubmittedSms, requestMessageSms, requestArchivedSms, 
  * all, so SMS is not an enhancement there, it can be the *only* way the
  * invite reaches them — and, since J2, for the three request events
  * (`REQUEST_SUBMITTED`, `REQUEST_MESSAGE`, `REQUEST_ARCHIVED`) and, since J4,
- * `BRIEF_SHARED` (step 1 handed over): a customer who
+ * `BRIEF_SHARED` (step 1 handed over), and, since J5 and J6, `SCOPE_PROPOSED`,
+ * `SCOPE_PROPOSAL_DECIDED` and `DRAFT_PUBLISHED`: a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
@@ -120,6 +133,36 @@ export type NotifyEvent =
   | {
       kind: 'BRIEF_SHARED';
       params: { customerName: string; projectTitleFa: string; projectTitleEn: string; portalUrl: string };
+    }
+  // Journeys build plan J5 — step 2a: a customer's scope proposal (to whoever
+  // can decide it), and Root's decision on it (to the customer).
+  | {
+      kind: 'SCOPE_PROPOSED';
+      params: {
+        recipientName: string;
+        projectTitleFa: string;
+        projectTitleEn: string;
+        proposalKind: 'ADD' | 'REMOVE' | 'RESTORE';
+        text: string;
+        deskUrl: string;
+      };
+    }
+  | {
+      kind: 'SCOPE_PROPOSAL_DECIDED';
+      params: {
+        customerName: string;
+        projectTitleFa: string;
+        projectTitleEn: string;
+        decision: 'ACCEPTED' | 'DECLINED';
+        reason: string | null;
+        portalUrl: string;
+      };
+    }
+  // Journeys build plan J6 — step 2b: the draft contract was published (the
+  // `contract-revised` email C0 promised).
+  | {
+      kind: 'DRAFT_PUBLISHED';
+      params: { customerName: string; projectTitleFa: string; projectTitleEn: string; version: number; portalUrl: string };
     };
 
 /** Every event's email rendering — always defined, since every event this
@@ -156,6 +199,12 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return requestArchivedEmail(locale, event.params);
     case 'BRIEF_SHARED':
       return briefSharedEmail(locale, event.params);
+    case 'SCOPE_PROPOSED':
+      return scopeProposedEmail(locale, event.params);
+    case 'SCOPE_PROPOSAL_DECIDED':
+      return scopeProposalDecidedEmail(locale, event.params);
+    case 'DRAFT_PUBLISHED':
+      return draftPublishedEmail(locale, event.params);
   }
 }
 
@@ -181,6 +230,15 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
     // step 1 is theirs to read — the same reason the request events have one.
     case 'BRIEF_SHARED':
       return briefSharedSms(locale, event.params);
+    // J5 and J6: a proposal made, a proposal decided, a draft published — the
+    // three moments a customer or a seller is waiting on the other side, so
+    // each has the one-line SMS a phone-only account would otherwise never get.
+    case 'SCOPE_PROPOSED':
+      return scopeProposedSms(locale, { deskUrl: event.params.deskUrl });
+    case 'SCOPE_PROPOSAL_DECIDED':
+      return scopeProposalDecidedSms(locale, { portalUrl: event.params.portalUrl });
+    case 'DRAFT_PUBLISHED':
+      return draftPublishedSms(locale, { portalUrl: event.params.portalUrl });
     default:
       return null;
   }

@@ -167,6 +167,19 @@ export const customerMutations = {
     if (contract.projectId !== item.projectId) {
       throw new GraphQLError('No such scope item.', { extensions: { code: 'NOT_FOUND' } });
     }
+    // **The tick belongs to the legacy road only** (journeys build plan J5,
+    // §7 item 9). On a new-road contract "tick this box" would mean two things —
+    // an old private mark and a proposal to Root — so it means neither: the
+    // customer's scope gestures there are `proposeScopeAddition`,
+    // `proposeScopeRemoval` and `proposeRestore`, and `checkedAt` is **never
+    // written** for such a contract (nor unwritten: legacy rows keep theirs).
+    // Refused after the ownership check, so a stranger still hears "no such
+    // item" and never learns which road a contract is on.
+    if (contract.sequence === 'AGREEMENT_FIRST') {
+      throw new GraphQLError('This contract does not use the scope checklist — propose a change instead.', {
+        extensions: { code: 'NOT_APPLICABLE' },
+      });
+    }
 
     // Never gated — the checklist stays editable at every stage.
     await prisma.scopeItem.update({
@@ -287,6 +300,20 @@ export const customerMutations = {
   ) => {
     const user = requireUser(ctx);
     const contract = await loadForActor(args.contractId, user);
+    // **A new-road contract has no free thread** (journeys build plan J6, §7
+    // item 8) — its notes are feedback: anchored to a field, an item or an
+    // article, with a fate (`submitFeedback`, S2). A second place to "say
+    // something about the contract" is the drift the plan warns of, and one that
+    // locks at approval (§3.1) cannot be the same mutation as one that is "free at
+    // every stage". This retires the schema's "Never gated" note for new
+    // contracts — the first of §3.1's three reversals, recorded in J6.md. The
+    // legacy road keeps `Comment` exactly as it was. Refused after ownership,
+    // so a stranger still hears "no such contract".
+    if (contract.sequence === 'AGREEMENT_FIRST') {
+      throw new GraphQLError('Leave a note on the thing it is about instead.', {
+        extensions: { code: 'USE_FEEDBACK' },
+      });
+    }
     const body = args.body.trim();
     if (!body) {
       throw new GraphQLError('Write something first.', { extensions: { code: 'EMPTY_COMMENT' } });

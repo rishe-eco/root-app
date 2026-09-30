@@ -596,3 +596,151 @@ export function briefSharedEmail(
     text: `${params.customerName} عزیز،\n\nریشه آنچه را برای «${params.projectTitleFa}» خواسته‌اید نوشته است. لطفاً بخوانید و هر جا درست نیست نظر بگذارید.\n\n${params.portalUrl}`,
   };
 }
+
+/**
+ * Journeys build plan J5: a customer proposed a change to their contract's
+ * scope (add, remove or restore an item) — sent to every account that can
+ * decide it (`contracts.author`), since the contract has no sales assignee to
+ * route to (S1 assigns a designer and a developer, not a seller). Staff to
+ * staff, so the customer's own words are in the body (escaped; line breaks
+ * kept); the SMS carries none, as the request SMSs do.
+ */
+const PROPOSAL_PHRASES: Record<'ADD' | 'REMOVE' | 'RESTORE', { fa: string; en: string }> = {
+  ADD: { fa: 'افزودنِ یک مورد', en: 'add an item' },
+  REMOVE: { fa: 'حذفِ یک مورد', en: 'remove an item' },
+  RESTORE: { fa: 'بازگرداندنِ یک مورد', en: 'bring an item back' },
+};
+
+export function scopeProposedEmail(
+  locale: string | null | undefined,
+  params: {
+    recipientName: string;
+    projectTitleFa: string;
+    projectTitleEn: string;
+    proposalKind: 'ADD' | 'REMOVE' | 'RESTORE';
+    text: string;
+    deskUrl: string;
+  },
+): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const phrase = PROPOSAL_PHRASES[params.proposalKind];
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `A scope proposal is waiting — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>The customer proposed to ${phrase.en} in the scope of <strong>${title}</strong>:</p>
+        <p>${multiline(params.text)}</p>
+        <p>Confirm it (with the bilingual label) or decline it with a reason.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\nThe customer proposed to ${phrase.en} in the scope of "${params.projectTitleEn}":\n\n${params.text}\n\nConfirm it (with the bilingual label) or decline it with a reason.\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  return {
+    subject: `پیشنهادی برای دامنه منتظر تصمیم است — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>مشتری پیشنهادِ ${phrase.fa} را در دامنه‌ی «${title}» ثبت کرده است:</p>
+      <p>${multiline(params.text)}</p>
+      <p>آن را با برچسبِ دوزبانه تأیید کنید یا با ذکرِ دلیل نپذیرید.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\nمشتری پیشنهادِ ${phrase.fa} را در دامنه‌ی «${params.projectTitleFa}» ثبت کرده است:\n\n${params.text}\n\nآن را با برچسبِ دوزبانه تأیید کنید یا با ذکرِ دلیل نپذیرید.\n\n${params.deskUrl}`,
+  };
+}
+
+/**
+ * Journeys build plan J5: Root decided a proposal — sent to the customer, with
+ * the reason when it was declined (the reason is *for* them: a "no" they cannot
+ * read is the silence this step exists to remove).
+ */
+export function scopeProposalDecidedEmail(
+  locale: string | null | undefined,
+  params: {
+    customerName: string;
+    projectTitleFa: string;
+    projectTitleEn: string;
+    decision: 'ACCEPTED' | 'DECLINED';
+    reason: string | null;
+    portalUrl: string;
+  },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  const accepted = params.decision === 'ACCEPTED';
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    const verdict = accepted ? 'accepted' : 'declined';
+    const tail = accepted ? ' The list is up to date in the portal.' : ' The reason:';
+    return {
+      subject: `Your scope proposal was ${verdict} — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Root ${verdict} your proposal for the scope of <strong>${title}</strong>.${tail}</p>
+        ${!accepted && params.reason ? `<p>${multiline(params.reason)}</p>` : ''}
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\nRoot ${verdict} your proposal for the scope of "${params.projectTitleEn}".${tail}${!accepted && params.reason ? `\n\n${params.reason}` : ''}\n\n${params.portalUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const verdict = accepted ? 'پذیرفت. فهرستِ به‌روز در پرتال است.' : 'نپذیرفت. دلیل:';
+  return {
+    subject: accepted
+      ? `پیشنهادت برای دامنه پذیرفته شد — ${params.projectTitleFa}`
+      : `پیشنهادت برای دامنه پذیرفته نشد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>ریشه پیشنهادِ تو را برای دامنه‌ی «${title}» ${verdict}</p>
+      ${!accepted && params.reason ? `<p>${multiline(params.reason)}</p>` : ''}
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\nریشه پیشنهادِ تو را برای دامنه‌ی «${params.projectTitleFa}» ${verdict}${!accepted && params.reason ? `\n\n${params.reason}` : ''}\n\n${params.portalUrl}`,
+  };
+}
+
+/**
+ * Journeys build plan J6: the draft contract has been published — the
+ * `contract-revised` email C0 promised and no stage built. Sent to the customer
+ * on every publish (the first is "read this", a later one is "it changed — your
+ * notes show what"), with the version in Latin digits (house rule 14: a version
+ * is an identifier).
+ */
+export function draftPublishedEmail(
+  locale: string | null | undefined,
+  params: { customerName: string; projectTitleFa: string; projectTitleEn: string; version: number; portalUrl: string },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  const later = params.version > 1;
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    const what = later ? `version ${params.version} of the contract draft` : 'the contract draft';
+    const tail = later ? ' Each of your earlier notes shows whether its article changed.' : '';
+    return {
+      subject: later
+        ? `The contract draft was revised (v${params.version}) — ${params.projectTitleEn}`
+        : `The contract draft is ready to read — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Root published ${what} for <strong>${title}</strong>. Read it article by article and leave a note wherever something is not right.${tail}</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\nRoot published ${what} for "${params.projectTitleEn}". Read it article by article and leave a note wherever something is not right.${tail}\n\n${params.portalUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const tail = later ? ' زیرِ هر نظرِ قبلی‌ات دیده می‌شود که مادّه‌اش تغییر کرده یا نه.' : '';
+  return {
+    subject: later
+      ? `پیش‌نویسِ قرارداد بازبینی شد (v${params.version}) — ${params.projectTitleFa}`
+      : `پیش‌نویسِ قرارداد آماده‌ی خواندن است — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>ریشه ${later ? `نسخه‌ی <span dir="ltr">${params.version}</span> از ` : ''}پیش‌نویسِ قرارداد «${title}» را منتشر کرد. مادّه‌به‌مادّه بخوان و هر جا درست نیست نظر بگذار.${tail}</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\nریشه ${later ? `نسخه‌ی ${params.version} از ` : ''}پیش‌نویسِ قرارداد «${params.projectTitleFa}» را منتشر کرد. مادّه‌به‌مادّه بخوان و هر جا درست نیست نظر بگذار.${tail}\n\n${params.portalUrl}`,
+  };
+}

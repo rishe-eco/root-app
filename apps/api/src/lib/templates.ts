@@ -5,14 +5,51 @@
  * two that can drift apart.
  */
 
-/** [number, titleFa, titleEn, bodyFa?, bodyEn?] */
+/**
+ * The two parties an article's prose may name (journeys build plan J5, D-5).
+ *
+ * The template used to carry one customer's name — "between Nahal Studio (the
+ * Client) and Root" — so every contract started by naming the wrong client.
+ * Its bodies now hold `{{client}}` and `{{provider}}`, **rendered when the
+ * template is applied** (`renderArticleBody`), and what is stored on the
+ * `Article` row — and so frozen into every snapshot — is the finished text.
+ * Rendering at apply time and not at read time is deliberate: a published
+ * revision is immutable, and a placeholder resolved on every read would let a
+ * customer's renamed `clientName` rewrite a signed instrument.
+ *
+ * `ROOT_PARTY` is Root's name in each language, the `{{provider}}` constant.
+ * There was no brand or legal-name constant anywhere in the API before this
+ * one (the mail templates type «ریشه» inline); when the legal entity's name is
+ * settled it changes here, once. The client is the customer's `clientName`
+ * (the company or studio) and, when none is recorded, their own name — one
+ * string for both languages, because it is a name the customer gave and not
+ * something to translate.
+ */
+export const ROOT_PARTY = { fa: 'ریشه', en: 'Root' } as const;
+
+export type ArticleParties = { client: string; provider: string };
+
+export const partiesFor = (customer: { clientName: string | null; name: string }, locale: 'fa' | 'en'): ArticleParties => ({
+  client: customer.clientName?.trim() || customer.name,
+  provider: ROOT_PARTY[locale],
+});
+
+/** `{{client}}` and `{{provider}}` — the only placeholders a template body may
+ *  hold (`templates.test.ts` scans `ARTICLES` for any other). An unknown one is
+ *  left as written rather than swallowed, so a typo is visible, not silent. */
+export function renderArticleBody(body: string | null | undefined, parties: ArticleParties): string | null {
+  if (body === undefined || body === null) return null;
+  return body.replace(/\{\{(client|provider)\}\}/g, (_m, name: 'client' | 'provider') => parties[name]);
+}
+
+/** [number, titleFa, titleEn, bodyFa?, bodyEn?] — bodies may hold `{{client}}` / `{{provider}}`. */
 export const ARTICLES: Array<[number, string, string, string?, string?]> = [
   [1, 'طرفین', 'Parties',
-    'این قرارداد میان استودیو نهال (کارفرما) و ریشه (مجری) بسته می‌شود. نشانی و اطلاعات تماسِ هر دو طرف در سربرگ آمده است.',
-    'This contract is between Nahal Studio (the Client) and Root (the Provider). The address and contact details of both parties appear in the header.'],
+    'این قرارداد میان {{client}} (کارفرما) و {{provider}} (مجری) بسته می‌شود. نشانی و اطلاعات تماسِ هر دو طرف در سربرگ آمده است.',
+    'This contract is between {{client}} (the Client) and {{provider}} (the Provider). The address and contact details of both parties appear in the header.'],
   [2, 'موضوع و دامنه', 'Subject & Scope',
-    'موضوع، طراحی و ساختِ وب‌سایت و پرتالِ مشتریِ نهال است، مطابق دامنه‌ی پیوست ۱. هر چیزی بیرون از این فهرست، تغییرِ دامنه شمرده می‌شود.',
-    'The subject is the design and build of the Nahal customer website and portal, per the scope in Appendix 1. Anything outside that list counts as a scope change.'],
+    'موضوع، طراحی و ساختِ وب‌سایت و پرتالِ {{client}} است، مطابق دامنه‌ی پیوست ۱. هر چیزی بیرون از این فهرست، تغییرِ دامنه شمرده می‌شود.',
+    'The subject is the design and build of the {{client}} website and portal, per the scope in Appendix 1. Anything outside that list counts as a scope change.'],
   [3, 'زمان‌بندی و مراحل', 'Timeline & Milestones',
     'کار در فازهای مشخص انجام می‌شود؛ هر فاز با تأییدِ کارفرما بسته می‌شود. زمان‌بندیِ دقیق پس از تأییدِ طرح نهایی می‌شود.',
     'Work proceeds in defined phases; each phase closes on the Client’s approval. The precise timeline is finalized once the design is approved.'],

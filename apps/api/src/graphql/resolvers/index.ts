@@ -39,6 +39,8 @@ import { Request, requestMutations, requestQueries } from './requests.js';
 import { peopleMutations, peopleQueries } from './people.js';
 import { contractWizardFields, wizardMutations } from './wizard.js';
 import { briefMutations, contractBriefFields } from './brief.js';
+import { scopeMutations, contractScopeFields } from './scope.js';
+import { contractDraftNoteFields } from './draftNotes.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -59,7 +61,15 @@ export const resolvers = {
   // why they are a separate file spread in here.
   // Journeys build plan J4: step 1's own fields (brief, payment plan, this
   // contract's phases) — see brief.ts.
-  Contract: { ...ContractFields, ...contractWizardFields, ...contractBriefFields },
+  // Journeys build plan J5 and J6: step 2a's proposals (scope.ts) and step 2b's
+  // notes with where each note's article is now (draftNotes.ts).
+  Contract: {
+    ...ContractFields,
+    ...contractWizardFields,
+    ...contractBriefFields,
+    ...contractScopeFields,
+    ...contractDraftNoteFields,
+  },
   ContractRevision,
   DesignConcept,
   DesignDraft,
@@ -158,5 +168,10 @@ export const resolvers = {
     // journeys build plan J4: setBrief / setExtra / setPaymentPlan —
     // contracts.author, each under the contract's lock and assertStepOpen(REQUIREMENTS).
     ...briefMutations,
+    // journeys build plan J5: the customer's proposals and the customer half of
+    // a scope trade (ownership edges), sales' decisions and template seeding
+    // (contracts.author) — see scope.ts. setPlannedDates and the J6 publish
+    // gate live in admin/contracts.ts beside the draft they belong to.
+    ...scopeMutations,
   },
 };

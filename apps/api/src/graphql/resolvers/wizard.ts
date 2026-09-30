@@ -19,6 +19,7 @@ import {
   type CommitmentKey,
 } from '../../lib/brief.js';
 import { attentionFor, type AttentionInput, type FeedbackFacts } from '../../lib/attention.js';
+import { scopeStepDone } from '../../lib/scopeProposals.js';
 import { isMoneyAnchored } from '../../lib/feedbackRules.js';
 import { computeStatusSummary } from '../../lib/statusSummary.js';
 import { timelineFor } from '../../lib/timeline.js';
@@ -56,8 +57,20 @@ async function loadFacts(c: FullContract) {
   // was a policy — the project's first contract owned them all — and a second
   // contract's road showed a placeholder; now each contract's road has exactly
   // the phases it delivers.
-  const [approvals, phases, dependencies, builds, contractRevisions, designRevisions, feedback, brief, plan, sensitiveArticles] =
-    await Promise.all([
+  const [
+    approvals,
+    phases,
+    dependencies,
+    builds,
+    contractRevisions,
+    designRevisions,
+    feedback,
+    brief,
+    plan,
+    sensitiveArticles,
+    scopeProposals,
+    scopeTrades,
+  ] = await Promise.all([
     prisma.stepApproval.findMany({
       where: { contractId: c.id },
       select: { id: true, step: true, phaseId: true, approvedAt: true, approvedById: true },
@@ -119,8 +132,36 @@ async function loadFacts(c: FullContract) {
     prisma.contractBrief.findUnique({ where: { contractId: c.id } }),
     prisma.paymentPlan.findUnique({ where: { contractId: c.id }, select: { invoices: { select: { amount: true } } } }),
     prisma.article.findMany({ where: { contractId: c.id, sensitive: true }, select: { number: true } }),
+    // Step 2a's own rows (J5): the customer's proposals — SCOPE's done signal
+    // and the attention module's "Root has proposals to decide" — and the scope
+    // trades still open on this contract's agreement (`TRADE_TO_CONFIRM`). A
+    // trade belongs to the contract that agreed its outgoing item (T1), which
+    // is the document it amends.
+    prisma.scopeProposal.findMany({
+      where: { contractId: c.id },
+      select: { decidedAt: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.scopeTrade.findMany({
+      where: { projectId: c.projectId, executedAt: null, outItem: { contractId: c.id } },
+      select: { id: true, proposedAt: true, rootConfirmedAt: true, customerConfirmedAt: true },
+      orderBy: { proposedAt: 'asc' },
+    }),
   ]);
-  return { approvals, phases, dependencies, builds, contractRevisions, designRevisions, feedback, brief, plan, sensitiveArticles };
+  return {
+    approvals,
+    phases,
+    dependencies,
+    builds,
+    contractRevisions,
+    designRevisions,
+    feedback,
+    brief,
+    plan,
+    sensitiveArticles,
+    scopeProposals,
+    scopeTrades,
+  };
 }
 
 /** The steps' own checklist extras that are in scope — `AGREED` or beyond
@@ -146,6 +187,16 @@ function briefMissing(c: FullContract, facts: Facts): BriefMissing[] {
   });
 }
 
+/**
+ * `briefMissing` for a caller outside the field resolvers — `publishContractRevision`'s
+ * `BRIEF_INCOMPLETE` gate (J6). The same function the wizard's REQUIREMENTS
+ * signal and `Contract.briefCompleteness` call, over the same facts, so the
+ * gate refuses exactly when the step says it is not done.
+ */
+export async function briefIncompleteOn(c: FullContract): Promise<BriefMissing[]> {
+  return briefMissing(c, await loadFacts(c));
+}
+
 /** One load per contract per request: the four views share it. Keyed on the
  *  context, which is per request, so nothing outlives the operation. */
 const factsCache = new WeakMap<Context, Map<string, Promise<Facts>>>();
@@ -162,9 +213,11 @@ function factsFor(ctx: Context, c: FullContract): Promise<Facts> {
  * The rows → `WizardState`. **The one place a new-road step's "done" signal
  * is wired**: REQUIREMENTS is done when `briefCompleteness` has nothing left
  * to name (J4 — the brief is complete, not merely handed over: a half-filled
- * brief the customer can already read is still Root's to finish), J5 pushes
- * SCOPE, J6 DRAFT, J11 SUMMARY (see `lib/steps.ts`). The legacy road's are read
- * off the gate and the phases' scope items.
+ * brief the customer can already read is still Root's to finish), SCOPE (J5) is
+ * done when the contract has a scope of its own and no proposal is waiting for
+ * Root, DRAFT (J6) when a revision is published and no note on it is waiting for
+ * Root, J11 pushes SUMMARY (see `lib/steps.ts`). The legacy road's are read off
+ * the gate and the phases' scope items.
  */
 function stateOf(c: FullContract, facts: Facts): WizardState {
   const gate = computeGate(c);
@@ -179,6 +232,26 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
       : [];
   if (c.sequence === 'AGREEMENT_FIRST' && facts.brief && briefMissing(c, facts).length === 0) {
     finished.push({ step: 'REQUIREMENTS', phaseId: null, at: facts.brief.updatedAt });
+  }
+  if (c.sequence === 'AGREEMENT_FIRST') {
+    // SCOPE (J5): the contract has a scope of its own and nothing the customer
+    // proposed is waiting for Root — `scopeStepDone`, the same function the
+    // draft's publish gate asks. `at` is when the last thing that settled it
+    // happened: the last decision, or the scope's own creation.
+    const own = c.project.scopeItems.filter((s) => s.kind !== 'EXTRA' && s.contractId === c.id);
+    if (scopeStepDone({ items: c.project.scopeItems, proposals: facts.scopeProposals, contractId: c.id })) {
+      const decided = facts.scopeProposals.map((p) => p.decidedAt!.getTime());
+      const seeded = own.map((s) => s.originAskedAt.getTime());
+      finished.push({ step: 'SCOPE', phaseId: null, at: new Date(Math.max(...decided, ...seeded)) });
+    }
+    // DRAFT (J6): a revision has been published and no note on it is waiting
+    // for Root. Notes Root has answered do not hold the step open — approval
+    // (J7) is what requires them *accepted*; "done" here is Root's half.
+    const openNote = facts.feedback.some((i) => i.step === 'DRAFT' && i.status === 'OPEN');
+    if (facts.contractRevisions.length > 0 && !openNote) {
+      const latest = Math.max(...facts.contractRevisions.map((r) => r.publishedAt!.getTime()));
+      finished.push({ step: 'DRAFT', phaseId: null, at: new Date(latest) });
+    }
   }
   return {
     sequence: c.sequence,
@@ -256,6 +329,10 @@ async function loadAttentionInput(c: FullContract, facts: Facts, now: Date): Pro
       : null,
     dependencies: facts.dependencies,
     feedback: feedbackFacts(c.customerId, facts.feedback, new Set(facts.sensitiveArticles.map((a) => a.number))),
+    scope: {
+      undecidedProposals: facts.scopeProposals.filter((p) => p.decidedAt === null).map((p) => ({ since: p.createdAt })),
+      openTrades: facts.scopeTrades,
+    },
   };
 }
 
@@ -273,6 +350,17 @@ function attentionInputFor(ctx: Context, c: FullContract, facts: Facts): Promise
 
 const agreementApproved = (facts: Facts) => facts.approvals.some((a) => a.step === 'AGREEMENT' && a.phaseId === null);
 
+/**
+ * When a customer may read the planned dates: **from the moment the draft is in
+ * front of them** (a contract revision is published — journeys Q12, "Root
+ * proposes them in the draft", and J6's step 2b shows them there) **or the
+ * agreement is approved**, whichever is first. J3 said "not before approval";
+ * that predates step 2b, whose whole point is that the customer reads the
+ * proposed dates and can comment on them. Staff read them always
+ * (`mayReadPlannedDates`).
+ */
+const plannedDatesShown = (facts: Facts) => agreementApproved(facts) || facts.contractRevisions.length > 0;
+
 export const contractWizardFields = {
   // The road is the same for every viewer — what differs is what is *on* it,
   // which is the panels' business (and the API's, field by field).
@@ -287,6 +375,13 @@ export const contractWizardFields = {
    * here carries a money value (PD-14).
    */
   briefCompleteness: async (c: FullContract, _a: unknown, ctx: Context) => briefMissing(c, await factsFor(ctx, c)),
+
+  /** The contract's planned start and end (J6, Q12) — `null` to a customer until
+   *  the draft is in front of them (`plannedDatesShown`), and to no staff reader. */
+  plannedStartAt: async (c: FullContract, _a: unknown, ctx: Context) =>
+    mayReadPlannedDates(viewerOf(ctx), plannedDatesShown(await factsFor(ctx, c))) ? c.plannedStartAt : null,
+  plannedEndAt: async (c: FullContract, _a: unknown, ctx: Context) =>
+    mayReadPlannedDates(viewerOf(ctx), plannedDatesShown(await factsFor(ctx, c))) ? c.plannedEndAt : null,
 
   attention: async (c: FullContract, _a: unknown, ctx: Context) => {
     const viewer = viewerOf(ctx);
@@ -313,8 +408,8 @@ export const contractWizardFields = {
       // The agreement's approval on the new road, the signature on the old;
       // J7 makes the first the only one.
       signedAt: approval?.approvedAt ?? revision?.signature?.signedAt ?? null,
-      plannedStartAt: mayReadPlannedDates(viewer, agreementApproved(facts)) ? c.plannedStartAt : null,
-      plannedEndAt: mayReadPlannedDates(viewer, agreementApproved(facts)) ? c.plannedEndAt : null,
+      plannedStartAt: mayReadPlannedDates(viewer, plannedDatesShown(facts)) ? c.plannedStartAt : null,
+      plannedEndAt: mayReadPlannedDates(viewer, plannedDatesShown(facts)) ? c.plannedEndAt : null,
       // Every published row Root has shown the customer — the sources are
       // named in lib/statusSummary.ts's header.
       progressAt: [

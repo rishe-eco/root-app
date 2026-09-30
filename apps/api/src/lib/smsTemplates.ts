@@ -32,6 +32,9 @@ export { LOCALES, resolveLocale };
  *     page.
  *   - `briefSharedSms` (journeys build plan J4): **one placeholder**, the URL —
  *     no title, for the same reason.
+ *   - `scopeProposedSms`, `scopeProposalDecidedSms` (J5) and `draftPublishedSms`
+ *     (J6): **one placeholder** each, the URL — a proposal's text and a
+ *     decline's reason are free text and stay in the email.
  *
  * Codes are printed in Latin digits in both languages, never through
  * `toPersianDigits` — house rule 14's own exception for an identifier
@@ -88,4 +91,28 @@ export function briefSharedSms(locale: string | null | undefined, params: { port
     return { text: `Your project requirements are ready on Root: ${params.portalUrl}` };
   }
   return { text: `نیازمندی‌های پروژه‌ی شما در ریشه آماده است: ${params.portalUrl}` };
+}
+
+/** J5 — to whoever can decide a scope proposal; the customer's words are one tap away, not in the SMS. */
+export function scopeProposedSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `New scope proposal on Root: ${params.deskUrl}` };
+  }
+  return { text: `پیشنهادِ تازه‌ای برای دامنه در ریشه ثبت شد: ${params.deskUrl}` };
+}
+
+/** J5 — to the customer; accepted or declined, the details (and a decline's reason) are in the portal. */
+export function scopeProposalDecidedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `Root answered your scope proposal: ${params.portalUrl}` };
+  }
+  return { text: `ریشه به پیشنهادِ تو برای دامنه پاسخ داد: ${params.portalUrl}` };
+}
+
+/** J6 — to the customer, when the contract draft (or a new version of it) is published. */
+export function draftPublishedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `Your contract draft is ready on Root: ${params.portalUrl}` };
+  }
+  return { text: `پیش‌نویسِ قرارداد تو در ریشه آماده است: ${params.portalUrl}` };
 }

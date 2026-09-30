@@ -214,12 +214,17 @@ export function attentionVisibleTo(
 
 /**
  * The contract's planned start and end (journeys build plan J3, Q12) are
- * proposed in the draft and frozen at approval (J7). A customer sees them once
- * the agreement is approved — the moment they stop being a proposal — and not
- * before; staff readers see them always, since the draft is theirs.
+ * proposed in the draft and frozen at approval (J7). Staff readers see them
+ * always, since the draft is theirs; a customer sees them once `shownToCustomer`
+ * — **which the loader (`resolvers/wizard.ts`, `plannedDatesShown`) makes true
+ * from the moment a draft is published, or the agreement approved, whichever is
+ * first.** J3 read it as "approval only"; J6's step 2b shows the proposed dates
+ * beside the draft, where the customer can comment on them, so the rule moved
+ * with it. The parameter is a plain boolean because *when* is the loader's
+ * question and *whether a customer may* is this file's.
  */
-export function mayReadPlannedDates(user: Viewer, agreementApproved: boolean): boolean {
-  return isContractReader(user) || agreementApproved;
+export function mayReadPlannedDates(user: Viewer, shownToCustomer: boolean): boolean {
+  return isContractReader(user) || shownToCustomer;
 }
 
 /**

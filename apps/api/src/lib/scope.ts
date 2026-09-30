@@ -86,6 +86,31 @@ export function assertCanConfirmTradeAsRoot(t: { rootConfirmedAt: Date | null })
   }
 }
 
+/**
+ * The customer's half (journeys build plan J5, the lifecycle plan's owed
+ * §0.3.1). Refused once the trade has executed (nothing is left to confirm),
+ * and once they have already confirmed it (a second click is not a second
+ * confirmation). **Who may confirm is not decided here** — it is the
+ * contract's own customer, an ownership edge `confirmScopeTradeCustomer`
+ * checks through `loadForActor` (house rule 2); this is only the trade's own
+ * state.
+ */
+export function assertCanConfirmTradeAsCustomer(t: {
+  customerConfirmedAt: Date | null;
+  executedAt: Date | null;
+}): void {
+  if (t.executedAt) {
+    throw new GraphQLError('This trade has already executed.', {
+      extensions: { code: 'ALREADY_EXECUTED' },
+    });
+  }
+  if (t.customerConfirmedAt) {
+    throw new GraphQLError('You have already confirmed this trade.', {
+      extensions: { code: 'ALREADY_CONFIRMED' },
+    });
+  }
+}
+
 export function assertCanExecuteTrade(t: {
   rootConfirmedAt: Date | null;
   customerConfirmedAt: Date | null;

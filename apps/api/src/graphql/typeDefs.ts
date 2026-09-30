@@ -232,8 +232,9 @@ export const typeDefs = /* GraphQL */ `
 
   """
   Paired movements — one item out, one in (spec §4). Both parties confirm
-  before it executes. **The customer-confirm half has no mutation yet** — see
-  docs/development/L1.md.
+  before it executes. The customer's half is confirmScopeTradeCustomer (J5) —
+  the contract's own customer; executeScopeTrade succeeds once both have
+  confirmed, and is the post-lock way to change a scope.
   """
   type ScopeTrade {
     id: ID!
@@ -244,6 +245,65 @@ export const typeDefs = /* GraphQL */ `
     rootConfirmedAt: DateTime
     customerConfirmedAt: DateTime
     executedAt: DateTime
+  }
+
+  enum ScopeProposalKind {
+    ADD
+    REMOVE
+    RESTORE
+  }
+
+  enum ScopeProposalDecision {
+    ACCEPTED
+    DECLINED
+  }
+
+  """
+  What a customer asked of their contract's scope (journeys build plan J5,
+  step 2a), in their own words and language, and Root's decision on it. Not a
+  registry row: an accepted ADD is when sales writes the bilingual item
+  (createdItem). "The scope is confirmed" is derived — no proposal is left
+  undecided.
+  """
+  type ScopeProposal {
+    id: ID!
+    kind: ScopeProposalKind!
+    "The item a REMOVE or RESTORE is about; null for an ADD."
+    scopeItem: ScopeItem
+    "What an ADD is: a page, a feature or a deliverable."
+    requestedKind: ScopeKind
+    "The customer's words."
+    text: String!
+    "The language they wrote in — fa or en."
+    lang: String!
+    proposedBy: User!
+    createdAt: DateTime!
+    "Null while the proposal waits for Root."
+    decidedAt: DateTime
+    decision: ScopeProposalDecision
+    "Set on a declined proposal — the customer reads it."
+    declineReason: String
+    "For an accepted ADD: the registry item sales created."
+    createdItem: ScopeItem
+  }
+
+  """
+  A note on the contract draft (journeys build plan J6) — a FeedbackItem of the
+  DRAFT step with where its article is now. articleNumber is the article's number
+  in the revision the note was written against (revisionVersion); the current
+  revision may number it differently (currentArticleNumber), have changed its
+  text (articleChangedSince), or no longer have it (articleGone — never guessed:
+  a note whose article cannot be found by title says so).
+  """
+  type DraftNote {
+    item: FeedbackItem!
+    revisionVersion: Int!
+    "True when the note is on the revision the customer is reading now."
+    onCurrentRevision: Boolean!
+    articleNumber: Int
+    currentArticleNumber: Int
+    articleChangedSince: Boolean!
+    articleGone: Boolean!
   }
 
   """
@@ -1181,6 +1241,23 @@ export const typeDefs = /* GraphQL */ `
     paymentPlan: PaymentPlan
     "This contract's own phases (PD-5). Project.phases is every phase of the project."
     phases: [Phase!]!
+
+    "Journeys build plan J5 — step 2a. Oldest first; the customer's words and Root's decisions."
+    scopeProposals: [ScopeProposal!]!
+    """
+    Journeys build plan J6 — step 2b. The DRAFT notes anchored to an article of a
+    revision, each with where its article is now. Filtered like feedbackItems
+    (PD-21: a note on a sensitive article is hidden from staff without
+    money.read). The draft-wide note stays on feedbackItems(step: DRAFT).
+    """
+    draftNotes: [DraftNote!]!
+    """
+    The planned start and end (Q12), calendar days: proposed in the draft, so a
+    customer reads them from the moment a revision is published (or the
+    agreement approved); null before, and when unset.
+    """
+    plannedStartAt: DateTime
+    plannedEndAt: DateTime
   }
 
   enum BriefKind {
@@ -2306,9 +2383,42 @@ export const typeDefs = /* GraphQL */ `
     chooseConcept(contractId: ID!, conceptId: ID!): Contract!
     setPageApproval(pageDesignId: ID!, approved: Boolean!): Contract!
     approveContract(contractId: ID!): Contract!
+    """
+    The legacy checklist tick. NOT_APPLICABLE on an AGREEMENT_FIRST contract
+    (J5): there the customer proposes changes instead, and checkedAt is never
+    written.
+    """
     setScopeItem(scopeItemId: ID!, checked: Boolean!, contractId: ID): Contract!
     signContract(contractId: ID!, typedName: String!): Contract!
+    """
+    The legacy free thread. USE_FEEDBACK on an AGREEMENT_FIRST contract (J6):
+    its notes are feedback, anchored and with a fate (submitFeedback).
+    """
     addComment(contractId: ID!, body: String!, target: CommentTarget): Contract!
+
+    # --- Step 2a — pages, features and deliverables (journeys build plan J5) ---
+    """
+    The contract's own customer. Proposes adding a page, feature or deliverable
+    in their own words and language (lang: fa or en); nothing enters the registry
+    until Root confirms it. NOT_FOUND (not theirs), STEP_NOT_ON_ROAD, INVALID_KIND
+    (an EXTRA is step 1's), INVALID_LANG, EMPTY_PROPOSAL, PROPOSAL_TOO_LONG,
+    STEP_LOCKED.
+    """
+    proposeScopeAddition(contractId: ID!, kind: ScopeKind!, text: String!, lang: String!): Contract!
+    """
+    The contract's own customer. Proposes taking an agreed item out, with why.
+    ITEM_NOT_REMOVABLE, NOT_PROPOSABLE (an extra), PROPOSAL_PENDING, and the rest
+    as proposeScopeAddition.
+    """
+    proposeScopeRemoval(scopeItemId: ID!, text: String!): Contract!
+    "The contract's own customer. Proposes bringing a declined item back. ITEM_NOT_RESTORABLE, and the rest as proposeScopeRemoval."
+    proposeRestore(scopeItemId: ID!, text: String!): Contract!
+    """
+    The customer's half of a scope trade. The contract's own customer only
+    (NOT_FOUND for anyone else); works when SCOPE is locked — a trade is the
+    post-lock way to change a scope. ALREADY_CONFIRMED, ALREADY_EXECUTED.
+    """
+    confirmScopeTradeCustomer(tradeId: ID!, contractId: ID): Contract!
 
     """
     The amendment's own mini-gate: approve, then sign — without reopening
@@ -2353,8 +2463,42 @@ export const typeDefs = /* GraphQL */ `
     "Drops REVIEWER from the account's role set. Refused if it is their only role — that would violate the non-empty-roles constraint (C2.md §5). Comments and threads are untouched."
     revokeReviewer(userId: ID!): Boolean!
     createContract(input: CreateContractInput!): Contract!
-    "Fills an empty contract with the standard article titles and scope items. Refuses if either already has rows."
+    """
+    Fills an empty contract with the standard article titles (their {{client}} and
+    {{provider}} rendered) and — on a legacy contract — the six scope items.
+    Refuses if this contract already has either. On an AGREEMENT_FIRST contract
+    the scope comes from applyScopeTemplate, not from here.
+    """
     applyContractTemplate(contractId: ID!): Contract!
+    """
+    contracts.author. Seeds this contract's scope from the template type its
+    brief chose — agreed, and its own (a key the project already has takes the
+    next free suffix). SCOPE_ALREADY_SEEDED, BRIEF_MISSING, TEMPLATE_SCOPE_EMPTY,
+    STEP_NOT_ON_ROAD, STEP_LOCKED.
+    """
+    applyScopeTemplate(contractId: ID!): Contract!
+    """
+    contracts.author. Decides a customer's proposal. Accepting an ADD needs both
+    labels (a key and a kind are optional: custom.<n>, and the kind they asked
+    for); declining needs a reason the customer reads. ALREADY_DECIDED,
+    REASON_REQUIRED, LABEL_REQUIRED, INVALID_KEY, KEY_TAKEN, ITEM_STATE_CHANGED,
+    STEP_LOCKED.
+    """
+    decideScopeProposal(
+      id: ID!
+      decision: ScopeProposalDecision!
+      labelFa: String
+      labelEn: String
+      key: String
+      kind: ScopeKind
+      declineReason: String
+    ): Contract!
+    """
+    contracts.author. The contract's planned start and end (Q12) as YYYY-MM-DD
+    days, a replace: an omitted day is cleared. INVALID_DATE, DATES_OUT_OF_ORDER,
+    STEP_NOT_ON_ROAD, STEP_LOCKED.
+    """
+    setPlannedDates(contractId: ID!, plannedStartAt: String, plannedEndAt: String): Contract!
     "The title and fee half of the draft. ref is not editable — see T1 in V2.md."
     updateContractDraft(contractId: ID!, titleFa: String!, titleEn: String!, amount: String): Contract!
     "Legal even when this article is inside the current published snapshot; the snapshot does not move."
@@ -2693,7 +2837,11 @@ export const typeDefs = /* GraphQL */ `
 
     """
     Freeze the current draft as the next contract revision. Refused on a signed
-    contract — that revision is terminal and changes go in as amendments.
+    contract — that revision is terminal and changes go in as amendments. On an
+    AGREEMENT_FIRST contract (J6) it is step 2b's hand-over and is also refused
+    SCOPE_UNCONFIRMED (no scope yet, or a proposal undecided) and then
+    BRIEF_INCOMPLETE (extensions.missing lists step 1's gaps); it tells the
+    customer.
     """
     publishContractRevision(contractId: ID!): Contract!
     "Publish the draft design revision, carrying forward unchanged approvals."

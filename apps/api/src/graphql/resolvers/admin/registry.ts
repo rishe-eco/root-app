@@ -270,9 +270,9 @@ export const registryMutations = {
   },
 
   /**
-   * Root's own confirmation. **The customer's has no mutation yet** — this is
-   * the "clearly-marked TODO" the build plan allows for scope trade rather
-   * than blocking L1 on the portal half; see docs/development/L1.md.
+   * Root's own confirmation. The customer's is `confirmScopeTradeCustomer`
+   * (resolvers/scope.ts, journeys build plan J5) — L1 left it as a marked TODO
+   * rather than block on the portal half; see docs/development/L1.md.
    */
   confirmScopeTradeRoot: async (_p: unknown, args: { tradeId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
@@ -286,10 +286,12 @@ export const registryMutations = {
   },
 
   /**
-   * Refused until both `rootConfirmedAt` and `customerConfirmedAt` are set —
-   * today that means this can never actually succeed, because nothing sets
-   * the customer half yet. The gate is real regardless: the day the portal
-   * mutation lands, this does not need to change to honour it.
+   * Refused until both `rootConfirmedAt` and `customerConfirmedAt` are set.
+   * Until J5 that meant this could never succeed, because nothing set the
+   * customer half; `confirmScopeTradeCustomer` now does, and **this gate did not
+   * change** — it had required both since L1, exactly so the day that mutation
+   * landed nothing here would have to. Not under `assertStepOpenOn`: a trade is
+   * how a scope changes after SCOPE has locked (journeys §3.1 point 5).
    */
   executeScopeTrade: async (_p: unknown, args: { tradeId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
