@@ -960,7 +960,7 @@ test('an extension with a charge creates a draft invoice the customer cannot see
   assert.deepEqual([wizardStep(await read(), 'DESIGN').iterationsUsed, wizardStep(await read(), 'DESIGN').allowance], [1, 3], 'the rounds were granted');
 });
 
-test('extendAllowance refuses what is not an extension: INVALID_EXTRA, REASON_REQUIRED, a step with no allowance, a bad charge, NO_ALLOWANCE_SET, the legacy road — and MOCKUP and DEMO wait for J9 and J10', async () => {
+test('extendAllowance refuses what is not an extension: INVALID_EXTRA, REASON_REQUIRED, a step with no allowance, a bad charge, NO_ALLOWANCE_SET, the legacy road — and DEMO waits for J10 (the mockup’s rounds are J9b’s)', async () => {
   await reachDesign();
   assert.equal((await extend(staff.SALES, { n: 0 })).code, 'INVALID_EXTRA');
   assert.equal((await extend(staff.SALES, { n: -1 })).code, 'INVALID_EXTRA');
@@ -970,7 +970,7 @@ test('extendAllowance refuses what is not an extension: INVALID_EXTRA, REASON_RE
   assert.equal((await extend(staff.SALES, { s: 'SUMMARY' })).code, 'STEP_HAS_NO_ALLOWANCE');
   assert.equal((await extend(staff.SALES, { p: 'p1' })).code, 'PHASE_NOT_ALLOWED', 'only a demo’s allowance is per phase');
   assert.equal((await extend(staff.SALES, { s: 'DEMO' })).code, 'PHASE_REQUIRED');
-  assert.equal((await extend(staff.SALES, { s: 'MOCKUP' })).code, 'STEP_NOT_BUILT', 'J9 counts mockup iterations');
+  assert.equal((await extend(staff.SALES, { s: 'MOCKUP' })).code, 'NO_ALLOWANCE_SET', 'J9b counts mockup iterations; a pre-made brief has no mockup allowance to extend');
   assert.equal((await extend(staff.SALES, { s: 'DEMO', p: 'p1' })).code, 'STEP_NOT_BUILT', 'J10 counts demo iterations');
   assert.equal((await extend(staff.SALES, { ch: '12.5' })).code, 'INVALID_AMOUNT');
   assert.equal((await extend(staff.SALES, { ch: '-5' })).code, 'INVALID_AMOUNT');
