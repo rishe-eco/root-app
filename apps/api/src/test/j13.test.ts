@@ -431,6 +431,7 @@ test('every resolver that can return a BillingEntry is accounted for — a new e
   const accounted: Record<string, string> = {
     'admin/billing.ts': 'staff mutations (billing.manage); every creator writes a draft',
     'allowance.ts': 'extendAllowance (J8): a charged extension creates a DRAFT (contracts.author + billing.manage) — never issued here',
+    'delivery.ts': 'Contract.summary (J11): the invoice totals — issued only, in the where, and only where mayReadMoney; a draft is not in the record',
     'design.ts': 'Contract.allowanceExtensions (J8): staff readers only, and the amount only where mayReadMoney; a customer gets an empty list',
     'admin/invoices.ts': 'staff mutations (billing.manage)',
     'brief.ts': 'counts issued entries to refuse replacing a plan (PLAN_HAS_ISSUED_INVOICES)',
@@ -455,6 +456,9 @@ test('every resolver that can return a BillingEntry is accounted for — a new e
   assert.equal((read('invoices.ts').match(/issuedAt: \{ not: null \}/g) ?? []).length, 2, 'myInvoices and invoice(id) select issued rows only');
   assert.match(read('invoices.ts'), /invoiceVisibleTo\(viewerOf\(ctx\), entry\)/, 'PlannedInvoice.invoice');
   assert.match(read('wizard.ts'), /issuedAt: \{ not: null \}/);
+  // J11's summary: issued rows only, and only for a viewer who may read the money.
+  assert.match(read('delivery.ts'), /issuedAt: \{ not: null \}/);
+  assert.match(read('delivery.ts'), /money\s*\n?\s*\? prisma\.billingEntry\.findMany/);
   // The report's two customer-facing callers go through the one function that skips drafts.
   assert.match(read('query.ts'), /computeBillingReport\(entries\)/);
   assert.match(read('people.ts'), /computeBillingReport\(/);
