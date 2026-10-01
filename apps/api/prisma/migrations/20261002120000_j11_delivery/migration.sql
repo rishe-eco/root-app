@@ -27,12 +27,15 @@ ALTER TABLE "ScopeItem" ADD CONSTRAINT "ScopeItem_handedOverById_fkey" FOREIGN K
 -- approves; a deliverable (the repository, the access, the export) has no demo,
 -- and the record of its handover is the only record there is — so a note that is
 -- NULL, empty or only whitespace is not one, stronger than `IS NOT NULL` as S2's
--- `FeedbackComment_declined_has_reason` is. An item not handed over has a NULL
+-- `FeedbackComment_declined_has_reason` is — and stronger than its `btrim(...) <> ''`
+-- too: `btrim` strips spaces only, so a note of newlines or tabs would pass it. The
+-- regex asks for one character that is not whitespace of any kind. An item not
+-- handed over has a NULL
 -- `handedOverAt`, `NULL IS NULL` is true, and the CHECK passes for every row that
 -- exists today. (`"kind" = 'DELIVERABLE'` is never NULL — the column is NOT NULL —
 -- and `"handoverNote" IS NOT NULL AND …` is FALSE, not NULL, for a missing note,
 -- so a handover with no note is refused rather than slipping through.)
 ALTER TABLE "ScopeItem" ADD CONSTRAINT "ScopeItem_handover_is_a_deliverable" CHECK (
   "handedOverAt" IS NULL
-  OR ("kind" = 'DELIVERABLE' AND "handoverNote" IS NOT NULL AND btrim("handoverNote") <> '')
+  OR ("kind" = 'DELIVERABLE' AND "handoverNote" IS NOT NULL AND "handoverNote" ~ '[^[:space:]]')
 );
