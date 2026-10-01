@@ -400,8 +400,8 @@ test('every mockup mutation and its guard: a developer, sales, the customer and 
     frames: await prisma.demoFrame.count(),
     files: await prisma.storedFile.count(),
   });
-  const before = await snapshot();
   const spare = await bundleFile(V2);
+  const before = await snapshot();
 
   const rows: Array<[string, (as: User) => ReturnType<typeof exec>, Record<string, string>]> = [
     ['createMockupDemo', (as) => asDesigner(CREATE_DEMO, {}, as), { DEVELOPER: 'FORBIDDEN', SALES: 'FORBIDDEN', DESIGNER2: 'NOT_ASSIGNED', CUSTOMER: 'FORBIDDEN' }],
@@ -628,7 +628,7 @@ test('the frame is from design: NEW for pages the bundle shows, KNOWN_MISSING fo
   await iteration(demo.id, V1);
 
   const first = (await read()).mockup!;
-  assert.deepEqual(first.frame!.lines.map((l) => [l.scopeItem?.key, l.kind]), [['about', 'KNOWN_MISSING'], ['home', 'NEW']].sort((x, y) => (x[1] < y[1] ? 1 : -1)).reverse());
+  assert.deepEqual(first.frame!.lines.map((l) => [l.scopeItem?.key, l.kind]), [['home', 'NEW'], ['about', 'KNOWN_MISSING']]);
   assert.deepEqual(first.bundlePages, ['/'], 'staff are told which pages the newest bundle has');
   assert.deepEqual(first.fixedFrameLines, ['MOCKUP_TEMPORARY'], 'the temporary line is a code for the web to word, never a stored sentence');
   assert.equal(await prisma.demoFrameLine.count({ where: { kind: 'TEMPORARY' } }), 0, 'and not a row');
@@ -845,7 +845,7 @@ async function lockedMockup() {
   ok(await asDesigner(APPROVE_MOCKUP, {}, f.customer));
   mail.length = 0;
   sms.length = 0;
-  return { demo, built, spare, draft };
+  return { demo, built, spare, draft, pageId: pageOf(demo, 'home').id };
 }
 
 type LockIds = Awaited<ReturnType<typeof lockedMockup>>;
@@ -857,7 +857,7 @@ const lockTable: Array<{ mutation: string; run: (ids: LockIds) => ReturnType<typ
   { mutation: 'approveMockup', run: () => asDesigner(APPROVE_MOCKUP, {}, f.customer) },
   {
     mutation: 'submitFeedback',
-    run: (ids) => exec(SUBMIT, { as: f.customer, variables: { c: f.contract.id, t: { demoId: ids.demo.id, general: false, demoPageId: null, frameLineId: null }, b: 'one more thing' } }),
+    run: (ids) => exec(SUBMIT, { as: f.customer, variables: { c: f.contract.id, t: { demoId: ids.demo.id, demoPageId: ids.pageId }, b: 'one more thing' } }),
   },
   {
     mutation: 'answerFeedback',
