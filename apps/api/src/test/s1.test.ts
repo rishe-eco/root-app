@@ -32,7 +32,7 @@ import { startFileServer, upload } from './http.js';
  * `NOT_SIGNED` (J13) likewise: issuing a payment plan's first row on a contract
  * nobody has signed is what "allowed" looks like for that row.
  */
-type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED' | 'NOT_SIGNED' | 'NO_DRAFT' | 'DESIGN_INCOMPLETE';
+type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED' | 'NOT_SIGNED' | 'NO_DRAFT' | 'DESIGN_INCOMPLETE' | 'PHASES_NOT_ACCEPTED';
 
 let f: Fixture;
 const staff: Record<string, User> = {};
@@ -329,6 +329,29 @@ const OPS: Record<string, (as: User) => ReturnType<typeof exec>> = {
     }),
   'contracts.author · publish the draft': (as) =>
     exec('mutation($c: ID!){ publishContractRevision(contractId: $c) { id } }', { as, variables: { c: f.contract.id } }),
+  // --- J11: step 7. A signed agreement, so the step's own refusals are the ones in play.
+  'contracts.author · close the contract': async (as) => {
+    await signAgreement();
+    return exec('mutation($c: ID!){ closeContract(contractId: $c) { id } }', { as, variables: { c: f.contract.id } });
+  },
+  // Handing over is contracts.author **or** builds.author *and* the contract's developer —
+  // the capability and the edge, separately (house rule 2).
+  'handover · mark a deliverable': async (as) => {
+    await signAgreement();
+    const d = await prisma.scopeItem.create({
+      data: { projectId: f.contract.projectId, contractId: f.contract.id, key: 'repo', kind: 'DELIVERABLE', status: 'AGREED', labelFa: 'ک', labelEn: 'Repo' },
+    });
+    return exec('mutation($i: ID!){ markHandedOver(scopeItemId: $i, note: "Transferred.") { id } }', { as, variables: { i: d.id } });
+  },
+  'contracts.author · take a handover back': async (as) => {
+    const d = await prisma.scopeItem.create({
+      data: {
+        projectId: f.contract.projectId, contractId: f.contract.id, key: 'repo', kind: 'DELIVERABLE', status: 'AGREED', labelFa: 'ک', labelEn: 'Repo',
+        handedOverAt: new Date(), handedOverById: staff.DEVELOPER.id, handoverNote: 'Transferred.',
+      },
+    });
+    return exec('mutation($i: ID!){ unmarkHandedOver(scopeItemId: $i) { id } }', { as, variables: { i: d.id } });
+  },
 };
 
 const F = 'FORBIDDEN' as const;
@@ -338,6 +361,7 @@ const U = 'SCOPE_UNCONFIRMED' as const;
 const NS = 'NOT_SIGNED' as const;
 const ND = 'NO_DRAFT' as const;
 const DI = 'DESIGN_INCOMPLETE' as const;
+const PNA = 'PHASES_NOT_ACCEPTED' as const;
 
 /**
  * The matrix. Columns: ADMIN, SALES, DESIGNER, DESIGNER_UNASSIGNED,
@@ -395,6 +419,10 @@ const MATRIX: Record<keyof typeof OPS, Outcome[]> = {
   'customer · confirm scope trade':       [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  'OK'],
   'contracts.author · planned dates':     ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'contracts.author · publish the draft': [U,    U,    F,    F,    F,    F,    F,   F,   F],
+  // J11. The fixture's phase has no accepted demo, so an authorized close gets as far as that.
+  'contracts.author · close the contract': [PNA,  PNA,  F,    F,    F,    F,    F,   F,   F],
+  'handover · mark a deliverable':        ['OK', 'OK', F,    F,    'OK', N,    F,   F,   F],
+  'contracts.author · take a handover back': ['OK', 'OK', F,  F,    F,    F,    F,   F,   F],
 };
 
 for (const [op, row] of Object.entries(MATRIX)) {
@@ -434,6 +462,19 @@ test('readActive: a designer can read an active contract and not a discarded one
   assert.deepEqual(list.allContracts, []);
   // Sales still sees it: readAll.
   ok(await exec(q, { as: staff.SALES, variables: { id: f.contract.id } }));
+});
+
+test('readActive (J11): a delivered contract leaves the designer’s and the developer’s list and link; sales and the customer keep it', async () => {
+  const q = 'query($id: ID!){ contract(id: $id) { id } }';
+  await prisma.contract.update({ where: { id: f.contract.id }, data: { status: 'DONE', deliveredAt: new Date(), deliveredById: staff.SALES.id } });
+  for (const who of [staff.DESIGNER, staff.DEVELOPER]) {
+    assert.equal((await exec(q, { as: who, variables: { id: f.contract.id } })).code, 'NOT_FOUND', who.email ?? '');
+    assert.deepEqual(ok(await exec('{ allContracts { id } }', { as: who })).allContracts, [], `${who.email} list`);
+  }
+  for (const who of [staff.SALES, f.admin, f.customer]) {
+    ok(await exec(q, { as: who, variables: { id: f.contract.id } }));
+  }
+  assert.equal(((ok(await exec('{ allContracts { id } }', { as: staff.SALES })).allContracts) as unknown[]).length, 1);
 });
 
 test('money: design and development read the contract without its fee; sales and the customer with it', async () => {

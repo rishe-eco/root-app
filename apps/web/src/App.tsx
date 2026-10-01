@@ -19,6 +19,7 @@ import PortalLayout from '@/portal/PortalLayout';
 import Contracts from '@/portal/Contracts';
 import ContractDetail from '@/portal/ContractDetail';
 import ContractPrint from '@/portal/ContractPrint';
+import SummaryPrint from '@/portal/SummaryPrint';
 import Support from '@/portal/Support';
 import PortalInvoices from '@/portal/Invoices';
 import PortalInvoiceDetail from '@/portal/InvoiceDetail';
@@ -117,6 +118,7 @@ export default function App() {
               printable contract is no less private than the screen it came
               from. The chrome around it is hidden at print time, not here. */}
           <Route path="contracts/:id/print" element={<ContractPrint />} />
+          <Route path="contracts/:id/summary/print" element={<SummaryPrint />} />
           {/* Build plan L7: the services rail goes live — see portal/Tools.tsx (S3 renamed it). */}
           <Route path="tools" element={<PortalTools />} />
           {/* S3: Services became Tools; old links and bookmarks keep working. */}

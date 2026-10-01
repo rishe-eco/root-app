@@ -1723,6 +1723,306 @@ export const CONTRACT_AS_CUSTOMER = gql`
   }
 `;
 
+// --- Journeys build plan J11: step 7, the summary, the handover, the close ------
+
+export type SummaryItem = {
+  id: string;
+  key: string;
+  labelFa: string;
+  labelEn: string;
+  kind: ScopeKind;
+  status: ScopeStatus;
+  phaseNumber: number | null;
+  inAgreement: boolean;
+  declinedReason: string | null;
+  tradePartner: { direction: 'OUT' | 'IN'; key: string; labelFa: string; labelEn: string; executedAt: string } | null;
+  handedOverAt: string | null;
+  handedOverBy: string | null;
+  handoverNote: string | null;
+};
+
+export type ContractSummary = {
+  deliveredAt: string | null;
+  deliveredBy: string | null;
+  agreed: {
+    version: number;
+    contentHash: string | null;
+    signedAt: string;
+    scopeItems: Array<{ key: string; labelFa: string; labelEn: string; kind: ScopeKind | null }>;
+    agreement: ContractRevision['agreement'];
+    amendments: Array<{
+      id: string;
+      ordinal: number;
+      titleFa: string;
+      titleEn: string;
+      publishedAt: string | null;
+      signature: { typedName: string; signedAt: string } | null;
+    }>;
+    trades: Array<{
+      executedAt: string;
+      out: { key: string; labelFa: string; labelEn: string };
+      in: { key: string; labelFa: string; labelEn: string };
+    }>;
+  };
+  items: SummaryItem[];
+  unpromptedChanges: Array<{
+    id: string;
+    step: StepKind;
+    buildNumber: number;
+    publishedAt: string;
+    textFa: string | null;
+    textEn: string | null;
+    note: string | null;
+    noteLang: string | null;
+    writtenUp: boolean;
+  }>;
+  steps: Array<{
+    step: StepKind;
+    phaseId: string | null;
+    phaseNumber: number | null;
+    iterationsUsed: number | null;
+    allowance: number | null;
+    extensions: number;
+    finishedAt: string | null;
+  }>;
+  dates: {
+    plannedStartAt: string | null;
+    plannedEndAt: string | null;
+    signedAt: string | null;
+    startedAt: string | null;
+    deliveredAt: string | null;
+    phases: Array<{ number: number; titleFa: string; titleEn: string; plannedEndAt: string | null; acceptedAt: string | null }>;
+  };
+  invoices: { count: number; paidCount: number; issued: string; paid: string; outstanding: string } | null;
+  support: { months: number; from: string | null; until: string | null } | null;
+};
+
+export type Delivery = {
+  deliveredAt: string | null;
+  closable: boolean;
+  noPhases: boolean;
+  phasesNotAccepted: number[];
+  deliverablesPending: string[];
+};
+
+export type SummaryContract = {
+  id: string;
+  ref: string;
+  titleFa: string;
+  titleEn: string;
+  customer: { id: string; name: string; clientName: string | null };
+  deliveredAt: string | null;
+  delivery: Delivery;
+  summary: ContractSummary | null;
+};
+
+export const SUMMARY_FIELDS = gql`
+  fragment SummaryFields on Contract {
+    id
+    ref
+    titleFa
+    titleEn
+    deliveredAt
+    customer {
+      id
+      name
+      clientName
+    }
+    delivery {
+      deliveredAt
+      closable
+      noPhases
+      phasesNotAccepted
+      deliverablesPending
+    }
+    summary {
+      deliveredAt
+      deliveredBy
+      agreed {
+        version
+        contentHash
+        signedAt
+        scopeItems {
+          key
+          labelFa
+          labelEn
+          kind
+        }
+        agreement {
+          brief {
+            kind
+            templateType {
+              slug
+              labelFa
+              labelEn
+            }
+            designTier
+            budgetCap
+            hardDeadline
+            supportMonths
+          }
+          paymentPlan {
+            total
+          }
+          phases {
+            number
+            titleFa
+            titleEn
+            plannedEndAt
+          }
+          plannedStartAt
+          plannedEndAt
+        }
+        amendments {
+          id
+          ordinal
+          titleFa
+          titleEn
+          publishedAt
+          signature {
+            typedName
+            signedAt
+          }
+        }
+        trades {
+          executedAt
+          out {
+            key
+            labelFa
+            labelEn
+          }
+          in {
+            key
+            labelFa
+            labelEn
+          }
+        }
+      }
+      items {
+        id
+        key
+        labelFa
+        labelEn
+        kind
+        status
+        phaseNumber
+        inAgreement
+        declinedReason
+        tradePartner {
+          direction
+          key
+          labelFa
+          labelEn
+          executedAt
+        }
+        handedOverAt
+        handedOverBy
+        handoverNote
+      }
+      unpromptedChanges {
+        id
+        step
+        buildNumber
+        publishedAt
+        textFa
+        textEn
+        note
+        noteLang
+        writtenUp
+      }
+      steps {
+        step
+        phaseId
+        phaseNumber
+        iterationsUsed
+        allowance
+        extensions
+        finishedAt
+      }
+      dates {
+        plannedStartAt
+        plannedEndAt
+        signedAt
+        startedAt
+        deliveredAt
+        phases {
+          number
+          titleFa
+          titleEn
+          plannedEndAt
+          acceptedAt
+        }
+      }
+      invoices {
+        count
+        paidCount
+        issued
+        paid
+        outstanding
+      }
+      support {
+        months
+        from
+        until
+      }
+    }
+  }
+`;
+
+/** The summary and the close, for one contract — as the signed-in viewer, or (with
+ *  `asCustomer`) as the customer would read it. */
+export const CONTRACT_SUMMARY = gql`
+  ${SUMMARY_FIELDS}
+  query ContractSummary($id: ID!, $asCustomer: Boolean) {
+    contract(id: $id, asCustomer: $asCustomer) {
+      ...SummaryFields
+    }
+  }
+`;
+
+export const MARK_HANDED_OVER = gql`
+  mutation MarkHandedOver($scopeItemId: ID!, $note: String!) {
+    markHandedOver(scopeItemId: $scopeItemId, note: $note) {
+      id
+      delivery {
+        deliveredAt
+        closable
+        noPhases
+        phasesNotAccepted
+        deliverablesPending
+      }
+    }
+  }
+`;
+
+export const UNMARK_HANDED_OVER = gql`
+  mutation UnmarkHandedOver($scopeItemId: ID!) {
+    unmarkHandedOver(scopeItemId: $scopeItemId) {
+      id
+      delivery {
+        deliveredAt
+        closable
+        noPhases
+        phasesNotAccepted
+        deliverablesPending
+      }
+    }
+  }
+`;
+
+/** Closing moves the status, the wizard (SUMMARY is done) and the timeline at once. */
+export const CLOSE_CONTRACT = gql`
+  ${SUMMARY_FIELDS}
+  ${WIZARD_FIELDS}
+  mutation CloseContract($contractId: ID!) {
+    closeContract(contractId: $contractId) {
+      ...SummaryFields
+      ...WizardFields
+      status
+    }
+  }
+`;
+
 export const ADD_INTERNAL_NOTE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
   mutation AddInternalNote($contractId: ID!, $body: String!) {

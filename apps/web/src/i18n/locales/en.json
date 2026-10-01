@@ -1766,6 +1766,150 @@
       }
     }
   },
+  "summary": {
+    "lede": {
+      "open": {
+        "customer": "This is the record of your project so far: what was agreed, what became of each item, and the dates. There is nothing to answer here — it is a summary, not a review.",
+        "staff": "The record as the customer will read it. Hand each agreed deliverable over below, then close the contract once every phase is accepted."
+      },
+      "delivered": {
+        "customer": "Your project is delivered. This is its record: what was agreed, what became of each item, what was handed over, and your support period. There is nothing to answer here.",
+        "staff": "This contract is delivered and closed. The record below is what the customer reads."
+      }
+    },
+    "unsigned": {
+      "customer": "The summary will appear here once the agreement is signed.",
+      "staff": "There is no summary yet — nothing has been agreed. It is derived from the signed agreement."
+    },
+    "facts": {
+      "version": "Signed agreement",
+      "signed": "Signed on",
+      "delivered": "Delivered on",
+      "notYet": "Not yet"
+    },
+    "agreed": {
+      "title": "What was agreed",
+      "scope": "The scope, as signed",
+      "changes": "Changes after signing",
+      "signedOn": "signed {{date}}",
+      "trade": "“{{out}}” was swapped for “{{in}}” on {{when}}"
+    },
+    "kind": {
+      "PAGE": "Page",
+      "FEATURE": "Feature",
+      "DELIVERABLE": "Deliverable",
+      "EXTRA": "Standing item"
+    },
+    "group": {
+      "PAGE": "Pages",
+      "FEATURE": "Features",
+      "DELIVERABLE": "Deliverables",
+      "EXTRA": "Standing items"
+    },
+    "status": {
+      "PROPOSED": "Proposed",
+      "AGREED": "Agreed, not built",
+      "IN_BUILD": "In build",
+      "IN_DEMO": "In demo",
+      "ACCEPTED": "Accepted",
+      "DECLINED": "Left out",
+      "TRADED": "Swapped out"
+    },
+    "items": {
+      "title": "What became of each item",
+      "item": "Item",
+      "endedAs": "Ended as",
+      "note": "Note",
+      "declinedBecause": "Left out: {{reason}}",
+      "tradedFor": "swapped for “{{label}}” on {{when}}",
+      "replaced": "came in on {{when}} in place of “{{label}}”",
+      "cameLater": "not in the signed agreement",
+      "inPhase": "phase {{n}}"
+    },
+    "handover": {
+      "title": "Handed over",
+      "none": "This contract has no deliverable to hand over.",
+      "on": "Handed over {{date}}",
+      "by": "by {{name}}",
+      "pending": "Not handed over yet",
+      "formTitle": "Deliverables",
+      "takeBack": "Take back",
+      "noteLabel": "What was handed over, and how",
+      "notePlaceholder": "For example: the repository was transferred to the customer’s organisation.",
+      "noteHelp": "The customer reads this and it is printed. Never write a password or a key here.",
+      "cta": "Mark as handed over"
+    },
+    "unprompted": {
+      "title": "Changes nobody asked for",
+      "help": "Things Root changed on its own initiative while building.",
+      "unwritten": "Not yet written up for the customer — “{{note}}”",
+      "in": "{{step}}, build {{n}}"
+    },
+    "steps": {
+      "title": "Each step",
+      "step": "Step",
+      "rounds": "Rounds",
+      "finished": "Finished",
+      "notCounted": "not counted",
+      "usedOf": "{{used}} of {{allowance}}",
+      "withExtra": "{{text}} (+{{extra}} extra)"
+    },
+    "dates": {
+      "title": "Planned and actual dates",
+      "planned": "Planned",
+      "actual": "Actual",
+      "start": "Start",
+      "phase": "Phase {{n}} — {{title}}",
+      "delivery": "Delivery"
+    },
+    "money": {
+      "title": "Invoices",
+      "invoices": "Invoices issued",
+      "issued": "Invoiced",
+      "paid": "Paid",
+      "outstanding": "Outstanding"
+    },
+    "support": {
+      "title": "Support",
+      "period": "{{months}} of support, from {{from}} until {{until}}.",
+      "promised": "{{months}} of support after delivery."
+    },
+    "close": {
+      "title": "Close the contract",
+      "noPhases": "The contract has no phase, so nothing has been accepted.",
+      "phasesNotAccepted": "The customer has not yet approved the demo of phase {{phases}}.",
+      "deliverablesPending_one": "{{n}} deliverable has not been handed over.",
+      "deliverablesPending_other": "{{n}} deliverables have not been handed over.",
+      "ready": "Every phase is accepted and every deliverable is handed over.",
+      "cta": "Close the contract",
+      "confirm": "Closing ends the contract’s working life: it moves to Done, the customer is told, and designers and developers no longer see it. This cannot be undone.",
+      "confirmCta": "Yes, close it",
+      "cancel": "Not yet"
+    },
+    "printLink": "Print the summary",
+    "print": {
+      "kind": "Summary",
+      "customer": "Client",
+      "unsigned": "There is no summary yet — the agreement has not been signed."
+    },
+    "error": {
+      "FORBIDDEN": "You are not allowed to do that.",
+      "NOT_FOUND": "That no longer exists, or you cannot see it.",
+      "NOT_ASSIGNED": "You are not the developer of this contract.",
+      "HANDOVER_NOTE_REQUIRED": "Say what was handed over, and how.",
+      "HANDOVER_NOTE_TOO_LONG": "That note is too long.",
+      "NOT_A_DELIVERABLE": "Only a deliverable is handed over.",
+      "NOT_AGREED": "That deliverable is no longer part of the agreement.",
+      "ALREADY_HANDED_OVER": "That deliverable has already been handed over.",
+      "NOT_HANDED_OVER": "That deliverable has not been handed over.",
+      "CONTRACT_DELIVERED": "This contract is already delivered; its record is closed.",
+      "CONTRACT_NOT_SIGNED": "The agreement has not been signed yet.",
+      "PHASES_NOT_ACCEPTED": "Every phase must be accepted by the customer first.",
+      "DELIVERABLES_PENDING": "Every agreed deliverable must be handed over first.",
+      "ALREADY_DELIVERED": "This contract has already been closed.",
+      "CONTRACT_DISCARDED": "A discarded contract cannot be delivered."
+    }
+  },
   "timeline": {
     "REQUEST_SUBMITTED": "Request submitted",
     "CONTRACT_HANDED_OVER": "Contract handed over",

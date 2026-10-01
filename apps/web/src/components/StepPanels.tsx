@@ -12,6 +12,7 @@ import ScopePanel from '@/components/ScopePanel';
 import DraftPanel from '@/components/DraftPanel';
 import AgreementPanel from '@/components/AgreementPanel';
 import DesignPanel from '@/components/DesignPanel';
+import SummaryPanel from '@/components/SummaryPanel';
 import { can } from '@/lib/access';
 
 /**
@@ -42,7 +43,7 @@ import { can } from '@/lib/access';
  *   the designer's half in `DesignAuthor`)
  * - J9  `MOCKUP`       — the mockup host, iterations
  * - J10 `DEMO`         — per phase: submission, readiness, approval
- * - J11 `SUMMARY`      — the summary, handover, closing
+ * - J11 `SUMMARY`      — ✔ built: the record (`SummaryDocument`), and for staff the handover and the close (`SummaryPanel`)
  *
  * A panel gets the contract (with `wizard`, `statusSummary`, `attention`
  * already loaded by `WizardFields`), its own `WizardStep`, who is reading, and
@@ -99,6 +100,7 @@ const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {
   DRAFT: DraftPanel,
   AGREEMENT: AgreementPanel,
   DESIGN: DesignPanel,
+  SUMMARY: SummaryPanel,
   DEMO: DemoStepPanel,
 };
 

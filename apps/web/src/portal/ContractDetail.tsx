@@ -312,6 +312,19 @@ export default function ContractDetail({ asCustomer = false }: { asCustomer?: bo
                   {t('detail.downloadPdf')}
                 </Link>
               ) : null}
+              {/* J11: a legacy contract has no summary step in a wizard, so a
+                  delivered one links its record from here. `status` is the
+                  hand-set legacy enum; the page it opens says so plainly if there
+                  is nothing signed to summarise. */}
+              {contract.status === 'DONE' && contract.sequence === 'DESIGN_FIRST' ? (
+                <Link
+                  className="btn btn-secondary btn-sm"
+                  data-testid="legacy-summary-link"
+                  to={lp(locale, `/app/contracts/${contract.id}/summary/print`)}
+                >
+                  {t('summary.printLink')}
+                </Link>
+              ) : null}
             </div>
             <p className="t-lead">
               {contract.customer.clientName ?? contract.customer.name} ·{' '}
