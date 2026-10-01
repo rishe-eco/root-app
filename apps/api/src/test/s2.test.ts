@@ -468,8 +468,9 @@ test('approveStep: only the contract’s customer, only the steps that are appro
 
   // The agreement is J7's gate; the steps it seals are approved with it. The design
   // has its own door since J8 (`approveDesign`, with the path's completeness as its
-  // precondition), so it is not approved here either — one way to approve it.
-  for (const step of ['AGREEMENT', 'REQUIREMENTS', 'SCOPE', 'DRAFT', 'DESIGN', 'SUMMARY'] as const) {
+  // precondition), so it is not approved here either — one way to approve it. The
+  // mockup's is `approveMockup` since J9b (a published iteration is its precondition).
+  for (const step of ['AGREEMENT', 'REQUIREMENTS', 'SCOPE', 'DRAFT', 'DESIGN', 'MOCKUP', 'SUMMARY'] as const) {
     assert.equal((await go(f.customer, step)).code, 'STEP_NOT_APPROVABLE', step);
   }
   assert.equal((await prisma.stepApproval.count()), 0, 'nothing was written by a refusal');
@@ -477,7 +478,7 @@ test('approveStep: only the contract’s customer, only the steps that are appro
   // A demo needs its phase — the placeholder demo (no phase) can never take an approval.
   assert.equal((await go(f.customer, 'DEMO', null)).code, 'STEP_NOT_ON_ROAD');
   assert.equal((await go(f.customer, 'DEMO', 'not-a-phase')).code, 'STEP_NOT_ON_ROAD');
-  assert.equal((await go(f.customer, 'MOCKUP', phase.id)).code, 'INVALID_TARGET', 'only a demo has a phase');
+  assert.equal((await go(f.customer, 'MOCKUP', phase.id)).code, 'STEP_NOT_APPROVABLE', 'the mockup has its own door, phase or not');
 
   // The legacy road approves through its own gate.
   await prisma.contract.update({ where: { id: f.contract.id }, data: { sequence: 'DESIGN_FIRST' } });
@@ -523,7 +524,10 @@ test('every step takes its own anchor through the API; a malformed or foreign ta
   await ok1('DESIGN', { designRevisionId: f.designRevision.id, pageDesignId: page.id });
   await ok1('DEMO', { demoId: demo.id, demoPageId: home.id }, { phaseId: phase.id });
   await ok1('DEMO', { general: true }, { phaseId: phase.id });
-  await ok1('MOCKUP', { demoId: demo.id, demoPageId: home.id });
+  // The mockup step’s demo is a MOCKUP-kind demo of the contract (J9b), not a site demo.
+  const mockup = await prisma.demo.create({ data: { kind: 'MOCKUP', projectId: f.contract.projectId, contractId: f.contract.id, publishedAt: new Date() } });
+  const mockupPage = await prisma.demoPage.create({ data: { demoId: mockup.id, key: 'home', labelFa: 'ا', labelEn: 'Home', canonicalPath: '/' } });
+  await ok1('MOCKUP', { demoId: mockup.id, demoPageId: mockupPage.id });
 
   const refused: Array<[string, StepKind, Record<string, unknown>, string | undefined, string]> = [
     ['a demo item with a brief field', 'DEMO', { demoId: demo.id, demoPageId: home.id, briefField: 'budgetCap' }, phase.id, 'INVALID_TARGET'],
@@ -540,6 +544,9 @@ test('every step takes its own anchor through the API; a malformed or foreign ta
     ['a revision that is not this contract’s', 'DRAFT', { contractRevisionId: 'nope' }, undefined, 'NOT_FOUND'],
     ['a concept of another revision', 'DESIGN', { designRevisionId: f.designRevision.id, conceptId: 'nope' }, undefined, 'NOT_FOUND'],
     ['a page of another demo', 'DEMO', { demoId: demo.id, demoPageId: 'nope' }, phase.id, 'NOT_FOUND'],
+    // The kind follows the step: a site demo is not the mockup’s and a mockup is not the demo step’s.
+    ['a site demo offered to the mockup step', 'MOCKUP', { demoId: demo.id, demoPageId: home.id }, undefined, 'NOT_FOUND'],
+    ['a mockup offered to the demo step', 'DEMO', { demoId: mockup.id, demoPageId: mockupPage.id }, phase.id, 'NOT_FOUND'],
   ];
   for (const [why, step, target, phaseId, code] of refused) {
     assert.equal((await submit(step, target, 'note', { phaseId })).code, code, why);

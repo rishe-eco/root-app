@@ -745,8 +745,8 @@ export const feedbackMutations = {
       throw refuse('STEP_NOT_APPROVABLE', 'That step cannot be approved this way.');
     }
 
-    const phaseId = args.step === 'DEMO' ? (args.phaseId ?? null) : null;
-    if (args.step !== 'DEMO' && args.phaseId) throw invalidTarget();
+    // Only DEMO reaches here (above), and a demo is approved once per phase.
+    const phaseId = args.phaseId ?? null;
     const road = computeWizard(await wizardStateOn(contract.id));
     // A step with no phase — the placeholder demo — "can never take an
     // approval" (lib/steps.ts): there is no phase for the approval to key on.
