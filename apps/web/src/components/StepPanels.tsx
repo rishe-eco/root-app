@@ -12,6 +12,7 @@ import ScopePanel from '@/components/ScopePanel';
 import DraftPanel from '@/components/DraftPanel';
 import AgreementPanel from '@/components/AgreementPanel';
 import DesignPanel from '@/components/DesignPanel';
+import MockupPanel from '@/components/MockupPanel';
 import { can } from '@/lib/access';
 
 /**
@@ -40,7 +41,9 @@ import { can } from '@/lib/access';
  * - J8  `DESIGN`       — ✔ built: a gallery of themes (pre-made) or wireframes and a
  *   palette (custom), the round counter, and approving the design (`DesignPanel`,
  *   the designer's half in `DesignAuthor`)
- * - J9  `MOCKUP`       — the mockup host, iterations
+ * - J9  `MOCKUP`       — ✔ built (J9b): the mockup browsed in the portal's viewport, a
+ *   note per page, "mockup 2 of 3", and approving it (`MockupPanel`; the designer's
+ *   half — upload, declare, map, publish — in `MockupAuthor`)
  * - J10 `DEMO`         — per phase: submission, readiness, approval
  * - J11 `SUMMARY`      — the summary, handover, closing
  *
@@ -99,6 +102,7 @@ const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {
   DRAFT: DraftPanel,
   AGREEMENT: AgreementPanel,
   DESIGN: DesignPanel,
+  MOCKUP: MockupPanel,
   DEMO: DemoStepPanel,
 };
 

@@ -482,7 +482,21 @@ function CustomAuthor({ contract, step }: { contract: Contract; step: WizardStep
 
 // --- sales: extend the allowance -----------------------------------------------------
 
-export function AllowanceBox({ contract, step, me }: { contract: Contract; step: WizardStep; me: User }) {
+/**
+ * Which step's rounds this box counts and extends — the design's (J8) or the
+ * mockup's (J9b). The wording is the same ("rounds"), the step is the argument.
+ */
+export function AllowanceBox({
+  contract,
+  step,
+  me,
+  kind = 'DESIGN',
+}: {
+  contract: Contract;
+  step: WizardStep;
+  me: User;
+  kind?: 'DESIGN' | 'MOCKUP';
+}) {
   const { t } = useTranslation();
   const locale = useLocale();
   const counter = roundCounter(step);
@@ -493,7 +507,7 @@ export function AllowanceBox({ contract, step, me }: { contract: Contract; step:
   const [charge, setCharge] = useState('');
   const [extend] = useMutation(EXTEND_ALLOWANCE);
   const { act, busy, error } = useAct();
-  const extensions = contract.allowanceExtensions ?? [];
+  const extensions = (contract.allowanceExtensions ?? []).filter((x) => x.step === kind);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -501,7 +515,7 @@ export function AllowanceBox({ contract, step, me }: { contract: Contract; step:
       extend({
         variables: {
           contractId: contract.id,
-          step: 'DESIGN',
+          step: kind,
           extra: Number(extra),
           reason,
           charge: can(me, 'billing.manage') && charge.trim() ? charge.trim() : null,

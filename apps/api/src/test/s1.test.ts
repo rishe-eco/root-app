@@ -4,6 +4,8 @@ import type { Role, User } from '@prisma/client';
 import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
 import { exec, ok, stop } from './graphql.js';
 import { startFileServer, upload } from './http.js';
+import * as yazl from 'yazl';
+import { storage } from '../lib/storage.js';
 
 /**
  * S1 — roles, the capability split, visibility, assignment (journeys build
@@ -32,7 +34,7 @@ import { startFileServer, upload } from './http.js';
  * `NOT_SIGNED` (J13) likewise: issuing a payment plan's first row on a contract
  * nobody has signed is what "allowed" looks like for that row.
  */
-type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED' | 'NOT_SIGNED' | 'NO_DRAFT' | 'DESIGN_INCOMPLETE';
+type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED' | 'NOT_SIGNED' | 'NO_DRAFT' | 'DESIGN_INCOMPLETE' | 'NO_PUBLISHED_MOCKUP';
 
 let f: Fixture;
 const staff: Record<string, User> = {};
@@ -179,6 +181,48 @@ after(async () => {
 const signAgreement = () =>
   prisma.signature.create({ data: { contractRevisionId: f.contractRevision.id, signerId: f.customer.id, typedName: 'Test Customer' } });
 
+/**
+ * J9b: the fixture on the custom path with its design approved (the row `openMockup` reads),
+ * a mockup allowance of two, and an agreed page for the mockup to show.
+ */
+async function customApproved() {
+  await prisma.contractBrief.update({ where: { contractId: f.contract.id }, data: { designTier: 'SENIOR_DESIGNER', mockupIterations: 2, premadeRounds: null } });
+  await prisma.stepApproval.create({ data: { contractId: f.contract.id, step: 'DESIGN', approvedById: f.customer.id } });
+  const existing = await prisma.scopeItem.findFirst({ where: { contractId: f.contract.id, key: 'home' } });
+  if (!existing) {
+    await prisma.scopeItem.create({
+      data: { projectId: f.contract.projectId, contractId: f.contract.id, key: 'home', labelFa: 'صفحه', labelEn: 'Home', kind: 'PAGE', status: 'AGREED' },
+    });
+  }
+}
+
+/** A MOCKUP demo with one declared page, as `createMockupDemo` leaves it. */
+async function mockupDemo() {
+  await customApproved();
+  const demo = await prisma.demo.create({
+    data: { kind: 'MOCKUP', projectId: f.contract.projectId, contractId: f.contract.id, pages: { create: [{ key: 'home', labelFa: 'صفحه', labelEn: 'Home', canonicalPath: '' }] } },
+    include: { pages: true },
+  });
+  return { demoId: demo.id, pageId: demo.pages[0].id };
+}
+
+/** A real one-page bundle on disk, owned by the contract. */
+async function mockupBundle() {
+  const zip = new yazl.ZipFile();
+  zip.addBuffer(Buffer.from('<html><head></head><body>hi</body></html>'), 'index.html');
+  const chunks: Buffer[] = [];
+  const bytes = await new Promise<Buffer>((resolve, reject) => {
+    zip.outputStream.on('data', (c: Buffer) => chunks.push(c));
+    zip.outputStream.on('error', reject);
+    zip.outputStream.on('end', () => resolve(Buffer.concat(chunks)));
+    zip.end();
+  });
+  const key = await storage.put('PRIVATE', bytes, '.zip');
+  return prisma.storedFile.create({
+    data: { key, class: 'MOCKUP_BUNDLE', visibility: 'PRIVATE', mime: 'application/zip', bytes: bytes.length, originalName: 'm.zip', contractId: f.contract.id, uploadedById: staff.DESIGNER.id },
+  });
+}
+
 /** Who is asking, by row label. */
 function actor(label: string): User {
   if (label === 'ADMIN') return f.admin;
@@ -246,6 +290,43 @@ const OPS: Record<string, (as: User) => ReturnType<typeof exec>> = {
   'design.author · publish a round': async (as) => {
     await signAgreement();
     return exec('mutation($c: ID!){ publishDesignRevision(contractId: $c) { id } }', { as, variables: { c: f.contract.id } });
+  },
+  // Journeys build plan J9b: step 5. The mockup belongs to a custom design that is approved,
+  // so each of these sets that up first (the design's approval row is what `openMockup` reads).
+  'design.author · start the mockup': async (as) => {
+    await customApproved();
+    return exec('mutation($c: ID!){ createMockupDemo(contractId: $c) { id } }', { as, variables: { c: f.contract.id } });
+  },
+  'design.author · map a mockup page': async (as) => {
+    const { pageId } = await mockupDemo();
+    return exec('mutation($p: ID!){ mapMockupPage(demoPageId: $p, path: "/about") { id } }', { as, variables: { p: pageId } });
+  },
+  'design.author · declare a mockup build': async (as) => {
+    const { demoId } = await mockupDemo();
+    const file = await mockupBundle();
+    return exec('mutation($d: ID!, $f: ID!){ declareMockupBuild(demoId: $d, fileId: $f, changes: []) { id } }', {
+      as,
+      variables: { d: demoId, f: file.id },
+    });
+  },
+  'design.author · publish a mockup build': async (as) => {
+    const { demoId } = await mockupDemo();
+    const file = await mockupBundle();
+    const build = await prisma.build.create({
+      data: { kind: 'MOCKUP', projectId: f.contract.projectId, demoId, bundleFileId: file.id, number: 1, declaredById: staff.DESIGNER.id },
+    });
+    return exec('mutation($b: ID!){ publishBuild(buildId: $b) { id } }', { as, variables: { b: build.id } });
+  },
+  'customer · approve the mockup': async (as) => {
+    await customApproved();
+    return exec('mutation($c: ID!){ approveMockup(contractId: $c) { id } }', { as, variables: { c: f.contract.id } });
+  },
+  'contracts.author · extend the mockup allowance': async (as) => {
+    await customApproved();
+    return exec(
+      'mutation($c: ID!){ extendAllowance(contractId: $c, step: MOCKUP, extra: 1, reason: "They asked for another look") { id } }',
+      { as, variables: { c: f.contract.id } },
+    );
   },
   'contracts.author · extend the allowance': async (as) => {
     await prisma.contractBrief.update({ where: { contractId: f.contract.id }, data: { premadeRounds: 3 } });
@@ -338,6 +419,7 @@ const U = 'SCOPE_UNCONFIRMED' as const;
 const NS = 'NOT_SIGNED' as const;
 const ND = 'NO_DRAFT' as const;
 const DI = 'DESIGN_INCOMPLETE' as const;
+const NP = 'NO_PUBLISHED_MOCKUP' as const;
 
 /**
  * The matrix. Columns: ADMIN, SALES, DESIGNER, DESIGNER_UNASSIGNED,
@@ -370,6 +452,14 @@ const MATRIX: Record<keyof typeof OPS, Outcome[]> = {
   'design.author · add a palette item':   ['OK', F,    'OK', N,    F,    F,    F,   F,   F],
   'design.author · publish a round':      [ND,   F,    ND,   N,    F,    F,    F,   F,   F],
   'contracts.author · extend the allowance': ['OK', 'OK', F,   F,    F,    F,    F,   F,   F],
+  // J9b. Step 5 is the designer's (design.author and the assignment edge), not the developer's:
+  // the developer who may publish a site build hears "no such build" for a mockup's.
+  'design.author · start the mockup':     ['OK', F,    'OK', N,    F,    F,    F,   F,   F],
+  'design.author · map a mockup page':    ['OK', F,    'OK', N,    F,    F,    F,   F,   F],
+  'design.author · declare a mockup build': ['OK', F,  'OK', N,    F,    F,    F,   F,   F],
+  'design.author · publish a mockup build': ['OK', F,  'OK', N,    NF,   NF,   F,   F,   F],
+  'customer · approve the mockup':        [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  NP],
+  'contracts.author · extend the mockup allowance': ['OK', 'OK', F, F, F,    F,    F,   F,   F],
   'customer · request other options':     [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  'OK'],
   'customer · approve the design':        [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  DI],
   'builds.author · demo CRUD':            ['OK', F,    F,    F,    'OK', N,    F,   F,   F],

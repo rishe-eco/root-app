@@ -51,7 +51,8 @@ test('every fa.json key exists in en.json', () => {
  * "v3" — a Latin identifier per the numeral rule), are stripped the same way
  * since neither is translatable content.
  */
-const SHARED_TERMS = ['Root', 'PDF', 'DOI'];
+// File names the mockup upload tells a designer about (J9b) are identifiers too.
+const SHARED_TERMS = ['Root', 'PDF', 'DOI', 'index.html', '__MACOSX', '.zip'];
 
 function strip(value: string): string {
   let s = value.replace(/v?\{\{[^}]+\}\}/g, '');

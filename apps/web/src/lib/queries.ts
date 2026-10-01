@@ -374,9 +374,41 @@ export type FeedbackSubmitResult = {
   interceptionScopeItem: FrameLineScopeItemRef | null;
 };
 
+export type DemoKind = 'MOCKUP' | 'SITE';
+
+/** One iteration of a mockup (journeys build plan J9b). `number` is the build's own
+ *  (per kind, skips whenever a draft is abandoned); the ordinal the customer is told
+ *  is the published count, `WizardStep.iterationsUsed`. */
+export type MockupBuild = {
+  id: string;
+  kind: 'MOCKUP';
+  number: number;
+  publishedAt: string | null;
+  createdAt: string;
+  declaredBy: Pick<User, 'id' | 'name'>;
+  /** Staff only — the API returns none to a customer. */
+  changes: Array<{
+    id: string;
+    outcome: BuildChangeOutcome | null;
+    note: string | null;
+    noteLang: string | null;
+    createdAt: string;
+    feedbackItem: { id: string; general: boolean; demoPage: Pick<DemoPage, 'id' | 'key' | 'labelFa' | 'labelEn'> | null } | null;
+  }>;
+};
+
 export type Demo = {
   id: string;
-  stagingUrl: string;
+  /** J9: a mockup is not a site. */
+  kind?: DemoKind;
+  /** Null exactly for a MOCKUP demo — it is served at a per-view subdomain (`mockupViewUrl`). */
+  stagingUrl: string | null;
+  /** J9b, MOCKUP only: its iterations (the customer's are the published ones). */
+  builds?: MockupBuild[];
+  /** J9b, MOCKUP only: frame lines that are words of the interface, as codes. */
+  fixedFrameLines?: string[];
+  /** J9b, staff only: the page paths the newest bundle has. */
+  bundlePages?: string[];
   buildRef: string | null;
   reviewWindowStart: string | null;
   reviewWindowEnd: string | null;
@@ -3212,6 +3244,142 @@ export const PUBLISH_BUILD = gql`
   mutation PublishBuild($buildId: ID!) {
     publishBuild(buildId: $buildId) {
       ...BuildFields
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Step 5, the mockup (journeys build plan J9b). The panel reads the mockup
+// through one query of its own — it is not part of `WizardFields`, which every
+// contract screen pays for — and refetches it after each act.
+// ---------------------------------------------------------------------------
+
+export const CONTRACT_MOCKUP = gql`
+  ${FEEDBACK_ITEM_FIELDS}
+  query ContractMockup($id: ID!, $asCustomer: Boolean) {
+    contract(id: $id, asCustomer: $asCustomer) {
+      id
+      mockup {
+        id
+        kind
+        publishedAt
+        fixedFrameLines
+        bundlePages
+        pages {
+          id
+          key
+          labelFa
+          labelEn
+          canonicalPath
+        }
+        builds {
+          id
+          kind
+          number
+          publishedAt
+          createdAt
+          declaredBy {
+            id
+            name
+          }
+          changes {
+            id
+            outcome
+            note
+            noteLang
+            createdAt
+            feedbackItem {
+              id
+              general
+              demoPage {
+                id
+                key
+                labelFa
+                labelEn
+              }
+            }
+          }
+        }
+        frame {
+          id
+          summaryFa
+          summaryEn
+          authoredBy {
+            id
+            name
+          }
+          unpromptedChanges {
+            id
+            note
+            noteLang
+          }
+          lines {
+            id
+            kind
+            textFa
+            textEn
+            position
+            scopeItem {
+              id
+              labelFa
+              labelEn
+              temporary
+              decidedAt
+              decidedNote
+            }
+            feedbackItem {
+              ...FeedbackItemFields
+            }
+          }
+        }
+        feedbackItems {
+          ...FeedbackItemFields
+        }
+      }
+    }
+  }
+`;
+
+export const MOCKUP_VIEW_URL = gql`
+  query MockupViewUrl($demoId: ID!) {
+    mockupViewUrl(demoId: $demoId)
+  }
+`;
+
+export const CREATE_MOCKUP_DEMO = gql`
+  mutation CreateMockupDemo($contractId: ID!) {
+    createMockupDemo(contractId: $contractId) {
+      id
+    }
+  }
+`;
+
+export const MAP_MOCKUP_PAGE = gql`
+  mutation MapMockupPage($demoPageId: ID!, $path: String!) {
+    mapMockupPage(demoPageId: $demoPageId, path: $path) {
+      id
+    }
+  }
+`;
+
+export const DECLARE_MOCKUP_BUILD = gql`
+  mutation DeclareMockupBuild($demoId: ID!, $fileId: ID!, $ref: String, $changes: [BuildChangeInput!]!) {
+    declareMockupBuild(demoId: $demoId, fileId: $fileId, ref: $ref, changes: $changes) {
+      id
+      number
+      publishedAt
+    }
+  }
+`;
+
+/** The customer approves the mockup — `approveStepTx(MOCKUP)` with a published iteration. */
+export const APPROVE_MOCKUP = gql`
+  ${CONTRACT_FIELDS}
+  ${WIZARD_FIELDS}
+  mutation ApproveMockup($contractId: ID!) {
+    approveMockup(contractId: $contractId) {
+      ...ContractFields
+      ...WizardFields
     }
   }
 `;
