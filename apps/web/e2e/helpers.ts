@@ -118,6 +118,31 @@ export function renameContractDraft(titleEn: string) {
   });
 }
 
+/**
+ * Every phase of the seeded wizard contract **accepted**, straight into the
+ * database (journeys build plan J11): the DEMO `StepApproval` per phase that
+ * `approveDemo` will write when J10 lands — signed as the contract's customer —
+ * and the phase's scope items moved to `ACCEPTED`, the effect that approval has.
+ * J10 does not exist on `main` yet; when it does, `24-summary` drives the real
+ * approval and this helper goes.
+ */
+export function insertAcceptedPhases() {
+  if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
+  execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
+    cwd: API_DIR,
+    input: `
+      INSERT INTO "StepApproval" ("id", "contractId", "step", "phaseId", "approvedById")
+      SELECT 'e2e-accept-' || p."id", c."id", 'DEMO'::"StepKind", p."id", c."customerId"
+      FROM "Phase" p JOIN "Contract" c ON c."id" = p."contractId" WHERE c."ref" = '${WIZARD_CONTRACT_REF}';
+      UPDATE "ScopeItem" SET "status" = 'ACCEPTED'
+      WHERE "contractId" = (SELECT "id" FROM "Contract" WHERE "ref" = '${WIZARD_CONTRACT_REF}')
+        AND "kind" <> 'DELIVERABLE' AND "status" = 'AGREED';
+    `,
+    stdio: 'pipe',
+    timeout: 60_000,
+  });
+}
+
 /** The seeded new-road contract (journeys build plan J3): `AGREEMENT_FIRST`, on
  *  the same customer's project as `CONTRACT_REF`, older-stamped so the
  *  customer's list still opens `CONTRACT_REF` first. */
