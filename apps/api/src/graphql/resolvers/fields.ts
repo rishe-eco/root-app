@@ -15,7 +15,7 @@ import {
 } from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
 import { diffSnapshots, isAgreementSnapshot, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
-import { carryForward, diffDesign, readThemeSnapshot, type PageChange } from '../../lib/design.js';
+import { carryForward, diffDesign, readThemeSnapshot, type ConceptShape, type PageChange } from '../../lib/design.js';
 import { canReadThemes } from '../../lib/themes.js';
 import { computeProjectProgress } from '../../lib/phase.js';
 import { isOverdue } from '../../lib/dependency.js';
@@ -291,72 +291,134 @@ export const Contract = {
    * on the client.
    */
   pending: async (c: FullContract) => {
-    const current = c.currentContractRevision;
-
-    // A · the text was revised and wants approving again. "Before" is
-    // whichever earlier revision the customer last approved (V3.md §2) — not
-    // necessarily the immediately preceding version.
-    let contractDiff:
-      | (Omit<SnapshotDiff, 'articles'> & {
-          fromVersion: number;
-          toVersion: number;
-          articles: Array<{ number: number; titleFa: string; titleEn: string; kind: string }>;
-        })
-      | null = null;
-    if (current && !current.approvedAt) {
-      const previouslyApproved = await prisma.contractRevision.findFirst({
-        where: { contractId: c.id, approvedAt: { not: null } },
-        orderBy: { version: 'desc' },
-      });
-      const after = readContractSnapshot(current.snapshot);
-      if (previouslyApproved && after) {
-        const before = readContractSnapshot(previouslyApproved.snapshot);
-        const diff = diffSnapshots(before, after);
-        contractDiff = {
-          fromVersion: previouslyApproved.version,
-          toVersion: current.version,
-          ...diff,
-          articles: diff.articles.map((a) => ({ ...a, kind: CHANGE_KIND[a.kind] })),
-        };
-      }
-    }
-
-    // B · pages of the current design revision still waiting on the
-    // customer — exactly the unapproved pages under the chosen concept
-    // (V3.md §2A). A page under a concept nobody chose is not something the
-    // customer owes attention, and this mode only exists once a revision has
-    // actually happened, so a fresh v1 design reports nothing here.
-    const revision = c.currentDesignRevision;
-    const chosen = revision?.concepts.find((cc) => cc.chosenAt !== null) ?? null;
-    const unapprovedKeys =
-      revision && revision.version > 1 && chosen
-        ? new Set(chosen.pages.filter((p) => p.approvedAt === null).map((p) => p.key))
-        : new Set<string>();
-    let designChanges: Array<{ conceptKey: string; pageKey: string; kind: PageChange['kind'] }> = [];
-    if (chosen && unapprovedKeys.size > 0) {
-      const previous = await prisma.designRevision.findFirst({
-        where: { contractId: c.id, version: revision!.version - 1 },
-        include: conceptsInclude,
-      });
-      designChanges = diffDesign(previous?.concepts ?? [], revision!.concepts).filter(
-        (ch) => ch.conceptKey === chosen.key && unapprovedKeys.has(ch.pageKey),
-      );
-    }
-
-    // C · a published amendment still waiting on approval or signature.
-    // Same publishedAt filter as ContractRevision.amendments (T7) — a
-    // different field on a different type does not inherit it.
-    const amendment =
-      current?.amendments.find((a) => a.publishedAt !== null && (!a.approvedAt || !a.signature)) ?? null;
-
-    if (!contractDiff && designChanges.length === 0 && !amendment) return null;
-    return {
-      contractDiff,
-      designChanges: designChanges.map((ch) => ({ ...ch, kind: CHANGE_KIND[ch.kind] })),
-      amendment,
-    };
+    // The rule is `pendingOf`'s, below, and so is which earlier revisions it has
+    // to read (`pendingNeeds`) — this field only fetches them, one contract at a
+    // time. J12's home screen asks the same rule for every contract at once
+    // (`resolvers/home.ts` fetches the same priors in two batched queries), so
+    // the banner and the dashboard cannot disagree about what is pending.
+    const needs = pendingNeeds(c);
+    const [approvedContract, previousDesign] = await Promise.all([
+      needs.approvedContract
+        ? prisma.contractRevision.findFirst({
+            where: { contractId: c.id, approvedAt: { not: null } },
+            orderBy: { version: 'desc' },
+            select: { version: true, snapshot: true },
+          })
+        : null,
+      needs.previousDesignVersion !== null
+        ? prisma.designRevision.findFirst({
+            where: { contractId: c.id, version: needs.previousDesignVersion },
+            include: conceptsInclude,
+          })
+        : null,
+    ]);
+    return pendingOf(c, { approvedContract, previousDesign });
   },
 };
+
+/**
+ * What `pendingOf` reads of a contract: its two current revisions. Structural,
+ * so the banner (a full contract) and the home screen (a lean select, with the
+ * snapshot attached only where it is read) both satisfy it.
+ */
+export type PendingSource = {
+  currentContractRevision: {
+    version: number;
+    approvedAt: Date | null;
+    /** Read only while the revision is unapproved — a batch loader may leave it
+     *  out (null) for an approved one, which `pendingOf` never opens. */
+    snapshot: unknown;
+    amendments: ReadonlyArray<{ ordinal: number; publishedAt: Date | null; approvedAt: Date | null; signature: unknown }>;
+  } | null;
+  currentDesignRevision: { version: number; concepts: ReadonlyArray<ConceptShape> } | null;
+};
+
+/** The earlier revisions `pendingOf` compares against. */
+export type PendingPrior = {
+  /** The highest-numbered contract revision the customer has approved. */
+  approvedContract: { version: number; snapshot: unknown } | null;
+  /** The design revision numbered one below the current. */
+  previousDesign: { concepts: ReadonlyArray<ConceptShape> } | null;
+};
+
+/**
+ * Which of the earlier revisions this contract's pending state needs — the
+ * conditions `pendingOf` would otherwise discover only after reading, stated
+ * once so a loader fetches nothing it will not use.
+ */
+export function pendingNeeds(c: PendingSource): { approvedContract: boolean; previousDesignVersion: number | null } {
+  const revision = c.currentDesignRevision;
+  const chosen = revision?.concepts.find((cc) => cc.chosenAt !== null) ?? null;
+  const unapproved = revision && revision.version > 1 && chosen ? chosen.pages.some((p) => p.approvedAt === null) : false;
+  return {
+    approvedContract: !!c.currentContractRevision && !c.currentContractRevision.approvedAt,
+    previousDesignVersion: revision && chosen && unapproved ? revision.version - 1 : null,
+  };
+}
+
+/**
+ * What has moved since the customer last acted (V3.md §3), as a pure function
+ * of a contract's two current revisions and the earlier ones in `prior`.
+ */
+export function pendingOf<S extends PendingSource>(c: S, prior: PendingPrior) {
+  const current = c.currentContractRevision;
+
+  // A · the text was revised and wants approving again. "Before" is
+  // whichever earlier revision the customer last approved (V3.md §2) — not
+  // necessarily the immediately preceding version.
+  let contractDiff:
+    | (Omit<SnapshotDiff, 'articles'> & {
+        fromVersion: number;
+        toVersion: number;
+        articles: Array<{ number: number; titleFa: string; titleEn: string; kind: string }>;
+      })
+    | null = null;
+  if (current && !current.approvedAt) {
+    const previouslyApproved = prior.approvedContract;
+    const after = readContractSnapshot(current.snapshot);
+    if (previouslyApproved && after) {
+      const before = readContractSnapshot(previouslyApproved.snapshot);
+      const diff = diffSnapshots(before, after);
+      contractDiff = {
+        fromVersion: previouslyApproved.version,
+        toVersion: current.version,
+        ...diff,
+        articles: diff.articles.map((a) => ({ ...a, kind: CHANGE_KIND[a.kind] })),
+      };
+    }
+  }
+
+  // B · pages of the current design revision still waiting on the
+  // customer — exactly the unapproved pages under the chosen concept
+  // (V3.md §2A). A page under a concept nobody chose is not something the
+  // customer owes attention, and this mode only exists once a revision has
+  // actually happened, so a fresh v1 design reports nothing here.
+  const revision = c.currentDesignRevision;
+  const chosen = revision?.concepts.find((cc) => cc.chosenAt !== null) ?? null;
+  const unapprovedKeys =
+    revision && revision.version > 1 && chosen
+      ? new Set(chosen.pages.filter((p) => p.approvedAt === null).map((p) => p.key))
+      : new Set<string>();
+  let designChanges: Array<{ conceptKey: string; pageKey: string; kind: PageChange['kind'] }> = [];
+  if (chosen && unapprovedKeys.size > 0) {
+    designChanges = diffDesign([...(prior.previousDesign?.concepts ?? [])], [...revision!.concepts]).filter(
+      (ch) => ch.conceptKey === chosen.key && unapprovedKeys.has(ch.pageKey),
+    );
+  }
+
+  // C · a published amendment still waiting on approval or signature.
+  // Same publishedAt filter as ContractRevision.amendments (T7) — a
+  // different field on a different type does not inherit it.
+  const amendment =
+    current?.amendments.find((a) => a.publishedAt !== null && (!a.approvedAt || !a.signature)) ?? null;
+
+  if (!contractDiff && designChanges.length === 0 && !amendment) return null;
+  return {
+    contractDiff,
+    designChanges: designChanges.map((ch) => ({ ...ch, kind: CHANGE_KIND[ch.kind] })),
+    amendment,
+  };
+}
 
 /**
  * design.ts's and revision.ts's kind literals are lower case; the shared

@@ -170,27 +170,55 @@ test('feedback about money is its own line, and only money readers see it (PD-21
   assert.equal(attentionFor(input, CUSTOMER).length, 2, 'the customer’s own feedback about money is theirs to see');
 });
 
+let invoiceSeq = 0;
+const invoice = (over: { issuedAt: Date | null; dueAt: Date | null; paidAt: Date | null }) => ({
+  id: `inv-${++invoiceSeq}`,
+  invoiceNumber: `INV-${String(invoiceSeq).padStart(6, '0')}`,
+  ...over,
+});
+
 test('overdue invoices (J13): one line with the count, since the earliest due day; paid, drafted and not-yet-due ones are no part of it', () => {
-  const inv = (dueOffset: number | null, paid = false, issued = true) => ({
-    issuedAt: issued ? day(-30) : null,
-    dueAt: dueOffset === null ? null : day(dueOffset),
-    paidAt: paid ? day(-1) : null,
-  });
+  const inv = (dueOffset: number | null, paid = false, issued = true) =>
+    invoice({
+      issuedAt: issued ? day(-30) : null,
+      dueAt: dueOffset === null ? null : day(dueOffset),
+      paidAt: paid ? day(-1) : null,
+    });
   const input = empty({
     invoices: [inv(-10), inv(-3), inv(-20, true), inv(4), inv(null, false, false)],
   });
-  const items = attentionFor(input, CUSTOMER);
+  // (J12: the one not yet due is its own `INVOICE_DUE` line, tested below.)
+  const items = attentionFor(input, CUSTOMER).filter((i) => i.kind === 'INVOICE_OVERDUE');
   assert.deepEqual(summary(items), ['INVOICE_OVERDUE/default/CUSTOMER']);
   assert.deepEqual(items[0].params, { count: 2 });
   // The earliest due *day* is when the wait began (a `date` column: midnight UTC).
   assert.equal(items[0].since.getTime(), day(-10).getTime());
   assert.equal(items[0].money, true);
   assert.equal(items[0].internal, false);
-  assert.deepEqual(attentionFor(empty({ invoices: [inv(4), inv(-20, true)] }), CUSTOMER), []);
+  // J12: the line is sales' to follow up, though the customer owes the money.
+  assert.equal(items[0].role, 'SALES');
+  assert.deepEqual(attentionFor(empty({ invoices: [inv(-20, true), inv(null, false, false)] }), CUSTOMER), []);
+});
+
+test('an invoice not yet due is its own line (J12): the customer’s move, one per invoice, named by number, money', () => {
+  const issued = invoice({ issuedAt: day(-2), dueAt: day(5), paidAt: null });
+  const overdue = invoice({ issuedAt: day(-30), dueAt: day(-3), paidAt: null });
+  const items = attentionFor(empty({ invoices: [issued, overdue] }), CUSTOMER);
+  assert.deepEqual(items.map((i) => i.kind).sort(), ['INVOICE_DUE', 'INVOICE_OVERDUE']);
+  const due = items.find((i) => i.kind === 'INVOICE_DUE')!;
+  assert.deepEqual(due.params, { invoiceId: issued.id, number: issued.invoiceNumber, dueAt: day(5).toISOString().slice(0, 10) });
+  assert.equal(due.since.getTime(), day(-2).getTime(), 'the wait began when it reached them');
+  assert.equal(due.waitingOn, 'CUSTOMER');
+  assert.equal(due.money, true);
+  assert.equal(due.role, null, 'a due invoice is nobody’s work yet — only an overdue one is chased');
+  // A designer may not read the money, so it is not on their list either.
+  assert.deepEqual(attentionFor(empty({ invoices: [issued] }), DESIGNER), []);
+  // Paid: no line.
+  assert.deepEqual(attentionFor(empty({ invoices: [invoice({ issuedAt: day(-2), dueAt: day(5), paidAt: day(-1) })] }), CUSTOMER), []);
 });
 
 test('an overdue invoice is money: the customer and sales see it, a designer does not (PD-21)', () => {
-  const input = empty({ invoices: [{ issuedAt: day(-30), dueAt: day(-2), paidAt: null }] });
+  const input = empty({ invoices: [invoice({ issuedAt: day(-30), dueAt: day(-2), paidAt: null })] });
   assert.equal(attentionFor(input, CUSTOMER).length, 1);
   assert.equal(attentionFor(input, SALES).length, 1);
   assert.deepEqual(attentionFor(input, DESIGNER), []);
@@ -298,7 +326,7 @@ test('every item the module can emit names a sentence that exists in the table',
         pendingApproval: [fact('DEMO', 'p', day(-1))],
         answered: [fact('DEMO', 'p', day(-1))],
       },
-      invoices: [{ issuedAt: day(-9), dueAt: day(-2), paidAt: null }],
+      invoices: [invoice({ issuedAt: day(-9), dueAt: day(-2), paidAt: null })],
     }),
     SALES,
   );

@@ -1,18 +1,20 @@
 import { GraphQLError } from 'graphql';
-import type { Prisma, StepKind } from '@prisma/client';
+import type { ContractSequence, Prisma, ScopeKind, ScopeStatus, StepKind } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { requireUser, viewerOf, type Context } from '../../context.js';
 import { computeGate } from '../../lib/gate.js';
 import { isPhaseAccepted } from '../../lib/phase.js';
-import { firstInvoicePaidAt } from '../../lib/invoice.js';
+import { canIssuePlanned, firstInvoicePaidAt } from '../../lib/invoice.js';
 import {
   agreementSignedAt,
   assertStepOpen,
   computeWizard,
+  currentStepOf,
   designPathOf,
   legacyFinished,
   type Finished,
   type WizardState,
+  type WizardStep,
 } from '../../lib/steps.js';
 import { allowanceFor } from '../../lib/allowance.js';
 import {
@@ -22,7 +24,13 @@ import {
   type BriefMissing,
   type CommitmentKey,
 } from '../../lib/brief.js';
-import { attentionFor, type AttentionInput, type FeedbackFacts } from '../../lib/attention.js';
+import {
+  attentionFor,
+  type AttentionInput,
+  type FeedbackFacts,
+  type PendingFacts,
+  type StepFacts,
+} from '../../lib/attention.js';
 import { scopeStepDone } from '../../lib/scopeProposals.js';
 import { isMoneyAnchored } from '../../lib/feedbackRules.js';
 import { computeStatusSummary } from '../../lib/statusSummary.js';
@@ -35,7 +43,7 @@ import {
   requestVisibleTo,
 } from '../../lib/visibility.js';
 import { loadForActor, reload, type FullContract } from './contracts.js';
-import { Contract as ContractFields } from './fields.js';
+import { Contract as ContractFields, pendingOf } from './fields.js';
 
 /**
  * The wizard's loader and its field resolvers (journeys build plan J3): one
@@ -51,84 +59,124 @@ import { Contract as ContractFields } from './fields.js';
  * **Every field asks `viewerOf(ctx)`** who is looking, never `requireUser`:
  * that is what makes view-as-customer the same rules seen through a different
  * viewer rather than a second implementation (`context.ts`).
+ *
+ * **The loader is batched (J12).** `loadFactsMany` reads the rows of any number
+ * of contracts in one round of `IN` queries and groups them in memory; the
+ * single-contract path every field resolver takes is `loadFactsMany([c])`, so
+ * the home screen's "every contract a sales user can see" and the contract page
+ * run *the same loader* — there is no second set of queries to drift. What a
+ * home screen costs is stated in `resolvers/home.ts`.
  */
 
-type Facts = Awaited<ReturnType<typeof loadFacts>>;
+/**
+ * What the loader and the wizard's rules read of a contract. Structural, so a
+ * `FullContract` satisfies it and so does the lean select the home screen makes
+ * (it must not drag every contract's comments, change log and articles along to
+ * learn which step it is on).
+ */
+export type WizardContract = {
+  id: string;
+  projectId: string;
+  customerId: string;
+  sequence: ContractSequence;
+  amount: bigint | null;
+  deliveredAt: Date | null;
+  createdAt: Date;
+  publishedAt: Date | null;
+  currentContractRevision: {
+    approvedAt: Date | null;
+    contentHash: string | null;
+    publishedAt: Date | null;
+    signature: { signedAt: Date } | null;
+  } | null;
+  currentDesignRevision: {
+    publishedAt: Date | null;
+    concepts: Array<{ chosenAt: Date | null; pages: Array<{ approvedAt: Date | null }> }>;
+  } | null;
+  project: {
+    scopeItems: Array<{ kind: ScopeKind; contractId: string | null; originAskedAt: Date; status: ScopeStatus; key: string }>;
+  };
+};
 
-async function loadFacts(c: FullContract) {
-  // **Phases, demos and builds are this contract's own** (J4, PD-5): a phase
-  // names its contract, and a build and a demo are its phase's. Until J4 this
-  // was a policy — the project's first contract owned them all — and a second
-  // contract's road showed a placeholder; now each contract's road has exactly
-  // the phases it delivers.
-  const [
-    approvals,
-    phases,
-    dependencies,
-    builds,
-    mockupBuilds,
-    contractRevisions,
-    designRevisions,
-    feedback,
-    brief,
-    plan,
-    sensitiveArticles,
-    scopeProposals,
-    scopeTrades,
-    invoices,
-    allowanceExtensions,
-  ] = await Promise.all([
+/** Keyed rows → a list per key, in the rows' own order (the queries order them). */
+function groupBy<T>(rows: readonly T[], key: (row: T) => string | null): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const k = key(row);
+    if (k === null) continue;
+    const list = groups.get(k);
+    if (list) list.push(row);
+    else groups.set(k, [row]);
+  }
+  return groups;
+}
+
+export type Facts = ReturnType<typeof factsOf>;
+type Rows = Awaited<ReturnType<typeof fetchRows>>;
+
+/**
+ * Every fact the wizard's views read, for any number of contracts: fifteen
+ * `IN` queries (plus the relations nested in three of them), *not* fifteen per
+ * contract. Rows come back keyed; `factsOf` hands each contract its own.
+ */
+async function fetchRows(contractIds: string[], projectIds: string[]) {
+  const inContracts = { in: contractIds };
+  return Promise.all([
     prisma.stepApproval.findMany({
-      where: { contractId: c.id },
-      select: { id: true, step: true, phaseId: true, approvedAt: true, approvedById: true },
+      where: { contractId: inContracts },
+      select: { id: true, contractId: true, step: true, phaseId: true, approvedAt: true, approvedById: true },
       orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
     }),
+    // **Phases, demos and builds are this contract's own** (J4, PD-5): a phase
+    // names its contract, and a build and a demo are its phase's. Every demo
+    // of the phase is read (J12 — readiness and "out for review" both need to
+    // tell a published one from one still being prepared); the consumers that
+    // used to see only published ones filter.
     prisma.phase.findMany({
-      where: { contractId: c.id },
+      where: { contractId: inContracts },
       orderBy: { number: 'asc' },
       select: {
         id: true,
+        contractId: true,
         number: true,
         plannedEndAt: true,
         scopeItems: { select: { status: true } },
-        demos: {
-          where: { publishedAt: { not: null } },
-          select: { id: true },
-        },
+        demos: { select: { id: true, publishedAt: true, readyAt: true, stagingUrl: true, updatedAt: true } },
       },
     }),
     prisma.dependency.findMany({
-      where: { projectId: c.projectId },
-      select: { id: true, side: true, titleFa: true, titleEn: true, dueAt: true, verifiedAt: true, briefKey: true },
+      where: { projectId: { in: projectIds } },
+      select: { id: true, projectId: true, side: true, titleFa: true, titleEn: true, dueAt: true, verifiedAt: true, briefKey: true, technical: true },
     }),
     prisma.build.findMany({
-      where: { projectId: c.projectId, phase: { contractId: c.id }, publishedAt: { not: null } },
-      select: { id: true, number: true, publishedAt: true, phaseId: true },
+      where: { phase: { contractId: inContracts }, publishedAt: { not: null } },
+      select: { id: true, number: true, publishedAt: true, phaseId: true, phase: { select: { contractId: true } } },
     }),
     // The mockup's published iterations (J9b): a mockup build has no phase, so it
     // is this contract's through its demo. Oldest first — the position in this
     // list is the iteration's ordinal ("mockup 2"), which is not the build's
     // number whenever a declared draft was never published.
     prisma.build.findMany({
-      where: { kind: 'MOCKUP', demo: { contractId: c.id }, publishedAt: { not: null } },
-      select: { id: true, publishedAt: true },
+      where: { kind: 'MOCKUP', demo: { contractId: inContracts }, publishedAt: { not: null } },
+      select: { id: true, publishedAt: true, demo: { select: { contractId: true } } },
       orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],
     }),
     prisma.contractRevision.findMany({
-      where: { contractId: c.id, publishedAt: { not: null } },
-      select: { id: true, version: true, publishedAt: true, approvedAt: true, signature: { select: { signedAt: true } } },
+      where: { contractId: inContracts, publishedAt: { not: null } },
+      select: { id: true, contractId: true, version: true, publishedAt: true, approvedAt: true, signature: { select: { signedAt: true } } },
     }),
     prisma.designRevision.findMany({
-      where: { contractId: c.id, publishedAt: { not: null } },
-      select: { id: true, version: true, publishedAt: true },
+      where: { contractId: inContracts, publishedAt: { not: null } },
+      select: { id: true, contractId: true, version: true, publishedAt: true },
     }),
     // Every step's feedback (S2), with just enough of each thread to say when
     // the customer last spoke and when an answer reached them. Items only
     // matter until the step is accepted, so an accepted one is not loaded.
     prisma.feedbackItem.findMany({
-      where: { contractId: c.id, status: { not: 'ACCEPTED' } },
+      where: { contractId: inContracts, status: { not: 'ACCEPTED' } },
       select: {
         id: true,
+        contractId: true,
         step: true,
         phaseId: true,
         status: true,
@@ -145,45 +193,73 @@ async function loadFacts(c: FullContract) {
     // Step 1's own rows (J4): the brief and the payment plan's amounts feed
     // `briefCompleteness`, which is REQUIREMENTS' done signal — and the
     // sensitive articles decide which DRAFT notes are about money (PD-21).
-    prisma.contractBrief.findUnique({ where: { contractId: c.id } }),
+    prisma.contractBrief.findMany({ where: { contractId: inContracts } }),
     // The plan's rows with what became of each (J13): `briefCompleteness` reads
-    // the amounts; "started" reads whether the first row's invoice is paid.
-    prisma.paymentPlan.findUnique({
-      where: { contractId: c.id },
+    // the amounts; "started" reads whether the first row's invoice is paid; J12's
+    // `INVOICE_ISSUABLE` reads the plan rule over them.
+    prisma.paymentPlan.findMany({
+      where: { contractId: inContracts },
       select: {
+        contractId: true,
         invoices: {
           orderBy: { ordinal: 'asc' },
           select: { id: true, ordinal: true, phaseId: true, amount: true, billingEntry: { select: { issuedAt: true, paidAt: true } } },
         },
       },
     }),
-    prisma.article.findMany({ where: { contractId: c.id, sensitive: true }, select: { number: true } }),
+    prisma.article.findMany({ where: { contractId: inContracts, sensitive: true }, select: { contractId: true, number: true } }),
     // Step 2a's own rows (J5): the customer's proposals — SCOPE's done signal
     // and the attention module's "Root has proposals to decide" — and the scope
     // trades still open on this contract's agreement (`TRADE_TO_CONFIRM`). A
     // trade belongs to the contract that agreed its outgoing item (T1), which
     // is the document it amends.
     prisma.scopeProposal.findMany({
-      where: { contractId: c.id },
-      select: { decidedAt: true, createdAt: true },
+      where: { contractId: inContracts },
+      select: { contractId: true, decidedAt: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.scopeTrade.findMany({
-      where: { projectId: c.projectId, executedAt: null, outItem: { contractId: c.id } },
-      select: { id: true, proposedAt: true, rootConfirmedAt: true, customerConfirmedAt: true },
+      where: { projectId: { in: projectIds }, executedAt: null, outItem: { contractId: inContracts } },
+      select: { id: true, proposedAt: true, rootConfirmedAt: true, customerConfirmedAt: true, outItem: { select: { contractId: true } } },
       orderBy: { proposedAt: 'asc' },
     }),
     // Issued and unpaid, with the due day: the status area's overdue invoices
-    // (J13). Nothing here is money the viewer may read until `attentionVisibleTo`
-    // says so — it is only dates, and the attention item carries a count.
+    // (J13) and J12's "due" lines. Nothing here is money the viewer may read
+    // until `attentionVisibleTo` says so — it is dates, a number and an id.
     prisma.billingEntry.findMany({
-      where: { contractId: c.id, issuedAt: { not: null }, paidAt: null },
-      select: { issuedAt: true, dueAt: true, paidAt: true },
+      where: { contractId: inContracts, issuedAt: { not: null }, paidAt: null },
+      select: { id: true, contractId: true, invoiceNumber: true, issuedAt: true, dueAt: true, paidAt: true },
+      orderBy: [{ issuedAt: 'asc' }, { id: 'asc' }],
     }),
     // The rounds sales has granted beyond the brief (J8), which the step counters read.
-    prisma.allowanceExtension.findMany({ where: { contractId: c.id }, select: { step: true, phaseId: true, extra: true } }),
+    prisma.allowanceExtension.findMany({ where: { contractId: inContracts }, select: { contractId: true, step: true, phaseId: true, extra: true } }),
   ]);
+}
+
+/** One contract's slice of the batched rows. */
+function factsOf(c: { id: string; projectId: string }, grouped: ReturnType<typeof groupRows>) {
+  const mine = <T>(m: Map<string, T[]>) => m.get(c.id) ?? [];
   return {
+    approvals: mine(grouped.approvals),
+    phases: mine(grouped.phases),
+    dependencies: grouped.dependencies.get(c.projectId) ?? [],
+    builds: mine(grouped.builds),
+    mockupBuilds: mine(grouped.mockupBuilds),
+    contractRevisions: mine(grouped.contractRevisions),
+    designRevisions: mine(grouped.designRevisions),
+    feedback: mine(grouped.feedback),
+    brief: grouped.briefs.get(c.id) ?? null,
+    plan: grouped.plans.get(c.id) ?? null,
+    sensitiveArticles: mine(grouped.sensitiveArticles),
+    scopeProposals: mine(grouped.scopeProposals),
+    scopeTrades: mine(grouped.scopeTrades),
+    invoices: mine(grouped.invoices),
+    allowanceExtensions: mine(grouped.allowanceExtensions),
+  };
+}
+
+function groupRows(rows: Rows) {
+  const [
     approvals,
     phases,
     dependencies,
@@ -192,25 +268,60 @@ async function loadFacts(c: FullContract) {
     contractRevisions,
     designRevisions,
     feedback,
-    brief,
-    plan,
+    briefs,
+    plans,
     sensitiveArticles,
     scopeProposals,
     scopeTrades,
     invoices,
     allowanceExtensions,
+  ] = rows;
+  return {
+    approvals: groupBy(approvals, (r) => r.contractId),
+    phases: groupBy(phases, (r) => r.contractId),
+    dependencies: groupBy(dependencies, (r) => r.projectId),
+    builds: groupBy(builds, (r) => r.phase?.contractId ?? null),
+    mockupBuilds: groupBy(mockupBuilds, (r) => r.demo?.contractId ?? null),
+    contractRevisions: groupBy(contractRevisions, (r) => r.contractId),
+    designRevisions: groupBy(designRevisions, (r) => r.contractId),
+    feedback: groupBy(feedback, (r) => r.contractId),
+    briefs: new Map(briefs.map((b) => [b.contractId, b] as const)),
+    plans: new Map(plans.map((p) => [p.contractId, p] as const)),
+    sensitiveArticles: groupBy(sensitiveArticles, (r) => r.contractId),
+    scopeProposals: groupBy(scopeProposals, (r) => r.contractId),
+    scopeTrades: groupBy(scopeTrades, (r) => r.outItem.contractId),
+    invoices: groupBy(invoices, (r) => r.contractId),
+    allowanceExtensions: groupBy(allowanceExtensions, (r) => r.contractId),
   };
+}
+
+/**
+ * The facts for a list of contracts, keyed by contract id. Fifteen queries
+ * whatever the length of the list (`fetchRows`).
+ */
+export async function loadFactsMany(cs: ReadonlyArray<{ id: string; projectId: string }>): Promise<Map<string, Facts>> {
+  if (cs.length === 0) return new Map();
+  const rows = await fetchRows(
+    cs.map((c) => c.id),
+    [...new Set(cs.map((c) => c.projectId))],
+  );
+  const grouped = groupRows(rows);
+  return new Map(cs.map((c) => [c.id, factsOf(c, grouped)] as const));
+}
+
+async function loadFacts(c: { id: string; projectId: string }): Promise<Facts> {
+  return (await loadFactsMany([c])).get(c.id)!;
 }
 
 /** The steps' own checklist extras that are in scope — `AGREED` or beyond
  *  (`INCLUDED_EXTRA_STATUSES`). Off `c.project.scopeItems`, already loaded. */
-const includedExtraKeys = (c: FullContract): string[] =>
+const includedExtraKeys = (c: WizardContract): string[] =>
   c.project.scopeItems.filter((s) => s.kind === 'EXTRA' && isIncludedExtra(s.status)).map((s) => s.key);
 
 /** Step 1's missing list (`lib/brief.ts`), from the loaded facts — one
  *  computation for the wizard's REQUIREMENTS signal and the `briefCompleteness`
  *  field, so the step cannot be "done" on one screen and incomplete on the other. */
-function briefMissing(c: FullContract, facts: Facts): BriefMissing[] {
+function briefMissing(c: WizardContract, facts: Facts): BriefMissing[] {
   const commitmentDates: Partial<Record<CommitmentKey, Date>> = {};
   for (const d of facts.dependencies) {
     if (d.briefKey && isCommitmentKey(d.briefKey)) commitmentDates[d.briefKey] = d.dueAt;
@@ -247,6 +358,9 @@ function factsFor(ctx: Context, c: FullContract): Promise<Facts> {
   return facts;
 }
 
+/** Whether a phase has a demo the customer can open. */
+const phaseDemoOut = (p: Facts['phases'][number]) => p.demos.some((d) => d.publishedAt !== null);
+
 /**
  * The rows → `WizardState`. **The one place a new-road step's "done" signal
  * is wired**: REQUIREMENTS is done when `briefCompleteness` has nothing left
@@ -257,7 +371,7 @@ function factsFor(ctx: Context, c: FullContract): Promise<Facts> {
  * Root, J11 pushes SUMMARY (see `lib/steps.ts`). The legacy road's are read off
  * the gate and the phases' scope items.
  */
-function stateOf(c: FullContract, facts: Facts): WizardState {
+export function stateOf(c: WizardContract, facts: Facts): WizardState {
   const gate = computeGate(c);
   const finished: Finished[] =
     c.sequence === 'DESIGN_FIRST'
@@ -379,33 +493,138 @@ function feedbackFacts(customerId: string, items: Facts['feedback'], sensitiveAr
   return out;
 }
 
-async function loadAttentionInput(c: FullContract, facts: Facts, now: Date): Promise<AttentionInput> {
-  const pending = await ContractFields.pending(c);
-  const current = c.currentContractRevision;
+const latest = (...dates: Array<Date | null | undefined>): Date | null =>
+  dates.reduce<Date | null>((a, d) => (d && (a === null || d > a) ? d : a), null);
+
+/**
+ * Steps 4–6 as attention facts (J12; `lib/attention.ts` words them). The
+ * membership rules live here, beside the wizard they read:
+ *
+ * - **waiting** — the wizard's *current* step is the design, the mockup or a
+ *   phase's demo and nothing has been shown for it: the step's owner's move.
+ *   `since` is when the road reached it, so the line ages from the right day.
+ * - **out for review** — a mockup iteration or a phase's demo is published, the
+ *   step is not locked (not approved) and no note on it waits for Root. A note
+ *   open means the ball is Root's, as `nextMoveOn` already says for the design.
+ * - **not ready** — a phase's staging site has a URL and no demo of the phase
+ *   is published, and no browser of Root's has seen the site report (J10's
+ *   `readyAt`). A phase already accepted has nothing left to ready.
+ */
+function stepFacts(c: WizardContract, facts: Facts, wizard: WizardStep[]): StepFacts {
+  const out: StepFacts = { waiting: [], mockupOut: null, demosOut: [], demosNotReady: [] };
+  const stepOf = (step: StepKind, phaseId: string | null) => wizard.find((s) => s.step === step && s.phaseId === phaseId);
+  const openNote = (step: StepKind, phaseId: string | null = null) =>
+    facts.feedback.some((i) => i.step === step && i.status === 'OPEN' && (step !== 'DEMO' || i.phaseId === phaseId));
+
+  const current = currentStepOf(wizard);
+  if (current) {
+    const index = wizard.indexOf(current);
+    const previous = index > 0 ? wizard[index - 1] : null;
+    const since = previous?.finishedAt ?? previous?.lockedAt ?? c.publishedAt ?? c.createdAt;
+    if (current.step === 'DESIGN' && facts.designRevisions.length === 0) {
+      out.waiting.push({ step: 'DESIGN', phaseId: null, phaseNumber: null, since });
+    } else if (current.step === 'MOCKUP' && facts.mockupBuilds.length === 0) {
+      out.waiting.push({ step: 'MOCKUP', phaseId: null, phaseNumber: null, since });
+    } else if (current.step === 'DEMO' && current.phaseId !== null) {
+      const phase = facts.phases.find((p) => p.id === current.phaseId);
+      if (phase && !phaseDemoOut(phase)) {
+        out.waiting.push({ step: 'DEMO', phaseId: phase.id, phaseNumber: phase.number, since });
+      }
+    }
+  }
+
+  const mockup = stepOf('MOCKUP', null);
+  if (mockup && !mockup.locked && facts.mockupBuilds.length > 0 && !openNote('MOCKUP')) {
+    out.mockupOut = {
+      count: facts.mockupBuilds.length,
+      since: latest(...facts.mockupBuilds.map((b) => b.publishedAt))!,
+    };
+  }
+
+  for (const phase of facts.phases) {
+    const demo = stepOf('DEMO', phase.id);
+    // DONE, not `locked`: a legacy contract has no approval rows and its phase is
+    // accepted by its scope items (`isPhaseAccepted`), which `computeWizard` reads
+    // through `legacyFinished`.
+    if (!demo || demo.status === 'DONE') continue;
+    if (phaseDemoOut(phase)) {
+      if (!openNote('DEMO', phase.id)) {
+        const builds = facts.builds.filter((b) => b.phaseId === phase.id).map((b) => b.publishedAt);
+        out.demosOut.push({
+          phaseId: phase.id,
+          phaseNumber: phase.number,
+          since: latest(...builds, ...phase.demos.map((d) => d.publishedAt))!,
+        });
+      }
+    } else {
+      const unready = phase.demos.filter((d) => d.stagingUrl !== null && d.readyAt === null);
+      if (unready.length > 0) {
+        out.demosNotReady.push({ phaseId: phase.id, phaseNumber: phase.number, since: latest(...unready.map((d) => d.updatedAt))! });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The planned invoices the plan rule lets sales issue right now (J13's
+ * `canIssuePlanned`, asked of every row) with the day each became issuable: the
+ * latest of the signature, the previous row's payment and the phase's approval.
+ */
+function issuableFacts(c: WizardContract, facts: Facts): Array<{ ordinal: number; since: Date }> {
+  if (!facts.plan || facts.plan.invoices.length === 0) return [];
+  const rows = facts.plan.invoices.map((i) => ({ id: i.id, ordinal: i.ordinal, phaseId: i.phaseId }));
+  const entries = facts.plan.invoices.flatMap((r) => (r.billingEntry ? [{ plannedInvoiceId: r.id, ...r.billingEntry }] : []));
+  const signedAt = agreementSignedAt({ signatureSignedAt: c.currentContractRevision?.signature?.signedAt ?? null });
+  const out: Array<{ ordinal: number; since: Date }> = [];
+  rows.forEach((row, index) => {
+    if (!canIssuePlanned(rows, index, entries, facts.approvals, signedAt !== null).ok) return;
+    const previous = index > 0 ? entries.find((e) => e.plannedInvoiceId === rows[index - 1].id) : undefined;
+    const phaseApproval = row.phaseId ? facts.approvals.find((a) => a.step === 'DEMO' && a.phaseId === row.phaseId) : undefined;
+    out.push({ ordinal: row.ordinal, since: latest(signedAt, previous?.paidAt, phaseApproval?.approvedAt)! });
+  });
+  return out;
+}
+
+/** What `pendingOf` (fields.ts) returns, reduced to the facts attention needs —
+ *  with the dates the wait began on, which the banner never showed. */
+type PendingResult = ReturnType<typeof pendingOf>;
+
+export function pendingFactsOf(c: WizardContract, pending: PendingResult, now: Date): PendingFacts | null {
+  if (!pending) return null;
+  return {
+    contract: pending.contractDiff
+      ? {
+          fromVersion: pending.contractDiff.fromVersion,
+          toVersion: pending.contractDiff.toVersion,
+          since: c.currentContractRevision?.publishedAt ?? now,
+        }
+      : null,
+    designChangeCount: pending.designChanges.length,
+    designSince: c.currentDesignRevision?.publishedAt ?? null,
+    amendment: pending.amendment
+      ? {
+          ordinal: pending.amendment.ordinal,
+          approved: pending.amendment.approvedAt !== null,
+          since: pending.amendment.publishedAt ?? now,
+        }
+      : null,
+  };
+}
+
+/**
+ * The rows → the attention module's input, for one contract. **Pure over the
+ * loaded facts** and shared by the contract page (`Contract.attention`) and the
+ * home screen (`myAttention`): the two differ only in how they fetched `facts`
+ * and `pending`, never in what they make of them.
+ */
+export function attentionInputOf(c: WizardContract, facts: Facts, pending: PendingFacts | null, now: Date): AttentionInput {
+  const wizard = computeWizard(stateOf(c, facts));
   return {
     contractId: c.id,
     customerId: c.customerId,
     now,
-    pending: pending
-      ? {
-          contract: pending.contractDiff
-            ? {
-                fromVersion: pending.contractDiff.fromVersion,
-                toVersion: pending.contractDiff.toVersion,
-                since: current?.publishedAt ?? now,
-              }
-            : null,
-          designChangeCount: pending.designChanges.length,
-          designSince: c.currentDesignRevision?.publishedAt ?? null,
-          amendment: pending.amendment
-            ? {
-                ordinal: pending.amendment.ordinal,
-                approved: pending.amendment.approvedAt !== null,
-                since: pending.amendment.publishedAt ?? now,
-              }
-            : null,
-        }
-      : null,
+    pending,
     dependencies: facts.dependencies,
     feedback: feedbackFacts(c.customerId, facts.feedback, new Set(facts.sensitiveArticles.map((a) => a.number))),
     scope: {
@@ -413,7 +632,13 @@ async function loadAttentionInput(c: FullContract, facts: Facts, now: Date): Pro
       openTrades: facts.scopeTrades,
     },
     invoices: facts.invoices,
+    steps: stepFacts(c, facts, wizard),
+    issuable: issuableFacts(c, facts),
   };
+}
+
+async function loadAttentionInput(c: FullContract, facts: Facts, now: Date): Promise<AttentionInput> {
+  return attentionInputOf(c, facts, pendingFactsOf(c, await ContractFields.pending(c), now), now);
 }
 
 /** `attention` and `statusSummary` (which counts what attention lists) both need
@@ -517,7 +742,11 @@ export const contractWizardFields = {
         designPublished: facts.designRevisions.length > 0,
         designOpenFeedback: facts.feedback.some((i) => i.step === 'DESIGN' && i.status === 'OPEN'),
         contractPublished: facts.contractRevisions.length > 0,
-        publishedDemoPhaseIds: facts.phases.filter((p) => p.demos.length > 0).map((p) => p.id),
+        publishedDemoPhaseIds: facts.phases.filter(phaseDemoOut).map((p) => p.id),
+        // J12 (J9b's owed gap): the mockup reads like the design — out, and whether
+        // a note waits for Root.
+        mockupPublished: facts.mockupBuilds.length > 0,
+        mockupOpenFeedback: facts.feedback.some((i) => i.step === 'MOCKUP' && i.status === 'OPEN'),
         demoOpenFeedbackPhaseIds: [
           ...new Set(facts.feedback.filter((i) => i.step === 'DEMO' && i.status === 'OPEN' && i.phaseId !== null).map((i) => i.phaseId!)),
         ],

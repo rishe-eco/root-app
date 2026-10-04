@@ -7,7 +7,8 @@ import type { AttentionItem, WaitingOn } from './attention.js';
  * stored — and, per the plan's trap, **never read from `ContractStatus`**. The
  * status enum is stored and hand-overridable (`setContractStatus`); this
  * summary can say both sides are waiting, which the enum cannot. The desk's V4
- * Overview keeps reading the enum until J12 re-points its queue.
+ * Overview tiles still count the enum (a count of what sales *set*); J12
+ * re-pointed its Needs-Root queue at the attention module.
  *
  * Pure (`statusSummary.test.ts`): the loader hands it the wizard, the
  * viewer's attention items and the dates it needs, and the clock.
@@ -75,6 +76,10 @@ export type MoveFacts = {
    *  out is then Root's move, not the customer's, as the design is (J8). Optional
    *  for the same reason `designOpenFeedback` is. */
   demoOpenFeedbackPhaseIds?: string[];
+  /** J12 (J9b's owed gap): a mockup iteration is published, and a note on the
+   *  mockup waits for Root's answer. Optional for the same reason. */
+  mockupPublished?: boolean;
+  mockupOpenFeedback?: boolean;
 };
 
 export type StatusSummary = {
@@ -124,6 +129,11 @@ export function nextMoveOn(sequence: ContractSequence, step: WizardStep, facts: 
   // The new road's design (J8): the customer's to choose or approve once a round
   // is out — unless they have asked for something and Root owes an answer.
   if (step.step === 'DESIGN') return facts.designPublished && facts.designOpenFeedback !== true ? 'CUSTOMER' : 'ROOT';
+  // The mockup (J9b, read here since J12): the same shape as the design's — the
+  // customer's to review and approve once an iteration is out, unless they have
+  // commented and Root owes an answer. Until J12 this fell through to "Root's",
+  // so a published mockup said Root was still the one to move.
+  if (step.step === 'MOCKUP') return facts.mockupPublished === true && facts.mockupOpenFeedback !== true ? 'CUSTOMER' : 'ROOT';
   // The new road's demo (J10), per phase: the customer's to review and approve once
   // the phase's demo is out — unless they have commented and Root owes an answer.
   if (step.step === 'DEMO') {

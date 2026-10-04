@@ -206,17 +206,6 @@ export const Query = {
     return grouped.map((g) => ({ status: g.status, count: g._count._all }));
   },
 
-  needsRootQueue: async (_p: unknown, args: { limit?: number }, ctx: Context) => {
-    requireCapability(ctx, 'contracts.readAll');
-    const rows = await prisma.contract.findMany({
-      where: { status: 'WAITING_ON_ROOT' },
-      orderBy: { statusChangedAt: 'asc' },
-      take: clampLimit(args.limit, 20, 100),
-      select: contractRefSelect,
-    });
-    return rows.map(toContractRef);
-  },
-
   activity: async (
     _p: unknown,
     args: { limit?: number; reviewOnly?: boolean },

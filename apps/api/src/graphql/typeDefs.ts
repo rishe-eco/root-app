@@ -2034,6 +2034,53 @@ export const typeDefs = /* GraphQL */ `
     statusChangedAt: DateTime!
   }
 
+  """
+  What is waiting on the signed-in person (journeys build plan J12), one list across
+  contracts, requests, tickets and invoices. A contract's items are the attention
+  module's (the same ones Contract.attention returns, for the same viewer); a
+  request's, a ticket's and a contract-less invoice's are home-only. Derived on every
+  read — nothing here is stored, and nothing needs clearing.
+  """
+  type HomeItem {
+    kind: AttentionKind!
+    "Which sentence of the kind: attention.<kind>.<variant>.<customer|staff> in the locale files — the audience picks the last part."
+    variant: String!
+    audience: HomeAudience!
+    "Null for what is not a contract's: a request, a ticket, a contract-less invoice."
+    contractId: ID
+    phaseId: ID
+    waitingOn: WaitingOn!
+    "The job that follows the item up — which staff home lists it. Null for the customer's own."
+    role: AttentionRole
+    since: DateTime!
+    params: [AttentionParam!]!
+    "Where to open it: a path inside the app without the language prefix (/app/contracts/…?step=…, /desk/…)."
+    route: String!
+    subject: HomeSubject!
+  }
+
+  "Which sentence set a home item is read in: the customer's own, or staff's about someone else's."
+  enum HomeAudience {
+    CUSTOMER
+    STAFF
+  }
+
+  "What a home item is about, for the line's context."
+  type HomeSubject {
+    "A contract's ref; null for a request, a ticket, an invoice."
+    ref: String
+    titleFa: String!
+    titleEn: String!
+    customerName: String!
+  }
+
+  "One contract in the desk's Needs-Root queue (V4, re-pointed by J12): the oldest thing Root owes on it and how many things are owed."
+  type NeedsRootEntry {
+    contract: ContractRef!
+    since: DateTime!
+    count: Int!
+  }
+
   "One entry in the desk's activity feed. Reads across every contract, so the contract field stays thin (T1)."
   type ActivityItem {
     id: ID!

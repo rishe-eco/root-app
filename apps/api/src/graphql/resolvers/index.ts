@@ -41,6 +41,7 @@ import { Theme, themeMutations, themeQueries } from './themes.js';
 import { Request, requestMutations, requestQueries } from './requests.js';
 import { peopleMutations, peopleQueries } from './people.js';
 import { contractWizardFields, wizardMutations } from './wizard.js';
+import { homeQueries } from './home.js';
 import { briefMutations, contractBriefFields } from './brief.js';
 import { scopeMutations, contractScopeFields } from './scope.js';
 import { contractDraftNoteFields } from './draftNotes.js';
@@ -169,6 +170,9 @@ export const resolvers = {
     // journeys build plan J9: mockupViewUrl mints a viewer's grant — see
     // resolvers/mockups.ts and routes/mockups.ts.
     ...mockupQueries,
+    // journeys build plan J12: myAttention (the home screens) and the Needs-Root
+    // queue, re-pointed at the attention module — see resolvers/home.ts.
+    ...homeQueries,
   },
 
   Mutation: {
