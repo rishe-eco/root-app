@@ -6,7 +6,6 @@ import {
   apiSignIn,
   approveAndSignViaApi,
   completeStepOneViaApi,
-  completeStepTwoViaApi,
   gql,
   resetTestDatabase,
   signIn,
@@ -64,7 +63,7 @@ async function approveDesignViaApi(request: APIRequestContext, id: string) {
     { c: id },
   );
   const concept = draft.contract.designDraft.concepts.find((c) => c.key === 'wireframes')!;
-  for (const key of ['placeholder-page', 'about']) {
+  for (const key of ['placeholder-page', 'team']) {
     await gql(request, 'mutation($k: ID!, $key: String!){ addPageDesign(conceptId: $k, key: $key, labelFa: "ف", labelEn: "L") { id } }', { k: concept.id, key });
   }
   for (const [kind, role, value] of [['COLOR', 'primary', '#1f3a5c'], ['FONT', 'heading', 'Vazirmatn']]) {
@@ -86,10 +85,23 @@ async function approveDesignViaApi(request: APIRequestContext, id: string) {
 test.beforeAll(async ({ request }) => {
   resetTestDatabase();
   contractId = await completeStepOneViaApi(request, undefined, { designTier: 'SENIOR_DESIGNER' });
-  // A second agreed page, so the mockup has one the first iteration will not show.
+  // Step 2 as `completeStepTwoViaApi` does it, with a second agreed page added between the seeding and the
+  // publish (the template refuses a contract that already has items, and a page added after the publish
+  // makes the revision stale): the mockup then has one page the first iteration will not show.
   await apiSignIn(request, SALES);
-  await gql(request, 'mutation($c: ID!){ addScopeItem(contractId: $c, key: "about", labelFa: "درباره‌ی ما", labelEn: "About us", kind: PAGE) { id } }', { c: contractId });
-  await completeStepTwoViaApi(request, contractId);
+  const { allContracts } = await gql<{ allContracts: Array<{ id: string; titleFa: string; titleEn: string }> }>(request, '{ allContracts { id titleFa titleEn } }');
+  const contract = allContracts.find((c) => c.id === contractId)!;
+  await gql(request, 'mutation($c: ID!, $fa: String!, $en: String!, $a: String){ updateContractDraft(contractId: $c, titleFa: $fa, titleEn: $en, amount: $a) { id } }', {
+    c: contractId,
+    fa: contract.titleFa,
+    en: contract.titleEn,
+    a: '150000000',
+  });
+  await gql(request, 'mutation($c: ID!){ applyScopeTemplate(contractId: $c) { id } }', { c: contractId });
+  await gql(request, 'mutation($c: ID!){ addScopeItem(contractId: $c, key: "team", labelFa: "درباره‌ی ما", labelEn: "About us", kind: PAGE) { id } }', { c: contractId });
+  await gql(request, 'mutation($c: ID!){ applyContractTemplate(contractId: $c) { id } }', { c: contractId });
+  await gql(request, 'mutation($c: ID!, $s: String, $e: String){ setPlannedDates(contractId: $c, plannedStartAt: $s, plannedEndAt: $e) { id } }', { c: contractId, s: '2026-10-12', e: '2026-12-20' });
+  await gql(request, 'mutation($c: ID!){ publishContractRevision(contractId: $c) { id } }', { c: contractId });
   await approveAndSignViaApi(request, contractId);
   await approveDesignViaApi(request, contractId);
 });
@@ -135,14 +147,14 @@ test('the designer starts the mockup, uploads a Finder zip with progress, maps t
   await mapRow(page, 'placeholder-page').locator('input').fill('index.html');
   await mapRow(page, 'placeholder-page').getByRole('button', { name: 'Save' }).click();
   await expect(mapRow(page, 'placeholder-page').getByTestId('mockup-map-state')).toHaveAttribute('data-in-bundle', 'true');
-  await mapRow(page, 'about').locator('input').fill('about.html');
-  await mapRow(page, 'about').getByRole('button', { name: 'Save' }).click();
-  await expect(mapRow(page, 'about').getByTestId('mockup-map-state')).toHaveAttribute('data-in-bundle', 'false');
+  await mapRow(page, 'team').locator('input').fill('about.html');
+  await mapRow(page, 'team').getByRole('button', { name: 'Save' }).click();
+  await expect(mapRow(page, 'team').getByTestId('mockup-map-state')).toHaveAttribute('data-in-bundle', 'false');
   // A path two pages cannot share is refused in words.
-  await mapRow(page, 'about').locator('input').fill('/');
-  await mapRow(page, 'about').getByRole('button', { name: 'Save' }).click();
+  await mapRow(page, 'team').locator('input').fill('/');
+  await mapRow(page, 'team').getByRole('button', { name: 'Save' }).click();
   await expect(page.getByTestId('mockup-mapping').getByRole('alert')).toContainText('Another page is already mapped to that path');
-  await mapRow(page, 'about').locator('input').fill('about.html');
+  await mapRow(page, 'team').locator('input').fill('about.html');
 
   await page.getByTestId('mockup-publish').click();
   await expect(page.getByTestId('mockup-iteration')).toContainText('Mockup 1 of 2');
@@ -168,7 +180,9 @@ test('the customer (Persian) browses it in the portal’s viewport on its own su
   await expect(page.locator('.demo-current-page')).toContainText(HOME_FA);
 
   // A root-relative link inside the frame navigates.
-  await frame.locator('#to-contact').click();
+  // The frame is drawn at 0.4 scale, and Playwright's pointer hit test cannot land on a link inside a scaled iframe
+  // ("<html> intercepts pointer events"); the element's own click() is the same navigation.
+  await frame.locator('#to-contact').evaluate((a) => (a as HTMLAnchorElement).click());
   await expect(frame.getByRole('heading', { name: 'CONTACT-V1' })).toBeVisible();
 
   // The frame lists the missing page and the pages the bundle shows, in Persian.
@@ -206,7 +220,7 @@ test('the designer declares iteration 2 — the note needs a fate first — and 
   await expect(page.getByTestId('mockup-ledger')).toContainText('The about page is in this iteration.');
 
   // The about page was mapped last time; this bundle has it.
-  await expect(mapRow(page, 'about').getByTestId('mockup-map-state')).toHaveAttribute('data-in-bundle', 'true');
+  await expect(mapRow(page, 'team').getByTestId('mockup-map-state')).toHaveAttribute('data-in-bundle', 'true');
   await page.getByTestId('mockup-publish').click();
   await expect(page.getByTestId('mockup-iteration')).toContainText('Mockup 2 of 2');
   await expect(page.getByTestId('mockup-allowance')).toContainText('2 of 2 rounds used');
@@ -227,7 +241,7 @@ test('the customer reads the fate, browses the new page, approves — and the st
 
   const frame = page.frameLocator('[data-testid="mockup-viewport"] iframe');
   await expect(frame.getByRole('heading', { name: 'HOME-V2' })).toBeVisible();
-  await frame.locator('#to-about').click();
+  await frame.locator('#to-about').evaluate((a) => (a as HTMLAnchorElement).click());
   await expect(frame.getByRole('heading', { name: 'ABOUT-V2' })).toBeVisible();
   // …and the portal knows which page the customer is on: the mapped one, by its Persian label.
   await expect(page.locator('.demo-current-page')).toContainText(ABOUT_FA);
