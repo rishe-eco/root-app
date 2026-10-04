@@ -532,6 +532,38 @@ export const typeDefs = /* GraphQL */ `
     scopeItems: [ScopeItem!]!
     "Newest first."
     demos: [Demo!]!
+    """
+    J10: this phase's site builds, oldest first. Staff read every one (a draft is the
+    developer's to confirm and publish); anyone else only the published.
+    """
+    builds: [Build!]!
+  }
+
+  """
+  J10 (journeys Q22): one phase on the build timeline — what the customer reads
+  between the design's (or mockup's) approval and the first demo. Derived on read
+  from published builds, the demo's publication and the phase's acceptance.
+  """
+  type BuildTimelineEntry {
+    phaseId: ID!
+    number: Int!
+    titleFa: String!
+    titleEn: String!
+    "A calendar day (PD-19) — render in UTC."
+    plannedEndAt: DateTime
+    "When the phase's demo first reached the customer; null until then."
+    demoPublishedAt: DateTime
+    "The customer's approval of the phase (approveDemo); null until then."
+    acceptedAt: DateTime
+    "Published site builds, in the order they were shown."
+    builds: [BuildTimelineBuild!]!
+  }
+
+  type BuildTimelineBuild {
+    id: ID!
+    "Latin figures, always (house rule 14)."
+    number: Int!
+    publishedAt: DateTime!
   }
 
   """
@@ -585,6 +617,15 @@ export const typeDefs = /* GraphQL */ `
     cannot be published naked" — publishDemo refuses without a frame first.
     """
     publishedAt: DateTime
+    """
+    J10, staff readers only: when a named staff member's browser first heard the
+    reporter snippet report from this demo's own origin, and whose browser it was.
+    A browser's claim, recorded with who — the server cannot see postMessage
+    origins. Cleared when stagingUrl changes; publishDemo refuses DEMO_NOT_READY
+    without it. Null for a mockup (Root's own server injects the snippet).
+    """
+    readyAt: DateTime
+    readyVerifiedBy: User
     "Null until generateDemoFrame has been called at least once."
     frame: DemoFrame
     pages: [DemoPage!]!
@@ -635,6 +676,12 @@ export const typeDefs = /* GraphQL */ `
     KNOWN_MISSING
     TEMPORARY
     DECIDED
+    """
+    J10 (journeys §7.5): how to try this iteration — STAGING-ONLY demo accounts,
+    sandbox payment details, where the sample data lives. Typed by the developer.
+    Never a production credential: the portal is not a place for one.
+    """
+    HOW_TO_TEST
   }
 
   """
@@ -693,7 +740,7 @@ export const typeDefs = /* GraphQL */ `
     DECLINED
     "Converted to a change ticket (createTicketFromFeedback) — a resolution the customer sees."
     MOVED
-    "The step was approved with this item resolved (approveStep, and nothing else)."
+    "The step was approved with this item resolved (a step's approval — approveDemo, approveDesign, approveMockup or approveContract — and nothing else)."
     ACCEPTED
   }
 
@@ -780,7 +827,7 @@ export const typeDefs = /* GraphQL */ `
     item (lib/feedbackRules.ts's reopensOnComment).
     """
     addressedInBuild: Build
-    "The customer's acceptance: written by the step's approval (approveStep) and nothing else."
+    "The customer's acceptance: written by the step's approval (approveDemo, approveDesign, approveMockup, approveContract) and nothing else."
     acceptedAt: DateTime
     acceptedBy: User
     "Oldest first — the opening voice, then whoever piled on. A customer never sees a pending or declined staff answer here."
@@ -957,6 +1004,12 @@ export const typeDefs = /* GraphQL */ `
     ref: String
     "Null means declared but not yet told to the customer (L3b.2's fourth rule)."
     publishedAt: DateTime
+    """
+    J10, staff readers only: when the developer confirmed the page map for this build
+    (publishBuild refuses PAGE_MAP_UNCONFIRMED without it; editing the map afterwards
+    clears it on an unpublished build). Always null for a mockup.
+    """
+    pageMapConfirmedAt: DateTime
     changes: [BuildChangeEntry!]!
     createdAt: DateTime!
   }
@@ -1489,6 +1542,12 @@ export const typeDefs = /* GraphQL */ `
     agreed to record.
     """
     summary: ContractSummary
+    """
+    Journeys build plan J10 (Q22): this contract's phases in order, each with the
+    site builds Root has published and its dates — what the customer reads between
+    the design's (or mockup's) approval and the first demo. Derived on read.
+    """
+    buildTimeline: [BuildTimelineEntry!]!
   }
 
   """
@@ -2695,6 +2754,26 @@ export const typeDefs = /* GraphQL */ `
     "The customer who made it, or contracts.readAll. NOT_FOUND for anyone else — and for a project that never was a request."
     request(projectId: ID!): Request
 
+    # --- Step 6, the demo (journeys build plan J10) ---
+    """
+    Staff: the phase's developer (builds.author), or sales (contracts.author) on a
+    contract they can see — FORBIDDEN for anyone else, NOT_ASSIGNED for another
+    developer. Records that THIS browser received the reporter snippet's first report
+    from the demo's own origin — origin is the origin it heard from, and must be the
+    demo's current staging origin (READINESS_ORIGIN_MISMATCH). A browser's claim,
+    recorded with who: the server cannot see postMessage origins. Idempotent; the first
+    claim stands. STEP_LOCKED once the phase is approved; NOT_FOUND for a mockup.
+    """
+    verifyDemoReadiness(demoId: ID!, origin: String!, contractId: ID): Contract!
+
+    """
+    Staff (builds.author, and the phase's developer). Confirms the page map for this
+    unpublished site build — it is pre-filled per iteration and never trusted
+    (journeys §7.5). publishBuild refuses PAGE_MAP_UNCONFIRMED without it. NO_DEMO,
+    ALREADY_PUBLISHED, STEP_LOCKED.
+    """
+    confirmPageMap(buildId: ID!): Build!
+
     # --- Builds and the resolution ledger (build plan L3b) ---
     "Staff (builds.author). Every phase across every active project, thin — the build-authoring form's phase picker."
     phasesForBuilds: [BuildPhase!]!
@@ -3221,16 +3300,19 @@ export const typeDefs = /* GraphQL */ `
     declineAnswer(commentId: ID!, reason: String!): FeedbackItem!
 
     """
-    The contract's own customer only. Approves a step (journeys §3.1): refused
-    while any comment on it is open (STEP_HAS_OPEN_FEEDBACK) or any answer is
-    waiting for sales (STEP_HAS_PENDING_ANSWERS); otherwise accepts every
-    resolved item at once and locks the step (STEP_LOCKED for anything after,
-    staff included). phaseId is required for a DEMO. Only DEMO is approved here
-    (STEP_NOT_APPROVABLE for the rest): the agreement is J7's gate, and the steps
-    it seals are approved with it; the design and the mockup have their own
-    doors, approveDesign (J8) and approveMockup (J9b).
+    The contract's own customer only (J10). Approves one phase's demo (journeys §3.1,
+    Q15 — one demo per phase, each approved on its own): refused while any comment on
+    that phase is open (STEP_HAS_OPEN_FEEDBACK) or any answer is waiting for sales
+    (STEP_HAS_PENDING_ANSWERS), and until the phase's demo has been published
+    (NO_PUBLISHED_DEMO). Accepts every resolved item at once, moves the phase's agreed
+    scope items to ACCEPTED and locks the phase (STEP_LOCKED for declareBuild,
+    publishBuild, the frame's edits and submitFeedback after it, staff included); a
+    phase-tied invoice becomes issuable (J13). The one door to a demo's approval —
+    there is no approveStep any more: the agreement is approveContract, the design
+    approveDesign (J8) and the mockup approveMockup (J9b). STEP_NOT_APPROVABLE on the
+    legacy road, STEP_NOT_ON_ROAD for a phase that is not this contract's.
     """
-    approveStep(contractId: ID!, step: StepKind!, phaseId: ID): Contract!
+    approveDemo(contractId: ID!, phaseId: ID!): Contract!
 
     """
     The contract's own customer only (J8). "Show me other options" on a pre-made
@@ -3241,7 +3323,7 @@ export const typeDefs = /* GraphQL */ `
     requestOtherOptions(contractId: ID!, note: String): Contract!
 
     """
-    The contract's own customer only (J8). Approves the design: approveStep's
+    The contract's own customer only (J8). Approves the design: the step approval's
     rule (STEP_HAS_OPEN_FEEDBACK, STEP_HAS_PENDING_ANSWERS) plus the path's own
     completeness — DESIGN_INCOMPLETE unless designMissing is empty. After it
     every design mutation is STEP_LOCKED. STEP_NOT_APPROVABLE on the legacy road.
@@ -3277,7 +3359,7 @@ export const typeDefs = /* GraphQL */ `
     declareMockupBuild(demoId: ID!, fileId: ID!, ref: String, changes: [BuildChangeInput!]!): Build!
 
     """
-    The contract's own customer only (J9b). Approves the mockup: approveStep's rule
+    The contract's own customer only (J9b). Approves the mockup: the step approval's rule
     (STEP_HAS_OPEN_FEEDBACK, STEP_HAS_PENDING_ANSWERS) plus a published iteration
     (NO_PUBLISHED_MOCKUP). After it every mockup mutation is STEP_LOCKED.
     """

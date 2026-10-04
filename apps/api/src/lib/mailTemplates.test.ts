@@ -26,6 +26,7 @@ import {
   contractClosedEmail,
   mockupIterationPublishedEmail,
   mockupApprovedEmail,
+  demoApprovedEmail,
   feedbackSubmittedEmail,
   answerPendingEmail,
   answerPublishedEmail,
@@ -283,6 +284,20 @@ const builders: Array<{ name: string; build: (locale: string) => MailContent; li
         customerName: 'نهال',
         projectTitleFa: 'فروشگاه نهال',
         projectTitleEn: 'Nahal shop',
+        deskUrl: DESK_STEPS_URL,
+      }),
+    link: DESK_STEPS_URL,
+  },
+  // Journeys build plan J10 — a phase's demo approved, to the developer and sales.
+  {
+    name: 'demo-approved',
+    build: (l) =>
+      demoApprovedEmail(l, {
+        recipientName: 'توسعه‌دهنده',
+        customerName: 'نهال',
+        projectTitleFa: 'فروشگاه نهال',
+        projectTitleEn: 'Nahal shop',
+        phaseNumber: 2,
         deskUrl: DESK_STEPS_URL,
       }),
     link: DESK_STEPS_URL,
@@ -644,6 +659,28 @@ test('J9b: the customer’s Persian is «تو», the desk’s is formal', () => 
   const desk = mockupApprovedEmail('fa', { ...agreementParams, recipientName: 'طراح' });
   assert.match(desk.text, /قفل شد/);
   assert.ok(!/بگرد|بگذار|بینداز/.test(desk.text), 'the desk is not addressed as «تو»');
+});
+
+const demoApprovedParams = {
+  recipientName: 'Dev <b>',
+  customerName: 'Nahal & Co',
+  projectTitleFa: 'فروشگاه نهال',
+  projectTitleEn: 'Nahal <shop>',
+  phaseNumber: 2,
+  deskUrl: DESK_STEPS_URL,
+};
+
+test('J10: an approved phase says which phase, that it is locked and that its invoice can now be issued; the phase is a count in the locale’s digits', () => {
+  const en = demoApprovedEmail('en', demoApprovedParams);
+  assert.match(en.subject, /Phase 2 accepted/);
+  assert.match(en.text, /accepted and locked/);
+  assert.match(en.text, /can now be issued/);
+  assert.ok(en.html.includes('Nahal &amp; Co') && en.html.includes('Nahal &lt;shop&gt;') && !en.html.includes('<b>'), 'escaped');
+  const fa = demoApprovedEmail('fa', demoApprovedParams);
+  assert.match(fa.subject, /فازِ ۲ پذیرفته شد/);
+  assert.ok(!/[0-9]/.test(fa.subject), 'no Latin digit in the Persian subject');
+  assert.match(fa.text, /قفل شد/);
+  assert.ok(!/بگرد|بگذار|می‌توانی/.test(fa.text), 'the desk is formal, never «تو»');
 });
 
 test('J9b: the designer’s approval email says the mockup step is locked and the build can begin, in each locale', () => {

@@ -3,13 +3,12 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { requireCapability, requireUser, type Context } from '../../context.js';
 import { can } from '../../lib/capabilities.js';
-import { notify } from '../../lib/notify.js';
-import { env } from '../../lib/env.js';
 import { feedbackItemInclude } from './feedback.js';
-import { linkContractId } from './admin/shared.js';
 import { buildPhaseScope, requireBuildAuthorOnPhase, requireBuildAuthorOnProject } from './access.js';
 import { buildInclude, declareBuildFor, type BuildChangeInputArg } from './buildLedger.js';
 import { publishMockupBuild } from './mockupStep.js';
+import { openDemo, publishSiteBuild } from './demoStep.js';
+import { assertStepOpenOn } from './wizard.js';
 
 /**
  * Builds and the resolution ledger (build plan L3b; spec §6's gap). Lives
@@ -162,6 +161,9 @@ export const buildMutations = {
     const phase = await prisma.phase.findUnique({ where: { id: args.phaseId } });
     if (!phase) throw notFound('phase');
     await requireBuildAuthorOnPhase(ctx, phase.id);
+    // Early, so an approved phase is `STEP_LOCKED` whatever else is wrong with the
+    // change list; the guard below asks again under the lock (J10).
+    await assertStepOpenOn(phase.contractId, 'DEMO', phase.id);
 
     // Journeys build plan S2: the demo step's open items **on this phase** —
     // `openFeedbackQueue`'s own `where`, which this must agree with, and which
@@ -186,6 +188,12 @@ export const buildMutations = {
       ref: args.ref,
       changes: args.changes,
       scopeItems: 'SHIP',
+      // J10: a phase whose demo the customer approved takes no more builds. The
+      // guard runs first in the declaring transaction, under the contract's lock,
+      // so a declaration cannot interleave with the approval.
+      guard: async (tx) => {
+        await openDemo(tx, phase.id);
+      },
     });
 
     return prisma.build.findUniqueOrThrow({ where: { id: buildId }, include: buildInclude });
@@ -227,23 +235,9 @@ export const buildMutations = {
       throw new GraphQLError('This build is already published.', { extensions: { code: 'ALREADY_PUBLISHED' } });
     }
 
-    await prisma.build.update({ where: { id: build.id }, data: { publishedAt: new Date() } });
-
-    const customer = build.project.customer;
-    // The build's phase names its contract (J4): link the customer there when
-    // they can open it (`linkContractId`).
-    const contractId = await linkContractId(build.projectId, 'customer', build.phase.contractId);
-    await notify(customer, {
-      kind: 'BUILD_PUBLISHED',
-      params: {
-        customerName: customer.name,
-        projectTitleFa: build.project.titleFa,
-        projectTitleEn: build.project.titleEn,
-        buildNumber: build.number,
-        portalUrl: `${env.APP_ORIGIN}/${customer.locale === 'en' ? 'en' : 'fa'}/app/contracts/${contractId}`,
-      },
-    });
-
-    return prisma.build.findUniqueOrThrow({ where: { id: build.id }, include: buildInclude });
+    // J10: the step is open, the page map confirmed (`PAGE_MAP_UNCONFIRMED`) and
+    // the phase's allowance has room (`ALLOWANCE_EXHAUSTED`) — in that order, and
+    // inside the contract's lock; see `publishSiteBuild`.
+    return publishSiteBuild(build.id);
   },
 };

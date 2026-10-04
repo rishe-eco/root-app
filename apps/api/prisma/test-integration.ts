@@ -46,6 +46,9 @@ const run = spawnSync('npx tsx --test --test-concurrency=1 src/test/*.test.ts', 
     // J9: the mockup host's base domain, pinned like the rest — j9a.test.ts
     // builds `Host` headers from it and asserts on the URLs it produces.
     MOCKUP_BASE_DOMAIN: 'mockup.localhost',
+    // J10: the staging base domain, pinned like the rest — j10.test.ts holds
+    // the host rule against it (`*.staging.localhost`, which `http` may use here).
+    STAGING_BASE_DOMAIN: 'staging.localhost',
   },
   stdio: 'inherit',
   // cmd.exe does not expand the glob, and does not need to: Node's test

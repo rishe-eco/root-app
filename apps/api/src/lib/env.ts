@@ -47,6 +47,17 @@ export function defaultMockupBaseDomain(nodeEnv: string): string {
   return nodeEnv === 'production' ? 'mockup.m-root.com' : 'mockup.localhost';
 }
 
+/**
+ * Journeys build plan J10, PD-8: the domain every staging site lives one label
+ * under — `<slug>.staging.m-root.com` in production (the wildcard the portal's
+ * CSP `frame-src` names, and the one the developer deploys sites to),
+ * `staging.localhost` in development and e2e (`*.localhost` resolves to
+ * loopback in every real browser, so e2e can play staging with no DNS).
+ */
+export function defaultStagingBaseDomain(nodeEnv: string): string {
+  return nodeEnv === 'production' ? 'staging.m-root.com' : 'staging.localhost';
+}
+
 /** A bare host name: dotted labels, no scheme, port, path or wildcard. What
  *  `grantIdFromHost` compares a request's `Host` against, so a value with a
  *  port or a `*.` in it would silently match nothing at all. */
@@ -67,6 +78,29 @@ export function assertMockupBaseDomain(nodeEnv: string, domain: string): void {
   }
   if (nodeEnv === 'production' && (domain === 'localhost' || domain.endsWith('.localhost'))) {
     throw new Error('Invalid environment:\n  - MOCKUP_BASE_DOMAIN must not be a .localhost name in production');
+  }
+}
+
+/**
+ * Refuses a `STAGING_BASE_DOMAIN` that could not work or that would be unsafe:
+ * not a bare host name, or — in production — a `.localhost` name (a staging URL
+ * nobody outside the machine could open) or **the same domain as the mockup host
+ * or the portal's own origin's host** (a staging site served from the portal's
+ * origin would be framed same-origin, which is the one thing the separate
+ * wildcard exists to prevent).
+ */
+export function assertStagingBaseDomain(nodeEnv: string, domain: string, others: { mockup: string; appHost: string }): void {
+  if (!HOST_NAME.test(domain)) {
+    throw new Error(
+      'Invalid environment:\n  - STAGING_BASE_DOMAIN must be a bare lowercase host name ' +
+        '(e.g. staging.m-root.com) — no scheme, port, path or wildcard',
+    );
+  }
+  if (nodeEnv === 'production' && (domain === 'localhost' || domain.endsWith('.localhost'))) {
+    throw new Error('Invalid environment:\n  - STAGING_BASE_DOMAIN must not be a .localhost name in production');
+  }
+  if (domain === others.mockup || domain === others.appHost) {
+    throw new Error('Invalid environment:\n  - STAGING_BASE_DOMAIN must differ from MOCKUP_BASE_DOMAIN and from the portal’s own host');
   }
 }
 
@@ -123,6 +157,14 @@ const schema = z.object({
    * see `defaultMockupBaseDomain`; validated by `assertMockupBaseDomain` below.
    */
   MOCKUP_BASE_DOMAIN: z.preprocess(emptyToUndefined, z.string().optional()),
+  /**
+   * The domain a staging site must be exactly one label under (journeys build
+   * plan J10; PD-8) — `createDemo` and `updateDemo` refuse
+   * `STAGING_HOST_NOT_ALLOWED` for any other host (`lib/stagingHost.ts`). No
+   * schema default, for the reason `MOCKUP_BASE_DOMAIN` has none; see
+   * `defaultStagingBaseDomain`, and `assertStagingBaseDomain` below.
+   */
+  STAGING_BASE_DOMAIN: z.preprocess(emptyToUndefined, z.string().optional()),
   SESSION_DAYS: z.coerce.number().default(14),
   INVITE_DAYS: z.coerce.number().default(14),
   RESET_HOURS: z.coerce.number().default(2),
@@ -291,10 +333,17 @@ assertCookieNameIsHardened(parsed.data.NODE_ENV, cookieName);
 const mockupBaseDomain = (parsed.data.MOCKUP_BASE_DOMAIN ?? defaultMockupBaseDomain(parsed.data.NODE_ENV)).toLowerCase();
 assertMockupBaseDomain(parsed.data.NODE_ENV, mockupBaseDomain);
 
+const stagingBaseDomain = (parsed.data.STAGING_BASE_DOMAIN ?? defaultStagingBaseDomain(parsed.data.NODE_ENV)).toLowerCase();
+assertStagingBaseDomain(parsed.data.NODE_ENV, stagingBaseDomain, {
+  mockup: mockupBaseDomain,
+  appHost: new URL(parsed.data.APP_ORIGIN).hostname.toLowerCase(),
+});
+
 export const env = {
   ...parsed.data,
   COOKIE_NAME: cookieName,
   MOCKUP_BASE_DOMAIN: mockupBaseDomain,
+  STAGING_BASE_DOMAIN: stagingBaseDomain,
   // Development and test write beside the app, which is fine precisely because
   // nothing there is swapped out from under them.
   STORAGE_DIR: parsed.data.STORAGE_DIR ?? fileURLToPath(new URL('../../storage', import.meta.url)),

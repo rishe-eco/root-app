@@ -17,12 +17,12 @@ import {
   takesFeedback,
   type FeedbackAnchor,
 } from '../../lib/feedbackRules.js';
-import { approveStepTx, lockContract } from '../../lib/stepApproval.js';
-import { computeWizard, stepOnRoad } from '../../lib/steps.js';
+import { lockContract } from '../../lib/stepApproval.js';
+import { stepOnRoad } from '../../lib/steps.js';
 import { notify, recipientsHolding } from '../../lib/notify.js';
 import { env } from '../../lib/env.js';
-import { loadForActor, reload } from './contracts.js';
-import { assertStepOpenOn, wizardStateOn } from './wizard.js';
+import { loadForActor } from './contracts.js';
+import { assertStepOpenOn } from './wizard.js';
 import { isBriefField } from '../../lib/brief.js';
 import { sensitiveArticleKeys, withArticleSensitivity } from './articleSensitivity.js';
 
@@ -43,7 +43,9 @@ import { sensitiveArticleKeys, withArticleSensitivity } from './articleSensitivi
  *   the answer is direct or pending by `answerRoute` (the `answers.direct.*`
  *   capabilities).
  * - `approveAnswer` / `declineAnswer` — `feedback.approveAnswers`.
- * - `approveStep` — the contract's own customer, through `approveStepTx`.
+ * - A step's approval is not here: every step has its own door (`approveContract`,
+ *   `approveDesign`, `approveMockup`, `approveDemo`), each through `approveStepTx`
+ *   with its own preconditions — S2's generic `approveStep` is gone (J10).
  *
  * `L3`'s `ratifyFeedback` and `L3b`'s `acceptFeedback` are gone: a submission
  * is its own ratification (PD-2), and the customer accepts a step, not items.
@@ -712,58 +714,6 @@ export const feedbackMutations = {
     }
 
     return reloadItem(item.id);
-  },
-
-  /**
-   * The customer approves a step: refused while anything on it is open or
-   * waiting (`approveStepTx`), otherwise every resolved item is accepted at
-   * once and the step locks. **This is the only door to `acceptedAt`** — the
-   * customer accepts a step, not items one by one, and nothing Root does can
-   * close the loop for them.
-   *
-   * Which steps: DEMO, for now. The agreement is J7's gate and has
-   * its own door — `approveContract` on an `AGREEMENT_FIRST` contract, which
-   * checks the scope, the payment plan, the phases' dates and the brief before
-   * calling `approveStepTx(AGREEMENT)` — and a bare approval here would let a
-   * customer lock steps 1–3 without any of it, so this **keeps refusing
-   * AGREEMENT** (J7 left it so on purpose); REQUIREMENTS, SCOPE and DRAFT are
-   * sealed by that approval, never approved alone. **The design has its own door
-   * too, since J8** (`approveDesign`, `resolvers/design.ts`): the same
-   * `approveStepTx`, with the path's completeness as its precondition — and this
-   * one stopped approving DESIGN so that there is one way to approve it, not two
-   * that would differ on whether a design has to be complete. **The mockup's is
-   * `approveMockup` since J9b** (`resolvers/mockupStep.ts`: a published iteration
-   * is its precondition); J10 replaces this door for the demo the same way,
-   * passing its own preconditions. A
-   * `DESIGN_FIRST` contract approves through its own gate and never through here.
-   */
-  approveStep: async (_p: unknown, args: { contractId: string; step: StepKind; phaseId?: string | null }, ctx: Context) => {
-    const user = requireUser(ctx);
-    const contract = await loadForActor(args.contractId, user);
-    if (contract.customerId !== user.id) throw notFound('contract');
-
-    if (contract.sequence !== 'AGREEMENT_FIRST' || args.step !== 'DEMO') {
-      throw refuse('STEP_NOT_APPROVABLE', 'That step cannot be approved this way.');
-    }
-
-    // Only DEMO reaches here (above), and a demo is approved once per phase.
-    const phaseId = args.phaseId ?? null;
-    const road = computeWizard(await wizardStateOn(contract.id));
-    // A step with no phase — the placeholder demo — "can never take an
-    // approval" (lib/steps.ts): there is no phase for the approval to key on.
-    if (!road.some((s) => s.step === args.step && s.phaseId === phaseId) || (args.step === 'DEMO' && phaseId === null)) {
-      throw refuse('STEP_NOT_ON_ROAD', 'This contract has no such step.');
-    }
-
-    try {
-      await prisma.$transaction((tx) => approveStepTx(tx, { contractId: contract.id, step: args.step, phaseId, approverId: user.id }));
-    } catch (err) {
-      // Two approvals at once: the partial unique index on `StepApproval`
-      // refuses the second — which is the answer the caller should get.
-      if (isUniqueViolation(err)) throw refuse('STEP_LOCKED', 'That step is locked.');
-      throw err;
-    }
-    return reload(contract.id);
   },
 };
 

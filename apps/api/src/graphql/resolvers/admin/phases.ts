@@ -7,6 +7,9 @@ import { requireBuildAuthorOnPhase, siteDemo } from '../access.js';
 import { assertStepOpenOn } from '../wizard.js';
 import { lockContract } from '../../../lib/stepApproval.js';
 import { parseCalendarDay } from '../../../lib/calendarDay.js';
+import { checkStagingUrl, type StagingRefusal } from '../../../lib/stagingHost.js';
+import { env } from '../../../lib/env.js';
+import { clearPageMapConfirmation, openDemo } from '../demoStep.js';
 
 /**
  * Phases and the live demo surface (build plan L2; spec §4 stage 6, §6).
@@ -42,21 +45,29 @@ import { parseCalendarDay } from '../../../lib/calendarDay.js';
  * phases — they behave as they always did.
  */
 
-function assertHttps(url: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new GraphQLError('That is not a valid URL.', { extensions: { code: 'INVALID_STAGING_URL' } });
+const STAGING_REFUSALS: Record<StagingRefusal, string> = {
+  INVALID_STAGING_URL: 'That is not a valid URL.',
+  // L2.2: mixed content is a silently blank iframe, not an error a reviewer can
+  // act on — refusing at write time is the only point this can be caught with a
+  // message attached to it. Production only, since J10 (see `lib/stagingHost.ts`).
+  STAGING_NOT_HTTPS: 'The staging URL must be HTTPS, or a browser will not frame it at all.',
+  STAGING_HOST_NOT_ALLOWED: 'A staging site must be exactly one label under the staging domain.',
+};
+
+/**
+ * **Every path that sets a SITE demo's staging URL asks this** (`createDemo`,
+ * `updateDemo`; journeys build plan J10): the host must be exactly one label under
+ * `STAGING_BASE_DOMAIN`, and in production the scheme `https` — the rule is
+ * `lib/stagingHost.ts`'s. Returns the URL in the form that was checked, which is
+ * what gets stored (the origin the viewport listens to is then the origin that
+ * passed).
+ */
+function stagingUrlOrThrow(url: string): string {
+  const result = checkStagingUrl(url, { baseDomain: env.STAGING_BASE_DOMAIN, production: env.NODE_ENV === 'production' });
+  if (!result.ok) {
+    throw new GraphQLError(STAGING_REFUSALS[result.reason], { extensions: { code: result.reason } });
   }
-  if (parsed.protocol !== 'https:') {
-    // L2.2: mixed content is a silently blank iframe, not an error a
-    // reviewer can act on — refusing at write time is the only point this
-    // can be caught with a message attached to it.
-    throw new GraphQLError('The staging URL must be HTTPS, or a browser will not frame it at all.', {
-      extensions: { code: 'STAGING_NOT_HTTPS' },
-    });
-  }
+  return result.normalized;
 }
 
 async function loadPhase(phaseId: string) {
@@ -227,6 +238,9 @@ export const phaseMutations = {
     await prisma.$transaction(async (tx) => {
       await lockContract(tx, phase.contractId);
       await assertStepOpenOn(phase.contractId, 'REQUIREMENTS', null, tx);
+      // An approved phase cannot be deleted out from under its own lock
+      // (`StepApproval.phaseId` restricts; this is the code before Postgres's).
+      await assertStepOpenOn(phase.contractId, 'DEMO', phase.id, tx);
       await tx.phase.delete({ where: { id: phase.id } });
     });
     return reload(phase.contractId);
@@ -260,14 +274,17 @@ export const phaseMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'builds.author');
-    assertHttps(args.stagingUrl);
+    const stagingUrl = stagingUrlOrThrow(args.stagingUrl);
     const phase = await loadPhase(args.phaseId);
     await requireBuildAuthorOnPhase(ctx, phase.id);
-    await prisma.demo.create({
-      // `kind` is SITE by the column's default; `projectId` is the phase's
-      // (J9 — a demo names its project directly, because a MOCKUP demo has no
-      // phase to reach it through).
-      data: { kind: 'SITE', projectId: phase.projectId, phaseId: phase.id, stagingUrl: args.stagingUrl, buildRef: args.buildRef ?? null },
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, phase.id);
+      await tx.demo.create({
+        // `kind` is SITE by the column's default; `projectId` is the phase's
+        // (J9 — a demo names its project directly, because a MOCKUP demo has no
+        // phase to reach it through).
+        data: { kind: 'SITE', projectId: phase.projectId, phaseId: phase.id, stagingUrl, buildRef: args.buildRef ?? null },
+      });
     });
     return reloadOnProject(phase.projectId, args.contractId ?? phase.contractId);
   },
@@ -290,15 +307,24 @@ export const phaseMutations = {
     requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
     await requireBuildAuthorOnPhase(ctx, demo.phaseId);
-    if (args.stagingUrl) assertHttps(args.stagingUrl);
-    await prisma.demo.update({
-      where: { id: demo.id },
-      data: {
-        stagingUrl: args.stagingUrl ?? undefined,
-        buildRef: args.buildRef === undefined ? undefined : args.buildRef,
-        reviewWindowStart: args.reviewWindowStart === undefined ? undefined : args.reviewWindowStart,
-        reviewWindowEnd: args.reviewWindowEnd === undefined ? undefined : args.reviewWindowEnd,
-      },
+    const stagingUrl = args.stagingUrl ? stagingUrlOrThrow(args.stagingUrl) : undefined;
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, demo.phaseId);
+      const current = await tx.demo.findUniqueOrThrow({ where: { id: demo.id }, select: { stagingUrl: true } });
+      // **A changed URL clears readiness** (J10, trap 1): the claim "a browser heard
+      // the snippet from this origin" was about the old address, and publishing on
+      // the strength of it would put an unverified site in front of the customer.
+      const moved = stagingUrl !== undefined && stagingUrl !== current.stagingUrl;
+      await tx.demo.update({
+        where: { id: demo.id },
+        data: {
+          stagingUrl,
+          ...(moved ? { readyAt: null, readyVerifiedById: null } : {}),
+          buildRef: args.buildRef === undefined ? undefined : args.buildRef,
+          reviewWindowStart: args.reviewWindowStart === undefined ? undefined : args.reviewWindowStart,
+          reviewWindowEnd: args.reviewWindowEnd === undefined ? undefined : args.reviewWindowEnd,
+        },
+      });
     });
     return reloadOnProject(demo.phase.projectId, args.contractId ?? demo.phase.contractId);
   },
@@ -308,7 +334,10 @@ export const phaseMutations = {
     requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
     await requireBuildAuthorOnPhase(ctx, demo.phaseId);
-    await prisma.demo.delete({ where: { id: demo.id } });
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, demo.phaseId);
+      await tx.demo.delete({ where: { id: demo.id } });
+    });
     return reloadOnProject(demo.phase.projectId, args.contractId ?? demo.phase.contractId);
   },
 
@@ -331,15 +360,19 @@ export const phaseMutations = {
     if (args.pageDesignId) {
       await assertPageDesignInProject(args.pageDesignId, demo.phase.projectId);
     }
-    await prisma.demoPage.create({
-      data: {
-        demoId: demo.id,
-        key: args.key,
-        labelFa: args.labelFa,
-        labelEn: args.labelEn,
-        canonicalPath: args.canonicalPath,
-        pageDesignId: args.pageDesignId ?? null,
-      },
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, demo.phaseId);
+      await tx.demoPage.create({
+        data: {
+          demoId: demo.id,
+          key: args.key,
+          labelFa: args.labelFa,
+          labelEn: args.labelEn,
+          canonicalPath: args.canonicalPath,
+          pageDesignId: args.pageDesignId ?? null,
+        },
+      });
+      await clearPageMapConfirmation(tx, demo.phaseId);
     });
     return reloadOnProject(demo.phase.projectId, args.contractId ?? demo.phase.contractId);
   },
@@ -362,14 +395,18 @@ export const phaseMutations = {
     if (args.pageDesignId) {
       await assertPageDesignInProject(args.pageDesignId, page.demo.phase.projectId);
     }
-    await prisma.demoPage.update({
-      where: { id: page.id },
-      data: {
-        labelFa: args.labelFa,
-        labelEn: args.labelEn,
-        canonicalPath: args.canonicalPath,
-        pageDesignId: args.pageDesignId ?? null,
-      },
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, page.demo.phaseId);
+      await tx.demoPage.update({
+        where: { id: page.id },
+        data: {
+          labelFa: args.labelFa,
+          labelEn: args.labelEn,
+          canonicalPath: args.canonicalPath,
+          pageDesignId: args.pageDesignId ?? null,
+        },
+      });
+      await clearPageMapConfirmation(tx, page.demo.phaseId);
     });
     return reloadOnProject(page.demo.phase.projectId, args.contractId ?? page.demo.phase.contractId);
   },
@@ -378,7 +415,11 @@ export const phaseMutations = {
     requireCapability(ctx, 'builds.author');
     const page = await loadDemoPage(args.demoPageId);
     await requireBuildAuthorOnPhase(ctx, page.demo.phaseId);
-    await prisma.demoPage.delete({ where: { id: page.id } });
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, page.demo.phaseId);
+      await tx.demoPage.delete({ where: { id: page.id } });
+      await clearPageMapConfirmation(tx, page.demo.phaseId);
+    });
     return reloadOnProject(page.demo.phase.projectId, args.contractId ?? page.demo.phase.contractId);
   },
 };

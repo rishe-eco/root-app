@@ -1203,3 +1203,49 @@ export function contractClosedEmail(
     text: `${params.customerName} عزیز،\n\nریشه «${params.projectTitleFa}» را تحویل داد: همه‌ی مرحله‌ها پذیرفته شده و هرچه توافق شده بود تحویل داده شده است.${support}\n\nخلاصه‌ی کار — آنچه توافق شد، سرانجام هر مورد، یادداشت‌های تحویل و تاریخ‌ها — همین‌جاست و می‌توانی چاپش کنی:\n${params.portalUrl}`,
   };
 }
+
+/**
+ * Journeys build plan J10 — a phase's demo was approved: to the contract's
+ * developer and to sales, the moment the phase locks and its invoice becomes
+ * issuable (J13). One template for both recipients, because both need the same
+ * three facts: who approved, which phase, and that it is locked. The phase is
+ * a **count** in the locale's own digits (house rule 14) — "phase 2", not an
+ * identifier. The desk's Persian is formal, never «تو».
+ */
+export function demoApprovedEmail(
+  locale: string | null | undefined,
+  params: {
+    recipientName: string;
+    customerName: string;
+    projectTitleFa: string;
+    projectTitleEn: string;
+    phaseNumber: number;
+    deskUrl: string;
+  },
+): MailContent {
+  const name = escapeHtml(params.recipientName);
+  const customer = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `Phase ${params.phaseNumber} accepted — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>${customer} approved the demo of phase <strong>${params.phaseNumber}</strong> of <strong>${title}</strong>. The phase is accepted and locked: its scope is done, no further builds or notes can be added to it, and any invoice tied to it can now be issued.</p>
+        <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+      `),
+      text: `Hi ${params.recipientName},\n\n${params.customerName} approved the demo of phase ${params.phaseNumber} of "${params.projectTitleEn}". The phase is accepted and locked: its scope is done, no further builds or notes can be added to it, and any invoice tied to it can now be issued.\n\n${params.deskUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const phase = countText(params.phaseNumber, 'fa');
+  return {
+    subject: `فازِ ${phase} پذیرفته شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>${customer} دموی فازِ <strong>${phase}</strong> از «${title}» را تأیید کرد. این فاز پذیرفته و قفل شد: دامنه‌ی کارش انجام‌شده است، بیلد یا یادداشتِ تازه‌ای به آن افزوده نمی‌شود و هر صورت‌حسابِ وابسته به آن اکنون قابل صدور است.</p>
+      <p><a href="${params.deskUrl}">${params.deskUrl}</a></p>
+    `),
+    text: `${params.recipientName} عزیز،\n\n${params.customerName} دموی فازِ ${phase} از «${params.projectTitleFa}» را تأیید کرد. این فاز پذیرفته و قفل شد: دامنه‌ی کارش انجام‌شده است، بیلد یا یادداشتِ تازه‌ای به آن افزوده نمی‌شود و هر صورت‌حسابِ وابسته به آن اکنون قابل صدور است.\n\n${params.deskUrl}`,
+  };
+}

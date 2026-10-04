@@ -178,6 +178,8 @@ model User {
   /// staff-only notes they wrote. Staff accounts are disabled, never deleted,
   /// so neither relation cascades.
   stepApprovals       StepApproval[]       @relation("StepApprovedBy")
+  /// Journeys build plan J10: demos whose readiness this person recorded.
+  demosVerifiedReady  Demo[]               @relation("DemoReadyVerifiedBy")
   /// Journeys build plan J8 — allowance extensions this user approved.
   allowanceExtensions AllowanceExtension[] @relation("AllowanceApprovedBy")
   internalNotes       InternalNote[]       @relation("InternalNoteAuthor")
@@ -1521,6 +1523,19 @@ model Demo {
   reviewWindowStart DateTime?
   reviewWindowEnd   DateTime?
 
+  /// Journeys build plan J10, trap 1: **a browser's claim, recorded with who.**
+  /// Set when a named staff member's browser received the reporter snippet's
+  /// first report from this demo's own origin (`DemoViewport`'s origin check) —
+  /// the server cannot see `postMessage` origins, so what it stores is that
+  /// claim and the claimant, never "the server verified the site". Cleared when
+  /// `stagingUrl` changes (the claim was about the old host). `publishDemo`
+  /// refuses `DEMO_NOT_READY` without it. SITE demos only: Root's own server
+  /// injects the snippet into a mockup, so there is nothing to prove about it.
+  /// CHECK `Demo_ready_has_a_verifier` holds the pair together and the kind.
+  readyAt           DateTime?
+  readyVerifiedById String?
+  readyVerifiedBy   User?     @relation("DemoReadyVerifiedBy", fields: [readyVerifiedById], references: [id], onDelete: Restrict)
+
   /// Build plan L3, spec §6: "a demo cannot be published naked." Null means
   /// draft — visible to staff while they shape phases, pages and the frame,
   /// invisible to the customer's own portal query. `publishDemo` is the only
@@ -1646,6 +1661,12 @@ enum DemoFrameLineKind {
   KNOWN_MISSING
   TEMPORARY
   DECIDED
+  /// Journeys build plan J10 (journeys §7.5 item 8): how to try this iteration —
+  /// **staging-only** demo accounts, sandbox payment details, where the sample
+  /// data lives. Typed by the developer, never generated from the registry.
+  /// **Never a production credential**: the portal is not a place for one, and
+  /// the desk's help text for this kind says so in both languages.
+  HOW_TO_TEST
 }
 
 /// One line of the frame — a commentable target in its own right (see
@@ -2012,6 +2033,15 @@ model Build {
   /// this second click — L3b's own framing is that the fate is written "at
   /// the moment they put a new version on staging."
   publishedAt DateTime?
+
+  /// Journeys build plan J10 (journeys §7.5 item 5, trap 2): **the page map is
+  /// per phase and the staging site per project**, so a phase-2 build whose map
+  /// still points at phase-1 paths would show the right labels over the wrong
+  /// pages. The map is pre-filled, never trusted: the developer confirms it for
+  /// each SITE build, and `publishBuild` refuses `PAGE_MAP_UNCONFIRMED` until
+  /// they have. Cleared on a draft build when the map is edited afterwards (the
+  /// confirmation attested to the map as it stood).
+  pageMapConfirmedAt DateTime?
 
   changes BuildChangeEntry[]
 

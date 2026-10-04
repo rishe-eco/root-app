@@ -34,6 +34,8 @@ const run = spawnSync('npx tsx --test src/lib/*.test.ts', {
     SMS_INVITE_PATTERN: '',
     // J9: see test-integration.ts.
     MOCKUP_BASE_DOMAIN: 'mockup.localhost',
+    // J10: see test-integration.ts.
+    STAGING_BASE_DOMAIN: 'staging.localhost',
   },
   stdio: 'inherit',
   // As in test-integration.ts: cmd.exe leaves the glob to Node's test runner.

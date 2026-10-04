@@ -1,5 +1,5 @@
 import { GraphQLError } from 'graphql';
-import type { DemoFrameLineKind } from '@prisma/client';
+import type { DemoFrameLineKind, Prisma } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { deriveFrameLines } from '../../../lib/demoFrame.js';
@@ -7,6 +7,8 @@ import { notify } from '../../../lib/notify.js';
 import { env } from '../../../lib/env.js';
 import { linkContractId, reloadOnProject } from './shared.js';
 import { requireBuildAuthorOnPhase, siteDemo } from '../access.js';
+import { openDemo } from '../demoStep.js';
+import { assertStepOpenOn } from '../wizard.js';
 
 /**
  * Authoring the review frame, and the publish gate it exists to hold (build
@@ -48,8 +50,8 @@ async function loadLine(lineId: string) {
 /** Idempotent — a demo has at most one frame (schema.prisma's unique
  *  `demoId`), and both `generateDemoFrame` and `addDemoFrameLine` need it to
  *  exist before they can act, so this is the one place either creates it. */
-async function ensureFrame(demoId: string, authoredById: string) {
-  return prisma.demoFrame.upsert({
+async function ensureFrame(demoId: string, authoredById: string, db: typeof prisma | Prisma.TransactionClient = prisma) {
+  return db.demoFrame.upsert({
     where: { demoId },
     update: {},
     create: { demoId, authoredById },
@@ -68,35 +70,41 @@ export const demoFrameMutations = {
     const admin = requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
     await requireBuildAuthorOnPhase(ctx, demo.phaseId);
-    const frame = await ensureFrame(demo.id, admin.id);
 
-    const items = await prisma.scopeItem.findMany({ where: { projectId: demo.phase.projectId } });
-    const candidates = deriveFrameLines(demo.phaseId, items);
+    // J10: every frame write is the demo step's, so it asks the lock first — an
+    // approved phase's frame is what the customer approved.
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, demo.phaseId);
+      const frame = await ensureFrame(demo.id, admin.id, tx);
 
-    const existing = await prisma.demoFrameLine.findMany({
-      where: { frameId: frame.id, scopeItemId: { not: null } },
-      select: { scopeItemId: true, kind: true },
+      const items = await tx.scopeItem.findMany({ where: { projectId: demo.phase.projectId } });
+      const candidates = deriveFrameLines(demo.phaseId, items);
+
+      const existing = await tx.demoFrameLine.findMany({
+        where: { frameId: frame.id, scopeItemId: { not: null } },
+        select: { scopeItemId: true, kind: true },
+      });
+      const already = new Set(existing.map((l) => `${l.scopeItemId}:${l.kind}`));
+      const toCreate = candidates.filter((c) => !already.has(`${c.scopeItemId}:${c.kind}`));
+
+      if (toCreate.length > 0) {
+        const highest = await tx.demoFrameLine.aggregate({
+          where: { frameId: frame.id },
+          _max: { position: true },
+        });
+        let position = (highest._max.position ?? -1) + 1;
+        await tx.demoFrameLine.createMany({
+          data: toCreate.map((c) => ({
+            frameId: frame.id,
+            kind: c.kind,
+            textFa: c.textFa,
+            textEn: c.textEn,
+            scopeItemId: c.scopeItemId,
+            position: position++,
+          })),
+        });
+      }
     });
-    const already = new Set(existing.map((l) => `${l.scopeItemId}:${l.kind}`));
-    const toCreate = candidates.filter((c) => !already.has(`${c.scopeItemId}:${c.kind}`));
-
-    if (toCreate.length > 0) {
-      const highest = await prisma.demoFrameLine.aggregate({
-        where: { frameId: frame.id },
-        _max: { position: true },
-      });
-      let position = (highest._max.position ?? -1) + 1;
-      await prisma.demoFrameLine.createMany({
-        data: toCreate.map((c) => ({
-          frameId: frame.id,
-          kind: c.kind,
-          textFa: c.textFa,
-          textEn: c.textEn,
-          scopeItemId: c.scopeItemId,
-          position: position++,
-        })),
-      });
-    }
 
     return reloadOnProject(demo.phase.projectId, args.contractId ?? demo.phase.contractId);
   },
@@ -109,13 +117,16 @@ export const demoFrameMutations = {
     const admin = requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
     await requireBuildAuthorOnPhase(ctx, demo.phaseId);
-    const frame = await ensureFrame(demo.id, admin.id);
-    await prisma.demoFrame.update({
-      where: { id: frame.id },
-      data: {
-        summaryFa: args.summaryFa === undefined ? undefined : args.summaryFa,
-        summaryEn: args.summaryEn === undefined ? undefined : args.summaryEn,
-      },
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, demo.phaseId);
+      const frame = await ensureFrame(demo.id, admin.id, tx);
+      await tx.demoFrame.update({
+        where: { id: frame.id },
+        data: {
+          summaryFa: args.summaryFa === undefined ? undefined : args.summaryFa,
+          summaryEn: args.summaryEn === undefined ? undefined : args.summaryEn,
+        },
+      });
     });
     return reloadOnProject(demo.phase.projectId, args.contractId ?? demo.phase.contractId);
   },
@@ -139,31 +150,35 @@ export const demoFrameMutations = {
     const admin = requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
     await requireBuildAuthorOnPhase(ctx, demo.phaseId);
-    const frame = await ensureFrame(demo.id, admin.id);
 
-    if (args.buildChangeEntryId) {
-      const entry = await prisma.buildChangeEntry.findUnique({
-        where: { id: args.buildChangeEntryId },
-        include: { build: true, frameLine: true },
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, demo.phaseId);
+      const frame = await ensureFrame(demo.id, admin.id, tx);
+
+      if (args.buildChangeEntryId) {
+        const entry = await tx.buildChangeEntry.findUnique({
+          where: { id: args.buildChangeEntryId },
+          include: { build: true, frameLine: true },
+        });
+        if (!entry || entry.build.phaseId !== demo.phaseId) {
+          throw new GraphQLError('No such unprompted change on this phase.', { extensions: { code: 'NOT_FOUND' } });
+        }
+        if (entry.frameLine) {
+          throw new GraphQLError('This change already has a frame line.', { extensions: { code: 'ALREADY_WRITTEN_UP' } });
+        }
+      }
+
+      const highest = await tx.demoFrameLine.aggregate({ where: { frameId: frame.id }, _max: { position: true } });
+      await tx.demoFrameLine.create({
+        data: {
+          frameId: frame.id,
+          kind: args.kind,
+          textFa: args.textFa,
+          textEn: args.textEn,
+          buildChangeEntryId: args.buildChangeEntryId ?? null,
+          position: (highest._max.position ?? -1) + 1,
+        },
       });
-      if (!entry || entry.build.phaseId !== demo.phaseId) {
-        throw new GraphQLError('No such unprompted change on this phase.', { extensions: { code: 'NOT_FOUND' } });
-      }
-      if (entry.frameLine) {
-        throw new GraphQLError('This change already has a frame line.', { extensions: { code: 'ALREADY_WRITTEN_UP' } });
-      }
-    }
-
-    const highest = await prisma.demoFrameLine.aggregate({ where: { frameId: frame.id }, _max: { position: true } });
-    await prisma.demoFrameLine.create({
-      data: {
-        frameId: frame.id,
-        kind: args.kind,
-        textFa: args.textFa,
-        textEn: args.textEn,
-        buildChangeEntryId: args.buildChangeEntryId ?? null,
-        position: (highest._max.position ?? -1) + 1,
-      },
     });
     return reloadOnProject(demo.phase.projectId, args.contractId ?? demo.phase.contractId);
   },
@@ -176,9 +191,12 @@ export const demoFrameMutations = {
     requireCapability(ctx, 'builds.author');
     const line = await loadLine(args.lineId);
     await requireBuildAuthorOnPhase(ctx, line.frame.demo.phaseId);
-    await prisma.demoFrameLine.update({
-      where: { id: line.id },
-      data: { textFa: args.textFa, textEn: args.textEn },
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, line.frame.demo.phaseId);
+      await tx.demoFrameLine.update({
+        where: { id: line.id },
+        data: { textFa: args.textFa, textEn: args.textEn },
+      });
     });
     return reloadOnProject(line.frame.demo.phase.projectId, args.contractId ?? line.frame.demo.phase.contractId);
   },
@@ -188,7 +206,10 @@ export const demoFrameMutations = {
     requireCapability(ctx, 'builds.author');
     const line = await loadLine(args.lineId);
     await requireBuildAuthorOnPhase(ctx, line.frame.demo.phaseId);
-    await prisma.demoFrameLine.delete({ where: { id: line.id } });
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, line.frame.demo.phaseId);
+      await tx.demoFrameLine.delete({ where: { id: line.id } });
+    });
     return reloadOnProject(line.frame.demo.phase.projectId, args.contractId ?? line.frame.demo.phase.contractId);
   },
 
@@ -203,6 +224,9 @@ export const demoFrameMutations = {
     requireCapability(ctx, 'builds.author');
     const demo = await loadDemo(args.demoId);
     await requireBuildAuthorOnPhase(ctx, demo.phaseId);
+    // Early, so an approved phase is `STEP_LOCKED` whatever else is wrong; the
+    // transaction below asks again under the lock (J10).
+    await assertStepOpenOn(demo.phase.contractId, 'DEMO', demo.phaseId);
     if (demo.publishedAt) {
       throw new GraphQLError('This demo is already published.', { extensions: { code: 'ALREADY_PUBLISHED' } });
     }
@@ -213,7 +237,27 @@ export const demoFrameMutations = {
       });
     }
 
-    await prisma.demo.update({ where: { id: demo.id }, data: { publishedAt: new Date() } });
+    // **Readiness first, then the publish** (J10, trap 1): the staging site has to
+    // have been heard from — a staff member's browser received the snippet's first
+    // report from the demo's own origin (`verifyDemoReadiness`) — before the
+    // customer is told there is something to look at. SITE demos only (this
+    // mutation is the site's: `loadDemo` refused a mockup above). Checked under
+    // the lock with the write, so a URL change that clears readiness cannot slip
+    // between the check and the publish.
+    await prisma.$transaction(async (tx) => {
+      await openDemo(tx, demo.phaseId);
+      const fresh = await tx.demo.findUniqueOrThrow({ where: { id: demo.id }, select: { publishedAt: true, readyAt: true } });
+      if (fresh.publishedAt) {
+        throw new GraphQLError('This demo is already published.', { extensions: { code: 'ALREADY_PUBLISHED' } });
+      }
+      if (!fresh.readyAt) {
+        throw new GraphQLError(
+          'The staging site has not been heard from yet. Open it in the viewport first — the demo publishes once its first report arrives.',
+          { extensions: { code: 'DEMO_NOT_READY' } },
+        );
+      }
+      await tx.demo.update({ where: { id: demo.id }, data: { publishedAt: new Date() } });
+    });
 
     const project = demo.phase.project;
     // The customer's link: the demo's own contract, when the customer can open

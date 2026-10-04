@@ -50,6 +50,14 @@ import { allowanceMutations } from './allowance.js';
 import { mockupQueries } from './mockups.js';
 import { contractDeliveryFields, deliveryMutations } from './delivery.js';
 import { Demo, contractMockupFields, mockupCustomerMutations, mockupMutations } from './mockupStep.js';
+import {
+  buildDemoFields,
+  contractDemoFields,
+  demoReadinessFields,
+  demoStepCustomerMutations,
+  demoStepMutations,
+  phaseDemoFields,
+} from './demoStep.js';
 
 /**
  * The composition root. Nothing but assembly lives here, so that the question
@@ -86,9 +94,14 @@ export const resolvers = {
     ...contractDeliveryFields,
     // Journeys build plan J9b: the contract's mockup demo — see mockupStep.ts.
     ...contractMockupFields,
+    // Journeys build plan J10: the build timeline — see demoStep.ts.
+    ...contractDemoFields,
   },
   // J9b: a MOCKUP demo's iterations, fixed frame lines and bundle pages.
-  Demo,
+  // J10: and a site demo's readiness (staff only).
+  Demo: { ...Demo, ...demoReadinessFields },
+  // J10: a phase's site builds (the customer's are the published ones).
+  Phase: phaseDemoFields,
   Amendment,
   ContractRevision,
   DesignConcept,
@@ -100,7 +113,8 @@ export const resolvers = {
   DemoFrame,
   FeedbackItem,
   FeedbackComment,
-  Build,
+  // J10: `pageMapConfirmedAt` is staff's — see demoStep.ts.
+  Build: { ...Build, ...buildDemoFields },
   Dependency,
   BillingEntry,
   // Journeys build plan J13: where each row of a payment plan stands.
@@ -217,5 +231,10 @@ export const resolvers = {
     // customer's approval. publishBuild's mockup branch is builds.ts's door.
     ...mockupMutations,
     ...mockupCustomerMutations,
+    // journeys build plan J10: step 6 — readiness and the page-map confirmation
+    // (the developer's, sales' for readiness) and the customer's per-phase
+    // approval. publishBuild's site branch is builds.ts's door.
+    ...demoStepMutations,
+    ...demoStepCustomerMutations,
   },
 };

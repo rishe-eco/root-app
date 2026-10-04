@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultCookieName, assertCookieNameIsHardened, defaultMockupBaseDomain, assertMockupBaseDomain } from './env.js';
+import {
+  defaultCookieName,
+  assertCookieNameIsHardened,
+  defaultMockupBaseDomain,
+  assertMockupBaseDomain,
+  defaultStagingBaseDomain,
+  assertStagingBaseDomain,
+} from './env.js';
 
 /**
  * P0-7 (defect D-8): the cookie name's production default and the refusal
@@ -62,4 +69,21 @@ test('assertMockupBaseDomain: only a bare host name passes', () => {
 
 test('assertMockupBaseDomain: a .localhost name is refused in production — a mockup URL only this machine could open', () => {
   assert.throws(() => assertMockupBaseDomain('production', 'mockup.localhost'), /localhost/);
+});
+
+test('defaultStagingBaseDomain: staging.localhost outside production, staging.m-root.com in it', () => {
+  for (const nodeEnv of ['development', 'test']) assert.equal(defaultStagingBaseDomain(nodeEnv), 'staging.localhost');
+  assert.equal(defaultStagingBaseDomain('production'), 'staging.m-root.com');
+});
+
+test('assertStagingBaseDomain: only a bare host name, never .localhost in production, never the mockup or portal host', () => {
+  const others = { mockup: 'mockup.m-root.com', appHost: 'app.m-root.com' };
+  assert.doesNotThrow(() => assertStagingBaseDomain('production', 'staging.m-root.com', others));
+  assert.doesNotThrow(() => assertStagingBaseDomain('development', 'staging.localhost', { mockup: 'mockup.localhost', appHost: 'localhost' }));
+  for (const bad of ['', 'https://staging.m-root.com', 'staging.m-root.com:443', '*.staging.m-root.com', 'staging.m-root.com/', 'localhost']) {
+    assert.throws(() => assertStagingBaseDomain('development', bad, others), /STAGING_BASE_DOMAIN/, bad);
+  }
+  assert.throws(() => assertStagingBaseDomain('production', 'staging.localhost', others), /localhost/);
+  assert.throws(() => assertStagingBaseDomain('production', 'mockup.m-root.com', others), /differ/);
+  assert.throws(() => assertStagingBaseDomain('production', 'app.m-root.com', others), /differ/);
 });

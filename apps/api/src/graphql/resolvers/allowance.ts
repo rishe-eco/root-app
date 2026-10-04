@@ -22,16 +22,16 @@ import { parseAmountOrThrow } from './admin/billing.js';
  * `lib/allowance.ts`). Two things live here: **the loader** every publish guard
  * calls, and **`extendAllowance`**, the only thing that raises an allowance.
  *
- * ## The extension point for J10
+ * ## Where the rounds are counted
  *
- * `roundCountsOn` is where a step's rounds are counted: the design's (published
- * design revisions of the contract, J8) and the mockup's (published mockup
- * builds, J9b). J10 adds the published site builds per phase
- * (`counts.demoByPhase`) *here*, and its publish mutation calls
- * `allowanceStateOn` and `assertWithinAllowance` exactly as
- * `publishDesignRevision` and the mockup branch of `publishBuild` do. Until then
- * that count is absent, which the rule reads as "not counted" and never refuses
- * on — see `lib/allowance.ts`'s header for why absent is not zero.
+ * `roundCountsOn` counts all three: the design's (published design revisions of
+ * the contract, J8), the mockup's (published mockup builds, J9b) and — since J10 —
+ * each phase's demo (its published SITE builds, `counts.demoByPhase`). The three
+ * publish mutations (`publishDesignRevision`, the mockup branch of `publishBuild`
+ * and the site branch, `publishSiteBuild` in `demoStep.ts`) call
+ * `allowanceStateOn` and `assertWithinAllowance` the same way. A step nothing
+ * counts reads "not counted" and never refuses — see `lib/allowance.ts`'s header
+ * for why absent is not zero.
  */
 
 type Db = typeof prisma | Prisma.TransactionClient;
@@ -47,11 +47,26 @@ const refuse = (code: string, message: string, extensions: Record<string, unknow
  *  A declared build the designer never published costs nothing, as a design draft
  *  does not (journeys §7.4: an iteration is what reached the customer). */
 export async function roundCountsOn(db: Db, contractId: string): Promise<RoundCounts> {
-  const [design, mockup] = await Promise.all([
+  const [design, mockup, phases, siteBuilds] = await Promise.all([
     db.designRevision.count({ where: { contractId, publishedAt: { not: null } } }),
     db.build.count({ where: { kind: 'MOCKUP', publishedAt: { not: null }, demo: { contractId } } }),
+    db.phase.findMany({ where: { contractId }, select: { id: true } }),
+    db.build.groupBy({
+      by: ['phaseId'],
+      where: { kind: 'SITE', publishedAt: { not: null }, phase: { contractId } },
+      _count: { _all: true },
+    }),
   ]);
-  return { design, mockup };
+  // **A phase's demo rounds (J10, Q-S6): its published SITE builds.** Every phase
+  // of the contract has an entry — zero for one nothing has been published for —
+  // because a phase with no entry reads "not counted" (`iterationsUsed` → null),
+  // which is a different statement from "none used": the desk's "iteration 1 of 3"
+  // needs the 0.
+  const demoByPhase: Record<string, number> = Object.fromEntries(phases.map((p) => [p.id, 0]));
+  for (const row of siteBuilds) {
+    if (row.phaseId !== null) demoByPhase[row.phaseId] = row._count._all;
+  }
+  return { design, mockup, demoByPhase };
 }
 
 /** A step's rounds used and allowance in force, as the publish guard needs them. */
@@ -113,9 +128,9 @@ const PROBLEM_MESSAGES: Record<ExtensionProblem, string> = {
 const CHARGE_TEXT = (step: StepKind, extra: number) => {
   const count = new Intl.NumberFormat('fa-IR').format(extra);
   const plural = extra === 1 ? 'round' : 'rounds';
-  return step === 'MOCKUP'
-    ? { descriptionFa: `${count} دورِ اضافه‌ی ماکت`, descriptionEn: `${extra} extra mockup ${plural}` }
-    : { descriptionFa: `${count} دورِ اضافه‌ی طراحی`, descriptionEn: `${extra} extra design ${plural}` };
+  if (step === 'MOCKUP') return { descriptionFa: `${count} دورِ اضافه‌ی ماکت`, descriptionEn: `${extra} extra mockup ${plural}` };
+  if (step === 'DEMO') return { descriptionFa: `${count} دورِ اضافه‌ی دمو`, descriptionEn: `${extra} extra demo ${plural}` };
+  return { descriptionFa: `${count} دورِ اضافه‌ی طراحی`, descriptionEn: `${extra} extra design ${plural}` };
 };
 
 export const allowanceMutations = {
@@ -127,15 +142,16 @@ export const allowanceMutations = {
    * extension so the two can be read together. The extension is a row of its own:
    * the brief's allowance was frozen with step 1 and is never edited.
    *
-   * The design's and the mockup's rounds can be extended (J8, J9b); a demo's are
-   * J10's (`STEP_NOT_BUILT`, until it counts them). The new road only —
+   * The design's, the mockup's and a phase's demo rounds can be extended (J8, J9b,
+   * J10 — a demo's per phase, the phase being this contract's). The new road only —
    * the legacy road has no allowance to raise (`STEP_NOT_ON_ROAD`).
    *
    * Refusals, in order: `FORBIDDEN` (no capability — checked first, so no id
    * leaks), the input's own (`INVALID_EXTRA`, `REASON_REQUIRED`,
    * `STEP_HAS_NO_ALLOWANCE`, `PHASE_REQUIRED`, `PHASE_NOT_ALLOWED`),
-   * `INVALID_AMOUNT`, `NOT_FOUND`, `STEP_NOT_ON_ROAD`, `STEP_NOT_BUILT`,
-   * `NO_ALLOWANCE_SET` (an extension on a step that had no limit is meaningless).
+   * `INVALID_AMOUNT`, `NOT_FOUND` (the contract, or a demo's phase),
+   * `STEP_NOT_ON_ROAD`, `NO_ALLOWANCE_SET` (an extension on a step that had no
+   * limit is meaningless).
    */
   extendAllowance: async (
     _p: unknown,
@@ -157,9 +173,13 @@ export const allowanceMutations = {
     if (contract.sequence !== 'AGREEMENT_FIRST') {
       throw refuse('STEP_NOT_ON_ROAD', 'This contract has no allowances to extend.');
     }
-    // DESIGN and MOCKUP count their rounds (J8, J9b); a phase's demo is J10's.
-    if (args.step !== 'DESIGN' && args.step !== 'MOCKUP') {
-      throw refuse('STEP_NOT_BUILT', 'Only the design’s and the mockup’s rounds can be extended yet.');
+    // DESIGN, MOCKUP and a phase's DEMO count their rounds (J8, J9b, J10); the
+    // other steps have no allowance (`checkExtension` refused them above).
+    if (args.step === 'DEMO') {
+      // A demo's allowance is per phase, and the phase must be this contract's:
+      // a sibling contract's phase id would extend nothing this contract reads.
+      const phase = await prisma.phase.findFirst({ where: { id: phaseId!, contractId: contract.id }, select: { id: true } });
+      if (!phase) throw refuse('NOT_FOUND', 'No such phase.');
     }
 
     await prisma.$transaction(async (tx) => {

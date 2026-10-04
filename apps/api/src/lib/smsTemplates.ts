@@ -47,6 +47,9 @@ export { LOCALES, resolveLocale };
  *     the title and the support period's end are the email's.
  *   - `mockupIterationPublishedSms`, `mockupApprovedSms` (journeys build plan J9b):
  *     **one placeholder** each, the URL.
+ *   - `demoPublishedSms`, `buildPublishedSms`, `demoApprovedSms` (journeys build plan
+ *     J10): **one placeholder** each, the URL — the phase and the title are the
+ *     email's.
  *
  * Codes are printed in Latin digits in both languages, never through
  * `toPersianDigits` — house rule 14's own exception for an identifier
@@ -223,4 +226,30 @@ export function contractClosedSms(locale: string | null | undefined, params: { p
     return { text: `Your project was delivered. The summary is on Root: ${params.portalUrl}` };
   }
   return { text: `پروژه‌ات تحویل شد. خلاصه‌اش در ریشه است: ${params.portalUrl}` };
+}
+
+/** J10 — to the customer, when a phase's demo is published (the first time they
+ *  can see it). The phase and the title are the email's; the SMS points at the
+ *  page. */
+export function demoPublishedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A demo is ready for you to review on Root: ${params.portalUrl}` };
+  }
+  return { text: `دمو برای بازبینی‌ات در ریشه آماده است: ${params.portalUrl}` };
+}
+
+/** J10 — to the customer, when a new build of a phase's staging site is published. */
+export function buildPublishedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A new version of your demo is up on Root: ${params.portalUrl}` };
+  }
+  return { text: `نسخه‌ی تازه‌ی دمویت در ریشه آماده است: ${params.portalUrl}` };
+}
+
+/** J10 — to the developer and to sales, when the customer approves a phase's demo. */
+export function demoApprovedSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A customer approved a phase's demo on Root: ${params.deskUrl}` };
+  }
+  return { text: `مشتری دموی یک فاز را در ریشه تأیید کرد: ${params.deskUrl}` };
 }

@@ -33,6 +33,7 @@ import {
   contractClosedEmail,
   mockupIterationPublishedEmail,
   mockupApprovedEmail,
+  demoApprovedEmail,
   type MailContent,
 } from './mailTemplates.js';
 import {
@@ -55,6 +56,9 @@ import {
   contractClosedSms,
   mockupIterationPublishedSms,
   mockupApprovedSms,
+  demoPublishedSms,
+  buildPublishedSms,
+  demoApprovedSms,
 } from './smsTemplates.js';
 
 /**
@@ -79,13 +83,16 @@ import {
  * sales — the moments an agreement moves), and since J8 the design step's five
  * (`DESIGN_ROUND_PUBLISHED`, `DESIGN_CONCEPT_CHOSEN`, `DESIGN_OTHER_OPTIONS_ASKED`,
  * `DESIGN_APPROVED`, `ALLOWANCE_EXHAUSTED`), since J9b the mockup's two
- * (`MOCKUP_ITERATION_PUBLISHED`, `MOCKUP_APPROVED`), and since J11
+ * (`MOCKUP_ITERATION_PUBLISHED`, `MOCKUP_APPROVED`), since J10 the demo's three
+ * (`DEMO_PUBLISHED` and `BUILD_PUBLISHED`, retrofitted with an SMS, and
+ * `DEMO_APPROVED`), and since J11
  * `CONTRACT_CLOSED`: a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
- * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
+ * (`NEW_COMMENT`/`FEEDBACK_SUBMITTED`/
  * `ANSWER_*` — S2's replacement for `FEEDBACK_RATIFIED`) and `PASSWORD_RESET`
- * keep going by email only: every
+ * keep going by email only (`DEMO_PUBLISHED` and `BUILD_PUBLISHED` stopped being
+ * email-only in J10: a phone-only customer must learn a demo exists): every
  * recipient of those is either a reviewer (never has a phone, PD-20) or a
  * customer/staff member already reachable by email, and a one-segment SMS
  * for "new comment on a document" is cost with no delivery gap to close.
@@ -256,6 +263,20 @@ export type NotifyEvent =
       kind: 'MOCKUP_APPROVED';
       params: { recipientName: string; customerName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string };
     }
+  // Journeys build plan J10 — step 6: the customer approved a phase's demo. To the
+  // contract's developer and to sales (the phase is accepted, locked, and its
+  // invoice is issuable).
+  | {
+      kind: 'DEMO_APPROVED';
+      params: {
+        recipientName: string;
+        customerName: string;
+        projectTitleFa: string;
+        projectTitleEn: string;
+        phaseNumber: number;
+        deskUrl: string;
+      };
+    }
   // Journeys build plan J11 — step 7: sales closed the contract. To the customer.
   // `supportUntil` is a calendar day (`YYYY-MM-DD`, PD-19), null when the brief
   // promised no support.
@@ -333,6 +354,8 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return mockupIterationPublishedEmail(locale, event.params);
     case 'MOCKUP_APPROVED':
       return mockupApprovedEmail(locale, event.params);
+    case 'DEMO_APPROVED':
+      return demoApprovedEmail(locale, event.params);
   }
 }
 
@@ -399,6 +422,15 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
       return mockupIterationPublishedSms(locale, { portalUrl: event.params.portalUrl });
     case 'MOCKUP_APPROVED':
       return mockupApprovedSms(locale, { deskUrl: event.params.deskUrl });
+    // J10: a phase's demo going out and a new build of it are the customer's cue
+    // to look; the approval is the developer's and sales' cue that the phase is
+    // locked and its invoice issuable.
+    case 'DEMO_PUBLISHED':
+      return demoPublishedSms(locale, { portalUrl: event.params.portalUrl });
+    case 'BUILD_PUBLISHED':
+      return buildPublishedSms(locale, { portalUrl: event.params.portalUrl });
+    case 'DEMO_APPROVED':
+      return demoApprovedSms(locale, { deskUrl: event.params.deskUrl });
     default:
       return null;
   }

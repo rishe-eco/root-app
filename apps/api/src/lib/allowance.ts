@@ -32,13 +32,13 @@ import { designPathOf, type DesignTierName } from './steps.js';
  *
  * ## What is built and what is not
  *
- * **DESIGN (J8) and MOCKUP (J9b) are counted.** MOCKUP's used-count is the
- * published mockup builds of the contract; a phase's DEMO's is J10's (published
- * site builds for that phase), and this file does not guess it. `RoundCounts`
- * has a slot for each, absent until the stage that owns it fills it, and an
- * absent count reads `null` — "not counted", which `assertWithinAllowance` never
- * refuses on. The allowance side (`allowanceFor`) is complete for all three, so
- * J10 adds a query and passes it in; it changes nothing here.
+ * **All three are counted** — DESIGN (J8), MOCKUP (J9b) and a phase's DEMO (J10).
+ * MOCKUP's used-count is the published mockup builds of the contract; a phase's
+ * DEMO's is the published **SITE** builds of that phase (`roundCountsOn`). This
+ * file does not count anything itself: `RoundCounts` has a slot for each, and a
+ * count that is absent reads `null` — "not counted", which
+ * `assertWithinAllowance` never refuses on (a phase nothing was loaded for, or a
+ * caller that does not have the counts to hand).
  *
  * ## An unset allowance
  *
@@ -67,8 +67,8 @@ export type BriefAllowances = {
 
 export type ExtensionRow = { step: StepKind; phaseId: string | null; extra: number };
 
-/** How many rounds each step has taken. DESIGN is J8's and MOCKUP J9b's; a
- *  phase's DEMO is absent until J10 counts it. */
+/** How many rounds each step has taken: DESIGN (J8), MOCKUP (J9b) and, by phase
+ *  id, a phase's DEMO (J10). */
 export type RoundCounts = {
   design: number;
   mockup?: number;

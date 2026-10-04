@@ -66,6 +66,8 @@ services:
       # J9: mockup views are served at <grant-id>.<this> — see
       # .env.production.example and deploy/nginx/mockup.conf.
       MOCKUP_BASE_DOMAIN: ${MOCKUP_BASE_DOMAIN:-mockup.m-root.com}
+      # J10: a site demo's staging URL is exactly one label under this.
+      STAGING_BASE_DOMAIN: ${STAGING_BASE_DOMAIN:-staging.m-root.com}
       SESSION_DAYS: ${SESSION_DAYS:-14}
       INVITE_DAYS: ${INVITE_DAYS:-14}
       RESET_HOURS: ${RESET_HOURS:-2}
