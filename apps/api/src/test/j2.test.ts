@@ -626,7 +626,7 @@ test('every project-scoped mutation returns the contract it is told to; unnamed,
   const dep = await prisma.dependency.create({
     data: { projectId, side: 'ROOT', titleFa: 'د', titleEn: 'D', dueAt: new Date('2026-12-01T00:00:00Z'), createdById: f.admin.id },
   });
-  const demo = await prisma.demo.create({ data: { projectId, phaseId: phase.id, stagingUrl: 'https://s.example.com' } });
+  const demo = await prisma.demo.create({ data: { projectId, phaseId: phase.id, stagingUrl: 'https://s.example.com', readyAt: new Date(), readyVerifiedById: f.admin.id } }); // J10: publishDemo wants a heard-from staging site
 
   const calls: Array<[string, string, Record<string, unknown>]> = [
     ['updateScopeItem', 'mutation($c: ID, $i: ID!){ updateScopeItem(scopeItemId: $i, labelFa: "ب", labelEn: "Blog", contractId: $c) { id } }', { i: item.id }],

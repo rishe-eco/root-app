@@ -23,7 +23,7 @@ export default function BuildTimeline({ entries }: { entries: BuildTimelineEntry
     <section className="card build-timeline" data-testid="build-timeline">
       <h3 className="t-h3">{t('demoStep.timeline.title')}</h3>
       <p className="t-small desk-muted">{t('demoStep.timeline.lede')}</p>
-      <ol className="build-timeline-list">
+      <ol className="build-timeline-list" style={{ listStyle: 'none', paddingInlineStart: 0 }}>
         {entries.map((p) => (
           <li key={p.phaseId} className="build-timeline-phase" data-phase={p.number}>
             <p className="t-small">

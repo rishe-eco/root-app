@@ -176,16 +176,17 @@ test('the developer corrects the address: the real snippet reports from the site
   await expect(page.getByTestId('demo-ready')).toContainText('recorded by');
   // …and the viewport matched the reported path to the declared page: the snippet's report is the same one
   // that tells the portal which page the reviewer is on.
-  await expect(page.locator('.demo-current-page').first()).toContainText('Current page');
+  await expect(page.locator('.demo-current-page').first()).toContainText('Currently viewing: Home page');
   const frame = page.frameLocator('.demo-viewport iframe').first();
   await expect(frame.locator('h1')).toHaveText('NAHAL-STAGING-HOME');
   await expect(page.getByTestId('publish-not-ready')).toHaveCount(0);
   await expect(page.getByTestId('publish-demo')).toBeEnabled();
 
   // Navigating inside the framed site is a new report: the second page is matched too.
-  await frame.locator('#to-about').click();
+  // (A script click: the viewport scales the frame with a CSS transform, which Playwright's hit-test refuses.)
+  await frame.locator('#to-about').evaluate((el) => (el as HTMLElement).click());
   await expect(frame.locator('h1')).toHaveText('NAHAL-STAGING-ABOUT');
-  await expect(page.locator('.demo-current-page').first()).not.toContainText('Current page: Home');
+  await expect(page.locator('.demo-current-page').first()).toContainText('Currently viewing: About page');
 });
 
 test('the frame with a how-to-test line, the demo published, and version 1 submitted — page map confirmed, then published', async ({ page }) => {
@@ -238,11 +239,11 @@ test('the customer, in Persian, browses the live site inside the portal, comment
   const about = page.locator('[data-testid="feedback-target"][data-key^="page:"]', { hasText: 'درباره' });
   await about.getByRole('button').first().click();
   await about.locator('textarea').fill('عکس تیم را اضافه کنید');
-  await about.getByRole('button', { name: 'ثبت' }).click();
+  await about.getByRole('button', { name: 'ارسال', exact: true }).click();
   await expect(about.getByTestId('feedback-status')).toHaveText('باز');
   // Approval is refused while a note is open — in her own language.
   await page.getByTestId('approve-step').click();
-  await expect(page.getByTestId('approve-error')).toContainText('پاسخِ ریشه');
+  await expect(page.getByTestId('approve-error')).toContainText('هنوز پاسخ نگرفته');
 
   // The developer answers (the answer is direct in the demo step) over the API.
   await apiSignIn(request, DEVELOPER);

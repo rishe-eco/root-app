@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { REPORT_DEMO_PATH, type Demo, type DemoPage } from '@/lib/queries';
+import { useLocale } from '@/lib/locale';
+import { pick } from '@/lib/format';
 import { acceptsFrameMessage } from '@/lib/frameOrigin';
 
 /**
@@ -71,6 +73,7 @@ export default function DemoViewport({
   onFirstReport?: (origin: string) => void;
 }) {
   const { t } = useTranslation();
+  const locale = useLocale();
   const isPhone = usePhoneViewport();
   const [preset, setPreset] = useState<Preset>('desktop');
   const [matched, setMatched] = useState<DemoPage | null>(null);
@@ -161,7 +164,7 @@ export default function DemoViewport({
       )}
 
       <p className="t-caption demo-current-page">
-        {matched ? t('demo.viewport.currentPage', { label: matched.labelFa }) : t('demo.viewport.noPageYet')}
+        {matched ? t('demo.viewport.currentPage', { label: pick(matched, 'label', locale) }) : t('demo.viewport.noPageYet')}
       </p>
     </div>
   );

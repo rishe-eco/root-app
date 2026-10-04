@@ -705,12 +705,13 @@ test('the summary against a run end to end: what was agreed, what became of each
   assert.equal(by('home').handoverNote, null);
 
   // Each step: rounds against the allowance, extensions, finish dates. The fixture's
-  // own published design round is the one counted; MOCKUP/DEMO counts are J9b's/J10's —
-  // a null hole, not a zero.
+  // own published design round is the one counted for the design; the phase's demo rounds
+  // are its published site builds (J10 filled `roundCountsOn` — they read null, "not
+  // counted", before it), and the fixture publishes two.
   const step = (name: string, phase: number | null = null) => s.steps.find((r) => r.step === name && r.phaseNumber === phase)!;
   assert.ok(!s.steps.some((r) => r.step === 'SUMMARY'));
   assert.deepEqual([step('DESIGN').iterationsUsed, step('DESIGN').allowance, step('DESIGN').extensions], [1, 3, 1]);
-  assert.deepEqual([step('DEMO', 1).iterationsUsed, step('DEMO', 1).allowance, step('DEMO', 1).extensions], [null, 2, 0]);
+  assert.deepEqual([step('DEMO', 1).iterationsUsed, step('DEMO', 1).allowance, step('DEMO', 1).extensions], [2, 2, 0]);
   assert.equal(step('AGREEMENT').finishedAt, s.dates.signedAt);
   assert.ok(step('DEMO', 1).finishedAt, 'the demo finished when the customer approved it');
 
