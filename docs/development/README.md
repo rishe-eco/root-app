@@ -110,7 +110,7 @@ J13   invoices — drafts, numbers, due dates, plan issuing  ✔ 2026-09-30 [J13
 T2+J8 step 4 — theme catalogue, wireframes and palette      ✔ T2 2026-09-29 [T2.md] · J8 2026-10-01 [J8.md]
 J9    step 5 — the mockup host, streamed bundle upload  ✔ J9a 2026-10-01 [J9a.md] · J9b 2026-10-04 [J9b.md]
 J10   step 6 — demo submission, readiness, per-phase approval
-J11   step 7 — the summary, handover, closing a contract
+J11   step 7 — the summary, handover, closing a contract  ✔ 2026-10-04 [J11.md] (built before J10)
 J12   the customer dashboard and a home screen per staff role
 ```
 
@@ -396,6 +396,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`J8.md`](J8.md) | step 4: theme rounds, custom wireframes and palette, allowances, design approval | ✔ built |
 | [`J9a.md`](J9a.md) | the mockup host: demo/build kinds, the streamed bundle upload, view grants, the fence | ✔ built |
 | [`J9b.md`](J9b.md) | step 5: mockup demos, iterations, frames, approval and the screens | ✔ built |
+| [`J11.md`](J11.md) | step 7: handover, closing a contract, the summary and its print view | ✔ built |
 | [`J13.md`](J13.md) | invoices: drafts, numbers, due dates, issuing the payment plan, the invoice view | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
