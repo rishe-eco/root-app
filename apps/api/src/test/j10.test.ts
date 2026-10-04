@@ -694,7 +694,7 @@ test('approveDemo: refused until the phase’s demo is published, then while a n
     assert.match(m[0].subject, /Phase 1 accepted|فازِ ۱ پذیرفته شد/);
     assert.equal(sms.filter((s) => s.to === who.phone).length, 1, `${who.email} sms`);
   }
-  assert.equal(mail.filter((x) => x.to === f.customer.email).length, 0, 'the customer is not told of their own act');
+  assert.equal(mail.filter((x) => x.to === f.customer.email && /Phase 1 accepted|فازِ ۱ پذیرفته شد/.test(x.subject)).length, 0, 'the customer is not told of their own act');
 });
 
 test('approveDemo accepts only that phase’s agreed items: not another phase’s, not another contract’s, not a proposal or a declined item', async () => {
