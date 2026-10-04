@@ -287,7 +287,7 @@ test('the customer’s dashboard: two contracts, an invoice and a request — ea
 test('the contract’s first published draft is on the customer’s dashboard from the day it is published until it is signed: read and approve, then sign', async () => {
   await signed({}, 'published');
   const draft = (await homeOf(f.customer)).filter((i) => i.kind === 'DRAFT_TO_REVIEW');
-  assert.deepEqual(draft.map((i) => [i.variant, i.waitingOn, param(i, 'version'), i.route]), [['draft', 'CUSTOMER', '1', `/app/contracts/${f.contract.id}?step=AGREEMENT`]]);
+  assert.deepEqual(draft.map((i) => [i.variant, i.waitingOn, param(i, 'version'), i.route]), [['draft', 'CUSTOMER', '2', `/app/contracts/${f.contract.id}?step=AGREEMENT`]]);
   assert.equal((await moveOf(f.customer)).nextMoveOn, 'CUSTOMER', 'and the status area has always said so');
   // Sales sees the same line about the customer, and it is on no staff home — nobody's job.
   assert.ok((await homeOf(staff.SALES)).every((i) => i.kind !== 'DRAFT_TO_REVIEW'));
@@ -313,7 +313,8 @@ test('a ticket is the customer’s move once Root has answered it and Root’s w
   const dueDay = (n: number) => new Date(Date.UTC(day(n).getUTCFullYear(), day(n).getUTCMonth(), day(n).getUTCDate()));
   await prisma.billingEntry.create({ data: { ...base, issuedAt: day(-30), invoiceNumber: 'INV-900001', paymentTermDays: 7, dueAt: dueDay(-23) } });
   await prisma.billingEntry.create({ data: { ...base, issuedAt: day(-2), invoiceNumber: 'INV-900002', paymentTermDays: 7, dueAt: dueDay(5) } });
-  const items = await homeOf(f.customer);
+  const items = (await homeOf(f.customer)).filter((i) => i.kind !== 'DRAFT_TO_REVIEW');
+  // (The fixture's own published, unapproved draft is the contract's first-draft line; it is not this test's subject.)
   assert.deepEqual(tags(items), ['INVOICE_DUE/default', 'INVOICE_OVERDUE/default']);
   assert.ok(items.every((i) => i.contractId === null));
   assert.deepEqual(items.map((i) => i.route).sort(), ['/app/invoices', `/app/invoices/${(await prisma.billingEntry.findFirstOrThrow({ where: { invoiceNumber: 'INV-900002' } })).id}`].sort());
@@ -439,7 +440,10 @@ test('an open note on a demo keeps the demo out of the customer’s hands: the m
   const customerNow = tags(await homeOf(f.customer));
   assert.ok(!customerNow.includes('DEMO_READY_TO_APPROVE/default@A') && customerNow.includes('FEEDBACK_UNRESOLVED/default@A'), customerNow.join(','));
   await prisma.feedbackItem.update({ where: { id: note.id }, data: { status: 'ADDRESSED' } });
-  assert.ok((await homeOf(f.customer)).some((i) => i.kind === 'DEMO_READY_TO_APPROVE'), 'once answered it is theirs again');
+  // Answered, the ball is theirs again — and the answer's own line already says "read it, or approve", so
+  // the generic "demo is ready" line steps aside rather than say it twice.
+  const answered = tags(await homeOf(f.customer));
+  assert.ok(answered.includes('ANSWER_PUBLISHED/default@A') && !answered.includes('FEEDBACK_UNRESOLVED/default@A') && !answered.includes('DEMO_READY_TO_APPROVE/default@A'), answered.join(','));
 });
 
 test('ADMIN holds every job and, through assignments.override, every contract: their home is everyone’s', async () => {

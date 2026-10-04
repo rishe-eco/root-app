@@ -91,7 +91,8 @@ test('needsRootQueue lists the contracts Root owes something on, oldest first â€
   const data = ok(await exec('query{ needsRootQueue { count since contract { id } } }', { as: f.admin }));
   const queue = data.needsRootQueue as Array<{ count: number; since: string; contract: { id: string } }>;
   assert.deepEqual(queue.map((e) => e.contract.id), [older.id, newer.id], 'longest-owed first, whatever the status says');
-  assert.deepEqual(queue.map((e) => [e.count, e.since]), [[1, '2026-03-01T00:00:00.000Z'], [1, '2026-06-01T00:00:00.000Z']]);
+  // Two things owed on each: the customer's note, and a legacy design with no round yet shown (STEP_WAITING).
+  assert.deepEqual(queue.map((e) => [e.count, e.since]), [[2, '2026-03-01T00:00:00.000Z'], [2, '2026-06-01T00:00:00.000Z']]);
 });
 
 test('setContractStatus to the status a contract already has does not move statusChangedAt (D7)', async () => {
