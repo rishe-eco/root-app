@@ -181,6 +181,11 @@ test('CHECK ScopeProposal_declined_has_reason: a decline says why — whitespace
     prisma.scopeProposal.create({ data: { ...base, decision: 'DECLINED', declineReason: '   ', decidedAt: new Date() } }),
     /ScopeProposal_declined_has_reason/,
   );
+  await assert.rejects(
+    prisma.scopeProposal.create({ data: { ...base, decision: 'DECLINED', declineReason: '\t\n\r\n', decidedAt: new Date() } }),
+    /ScopeProposal_declined_has_reason/,
+    'tabs and newlines are not a reason either (20261004100000 — btrim strips spaces only)',
+  );
   await prisma.scopeProposal.create({ data: { ...base, decision: 'DECLINED', declineReason: 'خارج از دامنه', decidedAt: new Date() } });
   await prisma.scopeProposal.create({ data: { ...base, decision: 'ACCEPTED', decidedAt: new Date() } });
   await prisma.scopeProposal.create({ data: base });
