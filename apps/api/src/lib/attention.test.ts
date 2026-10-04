@@ -379,3 +379,114 @@ test('a scope trade: the customer’s move until they confirm, then Root’s to 
   assert.equal(forCustomer.length, 2);
   assert.ok(forCustomer.every((i) => ATTENTION_SENTENCES.TRADE_TO_CONFIRM?.[i.variant]?.includes('customer')));
 });
+
+// --- J12: steps 4–6, and the planned invoices sales may issue -------------------------------
+
+const DEVELOPER = { id: 'developer', roles: ['DEVELOPER'] as Role[] };
+
+const noSteps = { waiting: [], mockupOut: null, demosOut: [], demosNotReady: [] };
+
+test('a step that is current with nothing shown is its owner’s move, and the customer is told Root is on it (STEP_WAITING)', () => {
+  const input = empty({
+    steps: {
+      ...noSteps,
+      waiting: [
+        { step: 'DESIGN', phaseId: null, phaseNumber: null, since: day(-4) },
+        { step: 'DEMO', phaseId: 'p1', phaseNumber: 2, since: day(-2) },
+      ],
+    },
+  });
+  const staff = attentionFor(input, SALES);
+  assert.deepEqual(
+    staff.map((i) => [i.kind, i.variant, i.waitingOn, i.role, i.phaseId, i.params]),
+    [
+      ['STEP_WAITING', 'DESIGN', 'ROOT', 'DESIGNER', null, { step: 'DESIGN' }],
+      ['STEP_WAITING', 'DEMO', 'ROOT', 'DEVELOPER', 'p1', { step: 'DEMO', phase: 2 }],
+    ],
+  );
+  // Not Root's housekeeping: the customer reads that the work is being prepared.
+  assert.equal(attentionFor(input, CUSTOMER).length, 2);
+  assert.deepEqual(attentionFor(empty({ steps: noSteps }), SALES), []);
+});
+
+test('a mockup iteration or a phase demo that is out is the customer’s move (J9b’s gap, J10’s declared-and-unemitted kind)', () => {
+  const input = empty({
+    steps: {
+      ...noSteps,
+      mockupOut: { count: 2, since: day(-3) },
+      demosOut: [{ phaseId: 'p1', phaseNumber: 1, since: day(-1) }],
+    },
+  });
+  const items = attentionFor(input, CUSTOMER);
+  assert.deepEqual(summary(items), ['ITERATION_PUBLISHED/default/CUSTOMER', 'DEMO_READY_TO_APPROVE/default/CUSTOMER']);
+  assert.deepEqual(items[0].params, { count: 2, step: 'MOCKUP' });
+  assert.deepEqual(items[1].params, { step: 'DEMO', phase: 1 });
+  assert.equal(items[1].phaseId, 'p1');
+  assert.ok(items.every((i) => i.role === null), 'waiting on the customer, and nobody’s job');
+});
+
+test('a staging site no browser of Root’s has seen report is the developer’s housekeeping, and never the customer’s business (DEMO_NOT_READY)', () => {
+  const input = empty({ steps: { ...noSteps, demosNotReady: [{ phaseId: 'p1', phaseNumber: 1, since: day(-1) }] } });
+  const items = attentionFor(input, SALES);
+  assert.deepEqual(summary(items), ['DEMO_NOT_READY/default/ROOT']);
+  assert.equal(items[0].role, 'DEVELOPER');
+  assert.equal(items[0].internal, true);
+  assert.deepEqual(attentionFor(input, CUSTOMER), []);
+  assert.equal(attentionFor(input, DEVELOPER).length, 1);
+});
+
+test('a planned invoice sales may issue is one line with the count: Root’s move, sales’ job, money, and not the customer’s business (INVOICE_ISSUABLE)', () => {
+  const input = empty({ issuable: [{ ordinal: 2, since: day(-2) }, { ordinal: 3, since: day(-5) }] });
+  const items = attentionFor(input, SALES);
+  assert.deepEqual(summary(items), ['INVOICE_ISSUABLE/default/ROOT']);
+  assert.deepEqual(items[0].params, { count: 2 });
+  assert.equal(items[0].since.getTime(), day(-5).getTime());
+  assert.equal(items[0].role, 'SALES');
+  assert.deepEqual(attentionFor(input, CUSTOMER), []);
+  assert.deepEqual(attentionFor(input, DESIGNER), [], 'money (PD-21)');
+});
+
+test('a technical commitment is the developer’s to follow up, whichever side owes it (J12)', () => {
+  const dep = (id: string, side: 'CUSTOMER' | 'ROOT', technical: boolean) => ({
+    id,
+    side,
+    titleFa: 'ا',
+    titleEn: 'a',
+    dueAt: day(-1),
+    verifiedAt: null,
+    technical,
+  });
+  const items = attentionFor(
+    empty({ dependencies: [dep('c-tech', 'CUSTOMER', true), dep('r-tech', 'ROOT', true), dep('c-plain', 'CUSTOMER', false), dep('r-plain', 'ROOT', false)] }),
+    SALES,
+  );
+  const roleOf = (id: string) => items.find((i) => i.params.dependencyId === id)!.role;
+  assert.deepEqual(['c-tech', 'r-tech', 'c-plain', 'r-plain'].map(roleOf), ['DEVELOPER', 'DEVELOPER', null, 'SALES']);
+});
+
+test('every J12 item names a sentence that exists, for the audiences that can see it', () => {
+  const emitted = attentionFor(
+    empty({
+      steps: {
+        waiting: [
+          { step: 'DESIGN', phaseId: null, phaseNumber: null, since: day(-1) },
+          { step: 'MOCKUP', phaseId: null, phaseNumber: null, since: day(-1) },
+          { step: 'DEMO', phaseId: 'p', phaseNumber: 1, since: day(-1) },
+        ],
+        mockupOut: { count: 1, since: day(-1) },
+        demosOut: [{ phaseId: 'p', phaseNumber: 1, since: day(-1) }],
+        demosNotReady: [{ phaseId: 'p', phaseNumber: 1, since: day(-1) }],
+      },
+      issuable: [{ ordinal: 1, since: day(-1) }],
+      invoices: [invoice({ issuedAt: day(-2), dueAt: day(5), paidAt: null })],
+    }),
+    SALES,
+  );
+  assert.deepEqual(
+    [...new Set(emitted.map((i) => i.kind))].sort(),
+    ['DEMO_NOT_READY', 'DEMO_READY_TO_APPROVE', 'INVOICE_DUE', 'INVOICE_ISSUABLE', 'ITERATION_PUBLISHED', 'STEP_WAITING'],
+  );
+  for (const item of emitted) {
+    assert.ok(ATTENTION_SENTENCES[item.kind]?.[item.variant]?.includes('staff'), `${item.kind}/${item.variant}`);
+  }
+});

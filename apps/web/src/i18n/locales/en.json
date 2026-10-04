@@ -1879,6 +1879,71 @@
         "staff_one": "The customer has {{n}} overdue invoice.",
         "staff_other": "The customer has {{n}} overdue invoices."
       }
+    },
+    "INVOICE_DUE": {
+      "default": {
+        "customer": "Invoice {{number}} is due on {{date}}.",
+        "staff": "Invoice {{number}} has not been paid yet; it is due on {{date}}."
+      }
+    },
+    "INVOICE_ISSUABLE": {
+      "default": {
+        "staff_one": "{{n}} invoice in the payment plan can be issued now.",
+        "staff_other": "{{n}} invoices in the payment plan can be issued now."
+      }
+    },
+    "ITERATION_PUBLISHED": {
+      "default": {
+        "customer": "Mockup {{n}} is ready for you — look through it, leave comments, or approve it.",
+        "staff": "Mockup {{n}} is out; the customer has not yet approved it or left a comment."
+      }
+    },
+    "DEMO_READY_TO_APPROVE": {
+      "default": {
+        "customer": "The demo for phase {{phaseN}} is ready — try it, leave comments, or approve it.",
+        "staff": "The demo for phase {{phaseN}} is out; the customer has not yet approved it."
+      }
+    },
+    "DEMO_NOT_READY": {
+      "default": {
+        "staff": "No one has yet seen the staging site for phase {{phaseN}} report. Open it in the portal so it can be marked ready."
+      }
+    },
+    "STEP_WAITING": {
+      "DESIGN": {
+        "customer": "Root is preparing the first design round for you.",
+        "staff": "The design step is open and no round has been published yet."
+      },
+      "MOCKUP": {
+        "customer": "Root is preparing the mockup for you.",
+        "staff": "The mockup step is open and no iteration has been published yet."
+      },
+      "DEMO": {
+        "customer": "Root is building the demo for phase {{phaseN}}.",
+        "staff": "The demo for phase {{phaseN}} is open and has not been published yet."
+      }
+    },
+    "REQUEST_MESSAGE": {
+      "reply": {
+        "customer": "Root replied to your request “{{title}}”."
+      },
+      "sent": {
+        "customer": "Your request “{{title}}” is waiting for Root’s reply."
+      },
+      "unanswered": {
+        "staff": "The request “{{title}}” is waiting for a reply."
+      }
+    },
+    "TICKET_REPLY": {
+      "reply": {
+        "customer": "Root replied to your ticket “{{subject}}”."
+      },
+      "open": {
+        "customer": "Your ticket “{{subject}}” is waiting for Root’s reply."
+      },
+      "unanswered": {
+        "staff": "The ticket “{{subject}}” is waiting for a reply."
+      }
     }
   },
   "summary": {

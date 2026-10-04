@@ -384,10 +384,13 @@ export function homeFor(input: HomeInput): HomeItem[] {
     }
   }
 
+  // The move that is *mine* comes first: for a customer, what waits on them; for
+  // staff, what waits on Root. What is left is information (a customer's "Root has
+  // your request") or follow-up (sales chasing an overdue invoice).
+  const mineFirst = (i: HomeItem) => Number(i.audience === 'CUSTOMER' ? i.waitingOn !== 'CUSTOMER' : i.waitingOn !== 'ROOT');
   return items.sort(
     (a, b) =>
-      // Mine first, then the ones waiting on Root (only a customer has both).
-      Number(a.waitingOn === 'ROOT') - Number(b.waitingOn === 'ROOT') ||
+      mineFirst(a) - mineFirst(b) ||
       a.since.getTime() - b.since.getTime() ||
       KIND_ORDER(a.kind) - KIND_ORDER(b.kind) ||
       a.variant.localeCompare(b.variant) ||
