@@ -60,21 +60,25 @@ export default function PortalLayout() {
         <nav className="side-nav">
           <p className="side-cap">{t('portal.workspace')}</p>
 
+          {/* Journeys build plan J12: the Dashboard is the first rail item — Dashboard,
+              Contracts, Invoices, Tools, Support (the plan's order; Q3 keeps Support).
+              `end`, because /app is also the prefix of every other portal route and
+              would otherwise light up on all of them. */}
+          <NavLink
+            end
+            className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
+            to={lp(locale, '/app')}
+          >
+            <span className="side-glyph" />
+            <span>{t('portal.navDashboard')}</span>
+          </NavLink>
+
           <NavLink
             className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
             to={lp(locale, '/app/contracts')}
           >
             <span className="side-glyph" />
             <span>{t('portal.navContracts')}</span>
-          </NavLink>
-
-          {/* Build plan L4: support is live — a real link, no "soon" tag. */}
-          <NavLink
-            className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
-            to={lp(locale, '/app/support')}
-          >
-            <span className="side-glyph" />
-            <span>{t('portal.navSupport')}</span>
           </NavLink>
 
           {/* Build plan L6: billing is live — a real link, no "soon" tag. J13
@@ -99,6 +103,15 @@ export default function PortalLayout() {
               <span>{t('portal.navTools')}</span>
             </NavLink>
           ) : null}
+
+          {/* Build plan L4: support is live — a real link, no "soon" tag. */}
+          <NavLink
+            className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
+            to={lp(locale, '/app/support')}
+          >
+            <span className="side-glyph" />
+            <span>{t('portal.navSupport')}</span>
+          </NavLink>
 
           {isStaff(me) ? (
             <NavLink

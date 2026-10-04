@@ -1,16 +1,15 @@
-import { Navigate, useOutletContext } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useLocale, lp } from '@/lib/locale';
-import type { User } from '@/lib/queries';
-import { visibleSections } from './sections';
 
 /**
- * Not a hardcoded `/desk/overview`: a person who only holds `review.participate`
- * would be bounced off it. Safe to index `[0]` here — `DeskLayout` has already
- * refused anyone with zero capabilities, so this list is never empty.
+ * The desk's index (journeys build plan J12): **My work**, for any staff
+ * capability set. It used to be the first section the person could see, which
+ * was Overview for everyone — and so, for a reviewer, a page that was not theirs.
+ * `DeskLayout` has already refused anyone who is not staff, and My work is the
+ * one section every staff member holds (`capability: null` in `DESK_SECTIONS`),
+ * so there is nothing to compute here.
  */
 export default function DeskHome() {
   const locale = useLocale();
-  const me = useOutletContext<User>();
-  const first = visibleSections(me)[0];
-  return <Navigate to={lp(locale, `/desk/${first.key}`)} replace />;
+  return <Navigate to={lp(locale, '/desk/work')} replace />;
 }

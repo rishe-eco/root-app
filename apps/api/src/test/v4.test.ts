@@ -58,32 +58,40 @@ test("allContractStatusCounts sees every contract; contractStatusCounts stays sc
   assert.equal(customerTotal, 1, "contractStatusCounts must stay scoped to the caller's own");
 });
 
-test('needsRootQueue orders by statusChangedAt ascending — the longest-waiting contract first', async () => {
-  const olderWait = new Date('2026-01-01T00:00:00Z');
-  const newerWait = new Date('2026-06-01T00:00:00Z');
-
+// J12 re-pointed this queue from `ContractStatus` to the attention module. The setup
+// is the status-based one it used to be tested with, kept as the decoy: the fixture's
+// contract says WAITING_ON_ROOT, and that now says nothing. What puts a contract in the
+// queue is Root owing something (`j12.test.ts` holds the table of what counts).
+test('needsRootQueue lists the contracts Root owes something on, oldest first — WAITING_ON_ROOT is neither necessary nor sufficient', async () => {
   await prisma.contract.update({
     where: { id: f.contract.id },
-    data: { status: 'WAITING_ON_ROOT', statusChangedAt: olderWait },
-  });
-  const second = await prisma.contract.create({
-    data: {
-      ref: 'RC-SECOND-1',
-      titleFa: 'قرارداد دوم',
-      titleEn: 'Second contract',
-      customerId: f.customer.id,
-      // A second contract on the fixture's own project (J2) — which is now
-      // also a contract the desk can hold.
-      projectId: f.contract.projectId,
-      status: 'WAITING_ON_ROOT',
-      statusChangedAt: newerWait,
-      publishedAt: new Date(),
-    },
+    data: { status: 'WAITING_ON_ROOT', statusChangedAt: new Date('2026-01-01T00:00:00Z') },
   });
 
-  const data = ok(await exec('query{ needsRootQueue { id } }', { as: f.admin }));
-  const ids = (data.needsRootQueue as Array<{ id: string }>).map((r) => r.id);
-  assert.deepEqual(ids, [f.contract.id, second.id], 'nudged-earlier must sort before nudged-later');
+  const owed = async (ref: string, status: 'WAITING_ON_ROOT' | 'WAITING_ON_CUSTOMER', since: string) => {
+    const project = await prisma.project.create({ data: { customerId: f.customer.id, titleFa: ref, titleEn: ref } });
+    const contract = await prisma.contract.create({
+      data: { ref, titleFa: ref, titleEn: ref, customerId: f.customer.id, projectId: project.id, status, publishedAt: new Date(), sequence: 'DESIGN_FIRST' },
+    });
+    await prisma.feedbackItem.create({
+      data: {
+        projectId: project.id,
+        contractId: contract.id,
+        step: 'DESIGN',
+        general: true,
+        createdAt: new Date(since),
+        comments: { create: { authorId: f.customer.id, body: 'a note', createdAt: new Date(since) } },
+      },
+    });
+    return contract;
+  };
+  const newer = await owed('RC-NEWER-1', 'WAITING_ON_ROOT', '2026-06-01T00:00:00Z');
+  const older = await owed('RC-OLDER-1', 'WAITING_ON_CUSTOMER', '2026-03-01T00:00:00Z');
+
+  const data = ok(await exec('query{ needsRootQueue { count since contract { id } } }', { as: f.admin }));
+  const queue = data.needsRootQueue as Array<{ count: number; since: string; contract: { id: string } }>;
+  assert.deepEqual(queue.map((e) => e.contract.id), [older.id, newer.id], 'longest-owed first, whatever the status says');
+  assert.deepEqual(queue.map((e) => [e.count, e.since]), [[1, '2026-03-01T00:00:00.000Z'], [1, '2026-06-01T00:00:00.000Z']]);
 });
 
 test('setContractStatus to the status a contract already has does not move statusChangedAt (D7)', async () => {
@@ -160,7 +168,7 @@ test('activity(reviewOnly) includes review-worthy customer actions and excludes 
 test('a customer is refused all three staff queries', async () => {
   for (const query of [
     'query{ allContractStatusCounts { status count } }',
-    'query{ needsRootQueue { id } }',
+    'query{ needsRootQueue { count } }',
     'query{ activity { id } }',
   ]) {
     const r = await exec(query, { as: f.customer });

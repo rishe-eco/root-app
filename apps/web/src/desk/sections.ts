@@ -3,6 +3,7 @@ import type { User } from '@/lib/queries';
 
 export type DeskSection = {
   key:
+    | 'work'
     | 'overview'
     | 'contracts'
     | 'requests'
@@ -19,7 +20,7 @@ export type DeskSection = {
     | 'users'
     | 'apiTokens';
   /**
-   * null means "any staff capability", which is what Overview needs. A list
+   * null means "any staff capability", which is what My work needs. A list
    * means *any one of these* — the section has more than one half, each behind
    * its own capability, and holding either is a reason to see the room (T1's
    * Templates: a designer keeps the types, sales the scope).
@@ -33,7 +34,12 @@ export type DeskSection = {
  * source rather than three copies of the same test.
  */
 export const DESK_SECTIONS: DeskSection[] = [
-  { key: 'overview', capability: null },
+  // Journeys build plan J12: **My work** is the home for any staff capability set — what is
+  // waiting on this person, from `myAttention` — so it is the first row and the one every staff
+  // member holds. Overview (V4's tiles and Needs-Root queue) is the whole book's view and moves
+  // to the capability that reads the whole book.
+  { key: 'work', capability: null },
+  { key: 'overview', capability: 'contracts.readAll' },
   // Journeys build plan S1: the contracts list answers both `contracts.readAll`
   // (sales, the whole book) and `contracts.readActive` (design, development —
   // the contracts still being worked). Gating the nav row on the narrower of

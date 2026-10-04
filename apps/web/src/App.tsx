@@ -16,6 +16,7 @@ import ForgotPassword from '@/portal/ForgotPassword';
 import ResetPassword from '@/portal/ResetPassword';
 import SetNewPassword from '@/portal/SetNewPassword';
 import PortalLayout from '@/portal/PortalLayout';
+import Dashboard from '@/portal/Dashboard';
 import Contracts from '@/portal/Contracts';
 import ContractDetail from '@/portal/ContractDetail';
 import ContractPrint from '@/portal/ContractPrint';
@@ -26,6 +27,7 @@ import PortalInvoiceDetail from '@/portal/InvoiceDetail';
 import PortalTools from '@/portal/Tools';
 import DeskLayout from '@/desk/DeskLayout';
 import DeskHome from '@/desk/DeskHome';
+import MyWork from '@/desk/MyWork';
 import Overview from '@/desk/Overview';
 import DeskContracts from '@/desk/Contracts';
 import DeskRequests, { DeskRequestDetail } from '@/desk/Requests';
@@ -111,7 +113,8 @@ export default function App() {
 
         {/* Authenticated customer area */}
         <Route path="app" element={<PortalLayout />}>
-          <Route index element={<Navigate to="contracts" replace />} />
+          {/* Journeys build plan J12: /app is the Dashboard, the first rail item — what is waiting on the customer, and what Root owes them. */}
+          <Route index element={<Dashboard />} />
           <Route path="contracts" element={<Contracts />} />
           <Route path="contracts/:id" element={<ContractDetail />} />
           {/* Inside the portal, so it inherits the same session check — a
@@ -138,6 +141,8 @@ export default function App() {
             public, so the rename is free (F2 §1). */}
         <Route path="desk" element={<DeskLayout />}>
           <Route index element={<DeskHome />} />
+          {/* J12: the desk's home — My work, for any staff capability set; Overview stays for contracts.readAll. */}
+          <Route path="work" element={<MyWork />} />
           <Route path="overview" element={<Overview />} />
           <Route path="contracts" element={<DeskContracts />} />
           <Route path="contracts/:id" element={<ContractWorkspace />}>

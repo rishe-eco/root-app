@@ -2503,11 +2503,87 @@ const CONTRACT_REF_FIELDS = gql`
   }
 `;
 
+/** One entry of the desk's Needs-Root queue (V4, re-pointed by J12): a contract,
+ *  the oldest thing Root owes on it, and how many things are owed. */
+export type NeedsRootEntry = { contract: ContractRef; since: string; count: number };
+
 export const NEEDS_ROOT_QUEUE = gql`
   ${CONTRACT_REF_FIELDS}
   query NeedsRootQueue($limit: Int) {
     needsRootQueue(limit: $limit) {
-      ...ContractRefFields
+      since
+      count
+      contract {
+        ...ContractRefFields
+      }
+    }
+  }
+`;
+
+/**
+ * The home screens (journeys build plan J12): what is waiting on the signed-in
+ * person, derived on every read by the API. The customer's dashboard and each
+ * staff role's *My work* are this one list; `audience` picks the sentence set
+ * (`attention.<kind>.<variant>.<customer|staff>`) and `route` is where the item
+ * opens, without the language prefix.
+ */
+export type HomeItem = {
+  kind: string;
+  variant: string;
+  audience: 'CUSTOMER' | 'STAFF';
+  contractId: string | null;
+  phaseId: string | null;
+  waitingOn: WaitingOn;
+  role: 'SALES' | 'DESIGNER' | 'DEVELOPER' | null;
+  since: string;
+  params: Array<{ key: string; value: string }>;
+  route: string;
+  subject: { ref: string | null; titleFa: string; titleEn: string; customerName: string };
+};
+
+export const MY_ATTENTION = gql`
+  query MyAttention {
+    myAttention {
+      kind
+      variant
+      audience
+      contractId
+      phaseId
+      waitingOn
+      role
+      since
+      route
+      params {
+        key
+        value
+      }
+      subject {
+        ref
+        titleFa
+        titleEn
+        customerName
+      }
+    }
+  }
+`;
+
+/** The dashboard's standing "open the current contract": just enough of each of
+ *  the customer's contracts to name one and to tell which is still being worked. */
+export type ContractLink = Pick<Contract, 'id' | 'ref' | 'titleFa' | 'titleEn' | 'status' | 'sequence' | 'updatedAt'> & {
+  deliveredAt: string | null;
+};
+
+export const MY_CONTRACT_LINKS = gql`
+  query MyContractLinks {
+    myContracts {
+      id
+      ref
+      titleFa
+      titleEn
+      status
+      sequence
+      updatedAt
+      deliveredAt
     }
   }
 `;

@@ -26,7 +26,7 @@ test('the nav offers exactly the rows canSeeSection accepts', () => {
   const me = holding('templates.scope', 'library.write');
   assert.deepEqual(
     visibleSections(me).map((s) => s.key),
-    ['overview', 'library', 'templates'],
+    ['work', 'library', 'templates'],
   );
 });
 
@@ -42,11 +42,39 @@ test('users (S3) is staff.manage and nothing else: no other capability, however 
 
 test('single-capability rows and the any-staff row behave as before', () => {
   const tokens = DESK_SECTIONS.find((s) => s.key === 'apiTokens')!;
-  const overview = DESK_SECTIONS.find((s) => s.key === 'overview')!;
+  const work = DESK_SECTIONS.find((s) => s.key === 'work')!;
   assert.equal(canSeeSection(holding('apiTokens.manage'), tokens), true);
   assert.equal(canSeeSection(holding('templates.types'), tokens), false);
-  assert.equal(canSeeSection(holding('templates.types'), overview), true);
-  assert.equal(canSeeSection(holding(), overview), false);
+  assert.equal(canSeeSection(holding('templates.types'), work), true);
+  assert.equal(canSeeSection(holding(), work), false);
+});
+
+/**
+ * Journeys build plan J12: **My work is every staff member's home** — the first
+ * row, held by any capability — and Overview (V4's tiles and Needs-Root queue) is
+ * the whole book's view, so it needs the capability that reads the whole book. A
+ * designer or a reviewer is no longer shown it, which is what lets `DeskHome` send
+ * everyone to the one section they all hold.
+ */
+test('work is first and any staff capability opens it; overview needs contracts.readAll and nothing narrower', () => {
+  assert.equal(DESK_SECTIONS[0].key, 'work');
+  const work = DESK_SECTIONS.find((s) => s.key === 'work')!;
+  const overview = DESK_SECTIONS.find((s) => s.key === 'overview')!;
+  for (const caps of [['review.participate'], ['library.write'], ['design.author', 'contracts.readActive'], ['builds.author'], ['contracts.readAll']] as Capability[][]) {
+    assert.equal(canSeeSection(holding(...caps), work), true, caps.join(','));
+  }
+  assert.equal(canSeeSection(holding(), work), false, 'a customer holds no capability and has no desk');
+
+  assert.equal(canSeeSection(holding('contracts.readAll'), overview), true);
+  assert.equal(canSeeSection(holding('contracts.readActive', 'design.author'), overview), false);
+  assert.equal(canSeeSection(holding('contracts.author', 'builds.author', 'review.participate'), overview), false);
+});
+
+test('each role’s nav, in order: sales and ADMIN keep Overview beside My work; the others have My work and their own rows', () => {
+  const keys = (...caps: Capability[]) => visibleSections(holding(...caps)).map((s) => s.key);
+  assert.deepEqual(keys('contracts.readAll', 'contracts.readActive', 'contracts.author'), ['work', 'overview', 'contracts', 'requests']);
+  assert.deepEqual(keys('contracts.readActive', 'design.author'), ['work', 'contracts']);
+  assert.deepEqual(keys('review.participate'), ['work', 'review']);
 });
 
 /**

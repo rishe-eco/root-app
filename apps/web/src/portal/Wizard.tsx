@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import type { Contract, User, WizardStep } from '@/lib/queries';
 import { pick } from '@/lib/format';
-import { defaultStep, sameStep, showBuildTimeline } from '@/lib/wizard';
+import { defaultStep, sameStep, showBuildTimeline, stepFromParams } from '@/lib/wizard';
 import StatusArea from '@/components/StatusArea';
 import StepList from '@/components/StepList';
 import BuildTimeline from '@/components/BuildTimeline';
@@ -32,7 +32,9 @@ export default function Wizard({ contract, me, asCustomer }: { contract: Contrac
   // Pinned to the step the page opened on (J4), for the same reason as the desk's
   // Steps tab: a panel that swaps itself when its step is finished is a panel
   // the reader loses. Opening still lands on the current step.
-  const [picked, setPicked] = useState<WizardStep | null>(() => defaultStep(wizard));
+  // A link from the home screen names the step (`?step=DESIGN&phase=…`, J12) and opens on it.
+  const [params] = useSearchParams();
+  const [picked, setPicked] = useState<WizardStep | null>(() => stepFromParams(wizard, params) ?? defaultStep(wizard));
   // Re-resolved against the live wizard on every render, so a step that just
   // changed state (an approval landed) shows its new state, not a stale copy.
   const selected = wizard.find((s) => sameStep(s, picked)) ?? defaultStep(wizard);

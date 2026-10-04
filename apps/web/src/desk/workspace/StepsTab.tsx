@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import type { WizardStep } from '@/lib/queries';
-import { defaultStep, sameStep } from '@/lib/wizard';
+import { defaultStep, sameStep, stepFromParams } from '@/lib/wizard';
 import StepList from '@/components/StepList';
 import StepPanel from '@/components/StepPanels';
 import type { WorkspaceContext } from './ContractWorkspace';
@@ -24,7 +24,9 @@ export default function StepsTab() {
   // form is on screen — the brief, once nothing is missing — must not swap the
   // panel out from under the person still using it. The road still moves on
   // (the list marks the new current step); the panel follows the click.
-  const [picked, setPicked] = useState<WizardStep | null>(() => defaultStep(wizard));
+  // A link from My work names the step (`?step=MOCKUP&phase=…`, J12) and opens on it.
+  const [params] = useSearchParams();
+  const [picked, setPicked] = useState<WizardStep | null>(() => stepFromParams(wizard, params) ?? defaultStep(wizard));
   const selected = wizard.find((s) => sameStep(s, picked)) ?? defaultStep(wizard);
 
   return (

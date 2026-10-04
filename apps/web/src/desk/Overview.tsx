@@ -1,5 +1,5 @@
 import { useQuery } from '@apollo/client';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, Navigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { can } from '@/lib/access';
@@ -9,7 +9,7 @@ import {
   NEEDS_ROOT_QUEUE,
   OVERDUE_DEPENDENCIES,
   type ActivityItem,
-  type ContractRef,
+  type NeedsRootEntry,
   type StatusCount,
   type DependencyWithProject,
   type User,
@@ -23,12 +23,15 @@ import StatusBadge from '@/components/StatusBadge';
  * panels, all four gated on `contracts.readAll` (journeys build plan S1) —
  * `allContractStatusCounts`, `needsRootQueue`, `activity` and
  * `overdueDependencies` are the sales/whole-book view of the desk, and design
- * and development hold only `contracts.readActive`. Skipping the queries
- * (the same `skip` pattern DeskContracts already uses) rather than letting
- * four FORBIDDEN errors render is what T4 asks for either way; the
- * difference this stage adds is that "not allowed" is no longer "not ADMIN"
- * — a designer or developer lands here too (Overview's own nav row is
- * capability: null) and needs somewhere to go instead of four empty panels.
+ * and development hold only `contracts.readActive`.
+ *
+ * **J12 moved the desk's home to My work** (`DeskHome`, `MyWork.tsx`) and gave
+ * this section the one capability that reads the whole book, so nobody else
+ * lands here: the nav row is `contracts.readAll`, and a typed URL from anyone
+ * without it is sent to My work rather than shown four empty panels. The tiles
+ * still count `Contract.status` — what sales *set* — while the **Needs-Root
+ * queue is read from the attention module**: a contract is in it because Root
+ * owes something on it, not because its status says so.
  */
 export default function Overview() {
   const { t } = useTranslation();
@@ -40,7 +43,7 @@ export default function Overview() {
     ALL_CONTRACT_STATUS_COUNTS,
     { skip: !allowed },
   );
-  const { data: queueData } = useQuery<{ needsRootQueue: ContractRef[] }>(NEEDS_ROOT_QUEUE, {
+  const { data: queueData } = useQuery<{ needsRootQueue: NeedsRootEntry[] }>(NEEDS_ROOT_QUEUE, {
     skip: !allowed,
   });
   const { data: activityData } = useQuery<{ activity: ActivityItem[] }>(ACTIVITY, {
@@ -62,31 +65,10 @@ export default function Overview() {
   const activity = activityData?.activity ?? [];
   const overdueDependencies = dependenciesData?.overdueDependencies ?? [];
 
-  // A designer or developer holds no capability this dashboard reads at all
-  // — rather than four empty panels that look like an idle desk, point them
-  // at the one or two working surfaces they do have.
-  if (!allowed) {
-    const canContracts = can(me, 'contracts.readActive');
-    const canBuilds = can(me, 'builds.author');
-    return (
-      <div className="desk-section">
-        <h2 className="t-h2">{t('desk.navOverview')}</h2>
-        <p className="t-lead">{t('desk.overviewNoDashboard')}</p>
-        <div className="queue-list">
-          {canContracts ? (
-            <Link className="queue-row" to={lp(locale, '/desk/contracts')}>
-              <span className="t-small">{t('desk.navContracts')}</span>
-            </Link>
-          ) : null}
-          {canBuilds ? (
-            <Link className="queue-row" to={lp(locale, '/desk/builds')}>
-              <span className="t-small">{t('desk.navBuilds')}</span>
-            </Link>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
+  // The whole book's view is `contracts.readAll`'s. Anyone else who types the URL is sent
+  // to their own home (J12; until then this branch listed the two surfaces a designer or
+  // developer had, because Overview was where everyone landed).
+  if (!allowed) return <Navigate to={lp(locale, '/desk/work')} replace />;
 
   return (
     <div className="desk-section">
@@ -111,15 +93,21 @@ export default function Overview() {
             <p className="t-small desk-muted">{t('desk.needsRootEmpty')}</p>
           ) : (
             <div className="queue-list">
-              {queue.map((c) => (
-                <Link key={c.id} className="queue-row" to={lp(locale, `/desk/contracts/${c.id}`)}>
+              {/* Re-pointed by J12: a row is a contract Root owes something on, read from the
+                  attention module — `since` is the oldest thing owed, `count` how many are —
+                  and not a contract whose status says "waiting on Root". */}
+              {queue.map(({ contract: c, since, count }) => (
+                <Link key={c.id} className="queue-row" to={lp(locale, `/desk/contracts/${c.id}`)} data-testid="needs-root-row">
                   <div className="queue-row-main">
                     <span className="t-small queue-row-title">{pick(c, 'title', locale)}</span>
                     <span className="t-caption desk-muted">
                       {c.customerName} · <span className="num-latin">{c.ref}</span>
                     </span>
                   </div>
-                  <span className="t-caption desk-muted">{relativeTime(c.statusChangedAt, locale)}</span>
+                  <div className="queue-row-end">
+                    <span className="badge">{t('desk.needsRootOwed', { count, n: formatCount(count, locale) })}</span>
+                    <span className="t-caption desk-muted">{relativeTime(since, locale)}</span>
+                  </div>
                 </Link>
               ))}
             </div>

@@ -97,6 +97,42 @@ test('attentionText: the reader’s audience picks the sentence, and a bilingual
   assert.match(attentionText(translator('fa'), 'fa', late, 'staff'), /ارسال محتوا/);
 });
 
+test('attentionText (J12): a phase number is in the reader’s digits, a due day is the calendar day it is, an invoice number stays Latin', () => {
+  const demo = { kind: 'DEMO_READY_TO_APPROVE', variant: 'default', params: [{ key: 'phase', value: '2' }, { key: 'step', value: 'DEMO' }] };
+  assert.equal(attentionText(translator('en'), 'en', demo, 'customer'), 'The demo for phase 2 is ready — try it, leave comments, or approve it.');
+  assert.match(attentionText(translator('fa'), 'fa', demo, 'customer'), /دموی فاز ۲ آماده است/);
+
+  const due = { kind: 'INVOICE_DUE', variant: 'default', params: [{ key: 'invoiceId', value: 'x' }, { key: 'number', value: 'INV-000001' }, { key: 'dueAt', value: '2026-10-11' }] };
+  assert.equal(attentionText(translator('en'), 'en', due, 'customer'), `Invoice INV-000001 is due on ${calendarDate('2026-10-11', 'en')}.`);
+  const fa = attentionText(translator('fa'), 'fa', due, 'customer');
+  assert.ok(fa.includes('INV-000001') && fa.includes(calendarDate('2026-10-11', 'fa')), fa);
+});
+
+test('attentionText (J12): every new kind has a sentence for the audience the API gives it, in both languages', () => {
+  const rows: Array<[string, string, 'customer' | 'staff']> = [
+    ['STEP_WAITING', 'DESIGN', 'customer'],
+    ['STEP_WAITING', 'MOCKUP', 'staff'],
+    ['STEP_WAITING', 'DEMO', 'staff'],
+    ['ITERATION_PUBLISHED', 'default', 'customer'],
+    ['DEMO_READY_TO_APPROVE', 'default', 'staff'],
+    ['DEMO_NOT_READY', 'default', 'staff'],
+    ['INVOICE_DUE', 'default', 'customer'],
+    ['INVOICE_ISSUABLE', 'default', 'staff'],
+    ['REQUEST_MESSAGE', 'reply', 'customer'],
+    ['REQUEST_MESSAGE', 'sent', 'customer'],
+    ['REQUEST_MESSAGE', 'unanswered', 'staff'],
+    ['TICKET_REPLY', 'reply', 'customer'],
+    ['TICKET_REPLY', 'open', 'customer'],
+    ['TICKET_REPLY', 'unanswered', 'staff'],
+  ];
+  for (const lang of ['en', 'fa'] as const) {
+    for (const [kind, variant, audience] of rows) {
+      const text = attentionText(translator(lang), lang, { kind, variant, params: [{ key: 'count', value: '2' }, { key: 'phase', value: '1' }, { key: 'title', value: 'T' }, { key: 'subject', value: 'S' }] }, audience);
+      assert.doesNotMatch(text, /^«/, `${lang} ${kind}/${variant}/${audience}`);
+    }
+  }
+});
+
 test('timelineText: a step approval names the step; a revision names its version', () => {
   const at = '2026-09-20T00:00:00.000Z';
   const t = translator('en');

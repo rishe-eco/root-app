@@ -174,6 +174,7 @@
   },
   "portal": {
     "workspace": "Workspace",
+    "navDashboard": "Dashboard",
     "navContracts": "Contracts",
     "navTools": "Tools",
     "navBilling": "Invoices",
@@ -187,6 +188,7 @@
   },
   "desk": {
     "title": "Desk",
+    "navWork": "My work",
     "navOverview": "Overview",
     "navContracts": "Contracts",
     "navCustomers": "Customers",
@@ -434,7 +436,8 @@
       "mapUnconfirmed": "Page map not confirmed"
     },
     "backToPortal": "Back to the portal",
-    "overviewNoDashboard": "The desk-wide dashboard is sales's view of the whole book. Here is where your own work is:",
+    "needsRootOwed_one": "{{n}} thing owed",
+    "needsRootOwed_other": "{{n}} things owed",
     "needsRootTitle": "Needs Root",
     "needsRootEmpty": "Nothing is waiting on Root.",
     "reviewQueueTitle": "Recent customer activity",
@@ -1944,6 +1947,26 @@
       "unanswered": {
         "staff": "The ticket “{{subject}}” is waiting for a reply."
       }
+    }
+  },
+  "home": {
+    "title": "Dashboard",
+    "lede": "What is waiting on you, and what Root owes you — across your contracts, requests, tickets and invoices.",
+    "yoursTitle": "Waiting on you",
+    "rootsTitle": "Waiting on Root",
+    "rootsLede": "Nothing for you to do here — Root has these.",
+    "openCurrent": "Open {{title}}",
+    "openTool": "Open a tool",
+    "nothingForYou": "Nothing is waiting on you right now.",
+    "emptyNothingYet": "You have no contracts or requests yet. Send Root a request describing what you need; it appears here as soon as Root replies.",
+    "emptyAllClear": "Nothing is waiting on you, and Root owes you nothing right now. When a draft is published, an invoice is issued or Root replies, it appears here.",
+    "work": {
+      "lede": "What is waiting on you — across the contracts, requests, tickets and invoices that are yours to work.",
+      "yoursTitle": "Your move",
+      "followingTitle": "Following up",
+      "followingLede": "These wait on the customer, and they are yours to chase.",
+      "emptyAllClear": "Nothing is waiting on you. New notes, requests, demos and invoices appear here as they arrive; the contracts you work on are under Contracts.",
+      "emptyNoWork": "No contract work belongs to your role, so there is nothing for this page to list. Your own sections are in the menu."
     }
   },
   "summary": {

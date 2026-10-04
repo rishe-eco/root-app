@@ -1,5 +1,5 @@
 import type { Locale } from '@/i18n';
-import { formatCount } from './format';
+import { calendarDate, formatCount } from './format';
 import type { AttentionItem, StepKind, TimelineItem, WaitingOn, WizardStep } from './queries';
 
 /**
@@ -45,6 +45,21 @@ export function defaultStep(wizard: WizardStep[]): WizardStep | null {
   return wizard.find((s) => s.status === 'CURRENT') ?? wizard[0] ?? null;
 }
 
+/**
+ * The step a link names (`?step=DESIGN`, and `&phase=<id>` for a demo) — journeys
+ * build plan J12: an attention item on the home screen opens the contract *on the
+ * step it is about*, so the route the API chose is a place, not just a page. An
+ * unknown step, a step this contract's road does not have, or a phase it does not
+ * own is no step at all (the wizard then opens where it always did), and a demo
+ * named without its phase is the first of the demos — never a guess at which.
+ */
+export function stepFromParams(wizard: WizardStep[], params: { get(name: string): string | null }): WizardStep | null {
+  const step = params.get('step');
+  if (!step) return null;
+  const phase = params.get('phase');
+  return wizard.find((s) => s.step === step && (phase === null || s.phaseId === phase)) ?? null;
+}
+
 const NUMERIC = new Set(['count']);
 
 /**
@@ -55,10 +70,14 @@ const NUMERIC = new Set(['count']);
  * the reader's language; versions and labels pass through as the Latin
  * identifiers they are.
  */
-export function attentionText(t: Translate, locale: Locale, item: AttentionItem, audience: Audience): string {
+export function attentionText(t: Translate, locale: Locale, item: Pick<AttentionItem, 'kind' | 'variant' | 'params'>, audience: Audience): string {
   const options: Record<string, unknown> = {};
   for (const { key, value } of item.params) options[key] = NUMERIC.has(key) ? Number(value) : value;
   if (typeof options.count === 'number') options.n = formatCount(options.count, locale);
+  // J12: a phase's number in the reader's digits (rule 14: a count, not an identifier), and a
+  // due day as the calendar day it is — the API sends ISO text, the reader gets a date.
+  if (typeof options.phase === 'string') options.phaseN = formatCount(Number(options.phase), locale);
+  if (typeof options.dueAt === 'string' && options.dueAt !== '') options.date = calendarDate(options.dueAt, locale);
   if (typeof options.titleFa === 'string' || typeof options.titleEn === 'string') {
     options.title = locale === 'fa' ? options.titleFa : options.titleEn;
   }
