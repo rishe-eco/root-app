@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import type { Contract, User, WizardStep } from '@/lib/queries';
 import { pick } from '@/lib/format';
-import { defaultStep, sameStep } from '@/lib/wizard';
+import { defaultStep, sameStep, showBuildTimeline } from '@/lib/wizard';
 import StatusArea from '@/components/StatusArea';
 import StepList from '@/components/StepList';
+import BuildTimeline from '@/components/BuildTimeline';
 import StepPanel from '@/components/StepPanels';
 import Timeline from '@/components/Timeline';
 import { CommitmentsCard, OriginRequestCard } from '@/components/RailCards';
@@ -69,6 +70,9 @@ export default function Wizard({ contract, me, asCustomer }: { contract: Contrac
 
             <StatusArea contract={contract} audience="customer" />
             <StepList steps={wizard} selected={selected} onSelect={setPicked} />
+            {/* J10 (Q22): the build, between the design's approval and the end — each phase with
+                the versions Root has shown. Derived on the API; nothing here is typed by hand. */}
+            {showBuildTimeline(wizard, contract.buildTimeline ?? []) ? <BuildTimeline entries={contract.buildTimeline ?? []} /> : null}
             {selected ? <StepPanel contract={contract} step={selected} audience="customer" me={me} asCustomer={asCustomer} /> : null}
           </div>
 

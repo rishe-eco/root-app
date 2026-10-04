@@ -199,11 +199,22 @@ test('nextMoveOn: the legacy road, read off what has been published', () => {
   }
 });
 
-test('nextMoveOn: every new-road step but the agreement and the design is Root’s until its own stage says otherwise', () => {
+test('nextMoveOn: every new-road step but the agreement, the design and a phase’s demo is Root’s until its own stage says otherwise', () => {
   const everything = facts({ designPublished: true, contractPublished: true, publishedDemoPhaseIds: ['p1'] });
-  for (const name of ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'MOCKUP', 'DEMO', 'SUMMARY']) {
-    assert.equal(nextMoveOn('AGREEMENT_FIRST', step(name, name === 'DEMO' ? 'p1' : null), everything), 'ROOT', name);
+  for (const name of ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'MOCKUP', 'SUMMARY']) {
+    assert.equal(nextMoveOn('AGREEMENT_FIRST', step(name), everything), 'ROOT', name);
   }
+});
+
+test('nextMoveOn (J10): the new road’s demo is the customer’s once the phase’s demo is out, and Root’s while a note on that phase waits for an answer', () => {
+  const at = (phase: string, over: Partial<MoveFacts>) => nextMoveOn('AGREEMENT_FIRST', step('DEMO', phase), facts(over));
+  assert.equal(at('p1', {}), 'ROOT', 'nothing published');
+  assert.equal(at('p1', { publishedDemoPhaseIds: ['p2'] }), 'ROOT', 'another phase’s demo');
+  assert.equal(at('p1', { publishedDemoPhaseIds: ['p1'] }), 'CUSTOMER');
+  assert.equal(at('p1', { publishedDemoPhaseIds: ['p1'], demoOpenFeedbackPhaseIds: [] }), 'CUSTOMER');
+  assert.equal(at('p1', { publishedDemoPhaseIds: ['p1'], demoOpenFeedbackPhaseIds: ['p1'] }), 'ROOT');
+  assert.equal(at('p1', { publishedDemoPhaseIds: ['p1'], demoOpenFeedbackPhaseIds: ['p2'] }), 'CUSTOMER', 'a note on another phase does not owe this one an answer');
+  assert.equal(nextMoveOn('AGREEMENT_FIRST', step('DEMO'), facts({ publishedDemoPhaseIds: ['p1'] })), 'ROOT', 'the placeholder demo (no phase) is never the customer’s');
 });
 
 test('nextMoveOn (J8): the new road’s design is the customer’s once a round is out, and Root’s while a note or a request for other options waits for an answer', () => {

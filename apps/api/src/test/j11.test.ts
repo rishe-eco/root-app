@@ -506,7 +506,7 @@ test('a closed contract leaves the designer and the developer; sales, ADMIN and 
   assert.equal((ok(await project(staff.DESIGNER)) as { project: unknown }).project, null);
   // …and what they could write is gone with it.
   assert.equal(
-    (await exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://nahal.staging.m-root.com") { id } }', {
+    (await exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://nahal.staging.localhost") { id } }', {
       as: staff.DEVELOPER,
       variables: { p: (await prisma.phase.findFirstOrThrow({ where: { contractId: f.contract.id } })).id },
     })).code,

@@ -28,14 +28,14 @@ describe('checkStagingUrl — production', () => {
   test('two labels, the bare base and an empty label are refused', () => {
     assert.equal(refusal('https://a.b.staging.m-root.com/'), 'STAGING_HOST_NOT_ALLOWED');
     assert.equal(refusal('https://staging.m-root.com/'), 'STAGING_HOST_NOT_ALLOWED');
-    assert.equal(refusal('https://.staging.m-root.com/'), 'INVALID_STAGING_URL');
+    assert.equal(refusal('https://.staging.m-root.com/'), 'STAGING_HOST_NOT_ALLOWED');
   });
 
   test('a label must be a DNS label: no leading or trailing hyphen, no underscore', () => {
     assert.equal(refusal('https://-a.staging.m-root.com/'), 'STAGING_HOST_NOT_ALLOWED');
     assert.equal(refusal('https://a-.staging.m-root.com/'), 'STAGING_HOST_NOT_ALLOWED');
     assert.equal(refusal('https://a_b.staging.m-root.com/'), 'STAGING_HOST_NOT_ALLOWED');
-    assert.equal(refusal(`https://${'a'.repeat(64)}.staging.m-root.com/`), 'INVALID_STAGING_URL', 'the parser itself refuses a label over 63 characters');
+    assert.equal(refusal(`https://${'a'.repeat(64)}.staging.m-root.com/`), 'STAGING_HOST_NOT_ALLOWED', 'a label over 63 characters is not a DNS label');
   });
 
   test('userinfo is refused whatever the host is', () => {

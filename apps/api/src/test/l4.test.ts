@@ -33,7 +33,7 @@ after(async () => {
 async function seedOpenFeedback(body = 'رنگِ دکمه اشتباه است') {
   const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
-  const demo = await prisma.demo.create({ data: { projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
+  const demo = await prisma.demo.create({ data: { projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com', readyAt: new Date(), readyVerifiedById: f.admin.id } });
   const page = await prisma.demoPage.create({
     data: { demoId: demo.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' },
   });

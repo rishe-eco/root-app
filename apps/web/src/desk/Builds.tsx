@@ -12,14 +12,15 @@ import {
   PROJECT_BUILDS,
   DECLARE_BUILD,
   PUBLISH_BUILD,
+  CONFIRM_PAGE_MAP,
   type User,
   type BuildPhase,
   type FeedbackItem,
   type ScopeItemAwaitingBuild,
   type Build,
   type BuildChangeInput,
-  type BuildChangeOutcome,
 } from '@/lib/queries';
+import { DispositionRow, DEFAULT_DISPOSITION, type Disposition } from '@/components/DispositionRow';
 
 /**
  * Builds and the resolution ledger (build plan L3b; spec §6's gap) — the
@@ -43,6 +44,12 @@ const KNOWN_ERROR_CODES = new Set([
   'NOT_OPEN',
   'SCOPE_ITEM_NOT_IN_BUILD',
   'DUPLICATE_DISPOSITION',
+  // J10: publishing a site build asks for a confirmed page map and a round to spend,
+  // and an approved phase takes no more builds.
+  'PAGE_MAP_UNCONFIRMED',
+  'ALLOWANCE_EXHAUSTED',
+  'STEP_LOCKED',
+  'NO_DEMO',
 ]);
 
 function errorMessage(err: unknown, t: T): string {
@@ -50,91 +57,6 @@ function errorMessage(err: unknown, t: T): string {
     ?.code;
   if (code && KNOWN_ERROR_CODES.has(code)) return t(`desk.builds.error.${code}`);
   return (err as { message?: string })?.message ?? String(err);
-}
-
-type Disposition = { outcome: BuildChangeOutcome; note: string; noteLang: 'fa' | 'en' };
-
-const DEFAULT_DISPOSITION: Disposition = { outcome: 'CARRIED_FORWARD', note: '', noteLang: 'en' };
-
-/**
- * One open feedback item, with the disposition the developer is about to
- * submit for it. Since S2 a submission is its own ratification (PD-2), so every
- * open item takes any disposition — and the disposition is the developer's
- * answer, which the customer reads.
- */
-function DispositionRow({
-  item,
-  locale,
-  t,
-  value,
-  onChange,
-}: {
-  item: FeedbackItem;
-  locale: 'fa' | 'en';
-  t: T;
-  value: Disposition;
-  onChange: (d: Disposition) => void;
-}) {
-  const target = item.demoPage
-    ? pick(item.demoPage, 'label', locale)
-    : item.frameLine
-      ? pick(item.frameLine, 'text', locale)
-      : '';
-
-  return (
-    <div className="card editor-card">
-      <div className="workspace-row">
-        <span className={`badge feedback-status-${item.status.toLowerCase()}`}>{t(`feedback.status.${item.status}`)}</span>
-        <span className="t-small">{target}</span>
-      </div>
-      {item.comments.map((c) => (
-        <p className="feedback-comment" key={c.id}>
-          <span className="t-eyebrow">{c.author.name}</span> — {c.body}
-        </p>
-      ))}
-      <div className="editor-grid-2">
-        <div className="field">
-          <label className="label">{t('desk.builds.outcomeLabel')}</label>
-          <select
-            className="input"
-            value={value.outcome}
-            onChange={(e) => onChange({ ...value, outcome: e.target.value as BuildChangeOutcome })}
-          >
-            <option value="CARRIED_FORWARD">{t('desk.builds.outcome.CARRIED_FORWARD')}</option>
-            <option value="ADDRESSED">{t('desk.builds.outcome.ADDRESSED')}</option>
-            <option value="DECLINED">{t('desk.builds.outcome.DECLINED')}</option>
-
-          </select>
-        </div>
-        {value.outcome !== 'CARRIED_FORWARD' ? (
-          <div className="field">
-            <label className="label">{t('desk.builds.noteLangLabel')}</label>
-            <select
-              className="input"
-              value={value.noteLang}
-              onChange={(e) => onChange({ ...value, noteLang: e.target.value as 'fa' | 'en' })}
-            >
-              <option value="en">{t('desk.builds.lang.en')}</option>
-              <option value="fa">{t('desk.builds.lang.fa')}</option>
-            </select>
-          </div>
-        ) : null}
-      </div>
-      {value.outcome !== 'CARRIED_FORWARD' ? (
-        <div className="field">
-          <label className="label">
-            {value.outcome === 'DECLINED' ? t('desk.builds.declineReasonLabel') : t('desk.builds.noteLabel')}
-          </label>
-          <textarea
-            className="input"
-            rows={2}
-            value={value.note}
-            onChange={(e) => onChange({ ...value, note: e.target.value })}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 type UnpromptedDraft = { note: string; noteLang: 'fa' | 'en' };
@@ -155,6 +77,7 @@ function BuildWorkspace({ phase }: { phase: BuildPhase }) {
 
   const [declareBuild, { loading: declaring }] = useMutation(DECLARE_BUILD);
   const [publishBuild, { loading: publishing }] = useMutation(PUBLISH_BUILD);
+  const [confirmPageMap, { loading: confirming }] = useMutation(CONFIRM_PAGE_MAP);
 
   const [ref, setRef] = useState('');
   const [dispositions, setDispositions] = useState<Record<string, Disposition>>({});
@@ -225,6 +148,16 @@ function BuildWorkspace({ phase }: { phase: BuildPhase }) {
       await Promise.all([queueQuery.refetch(), scopeQuery.refetch(), buildsQuery.refetch()]);
     } catch (err) {
       setError(errorMessage(err, t));
+    }
+  }
+
+  /** J10: the page map is confirmed per build before it can be published. */
+  async function onConfirmMap(buildId: string) {
+    setPublishError(null);
+    try {
+      await confirmPageMap({ variables: { buildId } });
+    } catch (err) {
+      setPublishError(errorMessage(err, t));
     }
   }
 
@@ -326,9 +259,23 @@ function BuildWorkspace({ phase }: { phase: BuildPhase }) {
                 {b.publishedAt ? (
                   <span className="badge">{t('desk.builds.published')}</span>
                 ) : (
-                  <button className="btn btn-secondary btn-sm" type="button" onClick={() => onPublish(b.id)} disabled={publishing}>
-                    {t('desk.builds.publish')}
-                  </button>
+                  <>
+                    {b.pageMapConfirmedAt ? (
+                      <span className="badge">{t('desk.builds.mapConfirmed')}</span>
+                    ) : (
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => onConfirmMap(b.id)} disabled={confirming}>
+                        {t('desk.builds.confirmMap')}
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      type="button"
+                      onClick={() => onPublish(b.id)}
+                      disabled={publishing || !b.pageMapConfirmedAt}
+                    >
+                      {t('desk.builds.publish')}
+                    </button>
+                  </>
                 )}
               </div>
               {publishError ? <p className="error">{publishError}</p> : null}

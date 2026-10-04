@@ -51,7 +51,25 @@ function usePhoneViewport(): boolean {
   return isPhone;
 }
 
-export default function DemoViewport({ demo, src: given }: { demo: Demo; /** The page to frame when it is not `demo.stagingUrl` — a mockup's grant URL. */ src?: string | null }) {
+export default function DemoViewport({
+  demo,
+  src: given,
+  onFirstReport,
+}: {
+  demo: Demo;
+  /** The page to frame when it is not `demo.stagingUrl` — a mockup's grant URL. */
+  src?: string | null;
+  /**
+   * **Readiness (journeys build plan J10, trap 1) — the browser's claim.** Called
+   * once per framed address, with the message's origin, when the reporter snippet's
+   * *first* report arrives **from the frame's own origin** — the very check below
+   * (`acceptsFrameMessage`), which is the only place the portal can know it: the
+   * server cannot see `postMessage` origins at all. The parent decides whether to
+   * record it (`verifyDemoReadiness`, for the phase's developer or sales); a viewport
+   * that is given no callback — the customer's — records nothing.
+   */
+  onFirstReport?: (origin: string) => void;
+}) {
   const { t } = useTranslation();
   const isPhone = usePhoneViewport();
   const [preset, setPreset] = useState<Preset>('desktop');
@@ -60,9 +78,14 @@ export default function DemoViewport({ demo, src: given }: { demo: Demo; /** The
   const [reportPath] = useMutation(REPORT_DEMO_PATH);
 
   const src = given ?? demo.stagingUrl;
+  // The callback is read through a ref so a parent re-rendering with a fresh closure
+  // does not tear down the message listener — a report arriving in that gap would be lost.
+  const firstReport = useRef(onFirstReport);
+  firstReport.current = onFirstReport;
 
   useEffect(() => {
     if (!src) return;
+    let reported = false;
     function onMessage(event: MessageEvent) {
       // L2.2: validate the *sender's* origin against the demo's own declared
       // staging host before trusting anything in the payload — the portal's
@@ -72,6 +95,10 @@ export default function DemoViewport({ demo, src: given }: { demo: Demo; /** The
       if (!acceptsFrameMessage(event.origin, src)) return;
       const data = event.data as { source?: unknown; path?: unknown } | null;
       if (!data || data.source !== 'root-demo-reporter' || typeof data.path !== 'string') return;
+      if (!reported) {
+        reported = true;
+        firstReport.current?.(event.origin);
+      }
       reportPath({ variables: { demoId: demo.id, path: data.path } })
         .then((res) => setMatched(res.data?.reportDemoPath?.page ?? null))
         .catch(() => {

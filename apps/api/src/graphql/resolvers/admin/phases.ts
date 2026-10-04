@@ -274,9 +274,11 @@ export const phaseMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'builds.author');
-    const stagingUrl = stagingUrlOrThrow(args.stagingUrl);
     const phase = await loadPhase(args.phaseId);
     await requireBuildAuthorOnPhase(ctx, phase.id);
+    // The host rule after the guards, so a caller who may not touch this phase is
+    // told that and nothing about what a staging URL may look like (J10).
+    const stagingUrl = stagingUrlOrThrow(args.stagingUrl);
     await prisma.$transaction(async (tx) => {
       await openDemo(tx, phase.id);
       await tx.demo.create({

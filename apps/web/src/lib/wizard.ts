@@ -90,3 +90,22 @@ export function captionFor(
     who: t(`wizard.who.${summary.nextMoveOn}`),
   });
 }
+
+/**
+ * Whether the build timeline (journeys build plan J10, Q22) is on the customer's
+ * wizard: once every step before the first demo is done — the design, and the mockup
+ * where the road has one — and until the summary closes the contract. That is the
+ * stretch in which the site is being built and a demo may not be out yet, which is
+ * where the wizard had nothing to show (F6). It keeps showing through the demos: it
+ * is the one place the phases and their versions read as a whole.
+ */
+export function showBuildTimeline(
+  wizard: ReadonlyArray<Pick<WizardStep, 'step' | 'status'>>,
+  entries: ReadonlyArray<unknown>,
+): boolean {
+  if (entries.length === 0) return false;
+  const firstDemo = wizard.findIndex((s) => s.step === 'DEMO');
+  if (firstDemo < 0) return false;
+  if (!wizard.slice(0, firstDemo).every((s) => s.status === 'DONE')) return false;
+  return !wizard.some((s) => s.step === 'SUMMARY' && s.status === 'DONE');
+}

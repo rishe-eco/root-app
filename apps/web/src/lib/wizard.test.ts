@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { calendarDate } from './format.js';
-import { STEP_KINDS, attentionText, captionFor, defaultStep, sameStep, stepLabel, timelineText } from './wizard.js';
+import { STEP_KINDS, attentionText, captionFor, defaultStep, sameStep, showBuildTimeline, stepLabel, timelineText } from './wizard.js';
 import type { AttentionItem, TimelineItem, WizardStep } from './queries.js';
 
 const LOCALES = join(dirname(fileURLToPath(import.meta.url)), '../i18n/locales');
@@ -128,4 +128,17 @@ test('calendarDate renders the stored day in UTC, whatever the machine’s zone'
     if (original === undefined) delete process.env.TZ;
     else process.env.TZ = original;
   }
+});
+
+test('showBuildTimeline (J10): from the design’s approval until the summary closes — and not before there is anything to show', () => {
+  const road = (...states: Array<[WizardStep['step'], WizardStep['status']]>) => states.map(([stepName, status]) => step({ step: stepName, status }));
+  const entries = [{}];
+  const custom = road(['REQUIREMENTS', 'DONE'], ['AGREEMENT', 'DONE'], ['DESIGN', 'DONE'], ['MOCKUP', 'DONE'], ['DEMO', 'CURRENT'], ['DEMO', 'UPCOMING'], ['SUMMARY', 'UPCOMING']);
+  assert.equal(showBuildTimeline(custom, entries), true, 'design and mockup approved, no demo yet');
+  assert.equal(showBuildTimeline(road(['REQUIREMENTS', 'DONE'], ['DESIGN', 'DONE'], ['MOCKUP', 'CURRENT'], ['DEMO', 'UPCOMING']), entries), false, 'the mockup is still being reviewed');
+  assert.equal(showBuildTimeline(road(['REQUIREMENTS', 'DONE'], ['DESIGN', 'CURRENT'], ['DEMO', 'UPCOMING']), entries), false, 'the design is not approved yet');
+  assert.equal(showBuildTimeline(road(['REQUIREMENTS', 'DONE'], ['DESIGN', 'DONE'], ['DEMO', 'CURRENT'], ['SUMMARY', 'UPCOMING']), entries), true, 'the pre-made road has no mockup');
+  assert.equal(showBuildTimeline(custom, []), false, 'no phases, nothing to show');
+  assert.equal(showBuildTimeline(road(['DESIGN', 'DONE'], ['DEMO', 'DONE'], ['SUMMARY', 'DONE']), entries), false, 'delivered');
+  assert.equal(showBuildTimeline(road(['DESIGN', 'DONE'], ['SUMMARY', 'UPCOMING']), entries), false, 'a road with no demo step');
 });

@@ -1152,13 +1152,13 @@ test('the developer\'s demo surface answers NOT_FOUND for a MOCKUP demo, and wor
 
 test('createDemo names the demo\'s project and kind; the demo\'s pages and frame still work', async () => {
   const phase = await aPhase();
-  ok(await exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://n.example.com") { id } }', { as: staff.DEVELOPER, variables: { p: phase.id } }));
+  ok(await exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://n.staging.localhost") { id } }', { as: staff.DEVELOPER, variables: { p: phase.id } }));
   const demo = await prisma.demo.findFirstOrThrow();
   assert.equal(demo.kind, 'SITE');
   assert.equal(demo.projectId, f.contract.projectId);
   assert.equal(demo.phaseId, phase.id);
   assert.equal(demo.contractId, null);
-  assert.equal(demo.stagingUrl, 'https://n.example.com');
+  assert.equal(demo.stagingUrl, 'https://n.staging.localhost/', 'stored in the form the host rule checked (J10)');
 });
 
 test('projectBuilds lists SITE builds only; publishBuild on a MOCKUP build is NOT_FOUND on the developer\'s surface', async () => {
@@ -1175,6 +1175,7 @@ test('projectBuilds lists SITE builds only; publishBuild on a MOCKUP build is NO
 
   assert.equal((await exec('mutation($b: ID!){ publishBuild(buildId: $b) { id } }', { as: staff.DEVELOPER, variables: { b: mockupBuild.id } })).code, 'NOT_FOUND');
   assert.equal((await prisma.build.findUniqueOrThrow({ where: { id: mockupBuild.id } })).publishedAt !== null, true, 'the seeded publish is untouched');
+  await prisma.build.update({ where: { id: declared.id }, data: { pageMapConfirmedAt: new Date() } }); // J10: the page map is confirmed before a site build publishes
   ok(await exec('mutation($b: ID!){ publishBuild(buildId: $b) { id } }', { as: staff.DEVELOPER, variables: { b: declared.id } }));
 });
 

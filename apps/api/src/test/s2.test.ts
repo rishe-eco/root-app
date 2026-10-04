@@ -128,7 +128,8 @@ const answer = (as: User, itemId: string, body: string, resolution: 'ADDRESSED' 
 
 const APPROVE_ANSWER = 'mutation($c: ID!, $b: String){ approveAnswer(commentId: $c, body: $b) { id status comments { id body originalBody approval } } }';
 const DECLINE_ANSWER = 'mutation($c: ID!, $r: String!){ declineAnswer(commentId: $c, reason: $r) { id status } }';
-const APPROVE_STEP = 'mutation($c: ID!, $s: StepKind!, $p: ID){ approveStep(contractId: $c, step: $s, phaseId: $p) { id wizard { step phaseId locked } } }';
+// J10: a phase's demo is approved through `approveDemo`, the one door (S2's generic `approveStep` is gone).
+const APPROVE_DEMO = 'mutation($c: ID!, $p: ID!){ approveDemo(contractId: $c, phaseId: $p) { id wizard { step phaseId locked } } }';
 
 const ITEMS = `
   query($c: ID!, $as: Boolean, $s: StepKind) {
@@ -392,7 +393,7 @@ test('approval locks the step for everyone: the customer, and staff who answer, 
   const pending = await prisma.feedbackComment.create({ data: { feedbackItemId: item.id, authorId: designer.id, body: 'late', approval: 'PENDING' } });
   await prisma.feedbackComment.update({ where: { id: pending.id }, data: { approval: 'DECLINED', approvalNote: 'moot' } });
 
-  ok(await exec(APPROVE_STEP, { as: f.customer, variables: { c: f.contract.id, s: 'DEMO', p: phase.id } }));
+  ok(await exec(APPROVE_DEMO, { as: f.customer, variables: { c: f.contract.id, p: phase.id } }));
 
   const target = { demoId: home.demoId, demoPageId: home.id };
   assert.equal((await submit('DEMO', target, 'one more', { phaseId: phase.id })).code, 'STEP_LOCKED', 'no new feedback');
@@ -402,7 +403,7 @@ test('approval locks the step for everyone: the customer, and staff who answer, 
   const late = await prisma.feedbackComment.create({ data: { feedbackItemId: item.id, authorId: designer.id, body: 'x', approval: 'PENDING' } });
   assert.equal((await exec(APPROVE_ANSWER, { as: sales, variables: { c: late.id, b: null } })).code, 'STEP_LOCKED');
   assert.equal((await exec(DECLINE_ANSWER, { as: sales, variables: { c: late.id, r: 'r' } })).code, 'STEP_LOCKED');
-  assert.equal((await exec(APPROVE_STEP, { as: f.customer, variables: { c: f.contract.id, s: 'DEMO', p: phase.id } })).code, 'STEP_LOCKED', 'approved once');
+  assert.equal((await exec(APPROVE_DEMO, { as: f.customer, variables: { c: f.contract.id, p: phase.id } })).code, 'STEP_LOCKED', 'approved once');
 });
 
 // =================================================================================
@@ -412,7 +413,7 @@ test('approval locks the step for everyone: the customer, and staff who answer, 
 test('approveStep is refused while an item is open, then while an answer waits for sales — and only then accepts', async () => {
   const { phase, home } = await seedDemo();
   const item = await submitOk('DEMO', { demoId: home.demoId, demoPageId: home.id }, 'Fix it', { phaseId: phase.id });
-  const approve = () => exec(APPROVE_STEP, { as: f.customer, variables: { c: f.contract.id, s: 'DEMO', p: phase.id } });
+  const approve = () => exec(APPROVE_DEMO, { as: f.customer, variables: { c: f.contract.id, p: phase.id } });
 
   const open = await approve();
   assert.equal(open.code, 'STEP_HAS_OPEN_FEEDBACK');
@@ -429,7 +430,7 @@ test('approveStep is refused while an item is open, then while an answer waits f
   ok(await exec(DECLINE_ANSWER, { as: sales, variables: { c: pending.id, r: 'Superseded' } }));
 
   const approved = ok(await approve());
-  const wizard = (approved.approveStep as { wizard: Array<{ step: string; phaseId: string | null; locked: boolean }> }).wizard;
+  const wizard = (approved.approveDemo as { wizard: Array<{ step: string; phaseId: string | null; locked: boolean }> }).wizard;
   assert.equal(wizard.find((s) => s.step === 'DEMO' && s.phaseId === phase.id)!.locked, true, 'the wizard shows the lock');
   assert.equal(wizard.find((s) => s.step === 'DESIGN')!.locked, false, 'and only that step');
 });
@@ -443,7 +444,7 @@ test('approving accepts everything at once: ADDRESSED becomes ACCEPTED, DECLINED
   ok(await answer(developer, b.id, 'no', 'DECLINED'));
   await prisma.feedbackItem.update({ where: { id: c.id }, data: { status: 'MOVED' } });
 
-  ok(await exec(APPROVE_STEP, { as: f.customer, variables: { c: f.contract.id, s: 'DEMO', p: phase.id } }));
+  ok(await exec(APPROVE_DEMO, { as: f.customer, variables: { c: f.contract.id, p: phase.id } }));
 
   const rows = await prisma.feedbackItem.findMany({ where: { id: { in: [a.id, b.id, c.id] } }, orderBy: { createdAt: 'asc' } });
   assert.deepEqual(rows.map((r) => r.status), ['ACCEPTED', 'DECLINED', 'MOVED']);
@@ -457,32 +458,29 @@ test('approving accepts everything at once: ADDRESSED becomes ACCEPTED, DECLINED
   assert.equal(approval.approvedById, f.customer.id);
 });
 
-test('approveStep: only the contract’s customer, only the steps that are approved this way, only a step on the road', async () => {
+test('approveDemo: only the contract’s customer, only a phase of this contract, only on the new road — and the generic approveStep no longer exists', async () => {
   const { phase } = await seedDemo();
-  const go = (as: User, s: StepKind, p: string | null = null) => exec(APPROVE_STEP, { as, variables: { c: f.contract.id, s, p } });
+  const go = (as: User, p: string) => exec(APPROVE_DEMO, { as, variables: { c: f.contract.id, p } });
 
   // Root does not approve for the customer, and a stranger cannot even see the contract.
-  assert.equal((await go(f.admin, 'DEMO', phase.id)).code, 'NOT_FOUND');
-  assert.equal((await go(sales, 'DEMO', phase.id)).code, 'NOT_FOUND');
-  assert.equal((await go(f.stranger, 'DEMO', phase.id)).code, 'NOT_FOUND');
+  assert.equal((await go(f.admin, phase.id)).code, 'NOT_FOUND');
+  assert.equal((await go(sales, phase.id)).code, 'NOT_FOUND');
+  assert.equal((await go(f.stranger, phase.id)).code, 'NOT_FOUND');
 
-  // The agreement is J7's gate; the steps it seals are approved with it. The design
-  // has its own door since J8 (`approveDesign`, with the path's completeness as its
-  // precondition), so it is not approved here either — one way to approve it. The
-  // mockup's is `approveMockup` since J9b (a published iteration is its precondition).
-  for (const step of ['AGREEMENT', 'REQUIREMENTS', 'SCOPE', 'DRAFT', 'DESIGN', 'MOCKUP', 'SUMMARY'] as const) {
-    assert.equal((await go(f.customer, step)).code, 'STEP_NOT_APPROVABLE', step);
-  }
+  // A phase that is not on this contract's road — an unknown id — is not a step that exists.
+  assert.equal((await go(f.customer, 'not-a-phase')).code, 'STEP_NOT_ON_ROAD');
   assert.equal((await prisma.stepApproval.count()), 0, 'nothing was written by a refusal');
 
-  // A demo needs its phase — the placeholder demo (no phase) can never take an approval.
-  assert.equal((await go(f.customer, 'DEMO', null)).code, 'STEP_NOT_ON_ROAD');
-  assert.equal((await go(f.customer, 'DEMO', 'not-a-phase')).code, 'STEP_NOT_ON_ROAD');
-  assert.equal((await go(f.customer, 'MOCKUP', phase.id)).code, 'STEP_NOT_APPROVABLE', 'the mockup has its own door, phase or not');
+  // J10: one way to approve each step, so S2's generic `approveStep` is gone from the schema
+  // altogether (as L3 retired `ratifyFeedback`): the agreement is `approveContract`, the design
+  // `approveDesign`, the mockup `approveMockup`, a phase's demo `approveDemo`.
+  const sdl = readFileSync(fileURLToPath(new URL('../graphql/typeDefs.ts', import.meta.url)), 'utf8');
+  assert.equal(/\bapproveStep\b\s*\(/.test(sdl), false, 'approveStep is not a mutation any more');
+  assert.equal((await exec('mutation($c: ID!){ approveStep(contractId: $c, step: DEMO) { id } }', { as: f.customer, variables: { c: f.contract.id } })).code, 'GRAPHQL_VALIDATION_FAILED');
 
-  // The legacy road approves through its own gate.
+  // The legacy road accepts a phase through its scope items, not through here.
   await prisma.contract.update({ where: { id: f.contract.id }, data: { sequence: 'DESIGN_FIRST' } });
-  assert.equal((await go(f.customer, 'DEMO', phase.id)).code, 'STEP_NOT_APPROVABLE');
+  assert.equal((await go(f.customer, phase.id)).code, 'STEP_NOT_APPROVABLE');
 });
 
 test('approving DESIGN accepts and locks design feedback and no other step’s', async () => {
@@ -869,7 +867,7 @@ test('the build queue is the demo step’s, on the phase: another step’s open 
   // Carrying forward is not resolving: the item stays open and still blocks the step.
   ok(await exec(DECLARE, { as: developer, variables: { p: otherPhase.id, c: [{ feedbackItemId: phase2Item.id, outcome: 'CARRIED_FORWARD' }] } }));
   assert.equal((await prisma.feedbackItem.findUniqueOrThrow({ where: { id: phase2Item.id } })).status, 'OPEN');
-  assert.equal((await exec(APPROVE_STEP, { as: f.customer, variables: { c: f.contract.id, s: 'DEMO', p: otherPhase.id } })).code, 'STEP_HAS_OPEN_FEEDBACK');
+  assert.equal((await exec(APPROVE_DEMO, { as: f.customer, variables: { c: f.contract.id, p: otherPhase.id } })).code, 'STEP_HAS_OPEN_FEEDBACK');
 });
 
 test('a build’s dispositions also serve the ledger: reopened and addressed again in build N+2, every hop is kept', async () => {
@@ -1237,7 +1235,7 @@ test('Acceptance: the customer comments; the developer answers directly; the des
   assert.equal((await view(f.customer)).find((i) => i.id === c.id)!.status, 'OPEN', 'the customer reopened a declined item');
 
   // 6. Approval is refused while anything is open…
-  const approve = () => exec(APPROVE_STEP, { as: f.customer, variables: { c: f.contract.id, s: 'DEMO', p: phase.id } });
+  const approve = () => exec(APPROVE_DEMO, { as: f.customer, variables: { c: f.contract.id, p: phase.id } });
   assert.equal((await approve()).code, 'STEP_HAS_OPEN_FEEDBACK');
 
   // …until every item is resolved (b answered by the developer; c answered by sales, and kept declined).

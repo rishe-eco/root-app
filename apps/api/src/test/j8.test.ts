@@ -589,7 +589,7 @@ test('approving a pre-made design: DESIGN_INCOMPLETE until a concept is chosen, 
   assert.ok(sms.some((s) => s.to === staff.DESIGNER.phone));
 });
 
-test('there is one door to approve the design: approveStep refuses DESIGN, and approveDesign is the only mutation that writes its StepApproval', async () => {
+test('there is one door to approve the design: there is no generic approveStep, and approveDesign is the only mutation that writes its StepApproval', async () => {
   await reachDesign();
   const a = await makeTheme('Astra');
   ok(await propose(a.id));
@@ -598,8 +598,8 @@ test('there is one door to approve the design: approveStep refuses DESIGN, and a
   ok(await exec('mutation($c: ID!, $k: ID!){ chooseConcept(contractId: $c, conceptId: $k) { id } }', { as: f.customer, variables: { c: f.contract.id, k: round[0].id } }));
   assert.equal(
     (await exec('mutation($c: ID!){ approveStep(contractId: $c, step: DESIGN) { id } }', { as: f.customer, variables: { c: f.contract.id } })).code,
-    'STEP_NOT_APPROVABLE',
-    'even a complete design is not approved through the generic door',
+    'GRAPHQL_VALIDATION_FAILED',
+    'even a complete design cannot be approved through a generic door: there is none (J10 retired approveStep)',
   );
   assert.equal(await prisma.stepApproval.count({ where: { step: 'DESIGN' } }), 0);
   // The legacy road approves through its own gate.

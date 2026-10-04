@@ -5,7 +5,7 @@ import { useLocale } from '@/lib/locale';
 import { pick, fullDateTime, formatCount } from '@/lib/format';
 import {
   ANSWER_FEEDBACK,
-  APPROVE_STEP,
+  APPROVE_DEMO,
   CREATE_TICKET_FROM_FEEDBACK,
   SUBMIT_FEEDBACK,
   type FeedbackComment,
@@ -439,7 +439,7 @@ export default function FeedbackPanel({
 
   const [submitFeedback, { loading: submitting }] = useMutation(SUBMIT_FEEDBACK);
   const [answerFeedback, { loading: answering }] = useMutation(ANSWER_FEEDBACK);
-  const [approveStep, { loading: approving }] = useMutation(APPROVE_STEP);
+  const [approveDemo, { loading: approving }] = useMutation(APPROVE_DEMO);
 
   const [pending, setPending] = useState<Record<string, Intercepted>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -511,8 +511,11 @@ export default function FeedbackPanel({
 
   async function approve() {
     setApproveError(null);
+    // J10: the one step approved from here is a phase's demo (the agreement, the design
+    // and the mockup each have their own door), so there is always a phase.
+    if (!phaseId) return;
     try {
-      await approveStep({ variables: { contractId, step, phaseId } });
+      await approveDemo({ variables: { contractId, phaseId } });
       onChanged();
     } catch (err) {
       setApproveError(errorText(err));

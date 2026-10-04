@@ -5,8 +5,6 @@ import type { Contract, StepKind, User, WizardStep } from '@/lib/queries';
 import { instantDate } from '@/lib/format';
 import { stepLabel, type Audience } from '@/lib/wizard';
 import Lock from '@/components/Lock';
-import DemoViewport from '@/components/DemoViewport';
-import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
 import RequirementsPanel from '@/components/RequirementsPanel';
 import ScopePanel from '@/components/ScopePanel';
 import DraftPanel from '@/components/DraftPanel';
@@ -14,7 +12,7 @@ import AgreementPanel from '@/components/AgreementPanel';
 import DesignPanel from '@/components/DesignPanel';
 import SummaryPanel from '@/components/SummaryPanel';
 import MockupPanel from '@/components/MockupPanel';
-import { can } from '@/lib/access';
+import DemoPanel from '@/components/DemoPanel';
 
 /**
  * One panel per wizard step (journeys build plan J3) — the portal's wizard and
@@ -45,7 +43,9 @@ import { can } from '@/lib/access';
  * - J9  `MOCKUP`       — ✔ built (J9b): the mockup browsed in the portal's viewport, a
  *   note per page, "mockup 2 of 3", and approving it (`MockupPanel`; the designer's
  *   half — upload, declare, map, publish — in `MockupAuthor`)
- * - J10 `DEMO`         — per phase: submission, readiness, approval
+ * - J10 `DEMO`         — ✔ built: one phase's demo in the viewport, "version 2 of 3", a note per
+ *   page, and the customer's approval of that phase (`DemoPanel`); the developer's half —
+ *   readiness, the page map, each version — is `DemoSubmission`, in the desk's Phases tab
  * - J11 `SUMMARY`      — ✔ built: the record (`SummaryDocument`), and for staff the handover and the close (`SummaryPanel`)
  *
  * A panel gets the contract (with `wizard`, `statusSummary`, `attention`
@@ -66,37 +66,6 @@ export type StepPanelProps = {
   asCustomer?: boolean;
 };
 
-/**
- * S2: the demo step, per phase — the live site and its feedback. The customer
- * comments and approves the step from here (`approveStep`, refused with a
- * sentence while anything is open); staff see the same thread and answer it.
- * Authoring the demo stays in the desk's Phases tab. J10 extends this panel
- * with submission, readiness and its own approval preconditions.
- */
-function DemoStepPanel({ contract, step, audience, me, asCustomer = false }: StepPanelProps) {
-  const phase = contract.project?.phases.find((p) => p.id === step.phaseId);
-  const demo = phase?.demos[0];
-  if (!phase || !demo) return <NotYet step={step} audience={audience} />;
-  return (
-    <>
-      <DemoViewport demo={demo} />
-      <DemoFeedbackPanel
-        demo={demo}
-        contractId={contract.id}
-        phaseId={phase.id}
-        audience={audience}
-        canAuthor={false}
-        canAnswer={audience === 'staff' && can(me, 'feedback.answer')}
-        answerDirect={can(me, 'answers.direct.demo')}
-        locked={step.locked}
-        canApprove={audience === 'customer'}
-        asCustomer={asCustomer}
-        onChanged={() => undefined}
-      />
-    </>
-  );
-}
-
 const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {
   REQUIREMENTS: RequirementsPanel,
   SCOPE: ScopePanel,
@@ -105,7 +74,7 @@ const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {
   DESIGN: DesignPanel,
   SUMMARY: SummaryPanel,
   MOCKUP: MockupPanel,
-  DEMO: DemoStepPanel,
+  DEMO: DemoPanel,
 };
 
 function NotYet({ step, audience }: Pick<StepPanelProps, 'step' | 'audience'>) {

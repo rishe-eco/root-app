@@ -34,7 +34,7 @@ import { storage } from '../lib/storage.js';
  * `NOT_SIGNED` (J13) likewise: issuing a payment plan's first row on a contract
  * nobody has signed is what "allowed" looks like for that row.
  */
-type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED' | 'NOT_SIGNED' | 'NO_DRAFT' | 'DESIGN_INCOMPLETE' | 'NO_PUBLISHED_MOCKUP' | 'PHASES_NOT_ACCEPTED';
+type Outcome = 'OK' | 'FORBIDDEN' | 'NOT_ASSIGNED' | 'NOT_FOUND' | 'SCOPE_UNCONFIRMED' | 'NOT_SIGNED' | 'NO_DRAFT' | 'DESIGN_INCOMPLETE' | 'NO_PUBLISHED_MOCKUP' | 'PHASES_NOT_ACCEPTED' | 'NO_PUBLISHED_DEMO';
 
 let f: Fixture;
 const staff: Record<string, User> = {};
@@ -341,10 +341,31 @@ const OPS: Record<string, (as: User) => ReturnType<typeof exec>> = {
   'customer · approve the design': (as) =>
     exec('mutation($c: ID!){ approveDesign(contractId: $c) { id } }', { as, variables: { c: f.contract.id } }),
   'builds.author · demo CRUD': (as) =>
-    exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://nahal.staging.m-root.com") { id } }', {
+    exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://nahal.staging.localhost") { id } }', {
       as,
       variables: { p: phaseId },
     }),
+  // Journeys build plan J10. Readiness is the phase's developer's or sales' — a browser's claim, recorded with who.
+  'builds.author · confirm a build’s page map': async (as) => {
+    const build = await prisma.build.create({
+      data: { kind: 'SITE', projectId: f.contract.projectId, phaseId, number: 1, declaredById: staff.DEVELOPER.id },
+    });
+    return exec('mutation($b: ID!){ confirmPageMap(buildId: $b) { id } }', { as, variables: { b: build.id } });
+  },
+  'readiness · record that the staging site reported': (as) =>
+    exec('mutation($d: ID!, $o: String!){ verifyDemoReadiness(demoId: $d, origin: $o) { id } }', {
+      as,
+      variables: { d: demoId, o: 'https://nahal.staging.m-root.com' },
+    }),
+  'customer · approve a phase’s demo': (as) =>
+    exec('mutation($c: ID!, $p: ID!){ approveDemo(contractId: $c, phaseId: $p) { id } }', { as, variables: { c: f.contract.id, p: phaseId } }),
+  'contracts.author · extend a demo’s allowance': async (as) => {
+    await prisma.contractBrief.update({ where: { contractId: f.contract.id }, data: { demoIterationsPerPhase: 2 } });
+    return exec(
+      'mutation($c: ID!, $p: ID!){ extendAllowance(contractId: $c, step: DEMO, phaseId: $p, extra: 1, reason: "They asked for another look") { id } }',
+      { as, variables: { c: f.contract.id, p: phaseId } },
+    );
+  },
   'builds.author · builds queue': (as) =>
     exec('query($p: ID!){ openFeedbackQueue(projectId: $p) { id } }', { as, variables: { p: f.contract.projectId } }),
   'dependencies.verifyGeneral · verify': (as) =>
@@ -444,6 +465,7 @@ const ND = 'NO_DRAFT' as const;
 const DI = 'DESIGN_INCOMPLETE' as const;
 const PNA = 'PHASES_NOT_ACCEPTED' as const;
 const NP = 'NO_PUBLISHED_MOCKUP' as const;
+const NPD = 'NO_PUBLISHED_DEMO' as const;
 
 /**
  * The matrix. Columns: ADMIN, SALES, DESIGNER, DESIGNER_UNASSIGNED,
@@ -488,6 +510,11 @@ const MATRIX: Record<keyof typeof OPS, Outcome[]> = {
   'customer · approve the design':        [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  DI],
   'builds.author · demo CRUD':            ['OK', F,    F,    F,    'OK', N,    F,   F,   F],
   'builds.author · builds queue':         ['OK', F,    F,    F,    'OK', N,    F,   F,   F],
+  'builds.author · confirm a build’s page map': ['OK', F, F,   F,    'OK', N,    F,   F,   F],
+  // Readiness is also sales' (contracts.author): the claim is about a deployment someone answers for.
+  'readiness · record that the staging site reported': ['OK', 'OK', F, F, 'OK', N, F, F, F],
+  'customer · approve a phase’s demo':     [NF,   NF,   NF,   NF,   NF,   NF,   NF,  NF,  NPD],
+  'contracts.author · extend a demo’s allowance': ['OK', 'OK', F, F,  F,    F,    F,   F,   F],
   'dependencies.verifyGeneral · verify':  ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],
   'dependencies.verifyTechnical · verify': ['OK', F,    F,    F,    'OK', N,    F,   F,   F],
   'billing.manage · ledger':              ['OK', 'OK', F,    F,    F,    F,    F,   F,   F],

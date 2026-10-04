@@ -71,6 +71,10 @@ export type MoveFacts = {
   contractPublished: boolean;
   /** Phases with a demo the customer can open. */
   publishedDemoPhaseIds: string[];
+  /** J10: phases with a demo note waiting for Root's answer — a phase whose demo is
+   *  out is then Root's move, not the customer's, as the design is (J8). Optional
+   *  for the same reason `designOpenFeedback` is. */
+  demoOpenFeedbackPhaseIds?: string[];
 };
 
 export type StatusSummary = {
@@ -120,6 +124,13 @@ export function nextMoveOn(sequence: ContractSequence, step: WizardStep, facts: 
   // The new road's design (J8): the customer's to choose or approve once a round
   // is out — unless they have asked for something and Root owes an answer.
   if (step.step === 'DESIGN') return facts.designPublished && facts.designOpenFeedback !== true ? 'CUSTOMER' : 'ROOT';
+  // The new road's demo (J10), per phase: the customer's to review and approve once
+  // the phase's demo is out — unless they have commented and Root owes an answer.
+  if (step.step === 'DEMO') {
+    const out = step.phaseId !== null && facts.publishedDemoPhaseIds.includes(step.phaseId);
+    const owed = step.phaseId !== null && (facts.demoOpenFeedbackPhaseIds ?? []).includes(step.phaseId);
+    return out && !owed ? 'CUSTOMER' : 'ROOT';
+  }
   return 'ROOT';
 }
 

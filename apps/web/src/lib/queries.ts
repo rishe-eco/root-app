@@ -253,7 +253,8 @@ export type DemoUnmatchedPath = {
 // unrelated Review Room).
 // ---------------------------------------------------------------------------
 
-export type DemoFrameLineKind = 'NEW' | 'KNOWN_MISSING' | 'TEMPORARY' | 'DECIDED';
+/** J10: `HOW_TO_TEST` is typed by the developer by hand — staging-only access details, never a production credential. */
+export type DemoFrameLineKind = 'NEW' | 'KNOWN_MISSING' | 'TEMPORARY' | 'DECIDED' | 'HOW_TO_TEST';
 
 /** Only what interception (D4) and the frame display need from the source item. */
 export type FrameLineScopeItemRef = {
@@ -414,6 +415,11 @@ export type Demo = {
   reviewWindowEnd: string | null;
   /** Null means draft — build plan L3: "a demo cannot be published naked." */
   publishedAt: string | null;
+  /** J10, staff only: when a staff member's browser first heard the reporter snippet
+   *  report from this demo's own origin, and whose. A browser's claim — never "the
+   *  server verified it". Null until then, and again after a change of staging URL. */
+  readyAt?: string | null;
+  readyVerifiedBy?: Pick<User, 'id' | 'name'> | null;
   pages: DemoPage[];
   unmatchedPaths: DemoUnmatchedPath[];
   frame: DemoFrame | null;
@@ -445,6 +451,29 @@ export type Phase = {
   milestoneLabel: string | null;
   scopeItems: PhaseScopeItemRef[];
   demos: Demo[];
+  /** J10: this phase's site builds, oldest first — staff read drafts too, anyone else only published. */
+  builds?: PhaseBuild[];
+};
+
+/** A site build as the phase lists it (J10). `pageMapConfirmedAt` is staff's. */
+export type PhaseBuild = {
+  id: string;
+  number: number;
+  ref: string | null;
+  publishedAt: string | null;
+  pageMapConfirmedAt: string | null;
+};
+
+/** One phase on the build timeline (J10, journeys Q22) — derived, never stored. */
+export type BuildTimelineEntry = {
+  phaseId: string;
+  number: number;
+  titleFa: string;
+  titleEn: string;
+  plannedEndAt: string | null;
+  demoPublishedAt: string | null;
+  acceptedAt: string | null;
+  builds: Array<{ id: string; number: number; publishedAt: string }>;
 };
 
 /** Derived server-side (lib/phase.ts) — never a hand-typed percentage (F5). */
@@ -801,6 +830,8 @@ export type Contract = {
   // `WizardFields` (the detail, the view-as-customer and the workspace); the
   // desk list selects `statusSummary` alone.
   wizard?: WizardStep[];
+  /** J10: the phases in order with their published builds and dates. */
+  buildTimeline?: BuildTimelineEntry[];
   statusSummary?: StatusSummary;
   attention?: AttentionItem[];
   timeline?: TimelineItem[];
@@ -1046,6 +1077,20 @@ export const WIZARD_FIELDS = gql`
       iterationsUsed
       allowance
       finishedAt
+    }
+    buildTimeline {
+      phaseId
+      number
+      titleFa
+      titleEn
+      plannedEndAt
+      demoPublishedAt
+      acceptedAt
+      builds {
+        id
+        number
+        publishedAt
+      }
     }
     statusSummary {
       started
@@ -1307,6 +1352,13 @@ export const CONTRACT_FIELDS = gql`
           labelEn
           status
         }
+        builds {
+          id
+          number
+          ref
+          publishedAt
+          pageMapConfirmedAt
+        }
         demos {
           id
           stagingUrl
@@ -1314,6 +1366,11 @@ export const CONTRACT_FIELDS = gql`
           reviewWindowStart
           reviewWindowEnd
           publishedAt
+          readyAt
+          readyVerifiedBy {
+            id
+            name
+          }
           pages {
             id
             key
@@ -2800,8 +2857,8 @@ export const DELETE_PALETTE_ITEM = gql`
 /** Sales admits more rounds (journeys Q-S5), optionally billed as a draft invoice. */
 export const EXTEND_ALLOWANCE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation ExtendAllowance($contractId: ID!, $step: StepKind!, $extra: Int!, $reason: String!, $charge: String) {
-    extendAllowance(contractId: $contractId, step: $step, extra: $extra, reason: $reason, charge: $charge) {
+  mutation ExtendAllowance($contractId: ID!, $step: StepKind!, $phaseId: ID, $extra: Int!, $reason: String!, $charge: String) {
+    extendAllowance(contractId: $contractId, step: $step, phaseId: $phaseId, extra: $extra, reason: $reason, charge: $charge) {
       ...ContractWorkspaceFields
     }
   }
@@ -3194,17 +3251,32 @@ export const DECLINE_ANSWER = gql`
 `;
 
 /**
- * The customer approves a step (journeys §3.1) — accepts every resolved item
- * at once and locks it. T9: the whole Contract back, wizard included, so the
- * step's lock shows without a refetch.
+ * The customer approves one phase's demo (journeys §3.1, J10) — accepts every
+ * resolved item at once, accepts the phase's scope and locks it. T9: the whole
+ * Contract back, wizard included, so the phase's lock shows without a refetch.
+ * The one door: the agreement, the design and the mockup each have their own.
  */
-export const APPROVE_STEP = gql`
+export const APPROVE_DEMO = gql`
   ${CONTRACT_FIELDS}
   ${WIZARD_FIELDS}
-  mutation ApproveStep($contractId: ID!, $step: StepKind!, $phaseId: ID) {
-    approveStep(contractId: $contractId, step: $step, phaseId: $phaseId) {
+  mutation ApproveDemo($contractId: ID!, $phaseId: ID!) {
+    approveDemo(contractId: $contractId, phaseId: $phaseId) {
       ...ContractFields
       ...WizardFields
+    }
+  }
+`;
+
+/**
+ * J10: a staff member's browser heard the reporter snippet report from the demo's
+ * own origin — a claim recorded with who (`DemoViewport` makes it). `origin` is the
+ * origin the browser heard from.
+ */
+export const VERIFY_DEMO_READINESS = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation VerifyDemoReadiness($demoId: ID!, $origin: String!, $contractId: ID) {
+    verifyDemoReadiness(demoId: $demoId, origin: $origin, contractId: $contractId) {
+      ...ContractWorkspaceFields
     }
   }
 `;
@@ -3419,6 +3491,8 @@ export type Build = {
   declaredBy: Pick<User, 'id' | 'name'>;
   ref: string | null;
   publishedAt: string | null;
+  /** J10, staff only. */
+  pageMapConfirmedAt?: string | null;
   changes: BuildChangeEntry[];
   createdAt: string;
 };
@@ -3462,6 +3536,7 @@ const BUILD_FIELDS = gql`
     deployedAt
     ref
     publishedAt
+    pageMapConfirmedAt
     createdAt
     declaredBy {
       id
@@ -3543,6 +3618,16 @@ export const PUBLISH_BUILD = gql`
   ${BUILD_FIELDS}
   mutation PublishBuild($buildId: ID!) {
     publishBuild(buildId: $buildId) {
+      ...BuildFields
+    }
+  }
+`;
+
+/** J10: the developer confirms the page map for this unpublished build. */
+export const CONFIRM_PAGE_MAP = gql`
+  ${BUILD_FIELDS}
+  mutation ConfirmPageMap($buildId: ID!) {
+    confirmPageMap(buildId: $buildId) {
       ...BuildFields
     }
   }

@@ -821,8 +821,8 @@ test('approveMockup: refused while a note is open or an answer waits, and until 
   assert.deepEqual([wizardStep(c, 'MOCKUP').status, wizardStep(c, 'MOCKUP').locked], ['DONE', true]);
   assert.equal(wizardStep(c, 'DEMO').status, 'CURRENT', 'and the road moves on');
 
-  // One approval writer: S2’s approveStep no longer approves MOCKUP, and a second approval is the lock.
-  assert.equal((await asDesigner('mutation($c: ID!){ approveStep(contractId: $c, step: MOCKUP) { id } }', {}, f.customer)).code, 'STEP_NOT_APPROVABLE');
+  // One approval writer: S2’s generic approveStep is gone (J10), and a second approval is the lock.
+  assert.equal((await asDesigner('mutation($c: ID!){ approveStep(contractId: $c, step: MOCKUP) { id } }', {}, f.customer)).code, 'GRAPHQL_VALIDATION_FAILED');
   assert.equal((await asDesigner(APPROVE_MOCKUP, {}, f.customer)).code, 'STEP_LOCKED');
 });
 
@@ -934,11 +934,11 @@ test('before the lock nothing is STEP_LOCKED: the approval is the only thing tha
   assert.equal(await prisma.stepApproval.count({ where: { step: 'MOCKUP' } }), 0);
 });
 
-test('the developer’s and the demo’s own steps are untouched: a SITE demo still approves through approveStep, and the legacy road never sees a mockup', async () => {
+test('the developer’s and the demo’s own steps are untouched: a SITE demo approves through approveDemo (J10), and the legacy road never sees a mockup', async () => {
   await reachMockup();
   const phase = await prisma.phase.findFirstOrThrow({ where: { contractId: f.contract.id } });
   const site = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://site.example.com', publishedAt: new Date() } });
   void site;
-  const result = await exec('mutation($c: ID!, $p: ID){ approveStep(contractId: $c, step: DEMO, phaseId: $p) { id } }', { as: f.customer, variables: { c: f.contract.id, p: phase.id } });
-  assert.equal(result.errors.length, 0, 'the demo step is approved through S2’s door as before');
+  const result = await exec('mutation($c: ID!, $p: ID!){ approveDemo(contractId: $c, phaseId: $p) { id } }', { as: f.customer, variables: { c: f.contract.id, p: phase.id } });
+  assert.equal(result.errors.length, 0, 'the demo step is approved through approveDemo');
 });

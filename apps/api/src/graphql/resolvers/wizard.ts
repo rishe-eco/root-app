@@ -103,7 +103,7 @@ async function loadFacts(c: FullContract) {
     }),
     prisma.build.findMany({
       where: { projectId: c.projectId, phase: { contractId: c.id }, publishedAt: { not: null } },
-      select: { id: true, number: true, publishedAt: true },
+      select: { id: true, number: true, publishedAt: true, phaseId: true },
     }),
     // The mockup's published iterations (J9b): a mockup build has no phase, so it
     // is this contract's through its demo. Oldest first — the position in this
@@ -328,6 +328,14 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
             used: facts.mockupBuilds.length,
             allowance: allowanceFor('MOCKUP', null, facts.brief, facts.allowanceExtensions),
           },
+          // J10: a phase's demo rounds are its published site builds, against
+          // `demoIterationsPerPhase` and that phase's extensions (Q-S6).
+          ...facts.phases.map((p) => ({
+            step: 'DEMO' as const,
+            phaseId: p.id,
+            used: facts.builds.filter((b) => b.phaseId === p.id).length,
+            allowance: allowanceFor('DEMO', p.id, facts.brief, facts.allowanceExtensions),
+          })),
         ]
       : [],
   };
@@ -510,6 +518,9 @@ export const contractWizardFields = {
         designOpenFeedback: facts.feedback.some((i) => i.step === 'DESIGN' && i.status === 'OPEN'),
         contractPublished: facts.contractRevisions.length > 0,
         publishedDemoPhaseIds: facts.phases.filter((p) => p.demos.length > 0).map((p) => p.id),
+        demoOpenFeedbackPhaseIds: [
+          ...new Set(facts.feedback.filter((i) => i.step === 'DEMO' && i.status === 'OPEN' && i.phaseId !== null).map((i) => i.phaseId!)),
+        ],
       },
     });
   },

@@ -39,7 +39,7 @@ import FeedbackPanel, { errorCode, type FeedbackTarget } from '@/components/Feed
  * other steps will keeps this panel from knowing two ways to read feedback.
  */
 
-const KIND_ORDER: DemoFrameLineKind[] = ['NEW', 'KNOWN_MISSING', 'TEMPORARY', 'DECIDED'];
+const KIND_ORDER: DemoFrameLineKind[] = ['NEW', 'KNOWN_MISSING', 'TEMPORARY', 'DECIDED', 'HOW_TO_TEST'];
 
 type T = (key: string, opts?: Record<string, unknown>) => string;
 
@@ -188,7 +188,14 @@ export default function DemoFeedbackPanel({
     try {
       await publish({ variables: { demoId: demo.id } });
     } catch (err) {
-      setPublishError(errorCode(err) === 'NO_FRAME' ? t('feedback.publishNoFrame') : (err as Error).message);
+      const code = errorCode(err);
+      setPublishError(
+        code === 'NO_FRAME'
+          ? t('feedback.publishNoFrame')
+          : code === 'DEMO_NOT_READY'
+            ? t('feedback.publishNotReady')
+            : (err as Error).message,
+      );
     }
   }
 
@@ -306,6 +313,13 @@ export default function DemoFeedbackPanel({
                         </option>
                       ))}
                     </select>
+                    {/* J10, trap 2: the how-to-test line is the one place a developer types access
+                        details into the portal, so the field says out loud what may go in it. */}
+                    {newLineKind === 'HOW_TO_TEST' ? (
+                      <p className="t-caption req-notice" data-testid="how-to-test-help">
+                        {t('feedback.howToTestHelp')}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="editor-grid-2">
                     <div className="field">
@@ -379,9 +393,20 @@ export default function DemoFeedbackPanel({
           ) : null}
 
           <div className="workspace-row">
-            <button className="btn btn-secondary btn-sm" type="button" onClick={onPublish} disabled={publishing || !!demo.publishedAt}>
+            <button
+              className="btn btn-secondary btn-sm"
+              type="button"
+              onClick={onPublish}
+              disabled={publishing || !!demo.publishedAt || (demo.kind !== 'MOCKUP' && !demo.readyAt)}
+              data-testid="publish-demo"
+            >
               {demo.publishedAt ? t('feedback.published') : t('feedback.publish')}
             </button>
+            {!demo.publishedAt && demo.kind !== 'MOCKUP' && !demo.readyAt ? (
+              <span className="t-caption req-notice" data-testid="publish-not-ready">
+                {t('feedback.publishNotReady')}
+              </span>
+            ) : null}
             {publishError ? <span className="error">{publishError}</span> : null}
           </div>
         </div>

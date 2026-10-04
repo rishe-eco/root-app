@@ -2754,26 +2754,6 @@ export const typeDefs = /* GraphQL */ `
     "The customer who made it, or contracts.readAll. NOT_FOUND for anyone else — and for a project that never was a request."
     request(projectId: ID!): Request
 
-    # --- Step 6, the demo (journeys build plan J10) ---
-    """
-    Staff: the phase's developer (builds.author), or sales (contracts.author) on a
-    contract they can see — FORBIDDEN for anyone else, NOT_ASSIGNED for another
-    developer. Records that THIS browser received the reporter snippet's first report
-    from the demo's own origin — origin is the origin it heard from, and must be the
-    demo's current staging origin (READINESS_ORIGIN_MISMATCH). A browser's claim,
-    recorded with who: the server cannot see postMessage origins. Idempotent; the first
-    claim stands. STEP_LOCKED once the phase is approved; NOT_FOUND for a mockup.
-    """
-    verifyDemoReadiness(demoId: ID!, origin: String!, contractId: ID): Contract!
-
-    """
-    Staff (builds.author, and the phase's developer). Confirms the page map for this
-    unpublished site build — it is pre-filled per iteration and never trusted
-    (journeys §7.5). publishBuild refuses PAGE_MAP_UNCONFIRMED without it. NO_DEMO,
-    ALREADY_PUBLISHED, STEP_LOCKED.
-    """
-    confirmPageMap(buildId: ID!): Build!
-
     # --- Builds and the resolution ledger (build plan L3b) ---
     "Staff (builds.author). Every phase across every active project, thin — the build-authoring form's phase picker."
     phasesForBuilds: [BuildPhase!]!
@@ -3364,6 +3344,26 @@ export const typeDefs = /* GraphQL */ `
     (NO_PUBLISHED_MOCKUP). After it every mockup mutation is STEP_LOCKED.
     """
     approveMockup(contractId: ID!): Contract!
+
+    # --- Step 6, the demo (journeys build plan J10) ---
+    """
+    Staff: the phase's developer (builds.author), or sales (contracts.author) on a
+    contract they can see — FORBIDDEN for anyone else, NOT_ASSIGNED for another
+    developer. Records that THIS browser received the reporter snippet's first report
+    from the demo's own origin — origin is the origin it heard from, and must be the
+    demo's current staging origin (READINESS_ORIGIN_MISMATCH). A browser's claim,
+    recorded with who: the server cannot see postMessage origins. Idempotent; the first
+    claim stands. STEP_LOCKED once the phase is approved; NOT_FOUND for a mockup.
+    """
+    verifyDemoReadiness(demoId: ID!, origin: String!, contractId: ID): Contract!
+
+    """
+    Staff (builds.author, and the phase's developer). Confirms the page map for this
+    unpublished site build — it is pre-filled per iteration and never trusted
+    (journeys §7.5). publishBuild refuses PAGE_MAP_UNCONFIRMED without it. NO_DEMO,
+    ALREADY_PUBLISHED, STEP_LOCKED.
+    """
+    confirmPageMap(buildId: ID!): Build!
 
     # --- Builds and the resolution ledger (build plan L3b) ---
     """

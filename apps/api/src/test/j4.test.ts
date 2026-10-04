@@ -711,12 +711,12 @@ test('a developer’s claim on a phase is its own contract’s developer — not
   const mineP = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: f.contract.id, number: 1, titleFa: 'ا', titleEn: 'mine' } });
   const theirsP = await prisma.phase.create({ data: { projectId: f.contract.projectId, contractId: second.id, number: 1, titleFa: 'ب', titleEn: 'theirs' } });
   const DEMO = (phaseId: string) =>
-    exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://a.staging.m-root.com") { id } }', { as: staff.DEVELOPER, variables: { p: phaseId } });
+    exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://a.staging.localhost") { id } }', { as: staff.DEVELOPER, variables: { p: phaseId } });
 
   ok(await DEMO(mineP.id));
   assert.equal((await DEMO(theirsP.id)).code, 'NOT_ASSIGNED', 'a developer of the project is not the developer of every phase on it');
   assert.equal(
-    (await exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://a.staging.m-root.com") { id } }', { as: otherDev, variables: { p: mineP.id } })).code,
+    (await exec('mutation($p: ID!){ createDemo(phaseId: $p, stagingUrl: "https://a.staging.localhost") { id } }', { as: otherDev, variables: { p: mineP.id } })).code,
     'NOT_ASSIGNED',
   );
 

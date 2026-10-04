@@ -423,8 +423,15 @@
         "SCOPE_ITEM_NOT_IN_BUILD": "That item is no longer in build.",
         "DUPLICATE_DISPOSITION": "That item already has a disposition in this build.",
         "DECLINE_REASON_REQUIRED": "Say why it was declined.",
-        "NOTE_REQUIRED": "Write a note — the note is the entry."
-      }
+        "NOTE_REQUIRED": "Write a note — the note is the entry.",
+        "PAGE_MAP_UNCONFIRMED": "Confirm the page map for this build first.",
+        "ALLOWANCE_EXHAUSTED": "All the rounds for this phase are used — ask sales to extend the allowance.",
+        "STEP_LOCKED": "This phase is approved — nothing about it can change.",
+        "NO_DEMO": "This phase has no demo, so there is no page map."
+      },
+      "confirmMap": "Confirm page map",
+      "mapConfirmed": "Page map confirmed",
+      "mapUnconfirmed": "Page map not confirmed"
     },
     "backToPortal": "Back to the portal",
     "overviewNoDashboard": "The desk-wide dashboard is sales's view of the whole book. Here is where your own work is:",
@@ -840,7 +847,9 @@
     "tabPhases": "Phases",
     "demoError": {
       "STAGING_NOT_HTTPS": "The staging URL must be HTTPS — over plain HTTP the browser silently refuses to frame it, which looks like a blank pane rather than an error.",
-      "INVALID_STAGING_URL": "That is not a valid URL."
+      "INVALID_STAGING_URL": "That is not a valid URL.",
+      "STAGING_HOST_NOT_ALLOWED": "A staging site must be exactly one label under the staging domain — for example {{example}}.",
+      "STEP_LOCKED": "This phase is approved — nothing about it can change."
     },
     "phasesTitle": "Phases",
     "addPhase": "Add phase",
@@ -1198,7 +1207,8 @@
       "NEW": "What's new",
       "KNOWN_MISSING": "What's known-missing",
       "TEMPORARY": "What's temporary",
-      "DECIDED": "What's decided"
+      "DECIDED": "What's decided",
+      "HOW_TO_TEST": "How to test"
     },
     "decidedOn": "Decided on {{date}}",
     "publish": "Publish this demo",
@@ -1250,8 +1260,8 @@
     "movedNote": "Moved to a change request.",
     "addressedInBuild": "Addressed in build {{number}} by {{name}}",
     "acceptedLine": "Accepted by {{name}} on {{date}}",
-    "approveStep": "Approve this step",
-    "approveHelp": "Approving accepts every answer at once and locks this step. Afterwards, anything you want changed is a change request.",
+    "approveStep": "Approve this phase",
+    "approveHelp": "Approving accepts every answer and everything in this phase at once, and locks it. Afterwards, anything you want changed is a change request.",
     "openCount_one": "{{n}} comment is still waiting for Root’s answer.",
     "openCount_other": "{{n}} comments are still waiting for Root’s answer.",
     "lockedNote": "This step is approved. To change anything now, open a change request.",
@@ -1262,7 +1272,9 @@
       "DEMO_NOT_PUBLISHED": "This demo has not been published yet.",
       "EMPTY_COMMENT": "Write something first.",
       "INVALID_TARGET": "That is not something this step takes comments about.",
-      "NOT_FOUND": "That no longer exists — reload the page."
+      "NOT_FOUND": "That no longer exists — reload the page.",
+      "NO_PUBLISHED_DEMO": "There is no demo of this phase to approve yet.",
+      "DEMO_NOT_READY": "The staging site has not reported in yet."
     },
     "unpromptedTitle": "Unprompted changes — not yet in this frame",
     "writeUp": "Write up as a frame line",
@@ -1274,7 +1286,9 @@
     "convertToTicket": "Convert to change ticket",
     "convertedToTicket": "Converted to a ticket",
     "briefCurrentState": "Current state",
-    "briefDesiredState": "Desired state"
+    "briefDesiredState": "Desired state",
+    "howToTestHelp": "Staging-only access: demo accounts that exist only on the staging site, sandbox payment details, where the sample data lives. Never type a production credential, a real customer’s password or a live payment detail here — the customer and Root’s staff read this line, and the portal is not a place to keep secrets.",
+    "publishNotReady": "The demo cannot be published until the staging site has reported in (step 1)."
   },
   "support": {
     "pageTitle": "Support",
@@ -2493,6 +2507,72 @@
       "REVISION_PUBLISHED": "That round is published and cannot be edited.",
       "REVISION_NOT_CURRENT": "That belongs to an older round.",
       "CONCEPT_NOT_CHOSEN": "Choose a theme first."
+    }
+  },
+  "demoStep": {
+    "lede": {
+      "customer": "This phase of your site is ready on a test copy of it. Click through it, leave a note on any page or line that is not right, and approve the phase when you are happy. Approving accepts everything in this phase and locks it.",
+      "staff": "The customer’s view of this phase. Authoring — the staging address, the frame, each version — is in the contract’s Phases tab."
+    },
+    "notYet": {
+      "customer": "Root has not shown this phase yet. When it does you will find it here, and we will tell you.",
+      "staff": "No demo has been published for this phase yet."
+    },
+    "iteration": "Version {{n}} of {{total}}",
+    "iterationOpen": "Version {{n}}",
+    "noVersion": "No version has been shown yet.",
+    "builds": {
+      "title": "Versions shown",
+      "line": "Version {{n}} · {{date}}"
+    },
+    "timeline": {
+      "title": "How the build is going",
+      "lede": "Each phase, in order, with every version Root has shown you. Nothing here is typed by hand — it is read off what has actually been published.",
+      "plannedEnd": "Planned to end {{date}}",
+      "nothing": "Nothing shown yet",
+      "demoOpened": "Demo opened {{date}}",
+      "build": "Version {{n}} · {{date}}",
+      "accepted": "Approved {{date}}"
+    },
+    "readiness": {
+      "title": "Step 1 — the staging site reports in",
+      "ready": "Heard from the staging site on {{when}} — recorded by {{who}}.",
+      "pending": "Not heard from yet. Open the staging site in the viewport below: the demo can be published once the reporter snippet reports from the site’s own address.",
+      "cleared": "The staging address changed, so the earlier check no longer counts. Open the new address in the viewport.",
+      "recording": "Recording…",
+      "help": "This is a claim made by this browser: it is recorded when the snippet on the staging site reports from the site’s own address. The snippet must be installed with {{attribute}} ({{path}}).",
+      "notYours": "Only the phase’s developer, or sales, can record this.",
+      "error": {
+        "READINESS_ORIGIN_MISMATCH": "The address that reported is not this demo’s current staging address — reload the page.",
+        "STEP_LOCKED": "This phase is approved — nothing about it can change."
+      }
+    },
+    "submit": {
+      "title": "Submit a version",
+      "help": "One form per version: the build, the page map, an answer for every open note, what changed — then publish it.",
+      "frameStep": "Step 2 — the frame, including how to test",
+      "versionStep": "Step 3 — this version",
+      "mapTitle": "Page map",
+      "mapHelp": "Each page of this phase and the path it has on the staging site. The map carries over from the last version, but the staging site belongs to the project and the map to the phase — check it against this build before you confirm it.",
+      "mapEmpty": "This demo declares no pages yet.",
+      "mapConfirm": "I checked this map against this build",
+      "mapConfirmed": "Page map confirmed on {{when}}.",
+      "mapUnconfirmed": "Page map not confirmed — this version cannot be published.",
+      "confirmAction": "Confirm the page map",
+      "declare": "Declare this version",
+      "publish": "Publish this version",
+      "draft": "Draft",
+      "published": "Published {{when}}",
+      "exhausted": "All the rounds for this phase are used. Sales has to extend the allowance before another version can be published.",
+      "locked": "This phase is approved and locked — no more versions, frame edits or notes.",
+      "noDemo": "Add the staging address above first: a version belongs to a demo.",
+      "error": {
+        "PAGE_MAP_UNCONFIRMED": "Confirm the page map for this version first.",
+        "ALLOWANCE_EXHAUSTED": "All the rounds for this phase are used — ask sales to extend the allowance.",
+        "STEP_LOCKED": "This phase is approved — nothing about it can change.",
+        "NO_DEMO": "This phase has no demo, so there is no page map.",
+        "DEMO_NOT_READY": "The staging site has not reported in yet — see step 1."
+      }
     }
   }
 }

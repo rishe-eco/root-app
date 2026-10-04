@@ -351,7 +351,7 @@ test('signing follows: the signature is the moment the agreement is done, and th
   assert.equal((await approve()).code, 'ALREADY_APPROVED');
 });
 
-test('who may: only the contract’s own customer approves or signs on the new road; signing before approving is refused; approveStep still refuses the agreement', async () => {
+test('who may: only the contract’s own customer approves or signs on the new road; signing before approving is refused; the agreement has no generic door any more', async () => {
   await ready();
   // Staff who can read the contract, and a stranger, hear "no such contract".
   for (const as of [staff.SALES, f.admin, f.stranger]) {
@@ -363,11 +363,12 @@ test('who may: only the contract’s own customer approves or signs on the new r
     assert.equal((await sign(as)).code, 'NOT_FOUND', as.email ?? '');
   }
   assert.equal((await sign(f.customer, 'x')).code, 'NAME_TOO_SHORT');
-  // S2's `approveStep` keeps refusing AGREEMENT: a customer must not lock steps 1–3 without the gate.
+  // S2's generic `approveStep` is gone (J10), so a customer cannot lock steps 1–3 without the gate by any
+  // other door: the only AGREEMENT approval is `approveContract`'s.
   const fresh = await prisma.stepApproval.count();
   assert.equal(
     (await exec('mutation($c: ID!){ approveStep(contractId: $c, step: AGREEMENT) { id } }', { as: f.customer, variables: { c: f.contract.id } })).code,
-    'STEP_NOT_APPROVABLE',
+    'GRAPHQL_VALIDATION_FAILED',
   );
   assert.equal(await prisma.stepApproval.count(), fresh);
 });

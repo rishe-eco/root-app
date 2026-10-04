@@ -525,9 +525,9 @@ model Contract {
 /// One step of the wizard, approved (journeys build plan J3). **This row is
 /// the lock**: REQUIREMENTS, SCOPE and DRAFT lock with AGREEMENT's approval,
 /// every other step with its own, and `assertStepOpen` (lib/steps.ts) reads
-/// them. Nothing writes one yet — J7 (AGREEMENT), J8 (DESIGN), J9 (MOCKUP)
-/// and J10 (DEMO, one per phase) do, in the same transaction as the act they
-/// seal.
+/// them. Written by `approveStepTx` and nothing else — J7 (AGREEMENT), J8 (DESIGN),
+/// J9b (MOCKUP) and J10 (DEMO, one per phase, `approveDemo`), each in the same
+/// transaction as the act it seals.
 ///
 /// **Two partial unique indexes**, hand-written in the migration because
 /// Prisma cannot express a `WHERE`, and not `NULLS NOT DISTINCT`, which needs
@@ -540,8 +540,8 @@ model Contract {
 ///   phaseId IS NOT NULL` — a demo is approved once per phase.
 ///
 /// The phase FK restricts: a phase that has been approved cannot be deleted
-/// out from under its own lock (J10 must refuse `deletePhase` with a code
-/// before Postgres does).
+/// out from under its own lock (`deletePhase` refuses `STEP_LOCKED` first, J10 —
+/// the code before Postgres's).
 model StepApproval {
   id         String   @id @default(cuid())
   contractId String

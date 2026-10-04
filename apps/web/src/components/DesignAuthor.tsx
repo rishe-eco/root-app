@@ -483,19 +483,24 @@ function CustomAuthor({ contract, step }: { contract: Contract; step: WizardStep
 // --- sales: extend the allowance -----------------------------------------------------
 
 /**
- * Which step's rounds this box counts and extends — the design's (J8) or the
- * mockup's (J9b). The wording is the same ("rounds"), the step is the argument.
+ * Which step's rounds this box counts and extends — the design's (J8), the
+ * mockup's (J9b) or one phase's demo (J10: `phaseId` names the phase, because a
+ * demo's allowance is per phase). The wording is the same ("rounds"), the step is
+ * the argument.
  */
 export function AllowanceBox({
   contract,
   step,
   me,
   kind = 'DESIGN',
+  phaseId = null,
 }: {
   contract: Contract;
   step: WizardStep;
   me: User;
-  kind?: 'DESIGN' | 'MOCKUP';
+  kind?: 'DESIGN' | 'MOCKUP' | 'DEMO';
+  /** A demo's allowance is per phase (J10). */
+  phaseId?: string | null;
 }) {
   const { t } = useTranslation();
   const locale = useLocale();
@@ -507,7 +512,7 @@ export function AllowanceBox({
   const [charge, setCharge] = useState('');
   const [extend] = useMutation(EXTEND_ALLOWANCE);
   const { act, busy, error } = useAct();
-  const extensions = (contract.allowanceExtensions ?? []).filter((x) => x.step === kind);
+  const extensions = (contract.allowanceExtensions ?? []).filter((x) => x.step === kind && (kind !== 'DEMO' || x.phaseId === phaseId));
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -516,6 +521,7 @@ export function AllowanceBox({
         variables: {
           contractId: contract.id,
           step: kind,
+          phaseId: kind === 'DEMO' ? phaseId : null,
           extra: Number(extra),
           reason,
           charge: can(me, 'billing.manage') && charge.trim() ? charge.trim() : null,

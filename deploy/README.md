@@ -369,6 +369,20 @@ These are the third guard the reporter snippet's own README documents
 read that file for why the header exists and what it is defending against;
 this section only says where it has to be set for each new site, not why.
 
+**The API needs `STAGING_BASE_DOMAIN=staging.m-root.com`** in `.env` (J10) —
+the default in production, so it can be left unset; it must match the wildcard
+above. `createDemo` and `updateDemo` refuse (`STAGING_HOST_NOT_ALLOWED`) any
+staging URL whose host is not **exactly one label** under it, and in production
+any that is not `https` with no explicit port — so a demo can only ever frame a
+site Root deployed itself. **Two more things a new staging site needs before its
+demo can be published** (J10): the reporter snippet installed in its theme with
+`data-enabled="true"` and `data-root-origin` set to the portal's origin, and a
+staff member (the phase's developer, or sales) to open the demo once in the
+desk's viewport — the snippet's first report from the site's own origin is what
+records the staging site as *ready* (`DEMO_NOT_READY` until then). Demo
+credentials written into the review frame's *how to test* line are staging-only;
+production credentials are never entered in the portal.
+
 **4. The mockup wildcard's Nginx** (J9, PD-9). Uploaded mockups are served by
 the API, out of the stored zip, one subdomain per view grant
 (`<32-hex-id>.mockup.m-root.com`). The server block is

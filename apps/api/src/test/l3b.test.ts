@@ -68,7 +68,7 @@ const SUBMIT_ON_PAGE = `
 async function seedOpenFeedback() {
   const projectId = f.contract.projectId;
   const phase = await prisma.phase.create({ data: { projectId, contractId: f.contract.id, number: 1, titleFa: 'فاز ۱', titleEn: 'Phase 1' } });
-  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
+  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com', readyAt: new Date(), readyVerifiedById: f.admin.id } });
   const page = await prisma.demoPage.create({
     data: { demoId: demo.id, key: 'home', labelFa: 'خانه', labelEn: 'Home', canonicalPath: '/' },
   });
@@ -116,7 +116,7 @@ test('declareBuild marking an item ADDRESSED does not make it ACCEPTED; the cust
   // The customer's own acceptance — a different mutation, a different actor,
   // and it accepts the step (S2), not the item: `acceptFeedback` is retired.
   ok(
-    await exec('mutation($c: ID!, $p: ID!){ approveStep(contractId: $c, step: DEMO, phaseId: $p) { id } }', {
+    await exec('mutation($c: ID!, $p: ID!){ approveDemo(contractId: $c, phaseId: $p) { id } }', {
       as: f.customer,
       variables: { c: f.contract.id, p: phase.id },
     }),
@@ -129,7 +129,7 @@ test('declareBuild marking an item ADDRESSED does not make it ACCEPTED; the cust
 
 test('the step cannot be approved while the item is still open — a build that has not addressed it accepts nothing', async () => {
   const { phase } = await seedOpenFeedback();
-  const result = await exec('mutation($c: ID!, $p: ID!){ approveStep(contractId: $c, step: DEMO, phaseId: $p) { id } }', {
+  const result = await exec('mutation($c: ID!, $p: ID!){ approveDemo(contractId: $c, phaseId: $p) { id } }', {
     as: f.customer,
     variables: { c: f.contract.id, p: phase.id },
   });
@@ -284,6 +284,10 @@ test('publishBuild sets publishedAt and refuses a second time (ALREADY_PUBLISHED
   const declared = ok(await exec(DECLARE_BUILD, { as: developer, variables: { phaseId: phase.id, changes: [] } }));
   const buildId = (declared.declareBuild as { id: string }).id;
 
+  // J10: a build is published only once the developer has confirmed the page map for it. This test is
+  // about publish, not the map (`j10.test.ts` holds PAGE_MAP_UNCONFIRMED), so it confirms by direct write.
+  assert.equal((await exec('mutation($id: ID!){ publishBuild(buildId: $id) { id } }', { as: developer, variables: { id: buildId } })).code, 'PAGE_MAP_UNCONFIRMED');
+  await prisma.build.update({ where: { id: buildId }, data: { pageMapConfirmedAt: new Date() } });
   const published = ok(await exec('mutation($id: ID!){ publishBuild(buildId: $id) { id publishedAt } }', { as: developer, variables: { id: buildId } }));
   assert.ok((published.publishBuild as { publishedAt: string }).publishedAt);
 
@@ -349,7 +353,7 @@ test('an unprompted (no-origin) change entry surfaces on the next demo\'s frame 
   );
   const entryId = (declared.declareBuild as { changes: Array<{ id: string }> }).changes[0].id;
 
-  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
+  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com', readyAt: new Date(), readyVerifiedById: f.admin.id } });
   ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 
   const UNPROMPTED_QUERY = `
@@ -390,7 +394,7 @@ test('unpromptedChanges is empty for a customer — staff-only, and empty is not
       variables: { phaseId: phase.id, changes: [{ note: 'internal refactor', noteLang: 'en' }] },
     }),
   );
-  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com' } });
+  const demo = await prisma.demo.create({ data: { projectId: f.contract.projectId, phaseId: phase.id, stagingUrl: 'https://staging.example.com', readyAt: new Date(), readyVerifiedById: f.admin.id } });
   ok(await exec('mutation($d: ID!){ generateDemoFrame(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
   ok(await exec('mutation($d: ID!){ publishDemo(demoId: $d) { id } }', { as: f.admin, variables: { d: demo.id } }));
 

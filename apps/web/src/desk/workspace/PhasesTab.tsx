@@ -23,6 +23,7 @@ import {
 } from '@/lib/queries';
 import DemoViewport from '@/components/DemoViewport';
 import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
+import DemoSubmission, { ReadinessStep, mayRecordReadiness, useDemoReadiness } from '@/components/DemoSubmission';
 import { useWorkspaceMutation, type WorkspaceContext } from './ContractWorkspace';
 
 /**
@@ -38,7 +39,7 @@ import { useWorkspaceMutation, type WorkspaceContext } from './ContractWorkspace
 // straight from the server (see ScopeTab.tsx). The one exception carved out
 // here is the staging-URL validation this stage explicitly calls for — the
 // server returns a code, and this is where it becomes a sentence.
-const KNOWN_ERROR_CODES = new Set(['STAGING_NOT_HTTPS', 'INVALID_STAGING_URL']);
+const KNOWN_ERROR_CODES = new Set(['STAGING_NOT_HTTPS', 'INVALID_STAGING_URL', 'STAGING_HOST_NOT_ALLOWED', 'STEP_LOCKED']);
 
 /** Structural rather than i18next's TFunction — same reasoning as lib/changelog.ts's T. */
 type T = (key: string, opts?: Record<string, unknown>) => string;
@@ -46,7 +47,7 @@ type T = (key: string, opts?: Record<string, unknown>) => string;
 function errorMessage(err: unknown, t: T): string {
   const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })?.graphQLErrors?.[0]?.extensions
     ?.code;
-  if (code && KNOWN_ERROR_CODES.has(code)) return t(`workspace.demoError.${code}`);
+  if (code && KNOWN_ERROR_CODES.has(code)) return t(`workspace.demoError.${code}`, { example: 'nahal.staging.m-root.com' });
   return (err as { message?: string })?.message ?? String(err);
 }
 
@@ -139,7 +140,7 @@ function DemoPageRow({
 }
 
 function DemoCard({
-  phaseId,
+  phase,
   demo,
   designOptions,
   editable,
@@ -147,7 +148,7 @@ function DemoCard({
   onChanged,
 }: {
   /** The phase this demo belongs to: feedback on a demo is approved (and locked) per phase. */
-  phaseId: string;
+  phase: Phase;
   demo: Demo;
   designOptions: PageDesignOption[];
   /** builds.author plus being this contract's developer (canAuthorBuild). */
@@ -158,7 +159,25 @@ function DemoCard({
   const { t } = useTranslation();
   const locale = useLocale();
   const { contract, me } = useOutletContext<WorkspaceContext>();
-  const demoLocked = !!contract.wizard?.some((s) => s.step === 'DEMO' && s.phaseId === phaseId && s.locked);
+  const phaseId = phase.id;
+  const demoStep = contract.wizard?.find((s) => s.step === 'DEMO' && s.phaseId === phaseId) ?? {
+    step: 'DEMO' as const,
+    phaseId,
+    phaseNumber: phase.number,
+    status: 'UPCOMING' as const,
+    locked: false,
+    lockedAt: null,
+    takesInput: true,
+    iterationsUsed: null,
+    allowance: null,
+    finishedAt: null,
+  };
+  const demoLocked = demoStep.locked;
+  // J10: the staging site's readiness — heard by this viewport, recorded with who. The
+  // viewer who may record it (the phase's developer, or sales) is the one whose browser
+  // makes the claim; anyone else's viewport makes none.
+  const canRecord = mayRecordReadiness(me, contract);
+  const readiness = useDemoReadiness(demo, contract.id, canRecord, demoLocked);
   const [stagingUrl, setStagingUrl] = useState(demo.stagingUrl ?? '');
   const [buildRef, setBuildRef] = useState(demo.buildRef ?? '');
   const [reviewWindowStart, setReviewWindowStart] = useState(demo.reviewWindowStart?.slice(0, 10) ?? '');
@@ -278,8 +297,12 @@ function DemoCard({
         </div>
       )}
 
-      <DemoViewport demo={demo} />
+      {/* J10: the submission, in the order a developer does it — 1 the staging site reports in
+          (the viewport below is what hears it), 2 the frame, 3 the version. */}
+      <ReadinessStep demo={demo} canRecord={canRecord} recording={readiness.recording} error={readiness.error} />
+      <DemoViewport demo={demo} onFirstReport={readiness.record} />
 
+      <p className="t-eyebrow">{t('demoStep.submit.frameStep')}</p>
       <DemoFeedbackPanel
         demo={demo}
         contractId={contract.id}
@@ -292,6 +315,8 @@ function DemoCard({
         locked={demoLocked}
         onChanged={onChanged}
       />
+
+      {editable ? <DemoSubmission contract={contract} phase={phase} demo={demo} step={demoStep} me={me} onChanged={onChanged} /> : null}
 
       <div className="workspace-row">
         <h4 className="t-h3">{t('workspace.demoPagesTitle')}</h4>
@@ -554,7 +579,7 @@ function PhaseCard({
           phase.demos.map((d) => (
             <DemoCard
               key={d.id}
-              phaseId={phase.id}
+              phase={phase}
               demo={d}
               designOptions={designOptions}
               editable={canBuild}
