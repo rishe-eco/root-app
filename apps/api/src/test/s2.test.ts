@@ -339,6 +339,11 @@ test('FeedbackComment_declined_has_reason: the database refuses a declined answe
     /FeedbackComment_declined_has_reason/,
     'a note of whitespace is not a reason',
   );
+  await assert.rejects(
+    () => prisma.feedbackComment.create({ data: { ...base, approval: 'DECLINED', approvalNote: '\t\n \r\n' } }),
+    /FeedbackComment_declined_has_reason/,
+    'nor is one of tabs and newlines (20261004100000 — btrim strips spaces only)',
+  );
   await prisma.feedbackComment.create({ data: { ...base, approval: 'DECLINED', approvalNote: 'because' } });
   // The CHECK binds only the DECLINED state.
   await prisma.feedbackComment.create({ data: { ...base, approval: 'PENDING' } });
