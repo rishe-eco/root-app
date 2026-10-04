@@ -2750,8 +2750,11 @@ export const typeDefs = /* GraphQL */ `
     themes(activeOnly: Boolean = false): [Theme!]!
     "Staff (contracts.author). Journeys build plan S1: the active accounts assignContract would accept for this job."
     assignableUsers(job: AssignmentJob!): [User!]!
-    "Staff. Contracts waiting on Root, longest-waiting first."
-    needsRootQueue(limit: Int = 20): [ContractRef!]!
+    """
+    Staff (contracts.readAll). Contracts with something owed by Root, longest-waiting
+    first — by the attention module, not by ContractStatus (journeys build plan J12).
+    """
+    needsRootQueue(limit: Int = 20): [NeedsRootEntry!]!
     """
     Staff. Recent activity across every contract, newest first. reviewOnly
     narrows it to customer actions that want a response from Root.
@@ -2848,6 +2851,13 @@ export const typeDefs = /* GraphQL */ `
     here (journeys build plan J13).
     """
     myInvoices: [BillingEntry!]!
+    """
+    Journeys build plan J12 — the home screen. What is waiting on the caller: as a
+    customer, across everything they own; as staff, the work whose job they hold, on
+    the contracts they may see (and, for design and development, are assigned to).
+    The caller's own moves first, then longest-waiting.
+    """
+    myAttention: [HomeItem!]!
     "One of the caller's own issued invoices. NOT_FOUND for anything else — a draft, someone else's, a missing id alike."
     invoice(id: ID!): BillingEntry!
     """
