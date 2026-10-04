@@ -107,7 +107,8 @@ test('sales has no Users place; an administrator invites a member of staff from 
   await signIn(page, SALES);
   await page.goto('/en/desk/users');
   // Not a page they are refused on — a section they do not have.
-  await expect(page).toHaveURL(/\/en\/desk(\/overview)?\/?$/);
+  // (J12: the staff index is My work; it was Overview.)
+  await expect(page).toHaveURL(/\/en\/desk(\/work|\/overview)?\/?$/);
 
   await signIn(page, ADMIN, 'fa');
   await page.locator('.desk-nav').getByText('کاربران', { exact: true }).click();
