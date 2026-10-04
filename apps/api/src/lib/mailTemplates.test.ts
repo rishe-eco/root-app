@@ -24,6 +24,8 @@ import {
   designApprovedEmail,
   allowanceExhaustedEmail,
   contractClosedEmail,
+  mockupIterationPublishedEmail,
+  mockupApprovedEmail,
   feedbackSubmittedEmail,
   answerPendingEmail,
   answerPublishedEmail,
@@ -258,6 +260,32 @@ const builders: Array<{ name: string; build: (locale: string) => MailContent; li
         portalUrl: PORTAL_CONTRACT_URL,
       }),
     link: PORTAL_CONTRACT_URL,
+  },
+  // Journeys build plan J9b — the mockup step.
+  {
+    name: 'mockup-iteration-published',
+    build: (l) =>
+      mockupIterationPublishedEmail(l, {
+        customerName: 'نهال',
+        projectTitleFa: 'فروشگاه نهال',
+        projectTitleEn: 'Nahal shop',
+        iteration: 2,
+        allowance: 3,
+        portalUrl: PORTAL_CONTRACT_URL,
+      }),
+    link: PORTAL_CONTRACT_URL,
+  },
+  {
+    name: 'mockup-approved',
+    build: (l) =>
+      mockupApprovedEmail(l, {
+        recipientName: 'طراح',
+        customerName: 'نهال',
+        projectTitleFa: 'فروشگاه نهال',
+        projectTitleEn: 'Nahal shop',
+        deskUrl: DESK_STEPS_URL,
+      }),
+    link: DESK_STEPS_URL,
   },
 ];
 
@@ -586,4 +614,42 @@ test('J11: a contract whose brief promised no support does not mention any — n
     assert.ok(!/پشتیبانی/.test(contractClosedEmail('fa', params).text));
   }
   assert.match(contractClosedEmail('en', { ...closedParams, supportMonths: 1 }).text, /1 month,/, 'singular');
+});
+
+const iterationParams = {
+  customerName: 'Nahal & Co',
+  projectTitleFa: 'فروشگاه نهال',
+  projectTitleEn: 'Nahal <shop>',
+  iteration: 2,
+  allowance: 3 as number | null,
+  portalUrl: PORTAL_CONTRACT_URL,
+};
+
+test('J9b: a published mockup iteration says which iteration of how many, in the locale’s own digits, and that it is a mockup', () => {
+  const en = mockupIterationPublishedEmail('en', iterationParams);
+  assert.match(en.subject, /Mockup 2 of 3/);
+  assert.match(en.text, /It is a mockup/);
+  assert.ok(en.html.includes('Nahal &amp; Co') && en.html.includes('Nahal &lt;shop&gt;'), 'a name is text, not markup');
+  const fa = mockupIterationPublishedEmail('fa', iterationParams);
+  // House rule 14: an iteration is a count, so Persian digits.
+  assert.match(fa.subject, /ماکتِ ۲ از ۳/);
+  assert.ok(!/[0-9]/.test(fa.subject.replace('Nahal', '')), 'no Latin digit in the Persian subject');
+  assert.match(fa.text, /این یک ماکت است/);
+  assert.match(mockupIterationPublishedEmail('en', { ...iterationParams, allowance: null }).subject, /Mockup 2 is ready/);
+  assert.match(mockupIterationPublishedEmail('fa', { ...iterationParams, allowance: null }).subject, /ماکتِ ۲ آماده/);
+});
+
+test('J9b: the customer’s Persian is «تو», the desk’s is formal', () => {
+  assert.match(mockupIterationPublishedEmail('fa', iterationParams).text, /در آن بگرد/);
+  const desk = mockupApprovedEmail('fa', { ...agreementParams, recipientName: 'طراح' });
+  assert.match(desk.text, /قفل شد/);
+  assert.ok(!/بگرد|بگذار|بینداز/.test(desk.text), 'the desk is not addressed as «تو»');
+});
+
+test('J9b: the designer’s approval email says the mockup step is locked and the build can begin, in each locale', () => {
+  assert.match(mockupApprovedEmail('en', agreementParams).subject, /Mockup approved/);
+  assert.match(mockupApprovedEmail('en', agreementParams).text, /locked; the build can begin/);
+  assert.match(mockupApprovedEmail('fa', agreementParams).subject, /ماکت تأیید شد/);
+  const en = mockupApprovedEmail('en', agreementParams);
+  assert.ok(en.html.includes('Nahal &amp; Co') && !en.html.includes('<b>'), 'escaped');
 });

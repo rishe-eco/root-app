@@ -159,7 +159,7 @@ function DemoCard({
   const locale = useLocale();
   const { contract, me } = useOutletContext<WorkspaceContext>();
   const demoLocked = !!contract.wizard?.some((s) => s.step === 'DEMO' && s.phaseId === phaseId && s.locked);
-  const [stagingUrl, setStagingUrl] = useState(demo.stagingUrl);
+  const [stagingUrl, setStagingUrl] = useState(demo.stagingUrl ?? '');
   const [buildRef, setBuildRef] = useState(demo.buildRef ?? '');
   const [reviewWindowStart, setReviewWindowStart] = useState(demo.reviewWindowStart?.slice(0, 10) ?? '');
   const [reviewWindowEnd, setReviewWindowEnd] = useState(demo.reviewWindowEnd?.slice(0, 10) ?? '');
@@ -268,7 +268,7 @@ function DemoCard({
         <div className="editor-grid-2">
           <p className="t-small">
             <span className="t-eyebrow">{t('workspace.demoStagingUrl')}</span>{' '}
-            <span className="num-latin">{demo.stagingUrl}</span>
+            <span className="num-latin">{demo.stagingUrl ?? ''}</span>
           </p>
           {demo.buildRef ? (
             <p className="t-small">

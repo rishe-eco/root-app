@@ -22,16 +22,16 @@ import { parseAmountOrThrow } from './admin/billing.js';
  * `lib/allowance.ts`). Two things live here: **the loader** every publish guard
  * calls, and **`extendAllowance`**, the only thing that raises an allowance.
  *
- * ## The extension point for J9 and J10
+ * ## The extension point for J10
  *
- * `roundCountsOn` is where a step's rounds are counted, and **only the design's
- * is written**: published design revisions of the contract. J9 adds the published
- * mockup builds (`counts.mockup`) and J10 the published site builds per phase
- * (`counts.demoByPhase`) *here*, and their publish mutations call
+ * `roundCountsOn` is where a step's rounds are counted: the design's (published
+ * design revisions of the contract, J8) and the mockup's (published mockup
+ * builds, J9b). J10 adds the published site builds per phase
+ * (`counts.demoByPhase`) *here*, and its publish mutation calls
  * `allowanceStateOn` and `assertWithinAllowance` exactly as
- * `publishDesignRevision` does. Until then those counts are absent, which the
- * rule reads as "not counted" and never refuses on — see `lib/allowance.ts`'s
- * header for why absent is not zero.
+ * `publishDesignRevision` and the mockup branch of `publishBuild` do. Until then
+ * that count is absent, which the rule reads as "not counted" and never refuses
+ * on — see `lib/allowance.ts`'s header for why absent is not zero.
  */
 
 type Db = typeof prisma | Prisma.TransactionClient;
@@ -41,9 +41,17 @@ const refuse = (code: string, message: string, extensions: Record<string, unknow
 
 /** How many rounds each step has taken. DESIGN: the published design revisions
  *  of this contract (`publishedAt` is set exactly once, at publish — a superseded
- *  revision was published and still counts). */
+ *  revision was published and still counts). MOCKUP (J9b): the published
+ *  iterations of this contract's mockup — builds of kind `MOCKUP` with a
+ *  `publishedAt`, counted through their demo because a mockup build has no phase.
+ *  A declared build the designer never published costs nothing, as a design draft
+ *  does not (journeys §7.4: an iteration is what reached the customer). */
 export async function roundCountsOn(db: Db, contractId: string): Promise<RoundCounts> {
-  return { design: await db.designRevision.count({ where: { contractId, publishedAt: { not: null } } }) };
+  const [design, mockup] = await Promise.all([
+    db.designRevision.count({ where: { contractId, publishedAt: { not: null } } }),
+    db.build.count({ where: { kind: 'MOCKUP', publishedAt: { not: null }, demo: { contractId } } }),
+  ]);
+  return { design, mockup };
 }
 
 /** A step's rounds used and allowance in force, as the publish guard needs them. */
@@ -102,10 +110,13 @@ const PROBLEM_MESSAGES: Record<ExtensionProblem, string> = {
   PHASE_NOT_ALLOWED: 'Only a demo’s allowance is per phase.',
 };
 
-const CHARGE_TEXT = (extra: number) => ({
-  descriptionFa: `${new Intl.NumberFormat('fa-IR').format(extra)} دورِ اضافه‌ی طراحی`,
-  descriptionEn: `${extra} extra design ${extra === 1 ? 'round' : 'rounds'}`,
-});
+const CHARGE_TEXT = (step: StepKind, extra: number) => {
+  const count = new Intl.NumberFormat('fa-IR').format(extra);
+  const plural = extra === 1 ? 'round' : 'rounds';
+  return step === 'MOCKUP'
+    ? { descriptionFa: `${count} دورِ اضافه‌ی ماکت`, descriptionEn: `${extra} extra mockup ${plural}` }
+    : { descriptionFa: `${count} دورِ اضافه‌ی طراحی`, descriptionEn: `${extra} extra design ${plural}` };
+};
 
 export const allowanceMutations = {
   /**
@@ -116,8 +127,8 @@ export const allowanceMutations = {
    * extension so the two can be read together. The extension is a row of its own:
    * the brief's allowance was frozen with step 1 and is never edited.
    *
-   * Only the design has rounds to extend in J8; a mockup's and a demo's are J9's
-   * and J10's (`STEP_NOT_BUILT`, until they count them). The new road only —
+   * The design's and the mockup's rounds can be extended (J8, J9b); a demo's are
+   * J10's (`STEP_NOT_BUILT`, until it counts them). The new road only —
    * the legacy road has no allowance to raise (`STEP_NOT_ON_ROAD`).
    *
    * Refusals, in order: `FORBIDDEN` (no capability — checked first, so no id
@@ -146,8 +157,9 @@ export const allowanceMutations = {
     if (contract.sequence !== 'AGREEMENT_FIRST') {
       throw refuse('STEP_NOT_ON_ROAD', 'This contract has no allowances to extend.');
     }
-    if (args.step !== 'DESIGN') {
-      throw refuse('STEP_NOT_BUILT', 'Only the design’s rounds can be extended yet.');
+    // DESIGN and MOCKUP count their rounds (J8, J9b); a phase's demo is J10's.
+    if (args.step !== 'DESIGN' && args.step !== 'MOCKUP') {
+      throw refuse('STEP_NOT_BUILT', 'Only the design’s and the mockup’s rounds can be extended yet.');
     }
 
     await prisma.$transaction(async (tx) => {
@@ -163,7 +175,7 @@ export const allowanceMutations = {
             customerId: contract.customerId,
             contractId: contract.id,
             source: 'CONTRACT',
-            ...CHARGE_TEXT(args.extra),
+            ...CHARGE_TEXT(args.step, args.extra),
             amount: charge,
           },
         });

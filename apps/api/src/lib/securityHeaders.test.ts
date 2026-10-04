@@ -243,3 +243,25 @@ test('the mockup server block takes no request bodies to speak of', () => {
 test("the portal's CSP still names the mockup wildcard in frame-src (the mockup host is what it frames)", () => {
   assert.ok((directives.get('frame-src') ?? []).includes('https://*.mockup.m-root.com'));
 });
+
+// ---------------------------------------------------------------------------
+// J9b: the portal now frames a mockup for real (`DemoViewport` over the viewer's
+// grant URL). Two things must stay true, and both are read as text.
+// ---------------------------------------------------------------------------
+
+test('J9b: the production portal CSP is byte-for-byte what P0-2 and J9a left — the mockup viewport needed no change to it', () => {
+  assert.equal(
+    csp,
+    "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; frame-src https://*.staging.m-root.com https://*.mockup.m-root.com; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; form-action 'self'",
+  );
+});
+
+test("J9b: development and e2e send no CSP of their own, so the viewport frames http://<grant>.mockup.localhost:<port> there freely — the production policy is Nginx's alone", () => {
+  // `vite` and `vite preview` add no CSP header (vite.config.ts sets none), and
+  // index.html must not carry a <meta http-equiv> one: a meta policy would apply
+  // in dev and e2e with `default-src 'self'` and silently block the mockup frame
+  // there while production (frame-src above) allowed it — the D-1 gap in reverse.
+  const html = read('apps/web/index.html');
+  assert.doesNotMatch(html, /http-equiv\s*=\s*["']?content-security-policy/i);
+  assert.doesNotMatch(read('apps/web/vite.config.ts'), /Content-Security-Policy/i);
+});

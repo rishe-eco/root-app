@@ -315,6 +315,62 @@ test('a single top-level folder containing index.html succeeds, and its prefix i
 });
 
 // ---------------------------------------------------------------------------
+// The Finder zip (J9b): `__MACOSX/` beside the top folder is ignored
+// ---------------------------------------------------------------------------
+
+describe('a top-level __MACOSX/ folder', () => {
+  test('is ignored: a Finder-made zip of one folder validates, and nothing of __MACOSX is servable', async () => {
+    const path = await fixture((zip) => {
+      zip.addBuffer(Buffer.from('<html></html>'), 'site/index.html');
+      zip.addBuffer(Buffer.from('body{}'), 'site/css/app.css');
+      // What Finder writes: an AppleDouble fork per file — an allowed extension over non-image bytes,
+      // and a .DS_Store that would otherwise be BUNDLE_TYPE_REFUSED.
+      zip.addBuffer(Buffer.from([0x00, 0x05, 0x16, 0x07]), '__MACOSX/site/._index.html');
+      zip.addBuffer(Buffer.from([0x00, 0x05, 0x16, 0x07]), '__MACOSX/site/css/._app.css');
+      zip.addBuffer(Buffer.from([0x00, 0x05, 0x16, 0x07]), '__MACOSX/._site');
+      zip.addBuffer(Buffer.from([0x00]), '__MACOSX/.DS_Store');
+    });
+    const result = await validateBundle(path);
+    assert.equal(result.rootPrefix, 'site/');
+    assert.deepEqual([...result.entries.keys()].sort(), ['css/app.css', 'index.html']);
+    assert.ok([...result.entries.values()].every((name) => !name.startsWith('__MACOSX')), 'no fork is in the served map');
+  });
+
+  test('is ignored beside a root index.html too', async () => {
+    const path = await fixture((zip) => {
+      zip.addBuffer(Buffer.from('<html></html>'), 'index.html');
+      zip.addBuffer(Buffer.from([0x00]), '__MACOSX/._index.html');
+    });
+    const result = await validateBundle(path);
+    assert.equal(result.rootPrefix, '');
+    assert.deepEqual([...result.entries.keys()], ['index.html']);
+  });
+
+  test('is still read: its entries count toward the entry cap', async () => {
+    const many = await fixture((zip) => {
+      zip.addBuffer(Buffer.from('<html></html>'), 'index.html');
+      for (let i = 0; i < 2000; i += 1) zip.addBuffer(Buffer.from('x'), `__MACOSX/._${i}.txt`);
+    });
+    assert.equal(await codeOf(validateBundle(many)), 'BUNDLE_TOO_MANY_FILES');
+  });
+
+  test('alone it is nothing: a zip with only __MACOSX/ still has no index', async () => {
+    const path = await fixture((zip) => {
+      zip.addBuffer(Buffer.from([0x00]), '__MACOSX/._index.html');
+    });
+    assert.equal(await codeOf(validateBundle(path)), 'BUNDLE_NO_INDEX');
+  });
+
+  test('only the top-level folder is ignored: a nested __MACOSX/ is an ordinary folder, extension-checked', async () => {
+    const path = await fixture((zip) => {
+      zip.addBuffer(Buffer.from('<html></html>'), 'site/index.html');
+      zip.addBuffer(Buffer.from([0x00]), 'site/__MACOSX/.DS_Store');
+    });
+    assert.equal(await codeOf(validateBundle(path)), 'BUNDLE_TYPE_REFUSED');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Non-zip and unreadable input
 // ---------------------------------------------------------------------------
 

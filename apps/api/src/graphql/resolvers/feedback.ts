@@ -309,8 +309,15 @@ async function resolveTarget(
     }
   }
   if (anchor.demoId) {
+    // A demo is this contract's by its phase (a site, DEMO step) or by itself (a
+    // mockup has no phase, J9 — MOCKUP step). The kind follows the step, so a
+    // site demo's id offered to the mockup step, or the reverse, is `NOT_FOUND`
+    // and never a comment on the wrong step's page.
     const demo = await prisma.demo.findFirst({
-      where: { id: anchor.demoId, phase: { contractId: contract.id } },
+      where:
+        step === 'MOCKUP'
+          ? { id: anchor.demoId, kind: 'MOCKUP', contractId: contract.id }
+          : { id: anchor.demoId, phase: { contractId: contract.id } },
       select: { id: true, phaseId: true, publishedAt: true },
     });
     if (!demo) throw notFound('demo');
@@ -714,7 +721,7 @@ export const feedbackMutations = {
    * customer accepts a step, not items one by one, and nothing Root does can
    * close the loop for them.
    *
-   * Which steps: MOCKUP and DEMO, for now. The agreement is J7's gate and has
+   * Which steps: DEMO, for now. The agreement is J7's gate and has
    * its own door — `approveContract` on an `AGREEMENT_FIRST` contract, which
    * checks the scope, the payment plan, the phases' dates and the brief before
    * calling `approveStepTx(AGREEMENT)` — and a bare approval here would let a
@@ -724,8 +731,10 @@ export const feedbackMutations = {
    * too, since J8** (`approveDesign`, `resolvers/design.ts`): the same
    * `approveStepTx`, with the path's completeness as its precondition — and this
    * one stopped approving DESIGN so that there is one way to approve it, not two
-   * that would differ on whether a design has to be complete. J9–J10 replace this
-   * door for their steps the same way, passing their own preconditions. A
+   * that would differ on whether a design has to be complete. **The mockup's is
+   * `approveMockup` since J9b** (`resolvers/mockupStep.ts`: a published iteration
+   * is its precondition); J10 replaces this door for the demo the same way,
+   * passing its own preconditions. A
    * `DESIGN_FIRST` contract approves through its own gate and never through here.
    */
   approveStep: async (_p: unknown, args: { contractId: string; step: StepKind; phaseId?: string | null }, ctx: Context) => {
@@ -733,12 +742,12 @@ export const feedbackMutations = {
     const contract = await loadForActor(args.contractId, user);
     if (contract.customerId !== user.id) throw notFound('contract');
 
-    if (contract.sequence !== 'AGREEMENT_FIRST' || !['MOCKUP', 'DEMO'].includes(args.step)) {
+    if (contract.sequence !== 'AGREEMENT_FIRST' || args.step !== 'DEMO') {
       throw refuse('STEP_NOT_APPROVABLE', 'That step cannot be approved this way.');
     }
 
-    const phaseId = args.step === 'DEMO' ? (args.phaseId ?? null) : null;
-    if (args.step !== 'DEMO' && args.phaseId) throw invalidTarget();
+    // Only DEMO reaches here (above), and a demo is approved once per phase.
+    const phaseId = args.phaseId ?? null;
     const road = computeWizard(await wizardStateOn(contract.id));
     // A step with no phase — the placeholder demo — "can never take an
     // approval" (lib/steps.ts): there is no phase for the approval to key on.

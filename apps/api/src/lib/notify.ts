@@ -31,6 +31,8 @@ import {
   designApprovedEmail,
   allowanceExhaustedEmail,
   contractClosedEmail,
+  mockupIterationPublishedEmail,
+  mockupApprovedEmail,
   type MailContent,
 } from './mailTemplates.js';
 import {
@@ -51,6 +53,8 @@ import {
   designApprovedSms,
   allowanceExhaustedSms,
   contractClosedSms,
+  mockupIterationPublishedSms,
+  mockupApprovedSms,
 } from './smsTemplates.js';
 
 /**
@@ -74,7 +78,9 @@ import {
  * `INVOICE_ISSUED`, and since J7 `AGREEMENT_APPROVED` and `AGREEMENT_SIGNED` (to
  * sales — the moments an agreement moves), and since J8 the design step's five
  * (`DESIGN_ROUND_PUBLISHED`, `DESIGN_CONCEPT_CHOSEN`, `DESIGN_OTHER_OPTIONS_ASKED`,
- * `DESIGN_APPROVED`, `ALLOWANCE_EXHAUSTED`), and since J11 `CONTRACT_CLOSED`: a customer who
+ * `DESIGN_APPROVED`, `ALLOWANCE_EXHAUSTED`), since J9b the mockup's two
+ * (`MOCKUP_ITERATION_PUBLISHED`, `MOCKUP_APPROVED`), and since J11
+ * `CONTRACT_CLOSED`: a customer who
  * signs in by phone alone is asking a question and waiting for the answer,
  * and the answer must be able to reach them. The five L3/L3b retrofits
  * (`NEW_COMMENT`/`DEMO_PUBLISHED`/`FEEDBACK_SUBMITTED`/`BUILD_PUBLISHED`/
@@ -232,6 +238,24 @@ export type NotifyEvent =
         deskUrl: string;
       };
     }
+  // Journeys build plan J9b — step 5, the mockup. An iteration published (to the
+  // customer: "mockup 2 of 3"), and the mockup approved (to the contract's
+  // designer, the step locked).
+  | {
+      kind: 'MOCKUP_ITERATION_PUBLISHED';
+      params: {
+        customerName: string;
+        projectTitleFa: string;
+        projectTitleEn: string;
+        iteration: number;
+        allowance: number | null;
+        portalUrl: string;
+      };
+    }
+  | {
+      kind: 'MOCKUP_APPROVED';
+      params: { recipientName: string; customerName: string; projectTitleFa: string; projectTitleEn: string; deskUrl: string };
+    }
   // Journeys build plan J11 — step 7: sales closed the contract. To the customer.
   // `supportUntil` is a calendar day (`YYYY-MM-DD`, PD-19), null when the brief
   // promised no support.
@@ -305,6 +329,10 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return allowanceExhaustedEmail(locale, event.params);
     case 'CONTRACT_CLOSED':
       return contractClosedEmail(locale, event.params);
+    case 'MOCKUP_ITERATION_PUBLISHED':
+      return mockupIterationPublishedEmail(locale, event.params);
+    case 'MOCKUP_APPROVED':
+      return mockupApprovedEmail(locale, event.params);
   }
 }
 
@@ -365,6 +393,12 @@ function renderSms(locale: string | null | undefined, event: NotifyEvent): { tex
     // the support period starts running with it.
     case 'CONTRACT_CLOSED':
       return contractClosedSms(locale, { portalUrl: event.params.portalUrl });
+    // J9b: an iteration is the customer's cue to look; the approval is the
+    // designer's cue that the step is done.
+    case 'MOCKUP_ITERATION_PUBLISHED':
+      return mockupIterationPublishedSms(locale, { portalUrl: event.params.portalUrl });
+    case 'MOCKUP_APPROVED':
+      return mockupApprovedSms(locale, { deskUrl: event.params.deskUrl });
     default:
       return null;
   }

@@ -303,6 +303,16 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 .design-theme-name { font-weight: var(--weight-medium); overflow-wrap: anywhere; }
 .design-chosen { background: var(--color-secondary-soft); color: var(--color-secondary); }
 .design-other, .design-allowance, .design-round-controls { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+
+/* Step 5, the mockup (journeys build plan J9b). It reuses the design step's column
+   and badge; these are the parts only it has. Logical properties and tokens only. */
+.mockup-author, .mockup-mapping, .mockup-drafts, .mockup-ledger { display: flex; flex-direction: column; gap: var(--space-3); align-items: stretch; }
+.mockup-map-row { align-items: center; flex-wrap: wrap; }
+.mockup-map-label { min-inline-size: 8rem; font-weight: 600; }
+.mockup-map-row .input { max-inline-size: 16rem; }
+.mockup-progress { display: flex; align-items: center; gap: var(--space-3); }
+.mockup-progress progress { flex: 1; max-inline-size: 24rem; accent-color: var(--color-accent); }
+.mockup-fate { display: flex; flex-direction: column; gap: var(--space-2); padding-block: var(--space-2); border-block-end: 1px solid var(--color-border); }
 .design-missing, .design-extension-list, .design-theme-pick, .design-page-list, .design-palette-list {
   list-style: none;
   margin: 0;

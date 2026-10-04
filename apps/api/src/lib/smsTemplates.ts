@@ -45,6 +45,8 @@ export { LOCALES, resolveLocale };
  *     placeholder** each, the URL — the round count and the names are the email's.
  *   - `contractClosedSms` (journeys build plan J11): **one placeholder**, the URL —
  *     the title and the support period's end are the email's.
+ *   - `mockupIterationPublishedSms`, `mockupApprovedSms` (journeys build plan J9b):
+ *     **one placeholder** each, the URL.
  *
  * Codes are printed in Latin digits in both languages, never through
  * `toPersianDigits` — house rule 14's own exception for an identifier
@@ -187,6 +189,23 @@ export function designApprovedSms(locale: string | null | undefined, params: { d
     return { text: `A customer approved their design on Root: ${params.deskUrl}` };
   }
   return { text: `مشتری طراحی‌اش را در ریشه تأیید کرد: ${params.deskUrl}` };
+}
+
+/** J9b — to the customer, when a mockup iteration is published. No count, no
+ *  title, like the design round's: the email carries "mockup 2 of 3". */
+export function mockupIterationPublishedSms(locale: string | null | undefined, params: { portalUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A new mockup is ready on Root: ${params.portalUrl}` };
+  }
+  return { text: `ماکتِ تازه در ریشه آماده است: ${params.portalUrl}` };
+}
+
+/** J9b — to the designer, when the customer approves the mockup. */
+export function mockupApprovedSms(locale: string | null | undefined, params: { deskUrl: string }): SmsContent {
+  if (resolveLocale(locale) === 'en') {
+    return { text: `A customer approved their mockup on Root: ${params.deskUrl}` };
+  }
+  return { text: `مشتری ماکتش را در ریشه تأیید کرد: ${params.deskUrl}` };
 }
 
 /** J8 — to sales, when a step's rounds are used up and another is wanted. */

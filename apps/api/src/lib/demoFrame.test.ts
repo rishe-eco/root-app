@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveFrameLines, type ScopeItemForFrame } from './demoFrame.js';
+import { deriveFrameLines, deriveMockupFrame, MOCKUP_FIXED_LINES, type ScopeItemForFrame } from './demoFrame.js';
 
 const item = (over: Partial<ScopeItemForFrame> & { id: string }): ScopeItemForFrame => ({
   labelFa: `ب-${over.id}`,
@@ -79,4 +79,44 @@ test('deriveFrameLines: declined and traded items never surface, even if flagged
 
 test('deriveFrameLines: an empty registry produces an empty frame', () => {
   assert.deepEqual(deriveFrameLines('p1', []), []);
+});
+
+// ---------------------------------------------------------------------------
+// The MOCKUP branch (journeys build plan J9b)
+// ---------------------------------------------------------------------------
+
+const page = (id: string, inBundle: boolean) => ({ scopeItemId: id, labelFa: `ب-${id}`, labelEn: `l-${id}`, inBundle });
+
+test('deriveMockupFrame: a page the bundle shows is NEW, a page it does not is KNOWN_MISSING — one line per page, in the order given', () => {
+  const { lines } = deriveMockupFrame([page('home', true), page('about', false), page('cart', true)]);
+  assert.deepEqual(
+    lines.map((l) => [l.scopeItemId, l.kind]),
+    [
+      ['home', 'NEW'],
+      ['about', 'KNOWN_MISSING'],
+      ['cart', 'NEW'],
+    ],
+  );
+  assert.deepEqual([lines[0].textFa, lines[0].textEn], ['ب-home', 'l-home']);
+});
+
+test('deriveMockupFrame: nothing about build states — no DECIDED, no project-wide TEMPORARY, whatever the registry holds', () => {
+  const { lines } = deriveMockupFrame([page('home', true), page('about', false)]);
+  assert.ok(lines.every((l) => l.kind === 'NEW' || l.kind === 'KNOWN_MISSING'));
+});
+
+test('deriveMockupFrame: the one fixed TEMPORARY line is a code, not a stored sentence — and is there even with no pages', () => {
+  assert.deepEqual(deriveMockupFrame([]).fixed, ['MOCKUP_TEMPORARY']);
+  assert.deepEqual(deriveMockupFrame([]).lines, []);
+  assert.deepEqual([...MOCKUP_FIXED_LINES], ['MOCKUP_TEMPORARY']);
+  // Prose would be a string with spaces in it; a code is a bare identifier.
+  assert.ok(MOCKUP_FIXED_LINES.every((code) => /^[A-Z_]+$/.test(code)));
+});
+
+test('deriveMockupFrame: the same pages with a different bundle are the same lines changing kind — the second iteration’s fates', () => {
+  const pages = (inBundle: Record<string, boolean>) => ['home', 'about', 'cart'].map((id) => page(id, inBundle[id]));
+  const first = deriveMockupFrame(pages({ home: true, about: false, cart: false })).lines;
+  const second = deriveMockupFrame(pages({ home: true, about: true, cart: false })).lines;
+  assert.deepEqual(first.map((l) => l.scopeItemId), second.map((l) => l.scopeItemId));
+  assert.deepEqual(second.filter((l, i) => l.kind !== first[i].kind).map((l) => l.scopeItemId), ['about']);
 });

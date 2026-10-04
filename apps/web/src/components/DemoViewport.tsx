@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { REPORT_DEMO_PATH, type Demo, type DemoPage } from '@/lib/queries';
+import { acceptsFrameMessage } from '@/lib/frameOrigin';
 
 /**
  * The viewport-preset frame (build plan L2; spec §4 stage 6, §12 Q1) — an
@@ -16,6 +17,11 @@ import { REPORT_DEMO_PATH, type Demo, type DemoPage } from '@/lib/queries';
  * (`snippets/demo-reporter`) — see the origin check below, which is the
  * portal-facing half of L2.2's "postMessage needs an origin check on both
  * ends."
+ *
+ * **A mockup (journeys build plan J9b) is framed by the same component.** The page
+ * to frame is then the viewer's own grant URL (`mockupViewUrl`, passed as `src`),
+ * not a stored staging URL — a mockup has none — and the origin the portal listens
+ * to is exactly that URL's: one grant, one subdomain (`lib/frameOrigin.ts`).
  */
 
 const PRESETS = {
@@ -45,17 +51,7 @@ function usePhoneViewport(): boolean {
   return isPhone;
 }
 
-/** Null when `stagingUrl` somehow fails to parse — refuses to listen for
- *  messages from an origin it cannot name, rather than falling back to '*'. */
-function originOf(url: string): string | null {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-}
-
-export default function DemoViewport({ demo }: { demo: Demo }) {
+export default function DemoViewport({ demo, src: given }: { demo: Demo; /** The page to frame when it is not `demo.stagingUrl` — a mockup's grant URL. */ src?: string | null }) {
   const { t } = useTranslation();
   const isPhone = usePhoneViewport();
   const [preset, setPreset] = useState<Preset>('desktop');
@@ -63,17 +59,17 @@ export default function DemoViewport({ demo }: { demo: Demo }) {
   const [showDesign, setShowDesign] = useState(false);
   const [reportPath] = useMutation(REPORT_DEMO_PATH);
 
-  const stagingOrigin = useMemo(() => originOf(demo.stagingUrl), [demo.stagingUrl]);
+  const src = given ?? demo.stagingUrl;
 
   useEffect(() => {
-    if (!stagingOrigin) return;
+    if (!src) return;
     function onMessage(event: MessageEvent) {
       // L2.2: validate the *sender's* origin against the demo's own declared
       // staging host before trusting anything in the payload — the portal's
       // half of the postMessage contract the reporter snippet's README
       // documents for the other end. Without this, any page that frames this
       // component could inject page-change events of its own.
-      if (event.origin !== stagingOrigin) return;
+      if (!acceptsFrameMessage(event.origin, src)) return;
       const data = event.data as { source?: unknown; path?: unknown } | null;
       if (!data || data.source !== 'root-demo-reporter' || typeof data.path !== 'string') return;
       reportPath({ variables: { demoId: demo.id, path: data.path } })
@@ -86,10 +82,11 @@ export default function DemoViewport({ demo }: { demo: Demo }) {
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [stagingOrigin, demo.id, reportPath]);
+  }, [src, demo.id, reportPath]);
 
   const designImage = matched?.pageDesign?.imageUrl ?? null;
   const box = isPhone ? null : PRESETS[preset];
+  if (!src) return null;
 
   return (
     <div className="demo-viewport">
@@ -129,10 +126,10 @@ export default function DemoViewport({ demo }: { demo: Demo }) {
           <img className="demo-frame-design" src={designImage} alt="" />
         </div>
       ) : box ? (
-        <ScaledFrame src={demo.stagingUrl} width={box.width} height={box.height} title={t('demo.viewport.frameTitle')} />
+        <ScaledFrame src={src} width={box.width} height={box.height} title={t('demo.viewport.frameTitle')} />
       ) : (
         <div className="demo-frame-outer demo-frame-outer-native">
-          <iframe className="demo-frame-native" src={demo.stagingUrl} title={t('demo.viewport.frameTitle')} />
+          <iframe className="demo-frame-native" src={src} title={t('demo.viewport.frameTitle')} />
         </div>
       )}
 

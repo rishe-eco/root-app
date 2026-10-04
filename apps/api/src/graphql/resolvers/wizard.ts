@@ -66,6 +66,7 @@ async function loadFacts(c: FullContract) {
     phases,
     dependencies,
     builds,
+    mockupBuilds,
     contractRevisions,
     designRevisions,
     feedback,
@@ -103,6 +104,15 @@ async function loadFacts(c: FullContract) {
     prisma.build.findMany({
       where: { projectId: c.projectId, phase: { contractId: c.id }, publishedAt: { not: null } },
       select: { id: true, number: true, publishedAt: true },
+    }),
+    // The mockup's published iterations (J9b): a mockup build has no phase, so it
+    // is this contract's through its demo. Oldest first — the position in this
+    // list is the iteration's ordinal ("mockup 2"), which is not the build's
+    // number whenever a declared draft was never published.
+    prisma.build.findMany({
+      where: { kind: 'MOCKUP', demo: { contractId: c.id }, publishedAt: { not: null } },
+      select: { id: true, publishedAt: true },
+      orderBy: [{ publishedAt: 'asc' }, { id: 'asc' }],
     }),
     prisma.contractRevision.findMany({
       where: { contractId: c.id, publishedAt: { not: null } },
@@ -178,6 +188,7 @@ async function loadFacts(c: FullContract) {
     phases,
     dependencies,
     builds,
+    mockupBuilds,
     contractRevisions,
     designRevisions,
     feedback,
@@ -293,8 +304,9 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
   }
   // The design path is the brief's tier through `designPathOf` (J8, PD-13); the
   // legacy road has none. The design step's rounds are the published design
-  // revisions against the brief's allowance and any extension — MOCKUP's and a
-  // demo's are J9's and J10's and are simply not listed.
+  // revisions against the brief's allowance and any extension; the mockup's (J9b)
+  // are its published iterations against `mockupIterations`. A demo's are J10's
+  // and are simply not listed.
   const newRoad = c.sequence === 'AGREEMENT_FIRST';
   return {
     sequence: c.sequence,
@@ -309,6 +321,12 @@ function stateOf(c: FullContract, facts: Facts): WizardState {
             phaseId: null,
             used: facts.designRevisions.length,
             allowance: allowanceFor('DESIGN', null, facts.brief, facts.allowanceExtensions),
+          },
+          {
+            step: 'MOCKUP',
+            phaseId: null,
+            used: facts.mockupBuilds.length,
+            allowance: allowanceFor('MOCKUP', null, facts.brief, facts.allowanceExtensions),
           },
         ]
       : [],
@@ -483,6 +501,7 @@ export const contractWizardFields = {
       // named in lib/statusSummary.ts's header.
       progressAt: [
         ...facts.builds.map((b) => b.publishedAt!),
+        ...facts.mockupBuilds.map((b) => b.publishedAt!),
         ...facts.contractRevisions.map((r) => r.publishedAt!),
         ...facts.designRevisions.map((r) => r.publishedAt!),
       ],
@@ -519,6 +538,7 @@ export const contractWizardFields = {
       designRevisions: facts.designRevisions.map((r) => ({ id: r.id, version: r.version, publishedAt: r.publishedAt! })),
       builds: facts.builds.map((b) => ({ id: b.id, number: b.number, publishedAt: b.publishedAt! })),
       deliveredAt: c.deliveredAt,
+      mockupBuilds: facts.mockupBuilds.map((b, i) => ({ id: b.id, iteration: i + 1, publishedAt: b.publishedAt! })),
     });
   },
 
@@ -591,8 +611,10 @@ export const wizardMutations = {
  * `setPageApproval`, `requestOtherOptions` and `approveDesign` in `customer.ts` /
  * `design.ts`) is J8's and calls it through `openDesign`, which adds the one rule
  * the others do not need: on the new road the design opens once the agreement is
- * *signed*. The mockup is J9's and a demo J10's: each adds its calls in the same
- * commit as the approval that makes them reachable.
+ * *signed*. The mockup (MOCKUP — J9b's `mockupStep.ts`) calls it through
+ * `openMockup`, which adds its own road (custom path, design approved); a demo is
+ * J10's and adds its calls in the same commit as the approval that makes them
+ * reachable.
  *
  * Takes a transaction client so the check and the write share a snapshot.
  */

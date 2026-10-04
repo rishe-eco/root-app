@@ -46,7 +46,29 @@ const ERROR_KEYS: Record<string, string> = {
   // session cookie. A same-origin upload from the portal itself never hits
   // this — it exists for the case reported to the user is not "your fault".
   ORIGIN_REFUSED: 'upload.errOrigin',
+  // J9a/J9b: the mockup bundle's own refusals (`lib/mockupBundle.ts`, and the
+  // streamed route's) — each one says what to fix in the zip, because a designer
+  // who is told only "the upload failed" has nothing to act on.
+  BUNDLE_TOO_LARGE: 'upload.errBundleTooLarge',
+  BUNDLE_TOO_MANY_FILES: 'upload.errBundleTooManyFiles',
+  BUNDLE_PATH_UNSAFE: 'upload.errBundlePathUnsafe',
+  BUNDLE_TYPE_REFUSED: 'upload.errBundleTypeRefused',
+  BUNDLE_NO_INDEX: 'upload.errBundleNoIndex',
+  BUNDLE_UNREADABLE: 'upload.errBundleUnreadable',
+  BUNDLE_ENCRYPTED_ENTRY: 'upload.errBundleEncrypted',
+  // The route's own: no contract named, a contract that is not theirs, no file.
+  CONTRACT_REQUIRED: 'upload.errContractRequired',
+  NOT_ASSIGNED: 'upload.errNotAssigned',
+  NO_FILE: 'upload.errNoFile',
 };
+
+/** The locale key for a code the upload route answered with, or the generic one. */
+export function uploadErrorKey(code: string | null | undefined): string {
+  return ERROR_KEYS[code ?? ''] ?? 'upload.errGeneric';
+}
+
+/** Every code with its own sentence — for the test that holds both locales to it. */
+export const UPLOAD_ERROR_CODES = Object.keys(ERROR_KEYS);
 
 export class UploadFailure extends Error {
   constructor(readonly i18nKey: string) {
@@ -147,4 +169,53 @@ export async function uploadThemePreview(themeId: string, file: File): Promise<U
     throw new UploadFailure(key ?? 'upload.errGeneric');
   }
   return body as unknown as UploadResult;
+}
+
+// ---------------------------------------------------------------------------
+// The mockup bundle (journeys build plan J9b) — the one upload with progress.
+// ---------------------------------------------------------------------------
+
+export const MOCKUP_BUNDLE_MAX_BYTES = 50 * 1024 * 1024;
+
+/** A hint for the file input, nothing more — the server sniffs the real bytes. */
+export const MOCKUP_BUNDLE_ACCEPT = '.zip,application/zip';
+
+/**
+ * Uploads a mockup bundle to a contract, reporting progress. `fetch` cannot say
+ * how much of a request body has gone, and a 50 MB zip over a slow connection is
+ * long enough that a bar is not decoration — so this is the one upload that uses
+ * `XMLHttpRequest`. The server streams it to disk (`routes/files.ts`,
+ * `receiveStreamedUpload`); nothing about that changes the request.
+ *
+ * `onProgress` gets a fraction between 0 and 1. Errors come back the way every
+ * other upload's do — `UploadFailure` carrying a locale key, never the server's
+ * English.
+ */
+export function uploadMockupBundle(contractId: string, file: File, onProgress?: (fraction: number) => void): Promise<UploadResult> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/upload?class=MOCKUP_BUNDLE&contractId=${encodeURIComponent(contractId)}`);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+    };
+    xhr.onerror = () => reject(new UploadFailure('upload.errGeneric'));
+    xhr.onload = () => {
+      let body: { error?: string } | null = null;
+      try {
+        body = JSON.parse(xhr.responseText) as { error?: string };
+      } catch {
+        body = null;
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && body) {
+        onProgress?.(1);
+        resolve(body as unknown as UploadResult);
+        return;
+      }
+      reject(new UploadFailure(uploadErrorKey(body?.error)));
+    };
+    xhr.send(form);
+  });
 }

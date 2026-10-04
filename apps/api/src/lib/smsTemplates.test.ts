@@ -21,6 +21,8 @@ import {
   designApprovedSms,
   allowanceExhaustedSms,
   contractClosedSms,
+  mockupIterationPublishedSms,
+  mockupApprovedSms,
   type SmsContent,
 } from './smsTemplates.js';
 
@@ -59,6 +61,9 @@ const builders: Array<{ name: string; build: (locale: string) => SmsContent; mus
   { name: 'allowance-exhausted', build: (l) => allowanceExhaustedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
   // Journeys build plan J11 — a contract closed, to the customer; one placeholder, the URL.
   { name: 'contract-closed', build: (l) => contractClosedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  // Journeys build plan J9b — the mockup step; one placeholder each, the URL.
+  { name: 'mockup-iteration-published', build: (l) => mockupIterationPublishedSms(l, { portalUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
+  { name: 'mockup-approved', build: (l) => mockupApprovedSms(l, { deskUrl: REQUEST_URL }), mustInclude: REQUEST_URL },
 ];
 
 for (const { name, build, mustInclude } of builders) {
@@ -117,6 +122,8 @@ test('the request SMS bodies carry no free text — only fixed words and the URL
     (l: string) => designApprovedSms(l, { deskUrl: REQUEST_URL }),
     (l: string) => allowanceExhaustedSms(l, { deskUrl: REQUEST_URL }),
     (l: string) => contractClosedSms(l, { portalUrl: REQUEST_URL }),
+    (l: string) => mockupIterationPublishedSms(l, { portalUrl: REQUEST_URL }),
+    (l: string) => mockupApprovedSms(l, { deskUrl: REQUEST_URL }),
   ]) {
     for (const locale of LOCALES) {
       const words = build(locale).text.replace(REQUEST_URL, '');

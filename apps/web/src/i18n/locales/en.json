@@ -901,7 +901,108 @@
     "errType": "That file type is not accepted.",
     "errEmpty": "That file is empty.",
     "errOrigin": "This upload could not be verified as coming from Root. Reload the page and try again.",
-    "errGeneric": "The upload failed. Try again."
+    "errGeneric": "The upload failed. Try again.",
+    "errBundleTooLarge": "That zip is too large: at most 50 MB, 200 MB once unpacked, and no single file that unpacks to more than 100 times its size.",
+    "errBundleTooManyFiles": "That zip has too many files (at most 2,000).",
+    "errBundlePathUnsafe": "That zip has a file whose name is not allowed — a path starting with / or containing .., a backslash, a shortcut (symlink), or two names that differ only in capitals.",
+    "errBundleTypeRefused": "That zip contains a type of file a mockup may not have. Allowed: html, css, js, json, images, fonts, mp4/webm video and txt.",
+    "errBundleNoIndex": "That zip has no index.html at its top level (or in its single top-level folder).",
+    "errBundleUnreadable": "That file could not be read as a zip. Check that it is a .zip and not damaged.",
+    "errBundleEncrypted": "That zip is password-protected. Zip it again without a password.",
+    "errContractRequired": "Open the mockup from its contract and upload from there.",
+    "errNotAssigned": "You are not the designer of this contract.",
+    "errNoFile": "Choose a zip file first."
+  },
+  "mockup": {
+    "notOpen": "The mockup opens once the design is approved.",
+    "noIteration": "No mockup published yet",
+    "iterationOpen": "Mockup {{n}}",
+    "iteration": "Mockup {{n}} of {{total}}",
+    "lede": {
+      "staff": "A mockup is a click-through of the pages, not the real site. The customer browses it here and leaves a note on any page.",
+      "customer": "This is a mockup: click through it, leave a note under any page that is not right, and approve the mockup when you are happy with it."
+    },
+    "readOnly": "Only this contract’s designer can build the mockup.",
+    "empty": {
+      "staff": "No iteration is published yet. The customer sees nothing until one is.",
+      "customer": "The designer has not published the mockup yet. We will tell you when it is ready."
+    },
+    "fixed": {
+      "MOCKUP_TEMPORARY": "A mockup: no real data, nothing is saved."
+    },
+    "kind": {
+      "NEW": "Pages in this mockup",
+      "KNOWN_MISSING": "Not in this mockup yet"
+    },
+    "approve": {
+      "help": "Once each of your notes has an answer you can approve the mockup. After that it is locked, and anything new is a change request.",
+      "action": "Approve the mockup",
+      "done": "The mockup is approved and locked."
+    },
+    "start": {
+      "help": "Start the mockup to create a page for each page in the agreed scope.",
+      "action": "Start the mockup"
+    },
+    "author": {
+      "title": "The mockup"
+    },
+    "upload": {
+      "label": "Mockup bundle (.zip)",
+      "help": "A zip with an index.html — at most 50 MB. A __MACOSX folder from Finder is ignored.",
+      "progress": "Upload progress"
+    },
+    "declare": {
+      "uploaded": "“{{name}}” is uploaded. Declare the iteration.",
+      "fates": "Every open note needs a fate first ({{n}}).",
+      "outcome": "Fate",
+      "note": "Note",
+      "reason": "Reason (required)",
+      "unprompted": "A change nobody asked for (optional)",
+      "action": "Declare the iteration",
+      "ADDRESSED": "Addressed",
+      "DECLINED": "Declined",
+      "CARRIED_FORWARD": "Carried forward"
+    },
+    "drafts": {
+      "title": "Declared, not published",
+      "line": "Iteration {{number}}",
+      "publish": "Publish to the customer",
+      "exhausted": "The rounds are used up; sales has to extend the allowance before another can be published."
+    },
+    "map": {
+      "title": "Page mapping",
+      "help": "Point each agreed page at a path in the bundle. The paths of the last iteration are already filled in.",
+      "pathFor": "Path of “{{label}}”",
+      "unmapped": "Not mapped",
+      "inBundle": "In the bundle",
+      "notInBundle": "Not in the bundle"
+    },
+    "ledger": {
+      "title": "What became of the notes",
+      "build": "Iteration {{number}}",
+      "unprompted": "Change noted"
+    },
+    "error": {
+      "STEP_HAS_OPEN_FEEDBACK": "Some of your notes are still waiting for Root’s answer. Once each has one, you can approve.",
+      "STEP_HAS_PENDING_ANSWERS": "Root is still finishing its answers on this step. Try again shortly.",
+      "STEP_LOCKED": "The mockup is approved and locked — open a change request instead.",
+      "NO_PUBLISHED_MOCKUP": "There is no mockup to approve yet.",
+      "ALLOWANCE_EXHAUSTED": "All the rounds in the brief are used. Ask sales to extend the allowance.",
+      "MISSING_DISPOSITION": "Every open note needs a fate before an iteration can be declared.",
+      "DECLINE_REASON_REQUIRED": "A declined note needs its reason.",
+      "PATH_ALREADY_MAPPED": "Another page is already mapped to that path.",
+      "INVALID_PATH": "That is not a path a bundle can hold.",
+      "FILE_ALREADY_USED": "That bundle is already an iteration. Upload the new one.",
+      "BUILD_SUPERSEDED": "A newer iteration is already published.",
+      "ALREADY_PUBLISHED": "That iteration is already published.",
+      "NOT_ASSIGNED": "You are not the designer of this contract.",
+      "FORBIDDEN": "You do not have access to that.",
+      "DESIGN_NOT_APPROVED": "The mockup starts once the design is approved.",
+      "NOT_CUSTOM": "Only a custom design has a mockup.",
+      "MOCKUP_DEMO_EXISTS": "The mockup is already started.",
+      "NO_PAGES": "The agreed scope has no pages to show.",
+      "SCOPE_ITEM_NOT_ON_MOCKUP": "A mockup does not ship registry items; note the change instead."
+    }
   },
   "contracts": {
     "pageTitle": "Your contracts",
@@ -1920,6 +2021,7 @@
     "DESIGN_PUBLISHED": "Design v{{number}} published",
     "BUILD_PUBLISHED": "Build {{number}} published on the demo",
     "CONTRACT_DELIVERED": "Delivered — the contract was closed",
+    "MOCKUP_PUBLISHED": "Mockup {{number}} published",
     "byCustomer": "Customer",
     "byRoot": "Root",
     "empty": "Nothing has happened yet."
