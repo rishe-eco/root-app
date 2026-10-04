@@ -490,3 +490,19 @@ test('every J12 item names a sentence that exists, for the audiences that can se
     assert.ok(ATTENTION_SENTENCES[item.kind]?.[item.variant]?.includes('staff'), `${item.kind}/${item.variant}`);
   }
 });
+
+test('the first published draft is the customer’s to read and approve, then to sign — a line each, dated by the act that began the wait (J12)', () => {
+  const none = { contract: null, designChangeCount: 0, designSince: null, amendment: null };
+  const review = attentionFor(empty({ pending: { ...none, draft: { state: 'review', version: 1, since: day(-2) } } }), CUSTOMER);
+  assert.deepEqual(summary(review), ['DRAFT_TO_REVIEW/draft/CUSTOMER']);
+  assert.deepEqual(review[0].params, { version: 1 });
+  assert.equal(review[0].since.getTime(), day(-2).getTime());
+  const sign = attentionFor(empty({ pending: { ...none, draft: { state: 'sign', version: 2, since: day(-1) } } }), CUSTOMER);
+  assert.deepEqual(summary(sign), ['DRAFT_TO_REVIEW/sign/CUSTOMER']);
+  // Sales reads the same line about the customer; nobody's job, so it is on no staff home.
+  assert.deepEqual(summary(attentionFor(empty({ pending: { ...none, draft: { state: 'review', version: 1, since: day(-2) } } }), SALES)), ['DRAFT_TO_REVIEW/draft/CUSTOMER']);
+  assert.equal(review[0].role, null);
+  for (const variant of ['draft', 'sign']) assert.deepEqual(ATTENTION_SENTENCES.DRAFT_TO_REVIEW?.[variant], ['customer', 'staff']);
+  // A fixture that predates the field is unchanged.
+  assert.deepEqual(attentionFor(empty({ pending: { ...none } }), CUSTOMER), []);
+});

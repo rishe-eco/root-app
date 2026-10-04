@@ -65,7 +65,12 @@ import { attentionVisibleTo } from './visibility.js';
  * (the design, the mockup or a phase's demo is the current step and nothing has
  * been shown yet — the designer's or the developer's move). Not per contract, in
  * `lib/home.ts`: `REQUEST_MESSAGE` and `TICKET_REPLY`, which belong to a project
- * that may not be a contract and a ticket that may belong to none. Not shipped,
+ * that may not be a contract and a ticket that may belong to none. And one variant
+ * of a shipped kind: `DRAFT_TO_REVIEW` gains `draft` (the contract's *first*
+ * published draft, on the new road — read it, say what you want changed, approve it)
+ * and `sign` (approved, not yet signed); the banner only ever compared a revision
+ * with an earlier one the customer had approved, so the dashboard would have said
+ * nothing on the day sales published the draft. Not shipped,
  * still: `PROPOSAL_DECIDED` (needs a "seen" state — see below), `ALLOWANCE_EXHAUSTED`
  * (a notification, and the allowance counters already say it) and
  * `ASSIGNEE_INACTIVE` (J4 decides who sees it).
@@ -144,7 +149,10 @@ const BOTH: readonly Audience[] = ['customer', 'staff'];
  * has no customer sentence to write.
  */
 export const ATTENTION_SENTENCES: Partial<Record<AttentionKind, Record<string, readonly Audience[]>>> = {
-  DRAFT_TO_REVIEW: { contract: BOTH, amendmentApprove: BOTH, amendmentSign: BOTH },
+  // J12 adds the contract's *first* published draft (`draft`: read it, say what you want
+  // changed, approve it) and its signature (`sign`) — until then only a revision made after
+  // an approval, or an amendment, was a line.
+  DRAFT_TO_REVIEW: { contract: BOTH, draft: BOTH, sign: BOTH, amendmentApprove: BOTH, amendmentSign: BOTH },
   ROUND_PUBLISHED: { default: BOTH },
   ANSWER_PUBLISHED: { default: BOTH },
   FEEDBACK_UNRESOLVED: { default: BOTH },
@@ -183,6 +191,10 @@ export type PendingFacts = {
   designChangeCount: number;
   designSince: Date | null;
   amendment: { ordinal: number; approved: boolean; since: Date } | null;
+  /** J12: the contract's first published draft, on the new road — to read and
+   *  approve (`review`), or approved and waiting for the signature (`sign`).
+   *  Optional so fixtures that predate it need not name it. */
+  draft?: { state: 'review' | 'sign'; version: number; since: Date } | null;
 };
 
 export type AttentionInput = {
@@ -295,6 +307,16 @@ function allItems(input: AttentionInput): AttentionItem[] {
       waitingOn: 'CUSTOMER',
       since: pending.contract.since,
       params: { fromVersion: pending.contract.fromVersion, toVersion: pending.contract.toVersion },
+    });
+  }
+  if (pending?.draft) {
+    items.push({
+      ...base,
+      kind: 'DRAFT_TO_REVIEW',
+      variant: pending.draft.state === 'review' ? 'draft' : 'sign',
+      waitingOn: 'CUSTOMER',
+      since: pending.draft.since,
+      params: { version: pending.draft.version },
     });
   }
   if (pending?.amendment) {

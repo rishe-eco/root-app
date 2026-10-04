@@ -164,7 +164,7 @@ const CUSTOM_BRIEF = { designTier: 'SENIOR_DESIGNER', premadeRounds: null, wiref
  * the draft published, approved and signed. The fixture's own legacy design is
  * removed, as `j9b.test.ts` does, so the design step is the new road's.
  */
-async function signed(over: Record<string, unknown> = {}) {
+async function signed(over: Record<string, unknown> = {}, upTo: 'published' | 'approved' | 'signed' = 'signed') {
   await prisma.contract.update({ where: { id: f.contract.id }, data: { currentDesignRevisionId: null } });
   await prisma.designRevision.deleteMany({ where: { contractId: f.contract.id } });
   ok(await exec(SET_BRIEF, { as: staff.SALES, variables: { c: f.contract.id, i: { ...BRIEF_INPUT, templateTypeId: type.id, ...over } } }));
@@ -187,8 +187,10 @@ async function signed(over: Record<string, unknown> = {}) {
   ok(await exec(SEED_SCOPE, { as: staff.SALES, variables: { c: f.contract.id } }));
   ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-12', e: '2026-12-20' } }));
   ok(await exec(PUBLISH_DRAFT, { as: staff.SALES, variables: { c: f.contract.id } }));
-  ok(await exec(APPROVE_AGREEMENT, { as: f.customer, variables: { c: f.contract.id } }));
-  ok(await exec(SIGN, { as: f.customer, variables: { c: f.contract.id, n: 'Test Customer' } }));
+  if (upTo !== 'published') {
+    ok(await exec(APPROVE_AGREEMENT, { as: f.customer, variables: { c: f.contract.id } }));
+    if (upTo === 'signed') ok(await exec(SIGN, { as: f.customer, variables: { c: f.contract.id, n: 'Test Customer' } }));
+  }
   const plan = await prisma.plannedInvoice.findMany({ where: { plan: { contractId: f.contract.id } }, orderBy: { ordinal: 'asc' } });
   return { phases, plan };
 }
@@ -280,6 +282,20 @@ test('the customer’s dashboard: two contracts, an invoice and a request — ea
 
   // A stranger's account has none of this.
   assert.deepEqual(await homeOf(f.stranger), []);
+});
+
+test('the contract’s first published draft is on the customer’s dashboard from the day it is published until it is signed: read and approve, then sign', async () => {
+  await signed({}, 'published');
+  const draft = (await homeOf(f.customer)).filter((i) => i.kind === 'DRAFT_TO_REVIEW');
+  assert.deepEqual(draft.map((i) => [i.variant, i.waitingOn, param(i, 'version'), i.route]), [['draft', 'CUSTOMER', '1', `/app/contracts/${f.contract.id}?step=AGREEMENT`]]);
+  assert.equal((await moveOf(f.customer)).nextMoveOn, 'CUSTOMER', 'and the status area has always said so');
+  // Sales sees the same line about the customer, and it is on no staff home — nobody's job.
+  assert.ok((await homeOf(staff.SALES)).every((i) => i.kind !== 'DRAFT_TO_REVIEW'));
+
+  ok(await exec(APPROVE_AGREEMENT, { as: f.customer, variables: { c: f.contract.id } }));
+  assert.deepEqual((await homeOf(f.customer)).filter((i) => i.kind === 'DRAFT_TO_REVIEW').map((i) => i.variant), ['sign']);
+  ok(await exec(SIGN, { as: f.customer, variables: { c: f.contract.id, n: 'Test Customer' } }));
+  assert.deepEqual((await homeOf(f.customer)).filter((i) => i.kind === 'DRAFT_TO_REVIEW'), []);
 });
 
 test('a ticket is the customer’s move once Root has answered it and Root’s while it waits; an overdue invoice and the next one due are two lines', async () => {
@@ -472,7 +488,7 @@ test('a discarded contract is on no one’s home, and a project that is not acti
   assert.ok((await homeOf(staff.DESIGNER)).length > 0);
   await prisma.contract.update({ where: { id: f.contract.id }, data: { status: 'DISCARDED' } });
   for (const u of [staff.DESIGNER, staff.SALES, f.admin, f.customer]) {
-    assert.ok(!(await homeOf(u)).some((i) => i.contractId === f.contract.id), u.email);
+    assert.ok(!(await homeOf(u)).some((i) => i.contractId === f.contract.id), String(u.email));
   }
 });
 
@@ -578,7 +594,9 @@ test('the mockup: nothing out is the designer’s move, an iteration out is the 
   // The designer answers; the customer is told, and the iteration is theirs to approve again.
   const item = await prisma.feedbackItem.findFirstOrThrow({ where: { contractId: f.contract.id, step: 'MOCKUP' } });
   ok(await exec('mutation($i: ID!){ answerFeedback(itemId: $i, body: "Fixed", resolution: ADDRESSED) { id } }', { as: staff.DESIGNER, variables: { i: item.id } }));
-  assert.deepEqual(tags(await homeOf(f.customer)), ['ANSWER_PUBLISHED/default@A', 'ITERATION_PUBLISHED/default@A']);
+  // One line, not two: the answer already says "read it, or approve the step".
+  assert.deepEqual(tags(await homeOf(f.customer)), ['ANSWER_PUBLISHED/default@A']);
+  assert.equal((await moveOf(f.customer)).nextMoveOn, 'CUSTOMER');
   assert.deepEqual(tags(await homeOf(staff.DESIGNER)), []);
 
   // Approval locks the step and clears the customer's line.

@@ -80,16 +80,18 @@ test('an admin sees every contract, not just their own', async ({ page }) => {
   await expect(page.getByText('RC-2026-014')).toBeVisible();
 });
 
-test('a reviewer sees Overview and Review and nothing else, and cannot type their way into Contracts', async ({
+test('a reviewer sees My work and Review and nothing else, and cannot type their way into Contracts', async ({
   page,
 }) => {
   await signIn(page, REVIEWER);
-  await expect(page).toHaveURL(/\/en\/desk\/overview/);
+  await expect(page).toHaveURL(/\/en\/desk\/work/);
 
   const nav = page.locator('.desk-nav');
-  await expect(nav.getByText('Overview')).toBeVisible();
+  await expect(nav.getByText('My work')).toBeVisible();
+  // J12: Overview is the whole book's view (contracts.readAll), not an any-staff page.
+  await expect(nav.getByText('Overview')).toHaveCount(0);
   // review.participate (C1) is the one capability REVIEWER holds beyond the
-  // implicit "any staff" Overview — so this is the one other section that
+  // implicit "any staff" My work — so this is the one other section that
   // should be here, not a hole where every other capability's section is not.
   await expect(nav.getByText('Review')).toBeVisible();
   await expect(nav.getByText('Contracts')).toHaveCount(0);
@@ -98,7 +100,7 @@ test('a reviewer sees Overview and Review and nothing else, and cannot type thei
 
   // The acceptance criterion: a capability filter, not an isAdmin in disguise.
   await page.goto('/en/desk/contracts');
-  await expect(page).toHaveURL(/\/en\/desk\/overview/);
+  await expect(page).toHaveURL(/\/en\/desk\/work/);
   await expect(page.getByText('RC-2026-014')).toHaveCount(0);
 });
 
@@ -110,6 +112,7 @@ test('a reviewer sees Overview and Review and nothing else, and cannot type thei
  */
 const NAV_LABELS = {
   en: {
+    work: 'My work',
     overview: 'Overview',
     contracts: 'Contracts',
     requests: 'Requests',
@@ -127,6 +130,7 @@ const NAV_LABELS = {
     apiTokens: 'Tokens',
   },
   fa: {
+    work: 'کارهای من',
     overview: 'نمای کلی',
     contracts: 'قراردادها',
     requests: 'درخواست‌ها',
@@ -170,6 +174,7 @@ async function assertNavShowsExactly(
 // checks it absent too, because `assertNavShowsExactly` walks every label.
 test('an admin sees every section, Users included — in both languages', async ({ page }) => {
   const sections = [
+    'work',
     'overview',
     'contracts',
     'requests',
@@ -192,10 +197,11 @@ test('an admin sees every section, Users included — in both languages', async 
   await assertNavShowsExactly(page, 'fa', sections);
 });
 
-test('a sales user sees Overview, Contracts, Requests, Approvals, Customers, Tickets, Billing, Services and Templates — in both languages', async ({
+test('a sales user sees My work, Overview, Contracts, Requests, Approvals, Customers, Tickets, Billing, Services and Templates — in both languages', async ({
   page,
 }) => {
   const sections = [
+    'work',
     'overview',
     'contracts',
     'requests',
@@ -213,20 +219,22 @@ test('a sales user sees Overview, Contracts, Requests, Approvals, Customers, Tic
 });
 
 // Templates (T1) is the designer's second row: `templates.types` opens it.
-test('a designer sees only Overview, Contracts and Templates — in both languages', async ({ page }) => {
+// J12: Overview is the whole book's view (`contracts.readAll`), so it is not on a designer's or a
+// developer's nav; their home is My work.
+test('a designer sees only My work, Contracts and Templates — in both languages', async ({ page }) => {
   await signIn(page, DESIGNER, 'en');
-  await assertNavShowsExactly(page, 'en', ['overview', 'contracts', 'templates']);
+  await assertNavShowsExactly(page, 'en', ['work', 'contracts', 'templates']);
   await signIn(page, DESIGNER, 'fa');
-  await assertNavShowsExactly(page, 'fa', ['overview', 'contracts', 'templates']);
+  await assertNavShowsExactly(page, 'fa', ['work', 'contracts', 'templates']);
 });
 
-test('a developer sees Overview, Contracts and Builds — in both languages (D-2 closed: a developer can open a demo)', async ({
+test('a developer sees My work, Contracts and Builds — in both languages (D-2 closed: a developer can open a demo)', async ({
   page,
 }) => {
   await signIn(page, DEVELOPER, 'en');
-  await assertNavShowsExactly(page, 'en', ['overview', 'contracts', 'builds']);
+  await assertNavShowsExactly(page, 'en', ['work', 'contracts', 'builds']);
   await signIn(page, DEVELOPER, 'fa');
-  await assertNavShowsExactly(page, 'fa', ['overview', 'contracts', 'builds']);
+  await assertNavShowsExactly(page, 'fa', ['work', 'contracts', 'builds']);
 });
 
 test('the seeded designer opens the seeded contract and sees no fee', async ({ page }) => {

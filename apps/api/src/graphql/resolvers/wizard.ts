@@ -84,6 +84,7 @@ export type WizardContract = {
   createdAt: Date;
   publishedAt: Date | null;
   currentContractRevision: {
+    version: number;
     approvedAt: Date | null;
     contentHash: string | null;
     publishedAt: Date | null;
@@ -504,17 +505,26 @@ const latest = (...dates: Array<Date | null | undefined>): Date | null =>
  *   phase's demo and nothing has been shown for it: the step's owner's move.
  *   `since` is when the road reached it, so the line ages from the right day.
  * - **out for review** — a mockup iteration or a phase's demo is published, the
- *   step is not locked (not approved) and no note on it waits for Root. A note
- *   open means the ball is Root's, as `nextMoveOn` already says for the design.
+ *   step is not locked (not approved) and nothing on it waits for Root or has
+ *   just been answered. A note open — or one whose fate is written in a build
+ *   the customer has not been shown yet — means the ball is Root's, as
+ *   `nextMoveOn` already says for the design; and an answer that has reached
+ *   them (`ANSWER_PUBLISHED`) already says "read it, or approve the step", so a
+ *   second line saying the same thing is left out.
  * - **not ready** — a phase's staging site has a URL and no demo of the phase
  *   is published, and no browser of Root's has seen the site report (J10's
  *   `readyAt`). A phase already accepted has nothing left to ready.
  */
-function stepFacts(c: WizardContract, facts: Facts, wizard: WizardStep[]): StepFacts {
+function stepFacts(c: WizardContract, facts: Facts, wizard: WizardStep[], feedback: FeedbackFacts): StepFacts {
   const out: StepFacts = { waiting: [], mockupOut: null, demosOut: [], demosNotReady: [] };
   const stepOf = (step: StepKind, phaseId: string | null) => wizard.find((s) => s.step === step && s.phaseId === phaseId);
-  const openNote = (step: StepKind, phaseId: string | null = null) =>
-    facts.feedback.some((i) => i.step === step && i.status === 'OPEN' && (step !== 'DEMO' || i.phaseId === phaseId));
+  const here = (step: StepKind, phaseId: string | null) => (i: { step: StepKind; phaseId: string | null }) =>
+    i.step === step && (step !== 'DEMO' || i.phaseId === phaseId);
+  // The ball is Root's while a note is open, or while its fate is declared in a build that has not been published.
+  const owed = (step: StepKind, phaseId: string | null = null) =>
+    facts.feedback.some((i) => here(step, phaseId)(i) && (i.status === 'OPEN' || (i.addressedInBuild !== null && i.addressedInBuild.publishedAt === null)));
+  const answered = (step: StepKind, phaseId: string | null = null) => feedback.answered.some(here(step, phaseId));
+  const openNote = (step: StepKind, phaseId: string | null = null) => owed(step, phaseId) || answered(step, phaseId);
 
   const current = currentStepOf(wizard);
   if (current) {
@@ -591,24 +601,39 @@ function issuableFacts(c: WizardContract, facts: Facts): Array<{ ordinal: number
 type PendingResult = ReturnType<typeof pendingOf>;
 
 export function pendingFactsOf(c: WizardContract, pending: PendingResult, now: Date): PendingFacts | null {
-  if (!pending) return null;
+  // **The first published draft is the customer's move too** (J12 — the banner never said so,
+  // because it only compares a revision with an earlier one the customer approved). On the new
+  // road, from the day sales publishes the draft until the customer has approved *and* signed it,
+  // the contract is theirs: first to read it and say what they want changed, then to sign. A
+  // revision published after an earlier approval is `pending.contractDiff`'s own line, not this.
+  const revision = c.currentContractRevision;
+  const draft: PendingFacts['draft'] =
+    c.sequence === 'AGREEMENT_FIRST' && revision && revision.publishedAt && !pending?.contractDiff
+      ? revision.approvedAt === null
+        ? { state: 'review', version: revision.version, since: revision.publishedAt }
+        : revision.signature === null
+          ? { state: 'sign', version: revision.version, since: revision.approvedAt }
+          : null
+      : null;
+  if (!pending && !draft) return null;
   return {
-    contract: pending.contractDiff
+    contract: pending?.contractDiff
       ? {
           fromVersion: pending.contractDiff.fromVersion,
           toVersion: pending.contractDiff.toVersion,
           since: c.currentContractRevision?.publishedAt ?? now,
         }
       : null,
-    designChangeCount: pending.designChanges.length,
+    designChangeCount: pending?.designChanges.length ?? 0,
     designSince: c.currentDesignRevision?.publishedAt ?? null,
-    amendment: pending.amendment
+    amendment: pending?.amendment
       ? {
           ordinal: pending.amendment.ordinal,
           approved: pending.amendment.approvedAt !== null,
           since: pending.amendment.publishedAt ?? now,
         }
       : null,
+    draft,
   };
 }
 
@@ -620,19 +645,20 @@ export function pendingFactsOf(c: WizardContract, pending: PendingResult, now: D
  */
 export function attentionInputOf(c: WizardContract, facts: Facts, pending: PendingFacts | null, now: Date): AttentionInput {
   const wizard = computeWizard(stateOf(c, facts));
+  const feedback = feedbackFacts(c.customerId, facts.feedback, new Set(facts.sensitiveArticles.map((a) => a.number)));
   return {
     contractId: c.id,
     customerId: c.customerId,
     now,
     pending,
     dependencies: facts.dependencies,
-    feedback: feedbackFacts(c.customerId, facts.feedback, new Set(facts.sensitiveArticles.map((a) => a.number))),
+    feedback,
     scope: {
       undecidedProposals: facts.scopeProposals.filter((p) => p.decidedAt === null).map((p) => ({ since: p.createdAt })),
       openTrades: facts.scopeTrades,
     },
     invoices: facts.invoices,
-    steps: stepFacts(c, facts, wizard),
+    steps: stepFacts(c, facts, wizard, feedback),
     issuable: issuableFacts(c, facts),
   };
 }

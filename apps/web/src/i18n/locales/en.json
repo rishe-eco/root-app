@@ -1801,6 +1801,14 @@
   },
   "attention": {
     "DRAFT_TO_REVIEW": {
+      "draft": {
+        "customer": "Root published the contract draft (v{{version}}). Read it, leave a note on anything you want changed, then approve it.",
+        "staff": "The customer has not yet reviewed and approved the contract draft (v{{version}})."
+      },
+      "sign": {
+        "customer": "You approved v{{version}} of the contract. Sign it to finish.",
+        "staff": "The customer approved v{{version}} of the contract but has not yet signed it."
+      },
       "contract": {
         "customer": "The contract text changed to v{{toVersion}}. Reviewing and approving it is up to you.",
         "staff": "The customer has not yet reviewed and approved v{{toVersion}} of the contract."

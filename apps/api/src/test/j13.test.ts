@@ -436,6 +436,7 @@ test('every resolver that can return a BillingEntry is accounted for — a new e
     'admin/invoices.ts': 'staff mutations (billing.manage)',
     'brief.ts': 'counts issued entries to refuse replacing a plan (PLAN_HAS_ISSUED_INVOICES)',
     'fields.ts': 'the field resolvers: ServiceRun.billingEntry and Ticket.billingEntry ask invoiceVisibleTo',
+    'home.ts': 'myAttention (J12): derived lines only, never a BillingEntry out — issued rows, in the where; the customer’s own and, for billing.manage with money.read, the contract-less overdue ones',
     'index.ts': 'composition only',
     'invoices.ts': 'the customer’s reads (issued only, in the where) and PlannedInvoice.invoice (invoiceVisibleTo)',
     'people.ts': 'the desk’s customer page, money-gated, through computeBillingReport (which skips drafts)',
@@ -456,6 +457,10 @@ test('every resolver that can return a BillingEntry is accounted for — a new e
   assert.equal((read('invoices.ts').match(/issuedAt: \{ not: null \}/g) ?? []).length, 2, 'myInvoices and invoice(id) select issued rows only');
   assert.match(read('invoices.ts'), /invoiceVisibleTo\(viewerOf\(ctx\), entry\)/, 'PlannedInvoice.invoice');
   assert.match(read('wizard.ts'), /issuedAt: \{ not: null \}/);
+  // J12's home screen: the same — drafts are never selected, and only the customer's own (or a billing
+  // manager's overdue ones) are read at all.
+  assert.match(read('home.ts'), /issuedAt: \{ not: null \}/);
+  assert.match(read('home.ts'), /OR: \[\{ customerId: user\.id \}, \.\.\.\(readsMoney/);
   // J11's summary: issued rows only, and only for a viewer who may read the money.
   assert.match(read('delivery.ts'), /issuedAt: \{ not: null \}/);
   assert.match(read('delivery.ts'), /money\s*\n?\s*\? prisma\.billingEntry\.findMany/);
