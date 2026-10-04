@@ -86,6 +86,10 @@ export function resetTestDatabase() {
           EXECUTE 'TRUNCATE TABLE ' || tables || ' RESTART IDENTITY CASCADE';
         END IF;
       END $$;
+      -- Invoice numbers come from a sequence TRUNCATE ... RESTART IDENTITY does not
+      -- reach (api/src/test/db.ts restarts it for the same reason): without this a
+      -- second run of the suite on one database numbers its first invoice INV-000004.
+      ALTER SEQUENCE "invoice_number_seq" RESTART;
     `,
     stdio: 'pipe',
     timeout: 60_000,
