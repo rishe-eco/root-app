@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Role, User } from '@prisma/client';
 import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
+import { onDay } from './calendar.js';
 import { exec, ok, stop } from './graphql.js';
 import { __setMailTransportForTests, __resetMailTransportForTests, type MailMessage } from '../lib/mail.js';
 import { __setSmsTransportForTests, __resetSmsTransportForTests } from '../lib/sms.js';
@@ -115,7 +116,7 @@ const BRIEF_INPUT = {
   templateTypeId: '',
   designTier: 'SENIOR_DESIGNER',
   budgetCap: '150000000',
-  hardDeadline: '2026-10-23',
+  hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
   domainProvidedBy: 'CUSTOMER',
   hostProvidedBy: 'ROOT',
@@ -126,9 +127,9 @@ const BRIEF_INPUT = {
   mockupIterations: 2,
   demoIterationsPerPhase: 2,
   commitments: [
-    { key: 'domain', dueAt: '2026-10-05' },
-    { key: 'host', dueAt: '2026-10-06' },
-    { key: 'content', dueAt: '2026-10-07' },
+    { key: 'domain', dueAt: onDay('2026-10-05') },
+    { key: 'host', dueAt: onDay('2026-10-06') },
+    { key: 'content', dueAt: onDay('2026-10-07') },
   ],
 };
 
@@ -146,7 +147,7 @@ const secondContractItem: { id?: string } = {};
 async function reachDemos(over: Record<string, unknown> = {}) {
   const input = { ...BRIEF_INPUT, templateTypeId: type.id, ...over };
   ok(await exec(SET_BRIEF, { as: staff.SALES, variables: { c: f.contract.id, i: input } }));
-  for (const [n, end] of [[1, '2026-11-10'], [2, '2026-12-10']] as const) {
+  for (const [n, end] of [[1, onDay('2026-11-10')], [2, onDay('2026-12-10')]] as const) {
     ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n, e: end } }));
   }
   const phases = await prisma.phase.findMany({ where: { contractId: f.contract.id }, orderBy: { number: 'asc' } });
@@ -164,7 +165,7 @@ async function reachDemos(over: Record<string, unknown> = {}) {
     }),
   );
   ok(await exec(SEED_SCOPE, { as: staff.SALES, variables: { c: f.contract.id } }));
-  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-12', e: '2026-12-20' } }));
+  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: onDay('2026-10-12'), e: onDay('2026-12-20') } }));
   ok(await exec(PUBLISH_DRAFT, { as: staff.SALES, variables: { c: f.contract.id } }));
   ok(await exec(APPROVE_AGREEMENT, { as: f.customer, variables: { c: f.contract.id } }));
   ok(await exec(SIGN, { as: f.customer, variables: { c: f.contract.id, n: 'Test Customer' } }));
@@ -925,7 +926,7 @@ test('Contract.buildTimeline: phases in order with their published builds and da
   assert.deepEqual(customer[0].builds.map((b) => b.id), [b1.id], 'only the published build');
   assert.ok(customer[0].demoPublishedAt);
   assert.equal(customer[0].acceptedAt, null);
-  assert.equal(customer[0].plannedEndAt?.slice(0, 10), '2026-11-10');
+  assert.equal(customer[0].plannedEndAt?.slice(0, 10), onDay('2026-11-10'));
   assert.deepEqual(customer[1], { phaseId: phase2.id, number: 2, plannedEndAt: customer[1].plannedEndAt, demoPublishedAt: null, acceptedAt: null, builds: [] });
   assert.ok(!customer[0].builds.some((b) => b.id === draft.id));
 

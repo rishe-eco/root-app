@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { Role, User } from '@prisma/client';
 import * as yazl from 'yazl';
 import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
+import { onDay } from './calendar.js';
 import { exec, ok, stop } from './graphql.js';
 import { storage } from '../lib/storage.js';
 import { statementsRun } from '../lib/prisma.js';
@@ -155,17 +156,6 @@ const BRIEF_INPUT = {
     { key: 'content', dueAt: onDay('2026-10-07') },
   ],
 };
-/**
- * The fixture's calendar, written on 2026-09-30 and moved forward by however many days
- * have passed since, so a commitment due "in five days" is never overdue because the
- * suite ran later (M4 found the first one going overdue on its due day).
- */
-function onDay(iso: string): string {
-  const written = Date.UTC(2026, 8, 30);
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return new Date(Date.parse(`${iso}T00:00:00Z`) + Math.max(0, today - written)).toISOString().slice(0, 10);
-}
 const CUSTOM_BRIEF = { designTier: 'SENIOR_DESIGNER', premadeRounds: null, wireframeIterations: 2, mockupIterations: 2 };
 
 /**
