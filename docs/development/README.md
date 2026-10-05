@@ -90,7 +90,7 @@ the Persian pass                 ← §1 done 2026-08-14, §2/§3 open
 L8   wedge contract shape        ← not built, on purpose: owed when the
                                     first wedge customer arrives — and
                                     paid by the journeys plan's J7
-──── the journeys build plan (P0 → J12), planned, not started ───────
+──── the journeys build plan (P0 → J12), built 2026-09-29 → 2026-10-05 ───────
 P0    pre-flight: CSP, docs, DNS/TLS, same-site hardening, SMS slot   ✔ code half 2026-09-29 [P0.md]
 S1    roles, the capability split, visibility, assignment   ✔ 2026-09-29 [S1.md]
 J1    phone identity, SMS, the notify router, staff 2FA      ✔ 2026-09-29 [J1.md]
@@ -112,6 +112,7 @@ J9    step 5 — the mockup host, streamed bundle upload  ✔ J9a 2026-10-01 [J9
 J10   step 6 — demo submission, readiness, per-phase approval  ✔ 2026-10-04 [J10.md]
 J11   step 7 — the summary, handover, closing a contract  ✔ 2026-10-04 [J11.md] (built before J10)
 J12   the customer dashboard and a home screen per staff role  ✔ 2026-10-05 [J12.md]
+      ── M4 (J8 · J9 · J10 · J11 · J12) full suites green 2026-10-05: unit 1064+327 · integration 1242 · e2e 114
 ```
 
 **R3 and the Persian pass each have their own build-ready file; L8 and the
