@@ -111,7 +111,7 @@ T2+J8 step 4 — theme catalogue, wireframes and palette      ✔ T2 2026-09-29 
 J9    step 5 — the mockup host, streamed bundle upload  ✔ J9a 2026-10-01 [J9a.md] · J9b 2026-10-04 [J9b.md]
 J10   step 6 — demo submission, readiness, per-phase approval  ✔ 2026-10-04 [J10.md]
 J11   step 7 — the summary, handover, closing a contract  ✔ 2026-10-04 [J11.md] (built before J10)
-J12   the customer dashboard and a home screen per staff role
+J12   the customer dashboard and a home screen per staff role  ✔ 2026-10-05 [J12.md]
 ```
 
 **R3 and the Persian pass each have their own build-ready file; L8 and the
@@ -398,6 +398,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`J9b.md`](J9b.md) | step 5: mockup demos, iterations, frames, approval and the screens | ✔ built |
 | [`J10.md`](J10.md) | step 6: demo submission, staging-host rule, readiness, page map, per-phase approval, the build timeline | ✔ built |
 | [`J11.md`](J11.md) | step 7: handover, closing a contract, the summary and its print view | ✔ built |
+| [`J12.md`](J12.md) | the customer Dashboard, My work per staff role, `myAttention`, the re-pointed Needs-Root queue | ✔ built |
 | [`J13.md`](J13.md) | invoices: drafts, numbers, due dates, issuing the payment plan, the invoice view | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
