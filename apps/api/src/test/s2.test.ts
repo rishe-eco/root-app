@@ -732,8 +732,10 @@ test('attention: Root owes an answer, an answer waits for sales (staff only), an
   const req = await submitOk('REQUIREMENTS', { general: true }, 'r');
   const read = async (as: User, asCustomer = false) =>
     (ok(await exec('query($c: ID!, $as: Boolean){ contract(id: $c, asCustomer: $as) { attention { kind waitingOn phaseId role params { key value } } } }', { as, variables: { c: f.contract.id, as: asCustomer } })).contract as { attention: Array<{ kind: string; waitingOn: string; phaseId: string | null; role: string | null; params: Array<{ key: string; value: string }> }> }).attention;
+  // J12: the fixture's published, unapproved draft is now the contract's first-draft line
+  // (`DRAFT_TO_REVIEW`); it is not this test's subject, so it is left out of the digest.
   const digest = (rows: Awaited<ReturnType<typeof read>>) =>
-    rows.map((r) => `${r.kind}/${r.waitingOn}/${r.role ?? '-'}/${r.params.map((p) => `${p.key}=${p.value}`).join(',')}`).sort();
+    rows.filter((r) => r.kind !== 'DRAFT_TO_REVIEW').map((r) => `${r.kind}/${r.waitingOn}/${r.role ?? '-'}/${r.params.map((p) => `${p.key}=${p.value}`).join(',')}`).sort();
 
   assert.deepEqual(digest(await read(f.customer)), [
     'FEEDBACK_UNRESOLVED/ROOT/DEVELOPER/count=2,step=DEMO',
