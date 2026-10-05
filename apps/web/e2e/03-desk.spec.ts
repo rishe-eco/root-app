@@ -25,7 +25,7 @@ test('a customer cannot reach the desk', async ({ page }) => {
   // customer ends up where they belong rather than staring at a sign-in form
   // they do not need. What matters is that they never land on the desk, and
   // never see any of it.
-  await expect(page).toHaveURL(/\/en\/app\/contracts/);
+  await expect(page).toHaveURL(/\/en\/app\/?$/);
   await expect(page.getByRole('heading', { name: 'Desk' })).toHaveCount(0);
   await expect(page.getByText('RC-2026-014')).toHaveCount(0);
 });

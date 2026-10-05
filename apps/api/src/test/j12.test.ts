@@ -139,7 +139,7 @@ const BRIEF_INPUT = {
   templateTypeId: '',
   designTier: 'THEME_PICK',
   budgetCap: '150000000',
-  hardDeadline: '2026-10-23',
+  hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
   domainProvidedBy: 'CUSTOMER',
   hostProvidedBy: 'ROOT',
@@ -150,11 +150,22 @@ const BRIEF_INPUT = {
   mockupIterations: null,
   demoIterationsPerPhase: 2,
   commitments: [
-    { key: 'domain', dueAt: '2026-10-05' },
-    { key: 'host', dueAt: '2026-10-06' },
-    { key: 'content', dueAt: '2026-10-07' },
+    { key: 'domain', dueAt: onDay('2026-10-05') },
+    { key: 'host', dueAt: onDay('2026-10-06') },
+    { key: 'content', dueAt: onDay('2026-10-07') },
   ],
 };
+/**
+ * The fixture's calendar, written on 2026-09-30 and moved forward by however many days
+ * have passed since, so a commitment due "in five days" is never overdue because the
+ * suite ran later (M4 found the first one going overdue on its due day).
+ */
+function onDay(iso: string): string {
+  const written = Date.UTC(2026, 8, 30);
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return new Date(Date.parse(`${iso}T00:00:00Z`) + Math.max(0, today - written)).toISOString().slice(0, 10);
+}
 const CUSTOM_BRIEF = { designTier: 'SENIOR_DESIGNER', premadeRounds: null, wireframeIterations: 2, mockupIterations: 2 };
 
 /**
@@ -168,7 +179,7 @@ async function signed(over: Record<string, unknown> = {}, upTo: 'published' | 'a
   await prisma.contract.update({ where: { id: f.contract.id }, data: { currentDesignRevisionId: null } });
   await prisma.designRevision.deleteMany({ where: { contractId: f.contract.id } });
   ok(await exec(SET_BRIEF, { as: staff.SALES, variables: { c: f.contract.id, i: { ...BRIEF_INPUT, templateTypeId: type.id, ...over } } }));
-  for (const [n, end] of [[1, '2026-11-10'], [2, '2026-12-10']] as const) {
+  for (const [n, end] of [[1, onDay('2026-11-10')], [2, onDay('2026-12-10')]] as const) {
     ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n, e: end } }));
   }
   const phases = await prisma.phase.findMany({ where: { contractId: f.contract.id }, orderBy: { number: 'asc' } });
@@ -185,7 +196,7 @@ async function signed(over: Record<string, unknown> = {}, upTo: 'published' | 'a
     }),
   );
   ok(await exec(SEED_SCOPE, { as: staff.SALES, variables: { c: f.contract.id } }));
-  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-12', e: '2026-12-20' } }));
+  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: onDay('2026-10-12'), e: onDay('2026-12-20') } }));
   ok(await exec(PUBLISH_DRAFT, { as: staff.SALES, variables: { c: f.contract.id } }));
   if (upTo !== 'published') {
     ok(await exec(APPROVE_AGREEMENT, { as: f.customer, variables: { c: f.contract.id } }));

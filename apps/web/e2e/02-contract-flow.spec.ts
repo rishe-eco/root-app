@@ -35,13 +35,19 @@ test.beforeAll(() => {
  * span. There is no link and no button to target, which is the subject of the
  * last test in this file.
  */
+/** Signing in lands on the Dashboard (J12); these tests start from the contracts list. */
+async function signInToList(page: import('@playwright/test').Page) {
+  await signIn(page, CUSTOMER);
+  await page.goto('/en/app/contracts');
+}
+
 async function openFirstContract(page: import('@playwright/test').Page) {
   await page.locator('.crow').first().click();
   await page.waitForURL(/\/app\/contracts\/.+/);
 }
 
 test('a customer signs a contract, one gate at a time', async ({ page }) => {
-  await signIn(page, CUSTOMER);
+  await signInToList(page);
 
   await expect(page.getByText(CONTRACT_TITLE)).toBeVisible();
   await openFirstContract(page);
@@ -94,7 +100,7 @@ test('a customer signs a contract, one gate at a time', async ({ page }) => {
 
 test('choosing a different concept resets the approvals', async ({ page }) => {
   resetTestDatabase();
-  await signIn(page, CUSTOMER);
+  await signInToList(page);
   await openFirstContract(page);
 
   const concepts = page.locator('.concept');
@@ -112,7 +118,7 @@ test('choosing a different concept resets the approvals', async ({ page }) => {
 
 test('commenting is never gated', async ({ page }) => {
   resetTestDatabase();
-  await signIn(page, CUSTOMER);
+  await signInToList(page);
   await openFirstContract(page);
 
   // Nothing chosen, nothing approved — the comment box must still work.
@@ -133,7 +139,7 @@ test('a keyboard user can open a contract', async ({ page }) => {
   // that *should* hold, so the day someone fixes the component Playwright
   // reports an unexpected pass and this annotation has to go. A test that
   // asserted the broken behaviour instead would quietly cement it.
-  await signIn(page, CUSTOMER);
+  await signInToList(page);
   await page.locator('.crow').first().press('Enter');
   await expect(page).toHaveURL(/\/app\/contracts\/.+/);
 });
@@ -143,7 +149,7 @@ test('the history reads as sentences, not enum names', async ({ page }) => {
   // ChangeAction with no translation renders its i18n key instead of a
   // sentence. changeAction.test.ts pins the five files against each other;
   // this checks what a human actually sees.
-  await signIn(page, CUSTOMER);
+  await signInToList(page);
   await openFirstContract(page);
 
   const history = page.locator('.lwhat');
@@ -163,7 +169,7 @@ test('the printable contract shows the published revision and its hash', async (
   // frozen snapshot; this proves the page a customer prints reads from it,
   // and that the verification strip is actually on the sheet rather than
   // merely in the markup.
-  await signIn(page, CUSTOMER);
+  await signInToList(page);
   await openFirstContract(page);
 
   await page.getByRole('link', { name: 'Download PDF' }).click();
@@ -206,7 +212,7 @@ test('renaming the draft after publishing does not change what the customer read
   resetTestDatabase();
   renameContractDraft('DRAFT RENAME — NOT PUBLISHED');
 
-  await signIn(page, CUSTOMER);
+  await signInToList(page);
 
   // The list names the published document.
   await expect(page.getByText(CONTRACT_TITLE)).toBeVisible();
@@ -233,7 +239,7 @@ test('a revised design page shows a banner naming it, and approving it clears th
 
   // The customer completes v1 first, so a v2 has something to carry forward
   // from — a one-page change should ask for one re-approval, not four.
-  await signIn(page, CUSTOMER);
+  await signInToList(page);
   await openFirstContract(page);
   const contractId = page.url().split('/contracts/')[1].split(/[/?]/)[0];
 
@@ -275,7 +281,7 @@ test('a revised design page shows a banner naming it, and approving it clears th
 
   // Back to the customer: the banner names it, with one action, and taking
   // it works.
-  await signIn(page, CUSTOMER);
+  await signInToList(page);
   await openFirstContract(page);
   await expect(page.getByText('The design changed — 1 page needs your approval.')).toBeVisible();
 
@@ -295,9 +301,10 @@ test('an admin sees a non-zero count on the Overview (V4)', async ({ page }) => 
   await signIn(page, ADMIN);
   await page.goto('/en/desk/overview');
 
+  // The tiles render 0 until the counts arrive, so read them until they have.
   const tileCounts = page.locator('.tile-count');
   await expect(tileCounts.first()).toBeVisible();
-  const values = await tileCounts.allInnerTexts();
-  const total = values.reduce((sum, v) => sum + (parseInt(v, 10) || 0), 0);
-  expect(total).toBeGreaterThan(0);
+  await expect
+    .poll(async () => (await tileCounts.allInnerTexts()).reduce((sum, v) => sum + (parseInt(v, 10) || 0), 0))
+    .toBeGreaterThan(0);
 });

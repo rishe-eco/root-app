@@ -66,7 +66,7 @@ test('sales disables a customer, who can no longer sign in — then restores the
   await expect(page.getByRole('button', { name: 'Disable account' })).toBeVisible();
 
   await signIn(page, CUSTOMER);
-  await expect(page).toHaveURL(/\/en\/app\/contracts/);
+  await expect(page).toHaveURL(/\/en\/app\/?$/);
 });
 
 test('the customer\'s Tools page: /app/services redirects to it, and it goes away when the tool is taken back', async ({

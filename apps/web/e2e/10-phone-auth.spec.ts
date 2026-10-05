@@ -65,7 +65,7 @@ test('invite by phone → set password → sign in with phone', async ({ page })
 
   // acceptInvite signs the account in directly — it lands in the portal,
   // not back at the sign-in form.
-  await expect(page).toHaveURL(/\/en\/app\/contracts/);
+  await expect(page).toHaveURL(/\/en\/app\/?$/);
 
   // Sign out, and prove the phone (not an email this account never had)
   // signs back in with the password just set.
@@ -75,7 +75,7 @@ test('invite by phone → set password → sign in with phone', async ({ page })
   await page.locator('#email').fill(phone);
   await page.locator('#password').fill('a-brand-new-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/en\/app\/contracts/);
+  await expect(page).toHaveURL(/\/en\/app\/?$/);
 });
 
 test('forgot password by phone → code → forced new password → portal (fa)', async ({ page }) => {
@@ -99,7 +99,7 @@ test('forgot password by phone → code → forced new password → portal (fa)'
   await page.locator('#pw').fill('the-old-password-123');
   await page.locator('#pw2').fill('the-old-password-123');
   await page.getByRole('button', { name: 'Activate my account' }).click();
-  await expect(page).toHaveURL(/\/en\/app\/contracts/);
+  await expect(page).toHaveURL(/\/en\/app\/?$/);
   await page.getByRole('button', { name: /sign out/i }).click();
 
   // The forgot flow itself, in Persian — one identifier field, a phone this time.
@@ -119,7 +119,7 @@ test('forgot password by phone → code → forced new password → portal (fa)'
   await page.locator('#pw').fill('a-completely-different-password');
   await page.locator('#pw2').fill('a-completely-different-password');
   await page.getByRole('button', { name: 'ذخیره‌ی رمز تازه' }).click();
-  await expect(page).toHaveURL(/\/fa\/app\/contracts/);
+  await expect(page).toHaveURL(/\/fa\/app\/?$/);
 
   // And the new password, not the one this account was created with, is
   // what actually signs it in from here on.
@@ -127,7 +127,7 @@ test('forgot password by phone → code → forced new password → portal (fa)'
   await page.locator('#email').fill(phone);
   await page.locator('#password').fill('a-completely-different-password');
   await page.getByRole('button', { name: /sign in|ورود/i }).click();
-  await expect(page).toHaveURL(/\/fa\/app\/contracts/);
+  await expect(page).toHaveURL(/\/fa\/app\/?$/);
 });
 
 test('the seeded sales user through the second factor, driven by hand', async ({ page }) => {
