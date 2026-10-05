@@ -62,7 +62,7 @@ export const isStaff = (u: Pick<User, 'capabilities'> | null | undefined) =>
 
 /** Where signing in puts you. Someone holding both lands on the desk and has a link to the portal. */
 export const homeFor = (u: Pick<User, 'capabilities'> | null | undefined) =>
-  isStaff(u) ? '/desk' : '/app/contracts';
+  isStaff(u) ? '/desk' : '/app';
 
 /**
  * The two authoring edges (journeys build plan S1) — a capability *and* an

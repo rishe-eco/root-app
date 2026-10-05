@@ -50,7 +50,8 @@ export default function Dashboard() {
   const { data: requestData } = useQuery<{ myRequests: Request[] }>(MY_REQUESTS);
   const { data: toolsData } = useQuery<{ myTools: string[] }>(MY_TOOLS);
 
-  const items = data?.myAttention ?? [];
+  // Staff who open the portal get their desk's lines from the same query; those are My work's.
+  const items = (data?.myAttention ?? []).filter((i) => i.audience === 'CUSTOMER');
   const yours = items.filter((i) => i.waitingOn === 'CUSTOMER');
   const rootsToo = items.filter((i) => i.waitingOn === 'ROOT');
   const contracts = contractData?.myContracts ?? [];

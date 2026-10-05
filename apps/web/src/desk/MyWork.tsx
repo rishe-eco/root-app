@@ -31,7 +31,9 @@ export default function MyWork() {
   const me = useOutletContext<User>();
   const { data, loading, error, refetch } = useQuery<{ myAttention: HomeItem[] }>(MY_ATTENTION, { fetchPolicy: 'cache-and-network' });
 
-  const items = data?.myAttention ?? [];
+  // A person who is staff and also someone's customer gets both audiences from the one query;
+  // their own account's lines belong to their Dashboard, not to My work.
+  const items = (data?.myAttention ?? []).filter((i) => i.audience === 'STAFF');
   const yours = items.filter((i) => i.waitingOn === 'ROOT');
   const following = items.filter((i) => i.waitingOn === 'CUSTOMER');
   const working = holdsContractWork(me);
