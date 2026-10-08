@@ -26,7 +26,7 @@ export default function Topbar({ start, user }: { start: ReactNode; user: User }
       <div className="topbar-right">
         <LangSwitch />
         <div className="user-chip">
-          <span className="t-small">{user.name}</span>
+          <span className="t-small user-name">{user.name}</span>
           <span className="avatar" aria-hidden="true">
             {initialOf(user.name)}
           </span>

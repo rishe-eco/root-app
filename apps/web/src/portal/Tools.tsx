@@ -207,7 +207,7 @@ export default function Tools() {
 
   return (
     <>
-      <Topbar user={me} start={<h1 className="t-h3 topbar-title">{t('portal.navTools')}</h1>} />
+      <Topbar user={me} start={<span className="crumb" />} />
       <div className="content">
         <div className="content-head">
           <div>

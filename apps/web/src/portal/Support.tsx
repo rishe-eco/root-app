@@ -149,7 +149,7 @@ export default function Support() {
 
   return (
     <>
-      <Topbar user={me} start={<h1 className="t-h3 topbar-title">{t('portal.navSupport')}</h1>} />
+      <Topbar user={me} start={<span className="crumb" />} />
       <div className="content">
         <div className="content-head">
           <div>

@@ -70,7 +70,7 @@ export default function Contracts() {
 
   return (
     <>
-      <Topbar user={me} start={<h1 className="t-h3 topbar-title">{t('portal.navContracts')}</h1>} />
+      <Topbar user={me} start={<span className="crumb" />} />
 
       <div className="content">
         <div className="content-head">

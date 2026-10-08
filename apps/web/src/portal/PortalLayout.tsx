@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { isStaff } from '@/lib/access';
 import { ME, MY_TOOLS, type User } from '@/lib/queries';
+import PortalIcon from '@/components/PortalIcon';
 
 export default function PortalLayout() {
   const { t } = useTranslation();
@@ -69,16 +70,16 @@ export default function PortalLayout() {
             className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
             to={lp(locale, '/app')}
           >
-            <span className="side-glyph" />
-            <span>{t('portal.navDashboard')}</span>
+            <PortalIcon name="dashboard" />
+            <span className="side-label">{t('portal.navDashboard')}</span>
           </NavLink>
 
           <NavLink
             className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
             to={lp(locale, '/app/contracts')}
           >
-            <span className="side-glyph" />
-            <span>{t('portal.navContracts')}</span>
+            <PortalIcon name="contracts" />
+            <span className="side-label">{t('portal.navContracts')}</span>
           </NavLink>
 
           {/* Build plan L6: billing is live — a real link, no "soon" tag. J13
@@ -87,8 +88,8 @@ export default function PortalLayout() {
             className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
             to={lp(locale, '/app/invoices')}
           >
-            <span className="side-glyph" />
-            <span>{t('portal.navBilling')}</span>
+            <PortalIcon name="invoices" />
+            <span className="side-label">{t('portal.navBilling')}</span>
           </NavLink>
 
           {/* Journeys build plan S3: L7's Services item, renamed Tools and shown
@@ -99,8 +100,8 @@ export default function PortalLayout() {
               className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
               to={lp(locale, '/app/tools')}
             >
-              <span className="side-glyph" />
-              <span>{t('portal.navTools')}</span>
+              <PortalIcon name="tools" />
+              <span className="side-label">{t('portal.navTools')}</span>
             </NavLink>
           ) : null}
 
@@ -109,8 +110,8 @@ export default function PortalLayout() {
             className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
             to={lp(locale, '/app/support')}
           >
-            <span className="side-glyph" />
-            <span>{t('portal.navSupport')}</span>
+            <PortalIcon name="support" />
+            <span className="side-label">{t('portal.navSupport')}</span>
           </NavLink>
 
           {isStaff(me) ? (
@@ -118,8 +119,8 @@ export default function PortalLayout() {
               className={({ isActive }) => `side-link${isActive ? ' side-link-active' : ''}`}
               to={lp(locale, '/desk')}
             >
-              <span className="side-glyph" />
-              <span>{t('portal.navDesk')}</span>
+              <PortalIcon name="desk" />
+              <span className="side-label">{t('portal.navDesk')}</span>
             </NavLink>
           ) : null}
         </nav>

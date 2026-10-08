@@ -406,6 +406,12 @@
 }
 .lang-switch button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-on-accent); }
 
+/* Touch targets (HIG: 44pt). Keyed to the input device, not the width: a narrow
+   desktop window keeps its density, and a tablet in landscape gets fat targets. */
+@media (pointer: coarse) {
+  .btn, .nav-link, .lang-switch button, .side-link, .chip, .menu-toggle { min-block-size: 44px; }
+}
+
 /* ---- Section rhythm --------------------------------------------------- */
 
 .section {
