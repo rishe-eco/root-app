@@ -220,8 +220,8 @@
 /* The palette has no green/red ramp on purpose — state is carried by copy,
    not hue (tokens.css). These tints stay inside clay/cyan/gold/neutral. */
 .change-tag { font-size: var(--text-caption); padding: 2px var(--space-2); border-radius: var(--radius-full); background: var(--color-panel); color: var(--color-text-muted); }
-.change-tag-added { background: var(--cyan-100); color: var(--cyan-700); }
-.change-tag-changed { background: var(--gold-100); color: var(--gold-600); }
+.change-tag-added { background: var(--badge-cyan-bg); color: var(--badge-cyan-fg); }
+.change-tag-changed { background: var(--badge-gold-bg); color: var(--badge-gold-fg); }
 .change-tag-removed { background: var(--color-accent-soft); color: var(--color-error); }
 
 .live-banner {
@@ -311,7 +311,7 @@
    HTML (lib/anchor.ts's highlightRange), so it inherits the block's own
    lang/dir rather than needing its own. ---- */
 .review-mark {
-  background: var(--gold-100);
+  background: var(--color-mark-bg);
   color: inherit;
   border-radius: 2px;
   padding-block: 1px;

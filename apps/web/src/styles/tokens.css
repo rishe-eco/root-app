@@ -26,8 +26,11 @@
   --neutral-300: #DCE2E7;   /* panel fill                         (as-built) */
   --neutral-400: #C7CDD3;   /* hairline                           (as-built) */
   --neutral-500: #A3ADB8;
-  --neutral-600: #7A8798;
-  --neutral-700: #5A6A82;   /* slate — muted text                 (as-built) */
+  --neutral-600: #7A8798;   /* control boundaries only: 3.17:1 on chalk — NOT a text colour */
+  --neutral-650: #55647B;   /* subtle text: 4.60 panel · 4.75 footer · 5.21 chalk */
+  --neutral-700: #505E74;   /* slate — muted text
+                               ⚠ corrected: as-built #5A6A82 was 4.21:1 on panel.
+                               5.03 panel · 5.19 footer · 5.70 chalk */
   --neutral-800: #3A4759;
   --neutral-900: #232D3B;
 
@@ -70,7 +73,8 @@
   --gold-300: #D4B366;
   --gold-400: #C79A3E;   /* as-built. 2.2:1 on chalk — decorative fills only */
   --gold-500: #A9851F;   /* ⚠ corrected: 3.0:1 — large text and icons */
-  --gold-600: #8A6C18;   /* body-text rung */
+  --gold-600: #8A6C18;   /* body-text rung on chalk (non-text marks: the pending rule) */
+  --gold-700: #6F5713;   /* badge text on gold-100: 5.59:1 (gold-600 was 4.02) */
 
   /* ---- Semantic: surface ---- */
   --color-bg:       var(--neutral-100);  /* chalk — the page */
@@ -82,15 +86,25 @@
   /* ---- Semantic: text ---- */
   --color-text:         var(--indigo-500);
   --color-text-muted:   var(--neutral-700);
-  --color-text-subtle:  var(--neutral-600);
+  /* Subtle is for 13px captions and metadata. At that size there is no room
+     for a tier much lighter than muted (4.5:1 is the floor on the darkest
+     ground, the panel), so "subtle" now differs from "muted" by size and
+     weight more than by colour — the as-built #7A8798 was 3.17:1 on chalk and
+     2.89:1 on the footer. */
+  --color-text-subtle:  var(--neutral-650);
   --color-text-inverse: var(--neutral-100);
   --color-beauty:       var(--gold-500);  /* the tagline highlight */
 
   /* ---- Semantic: line ---- */
   --color-border:        var(--neutral-400);
   --color-border-strong: var(--neutral-500);
-  --color-rule:          var(--cyan-400);   /* decorative rules and focus */
+  --color-rule:          var(--cyan-400);   /* decorative rules (not focus — see --color-focus) */
   --color-rule-strong:   var(--clay-400);   /* the 3px card top-rule */
+  /* The boundary of anything you type into or toggle: an input, a select, a
+     checkbox. WCAG 1.4.11 wants 3:1 for that, and the hairline above is
+     deliberately lighter (cards and rules are decorative, exempt).
+     3.17:1 on chalk, ≥3 on raised. */
+  --color-border-control: var(--neutral-600);
 
   /* ---- Semantic: action ----
      Clay is the action colour on this brand, not a rare mark. Indigo is
@@ -107,7 +121,34 @@
      confirmation step. See components/buttons. */
   --color-locked:  var(--gold-500);   /* "coming later" */
   --color-error:   var(--clay-600);   /* darker than the action, on purpose */
-  --color-focus:   var(--cyan-400);
+  --color-focus:   var(--cyan-500);   /* ⚠ corrected: cyan-400 was 2.94:1 on chalk; cyan-500 is 3.92:1 */
+
+  /* ---- Semantic: text on a filled ground ----
+     Component CSS names the role, never the ramp, so a second appearance can
+     redefine the role (Phase G of wp-design-review.md). */
+  --color-on-accent: var(--neutral-100);   /* a clay button, the active language pill */
+  --color-on-strong: var(--neutral-50);    /* a solid error / secondary fill: the failed badge, the done pill, a ticked box */
+  --color-accent-text:  var(--clay-500);   /* the action colour read as text: .link-action, a required mark */
+  --color-mark-bg:      var(--gold-100);   /* a highlighted passage in the Review Room */
+  --avatar-you-bg:      var(--clay-100);   /* the customer's own avatar in a thread */
+  --avatar-you-fg:      var(--clay-600);
+  --color-text-on-inverse-muted: var(--indigo-200);   /* secondary copy on the indigo ground */
+  --color-eyebrow-on-inverse:    var(--cyan-300);     /* eyebrows on the indigo ground: 5.54:1 */
+
+  /* ---- Semantic: badges — one fg/bg pair per hue ----
+     Every pair is held to 4.5:1 by lib/tokens.test.ts. */
+  --badge-gold-bg:    var(--gold-100);
+  --badge-gold-fg:    var(--gold-700);
+  --badge-cyan-bg:    var(--cyan-100);
+  --badge-cyan-fg:    var(--cyan-700);
+  --badge-clay-bg:    var(--clay-50);
+  --badge-clay-fg:    var(--clay-600);
+  --badge-indigo-bg:  var(--indigo-100);
+  --badge-indigo-fg:  var(--indigo-500);
+  --badge-neutral-bg: var(--neutral-300);
+  --badge-neutral-fg: var(--neutral-700);
+  --badge-strong-bg:  var(--indigo-500);
+  --badge-strong-fg:  var(--neutral-100);
 
   /* ---- Typography ---- */
   --font-latin:   'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -141,8 +182,10 @@
   --space-2:  0.5rem;
   --space-3:  0.75rem;
   --space-4:  1rem;
+  --space-5:  1.25rem;   /* used by portal.css since V3; was never defined, so its declaration was dropped */
   --space-6:  1.5rem;
   --space-8:  2rem;
+  --space-10: 2.5rem;    /* used by public.css's Library since R2; same story as --space-5 */
   --space-12: 3rem;
   --space-16: 4rem;
   --space-24: 6rem;
@@ -155,6 +198,7 @@
   /* ---- Radius (as-built — the landing uses 10 / 16, not §9.1's 6 / 12) -- */
   --radius-sm:   10px;
   --radius-md:   16px;
+  --radius-lg:   24px;   /* the About page's closing card */
   --radius-full: 999px;
 
   /* ---- Shadows (cool-tinted, very soft) ---- */

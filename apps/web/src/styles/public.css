@@ -38,9 +38,9 @@
 .gist .gist-body { margin: var(--space-6) 0 0; }
 
 .clients-cta { border-radius: 24px; padding: var(--space-16); }
-.clients-cta .clients-eyebrow { margin: 0; color: #CBB9A6; }
+.clients-cta .clients-eyebrow { margin: 0; }
 .clients-cta .clients-title { margin: var(--space-6) 0 0; }
-.clients-cta .clients-body { margin: var(--space-6) 0 0; max-inline-size: 46ch; font-size: var(--text-body-lg); line-height: var(--leading-body); color: var(--indigo-200); }
+.clients-cta .clients-body { margin: var(--space-6) 0 0; max-inline-size: 46ch; font-size: var(--text-body-lg); line-height: var(--leading-body); color: var(--color-text-on-inverse-muted); }
 .clients-cta .clients-btn { margin-block-start: var(--space-8); }
 
 /* ---- Footer ------------------------------------------------------------ */
@@ -49,6 +49,10 @@
 .footer-brand { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); font-weight: var(--weight-bold); margin: 0; }
 .footer-dot { inline-size: 9px; block-size: 9px; border-radius: 50%; background: var(--color-rule-strong); flex: none; }
 .footer-descriptor { margin: var(--space-1) 0 0; }
+/* kit.css: `.beauty` is "the one gold thing on the page", and the hero already
+   spends it. Repeated here at 13px it was also 2.74:1 on the footer ground —
+   the footer's copy of the tagline reads in the ground's own ink. */
+.footer-descriptor .beauty { color: inherit; }
 .footer-refusal { margin: 0; font-style: italic; max-inline-size: 220px; }
 .footer-rule { margin-block: var(--space-4); }
 .footer-copy { margin: 0; }
@@ -95,7 +99,10 @@
 .library-strands { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .library-strand { position: relative; }
 .library-strand-count { margin: 0; }
-.library-strand-locked { opacity: 0.75; }
+/* Quieter than the live strand by colour, not by opacity (an opacity on text is
+   invisible to lib/tokens.test.ts, and 0.75 of muted was below 4.5:1). */
+.library-strand-locked,
+.library-strand-locked .t-small { color: var(--color-text-subtle); }
 .library-strand-locked .lock { align-self: flex-start; margin-block-start: var(--space-2); }
 
 .library-recent { display: flex; flex-direction: column; gap: var(--space-3); }
