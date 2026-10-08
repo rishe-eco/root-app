@@ -16,7 +16,9 @@
     "library": "Library",
     "journey": "Journey",
     "portal": "Portal",
-    "locked": "Coming later"
+    "locked": "Coming later",
+    "menu": "Menu",
+    "close": "Close"
   },
   "landing": {
     "cta": "Start where you are",

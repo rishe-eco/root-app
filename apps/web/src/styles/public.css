@@ -11,6 +11,12 @@
 .nav-link-locked .lock { position: absolute; inset-block-start: 50%; inset-inline-start: 50%; transform: translate(-50%, -50%); }
 .nav-brand-link { text-decoration: none; color: inherit; }
 
+/* The menu is a disclosure below 769px (Nav.tsx). Above it, `display: contents`
+   dissolves the wrapper, so the links are the bar's own flex items and the
+   desktop layout is untouched; the toggle does not exist. */
+.nav-menu { display: contents; }
+.menu-toggle { display: none; }
+
 /* ---- Landing hero ------------------------------------------------------ */
 /* One centred line and its descriptor. The two-column split, the blurred
    Root Cast panel and their responsive rules were removed 2026-08-09 —
@@ -192,6 +198,24 @@
 }
 @media (max-width: 768px) {
   .nav { flex-wrap: wrap; gap: var(--space-4); padding-inline: var(--space-6); }
+  /* Bar: brand, language switch, Menu. The links open in a column under it —
+     `order` and a full-width basis put the menu on its own row whatever its
+     place in the markup. */
+  .menu-toggle { display: inline-flex; }
+  .nav-menu {
+    display: none;
+    order: 1;
+    flex: 0 0 100%;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-block-start: var(--space-2);
+    border-block-start: 1px solid var(--color-border);
+  }
+  .nav-menu-open { display: flex; }
+  /* Each row at least 44px tall; the row hugs its text so the current-page
+     underline does not run edge to edge, and a locked slot's padlock (centred
+     on its own box) stays on its blurred label. */
+  .nav-menu .nav-link { align-self: flex-start; min-block-size: 44px; }
   .hero, .growth { padding-inline: var(--space-6); }
   .about { padding-inline: var(--space-6); }
   .clients-cta { padding: var(--space-12); }
