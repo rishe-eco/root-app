@@ -8,8 +8,12 @@ export default function About() {
   const { t } = useTranslation();
   const locale = useLocale();
 
+  /* The closing card must not outrank the page's thesis: it was t-display (64px)
+     under a t-h1 (48px) in English. Each language drops the card one rung below
+     its thesis — Persian sits a rung lower than English throughout (the script
+     carries more ink per word). */
   const thesisCls = locale === 'fa' ? 't-h2' : 't-h1';
-  const clientsTitleCls = locale === 'fa' ? 't-h1' : 't-display';
+  const clientsTitleCls = locale === 'fa' ? 't-h3' : 't-h2';
 
   return (
     <div className="root-ui shell">

@@ -48,13 +48,17 @@ export default function LibraryHome() {
             {/* Not num-latin (persian-pass.md §1.2): a count reads in the
                 viewer's own digits, and num-latin would force the Latin
                 figure font onto them — same reasoning as desk/Overview.tsx. */}
-            <p className="t-caption library-strand-count">
-              {formatCount(total, locale)} {t('library.home.entries')}
-            </p>
+            {/* A zero count reads, in Persian, as a bullet ("• مدخل") — and a
+                strand with nothing in it has no count to give. */}
+            {total > 0 ? (
+              <p className="t-caption library-strand-count">
+                {formatCount(total, locale)} {t('library.home.entries')}
+              </p>
+            ) : null}
           </Link>
 
           <Link className="card card-link library-strand library-strand-locked" to={lp(locale, '/library/cast')}>
-            <p className="t-eyebrow">{t('landing.rootCast')}</p>
+            {/* No eyebrow: it said "Root Cast" over a title that says "Root Cast". */}
             <h2 className="t-h2">{t('nav.cast')}</h2>
             <p className="t-small">{t('nav.locked')}</p>
             <Lock />

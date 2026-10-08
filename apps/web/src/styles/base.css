@@ -16,6 +16,13 @@ body { margin: 0; }
   text-transform: none;
 }
 
+/* Vazirmatn has no italic. The browser fakes one by slanting the upright
+   glyphs, and in a right-to-left run the slant leans the wrong way (and
+   breaks the joins). Turn the synthesis off for Persian, and say "not italic"
+   outright where the kit asks for it (the footer's refusal line). */
+:lang(fa) { font-synthesis-style: none; }
+:lang(fa) .footer-refusal { font-style: normal; }
+
 /* Numbers read better in Latin figures inside tables even in Persian copy,
    but the surrounding text stays Persian. Applied per-cell, not globally. */
 .num-latin { font-family: var(--font-latin); font-variant-numeric: tabular-nums; }

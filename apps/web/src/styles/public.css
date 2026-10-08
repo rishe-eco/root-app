@@ -35,6 +35,11 @@
 .growth-heading { margin: 0 0 var(--space-6); }
 .growth-grid { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .growth-grid p { margin: 0; }
+/* The landing's signature is the clay rule across the top, not the card: these
+   do not link anywhere (and the hero's CTA is hidden by founder direction,
+   2026-08-09), so they must not wear the clickable frame. A rule, a title and a
+   line; no border, no radius, no inline padding. */
+.growth-item { display: flex; flex-direction: column; gap: var(--space-3); border-block-start: 3px solid var(--color-rule-strong); padding-block-start: var(--space-6); }
 
 /* ---- About ------------------------------------------------------------- */
 .about { flex: 1; inline-size: 100%; max-inline-size: 1040px; margin-inline: auto; padding-block: var(--space-24); padding-inline: var(--space-12); display: flex; flex-direction: column; gap: var(--space-16); }
@@ -43,7 +48,7 @@
 .gist .gist-title { margin: var(--space-4) 0 0; }
 .gist .gist-body { margin: var(--space-6) 0 0; }
 
-.clients-cta { border-radius: 24px; padding: var(--space-16); }
+.clients-cta { border-radius: var(--radius-lg); padding: var(--space-16); }
 .clients-cta .clients-eyebrow { margin: 0; }
 .clients-cta .clients-title { margin: var(--space-6) 0 0; }
 .clients-cta .clients-body { margin: var(--space-6) 0 0; max-inline-size: 46ch; font-size: var(--text-body-lg); line-height: var(--leading-body); color: var(--color-text-on-inverse-muted); }
@@ -119,6 +124,7 @@
 .library-list-controls { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .library-list-controls .input { flex: 1 1 280px; }
 .library-list-controls .select { flex: 0 0 auto; }
+.library-list-empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
 
 .library-cards { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .library-entry-card { gap: var(--space-2); }
