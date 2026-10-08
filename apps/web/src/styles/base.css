@@ -1,7 +1,11 @@
 /* Global reset + the two things every screen shares.
    Everything else is page-specific layout on top of kit.css. */
 
-body { margin: 0; }
+/* The page's own ground on the body too: with the dark appearance the canvas
+   behind a short page (and the overscroll) is the browser's dark default, not
+   the product's blue-black. (In light it was a white strip a few pixels tall
+   under the footer on a phone — the document is a little taller than .shell.) */
+body { margin: 0; background: var(--color-bg); color: var(--color-text); }
 * { box-sizing: border-box; }
 
 #app { min-block-size: 100vh; }

@@ -68,7 +68,7 @@ export default function SummaryPanel({ contract, audience, me, asCustomer = fals
 
       {staff && !delivered ? <Controls contract={c} me={me} variables={variables} /> : null}
 
-      <article className="doc doc-inline" lang={locale} dir={locale === 'fa' ? 'rtl' : 'ltr'}>
+      <article className="doc doc-inline force-light" lang={locale} dir={locale === 'fa' ? 'rtl' : 'ltr'}>
         <SummaryDocument summary={c.summary} />
       </article>
 

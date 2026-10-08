@@ -96,7 +96,7 @@ export default function InvoiceDetail() {
         <span className="t-caption printbar-hint">{t('print.hint')}</span>
       </div>
 
-      <article className="doc" lang={locale} dir={dirOf(locale)}>
+      <article className="doc force-light" lang={locale} dir={dirOf(locale)}>
         <header className="doc-head">
           <div className="doc-brand">
             <span className="dot" />

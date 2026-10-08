@@ -22,7 +22,8 @@
    ========================================================================= */
 
 :root {
-  color-scheme: light;
+  /* The appearance follows the system (HIG: no app-specific toggle). */
+  color-scheme: light dark;
 
   /* ---- Raw: neutral ramp (cool, indigo-tinted — drafting paper) --------
      100 / 200 / 300 / 400 / 700 are as-built from the landing. */
@@ -152,7 +153,8 @@
    be a different document.
    ========================================================================= */
 
-:root {
+:root,
+.force-light {
   /* ---- Semantic: surface ---- */
   --color-bg:       var(--neutral-100);  /* chalk — the page */
   --color-panel:    var(--neutral-300);  /* tinted panels, quiet blocks */
@@ -241,6 +243,84 @@
   --shadow-sm: 0 1px 2px rgba(30, 53, 87, 0.06);
   --shadow-md: 0 6px 24px rgba(30, 53, 87, 0.08);
   --shadow-lg: 0 16px 48px rgba(30, 53, 87, 0.10);
+}
+
+/* A `.force-light` subtree also has to *use* the light set: `color` inherits as
+   a computed value, so without this it would keep the dark page's text colour. */
+.force-light {
+  color-scheme: light;
+  color: var(--color-text);
+}
+
+/* ============================================================================
+   The dark appearance — semantic tokens only, following the system setting.
+   `screen`, so printing always gets the light set above.
+
+   Built, not inverted: chalk becomes a blue-black ground (the indigo family,
+   darkened — not grey), the text tiers are re-derived so each still clears its
+   ratio on every ground (the test computes them), and clay stays the landing's
+   mark. Every value below is held by lib/tokens.test.ts; the figures in the
+   comments are those ratios.
+   ========================================================================= */
+
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    --color-bg:       #101925;
+    --color-footer:   #141E2B;
+    --color-raised:   #192333;
+    --color-panel:    #1C2738;
+    --color-inverse:  #24406A;   /* text-inverse 9.0 · indigo-200 5.1 · cyan-300 4.7 */
+
+    --color-text:         #E4E8EC;   /* 12.2 on panel */
+    --color-text-muted:   #AEB8C6;   /* 7.5 on panel */
+    --color-text-subtle:  #9AA5B5;   /* 6.0 on panel */
+    --color-text-inverse: var(--neutral-100);   /* unchanged: it sits on inverse and accent grounds */
+    --color-beauty:       #D4B366;   /* 8.8 on bg */
+
+    --color-border:         #2E3B4F;   /* hairline */
+    --color-border-strong:  #3F4F66;
+    --color-border-control: #6B7A8F;   /* 3.44 on panel */
+    --color-rule:           #5E93A6;
+    --color-rule-strong:    #C24B3A;   /* clay stays the landing's mark */
+
+    --color-accent:        #A83E2F;    /* the button fill; --color-on-accent on it is 5.36 */
+    --color-accent-hover:  var(--clay-600);   /* darker on hover here too: a lighter fill drops the label below 4.5:1 */
+    --color-accent-soft:   #3A2220;
+    --color-accent-text:   #E08A7C;    /* 5.8 on panel */
+    --color-accent-border: #6B3A33;
+    --color-secondary:     #7FB3C4;    /* 6.6 on panel */
+    --color-secondary-soft:   #1D3640;
+    --color-secondary-border: #2E5666;
+    --color-secondary-line:   #3B6575;
+
+    --color-locked:  #C79A3E;
+    --color-error:   #EE9A8C;          /* 6.9 on panel */
+    --color-focus:   #6FA8BC;          /* 5.7 on panel */
+    --color-pending: #D4B366;
+
+    /* Solid fills (the failed badge, the done pill) are the *light* semantic
+       colours in this appearance, so their label is the dark ground's own ink. */
+    --color-on-strong: #101925;
+
+    --badge-gold-bg:    #3A3020;  --badge-gold-fg:    #E5D09B;   /* 8.5 */
+    --badge-cyan-bg:    #1D3640;  --badge-cyan-fg:    #B0CFD8;   /* 7.7 */
+    --badge-clay-bg:    #4A2420;  --badge-clay-fg:    #F5D8D3;   /* 10.0 */
+    --badge-indigo-bg:  #2A3B56;  --badge-indigo-fg:  #D3DBE7;   /* 8.1 */
+    --badge-neutral-bg: #2A3442;  --badge-neutral-fg: #C7CDD3;   /* 7.9 */
+    --badge-strong-bg:  #24406A;  --badge-strong-fg:  #EDEFF0;
+
+    --color-mark-bg:      #4A3D1E;
+    --avatar-you-bg:      #4A2420;
+    --avatar-you-fg:      #F5D8D3;
+    --color-skeleton:     #3F4F66;
+    --color-skeleton-dot: #55657C;
+    --color-placeholder-ink: #7B8FAF;
+    --color-scrim:        rgba(0, 0, 0, 0.6);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.55);
+  }
 }
 
 /* Persian is the default language of the product, not a translation.

@@ -89,7 +89,7 @@ export default function AgreementPanel({ contract, audience, asCustomer = false 
     <div className="agreement" data-testid="agreement-panel" data-state={signature ? 'signed' : approved ? 'approved' : 'open'}>
       <p className="sec-help">{t(`agreement.lede.${audience}`)}</p>
 
-      <article className="doc doc-inline" lang={locale} dir={locale === 'fa' ? 'rtl' : 'ltr'}>
+      <article className="doc doc-inline force-light" lang={locale} dir={locale === 'fa' ? 'rtl' : 'ltr'}>
         <AgreementDocument contract={contract} revision={revision} />
       </article>
 

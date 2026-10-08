@@ -104,7 +104,7 @@ export default function SummaryPrint() {
         <span className="t-caption printbar-hint">{t('print.hint')}</span>
       </div>
 
-      <article className="doc" lang={locale} dir={dirOf(locale)}>
+      <article className="doc force-light" lang={locale} dir={dirOf(locale)}>
         <table className="doc-sheet">
           <tfoot>
             <tr>
