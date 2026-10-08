@@ -113,6 +113,9 @@ J10   step 6 — demo submission, readiness, per-phase approval  ✔ 2026-10-04 
 J11   step 7 — the summary, handover, closing a contract  ✔ 2026-10-04 [J11.md] (built before J10)
 J12   the customer dashboard and a home screen per staff role  ✔ 2026-10-05 [J12.md]
       ── M4 (J8 · J9 · J10 · J11 · J12) full suites green 2026-10-05: unit 1064+327 · integration 1242 · e2e 114
+──── after the build: work packages on branch wp-dashboards ──────────────────
+WP    the founder's dashboards review — 11 items, 2 decisions   recorded 2026-10-08 [wp-dashboards.md] · #10 built by the design review
+WP    design review of the public site and portal (HIG) — contrast, phone nav, dark   ✔ 2026-10-08 [wp-design-review.md] · unit 1064+334 · e2e 129
 ```
 
 **R3 and the Persian pass each have their own build-ready file; L8 and the
@@ -401,6 +404,8 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`J11.md`](J11.md) | step 7: handover, closing a contract, the summary and its print view | ✔ built |
 | [`J12.md`](J12.md) | the customer Dashboard, My work per staff role, `myAttention`, the re-pointed Needs-Root queue | ✔ built |
 | [`J13.md`](J13.md) | invoices: drafts, numbers, due dates, issuing the payment plan, the invoice view | ✔ built |
+| [`wp-dashboards.md`](wp-dashboards.md) | the founder's review of the desk and the portal: 11 items, 2 decisions | recorded · #10 ✔ |
+| [`wp-design-review.md`](wp-design-review.md) | the design review: contrast, spacing tokens, phone nav, one heading, Library, dark appearance | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |

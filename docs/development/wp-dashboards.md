@@ -75,11 +75,15 @@ everywhere.
     [`portal.css:17`](../../apps/web/src/styles/portal.css)). Narrow widths
     hide the labels (`portal.css:201`), which leaves a column of identical
     squares. Each item needs its own icon.
+    **Built 2026-10-08 by `wp-design-review.md` (Phase C):** six inline-SVG
+    icons, and below 860px the rail is a labelled bottom tab bar.
 
 ### Later
 
 11. **A UI/UX review** of the desk and the portal. This is a reminder only
     and not scoped here.
+    **The portal half is done** (`wp-design-review.md`, with the public site);
+    the desk's review is still owed.
 
 ## Suggested order
 
