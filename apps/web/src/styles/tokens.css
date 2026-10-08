@@ -5,14 +5,20 @@
 
    DERIVED FROM THE BUILD, not from an exploration. Every named colour below
    is taken from "Root Landing.dc.html" in the Root website layout project.
-   Two values are corrected for contrast (marked ⚠ below); everything else
-   is as-built.
+   The values that were corrected for contrast are marked ⚠ below (the
+   review of 2026-10-08, wp-design-review.md, computed every pair and found
+   more than the original two); everything else is as-built.
 
    Type scale, spacing, weights and motion are carried over unchanged from
    root-website-requirements_2.md §9.1. That document's warm colour layer
    (grey ramp + clay #B25C3B) is superseded here.
 
-   Components reference the SEMANTIC names — never the raw ramps.
+   Components reference the SEMANTIC names — never the raw ramps. That is
+   what makes the dark appearance (below) possible: it redefines the semantic
+   names and nothing else, so a component that reached for a raw ramp would be
+   the one thing that did not switch. lib/tokens.test.ts enforces both halves:
+   every var(--x) is defined, and every text/ground pair clears its WCAG ratio
+   in the light set and in the dark one.
    ========================================================================= */
 
 :root {
@@ -76,80 +82,6 @@
   --gold-600: #8A6C18;   /* body-text rung on chalk (non-text marks: the pending rule) */
   --gold-700: #6F5713;   /* badge text on gold-100: 5.59:1 (gold-600 was 4.02) */
 
-  /* ---- Semantic: surface ---- */
-  --color-bg:       var(--neutral-100);  /* chalk — the page */
-  --color-panel:    var(--neutral-300);  /* tinted panels, quiet blocks */
-  --color-footer:   var(--neutral-200);  /* footer ground */
-  --color-raised:   var(--neutral-50);   /* menus, popovers — the rare lift */
-  --color-inverse:  var(--indigo-500);   /* dark statement sections */
-
-  /* ---- Semantic: text ---- */
-  --color-text:         var(--indigo-500);
-  --color-text-muted:   var(--neutral-700);
-  /* Subtle is for 13px captions and metadata. At that size there is no room
-     for a tier much lighter than muted (4.5:1 is the floor on the darkest
-     ground, the panel), so "subtle" now differs from "muted" by size and
-     weight more than by colour — the as-built #7A8798 was 3.17:1 on chalk and
-     2.89:1 on the footer. */
-  --color-text-subtle:  var(--neutral-650);
-  --color-text-inverse: var(--neutral-100);
-  --color-beauty:       var(--gold-500);  /* the tagline highlight */
-
-  /* ---- Semantic: line ---- */
-  --color-border:        var(--neutral-400);
-  --color-border-strong: var(--neutral-500);
-  --color-rule:          var(--cyan-400);   /* decorative rules (not focus — see --color-focus) */
-  --color-rule-strong:   var(--clay-400);   /* the 3px card top-rule */
-  /* The boundary of anything you type into or toggle: an input, a select, a
-     checkbox. WCAG 1.4.11 wants 3:1 for that, and the hairline above is
-     deliberately lighter (cards and rules are decorative, exempt).
-     3.17:1 on chalk, ≥3 on raised. */
-  --color-border-control: var(--neutral-600);
-
-  /* ---- Semantic: action ----
-     Clay is the action colour on this brand, not a rare mark. Indigo is
-     the ink you read; clay is the thing you press. */
-  --color-accent:       var(--clay-500);
-  --color-accent-hover: var(--clay-600);
-  --color-accent-soft:  var(--clay-50);
-  --color-secondary:    var(--cyan-600);
-  --color-secondary-soft: var(--cyan-50);
-
-  /* ---- Semantic: state ----
-     NOTE: clay is already the action colour, so destructive actions are
-     NOT distinguished by hue. They are distinguished by copy and by a
-     confirmation step. See components/buttons. */
-  --color-locked:  var(--gold-500);   /* "coming later" */
-  --color-error:   var(--clay-600);   /* darker than the action, on purpose */
-  --color-focus:   var(--cyan-500);   /* ⚠ corrected: cyan-400 was 2.94:1 on chalk; cyan-500 is 3.92:1 */
-
-  /* ---- Semantic: text on a filled ground ----
-     Component CSS names the role, never the ramp, so a second appearance can
-     redefine the role (Phase G of wp-design-review.md). */
-  --color-on-accent: var(--neutral-100);   /* a clay button, the active language pill */
-  --color-on-strong: var(--neutral-50);    /* a solid error / secondary fill: the failed badge, the done pill, a ticked box */
-  --color-accent-text:  var(--clay-500);   /* the action colour read as text: .link-action, a required mark */
-  --color-mark-bg:      var(--gold-100);   /* a highlighted passage in the Review Room */
-  --avatar-you-bg:      var(--clay-100);   /* the customer's own avatar in a thread */
-  --avatar-you-fg:      var(--clay-600);
-  --color-text-on-inverse-muted: var(--indigo-200);   /* secondary copy on the indigo ground */
-  --color-eyebrow-on-inverse:    var(--cyan-300);     /* eyebrows on the indigo ground: 5.54:1 */
-
-  /* ---- Semantic: badges — one fg/bg pair per hue ----
-     Every pair is held to 4.5:1 by lib/tokens.test.ts. */
-  --badge-gold-bg:    var(--gold-100);
-  --badge-gold-fg:    var(--gold-700);
-  --badge-cyan-bg:    var(--cyan-100);
-  --badge-cyan-fg:    var(--cyan-700);
-  --badge-clay-bg:    var(--clay-50);
-  --badge-clay-fg:    var(--clay-600);
-  --badge-indigo-bg:  var(--indigo-100);
-  --badge-indigo-fg:  var(--indigo-500);
-  --badge-neutral-bg: var(--neutral-300);
-  --badge-neutral-fg: var(--neutral-700);
-  --badge-strong-bg:  var(--indigo-500);
-  --badge-strong-fg:  var(--neutral-100);
-
   /* ---- Typography ---- */
   --font-latin:   'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-persian: 'Vazirmatn', 'Inter', system-ui, sans-serif;
@@ -201,11 +133,6 @@
   --radius-lg:   24px;   /* the About page's closing card */
   --radius-full: 999px;
 
-  /* ---- Shadows (cool-tinted, very soft) ---- */
-  --shadow-sm: 0 1px 2px rgba(30, 53, 87, 0.06);
-  --shadow-md: 0 6px 24px rgba(30, 53, 87, 0.08);
-  --shadow-lg: 0 16px 48px rgba(30, 53, 87, 0.10);
-
   /* ---- Motion (subtle only) ---- */
   --dur-fast: 150ms;
   --dur-base: 250ms;
@@ -213,6 +140,107 @@
   --ease:     cubic-bezier(0.4, 0, 0.2, 1);
 
   /* ---- Breakpoints (reference) — sm 640 · md 768 · lg 1024 · xl 1280 ---- */
+}
+
+/* ============================================================================
+   Semantic colour — the light set, and the part the dark appearance replaces.
+
+   `:root, .force-light`: `.force-light` re-declares the light set on any
+   subtree that must stay light inside a dark page — the paper sheets (the
+   contract, summary and invoice documents) and the frame that shows a
+   customer's own site. Those draw white paper on purpose; a dark sheet would
+   be a different document.
+   ========================================================================= */
+
+:root {
+  /* ---- Semantic: surface ---- */
+  --color-bg:       var(--neutral-100);  /* chalk — the page */
+  --color-panel:    var(--neutral-300);  /* tinted panels, quiet blocks */
+  --color-footer:   var(--neutral-200);  /* footer ground (also the portal's rail) */
+  --color-raised:   var(--neutral-50);   /* menus, popovers — the rare lift */
+  --color-inverse:  var(--indigo-500);   /* dark statement sections */
+
+  /* ---- Semantic: text ---- */
+  --color-text:         var(--indigo-500);
+  --color-text-muted:   var(--neutral-700);
+  /* Subtle is for 13px captions and metadata. At that size there is no room
+     for a tier much lighter than muted (4.5:1 is the floor on the darkest
+     ground, the panel), so "subtle" now differs from "muted" by size and
+     weight more than by colour — the as-built #7A8798 was 3.17:1 on chalk and
+     2.89:1 on the footer. */
+  --color-text-subtle:  var(--neutral-650);
+  --color-text-inverse: var(--neutral-100);
+  --color-beauty:       var(--gold-500);  /* the tagline highlight — large type only */
+
+  /* ---- Semantic: line ---- */
+  --color-border:        var(--neutral-400);
+  --color-border-strong: var(--neutral-500);
+  --color-rule:          var(--cyan-400);   /* decorative rules (not focus — see --color-focus) */
+  --color-rule-strong:   var(--clay-400);   /* the 3px card top-rule */
+  /* The boundary of anything you type into or toggle: an input, a select, a
+     checkbox. WCAG 1.4.11 wants 3:1 for that, and the hairline above is
+     deliberately lighter (cards and rules are decorative, exempt).
+     3.17:1 on chalk, ≥3 on raised. */
+  --color-border-control: var(--neutral-600);
+  --color-border-on-inverse: var(--indigo-200);   /* a ghost button's edge on the indigo ground */
+
+  /* ---- Semantic: action ----
+     Clay is the action colour on this brand, not a rare mark. Indigo is
+     the ink you read; clay is the thing you press. */
+  --color-accent:       var(--clay-500);
+  --color-accent-hover: var(--clay-600);
+  --color-accent-soft:  var(--clay-50);
+  --color-accent-text:  var(--clay-500);   /* the action colour read as text: .link-action, a required mark */
+  --color-accent-border: var(--clay-200);  /* an underline or edge in the action's tint */
+  --color-secondary:    var(--cyan-600);   /* cyan as text (crumbs, links) and as a solid fill (done pill) */
+  --color-secondary-soft: var(--cyan-50);
+  --color-secondary-border: var(--cyan-200);
+  --color-secondary-line:   var(--cyan-300);
+
+  /* ---- Semantic: state ----
+     NOTE: clay is already the action colour, so destructive actions are
+     NOT distinguished by hue. They are distinguished by copy and by a
+     confirmation step. See components/buttons. */
+  --color-locked:  var(--gold-500);   /* "coming later" */
+  --color-error:   var(--clay-600);   /* darker than the action, on purpose */
+  --color-focus:   var(--cyan-500);   /* ⚠ corrected: cyan-400 was 2.94:1 on chalk; cyan-500 is 3.92:1 */
+  --color-pending: var(--gold-600);   /* the 3px mark on something waiting for a person */
+  --color-focus-on-inverse: var(--cyan-300);   /* cyan-500 is 2.6:1 on indigo; this is 5.54 */
+
+  /* ---- Semantic: text on a filled ground ---- */
+  --color-on-accent: var(--neutral-100);   /* a clay button, the active language pill */
+  --color-on-strong: var(--neutral-50);    /* a solid error / secondary fill: the failed badge, the done pill, a ticked box */
+  --color-text-on-inverse-muted: var(--indigo-200);   /* secondary copy on the indigo ground */
+  --color-eyebrow-on-inverse:    var(--cyan-300);     /* eyebrows on the indigo ground: 5.54:1 */
+
+  /* ---- Semantic: badges — one fg/bg pair per hue ----
+     Every pair is held to 4.5:1 by lib/tokens.test.ts, in both appearances. */
+  --badge-gold-bg:    var(--gold-100);
+  --badge-gold-fg:    var(--gold-700);
+  --badge-cyan-bg:    var(--cyan-100);
+  --badge-cyan-fg:    var(--cyan-700);
+  --badge-clay-bg:    var(--clay-50);
+  --badge-clay-fg:    var(--clay-600);
+  --badge-indigo-bg:  var(--indigo-100);
+  --badge-indigo-fg:  var(--indigo-500);
+  --badge-neutral-bg: var(--neutral-300);
+  --badge-neutral-fg: var(--neutral-700);
+  --badge-strong-bg:  var(--indigo-500);
+  --badge-strong-fg:  var(--neutral-100);
+
+  /* ---- Semantic: one-off roles ---- */
+  --color-mark-bg:      var(--gold-100);   /* a highlighted passage in the Review Room */
+  --avatar-you-bg:      var(--clay-100);   /* the customer's own avatar in a thread */
+  --avatar-you-fg:      var(--clay-600);
+  --color-skeleton:     var(--neutral-400); /* the placeholder bars of a design concept's preview */
+  --color-skeleton-dot: var(--neutral-500);
+  --color-placeholder-ink: var(--indigo-400); /* the big letter on that preview — 32px bold, so 3:1. ⚠ corrected: indigo-300 was 2.52:1 on the panel */
+  --color-scrim:        rgba(30, 53, 87, 0.45);  /* behind a modal or drawer */
+
+  /* ---- Shadows (cool-tinted, very soft) ---- */
+  --shadow-sm: 0 1px 2px rgba(30, 53, 87, 0.06);
+  --shadow-md: 0 6px 24px rgba(30, 53, 87, 0.08);
+  --shadow-lg: 0 16px 48px rgba(30, 53, 87, 0.10);
 }
 
 /* Persian is the default language of the product, not a translation.

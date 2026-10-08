@@ -27,6 +27,11 @@
   border-radius: var(--radius-sm);
 }
 
+/* On the indigo ground the ring would be 2.6:1; the ring on a dark ground is the
+   light cyan. (.view-as-banner is the other indigo surface — wizard.css.) */
+.card-inverse :focus-visible,
+.view-as-banner :focus-visible { outline-color: var(--color-focus-on-inverse); }
+
 /* ---- Typography ------------------------------------------------------- */
 
 .t-display { font-size: var(--text-display); line-height: var(--leading-tight); font-weight: var(--weight-bold); letter-spacing: -0.02em; }
@@ -78,7 +83,7 @@
 .link-action {
   color: var(--color-accent-text);
   text-decoration: underline;
-  text-decoration-color: var(--clay-200);
+  text-decoration-color: var(--color-accent-border);
   text-underline-offset: 0.25em;
   text-decoration-thickness: 1px;
 }

@@ -82,7 +82,7 @@
 .detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-6); align-items: start; padding: var(--space-8); max-inline-size: 1240px; }
 
 /* V3 · the pending-review banner — leads the page, one primary action */
-.pending-banner { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-inline-start: 3px solid var(--gold-600); background: var(--color-panel); border-radius: var(--radius-sm); padding: var(--space-4) var(--space-5); flex-wrap: wrap; }
+.pending-banner { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-inline-start: 3px solid var(--color-pending); background: var(--color-panel); border-radius: var(--radius-sm); padding: var(--space-4) var(--space-5); flex-wrap: wrap; }
 .pending-banner-body { display: flex; flex-direction: column; gap: 3px; min-inline-size: 0; }
 .pending-lead { margin: 0; font-size: var(--text-body); font-weight: var(--weight-medium); color: var(--color-text); }
 .pending-note { margin: 0; font-size: var(--text-small); color: var(--color-text-muted); }
@@ -106,11 +106,11 @@
 .concept-dim { opacity: 0.5; }
 .concept-prev { aspect-ratio: 4 / 3; background: var(--color-panel); display: flex; flex-direction: column; }
 .concept-bar { block-size: 22px; display: flex; align-items: center; gap: 5px; padding-inline: 10px; background: var(--color-footer); border-block-end: 1px solid var(--color-border); }
-.concept-bar i { inline-size: 7px; block-size: 7px; border-radius: 50%; background: var(--neutral-500); }
+.concept-bar i { inline-size: 7px; block-size: 7px; border-radius: 50%; background: var(--color-skeleton-dot); }
 .concept-canvas { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; }
-.concept-id { font-size: var(--text-h2); font-weight: var(--weight-bold); color: var(--indigo-300); font-family: var(--font-latin); }
+.concept-id { font-size: var(--text-h2); font-weight: var(--weight-bold); color: var(--color-placeholder-ink); font-family: var(--font-latin); }
 .concept-img { inline-size: 100%; block-size: 100%; object-fit: cover; }
-.skl { block-size: 6px; border-radius: 3px; background: var(--neutral-400); }
+.skl { block-size: 6px; border-radius: 3px; background: var(--color-skeleton); }
 .concept-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3) var(--space-4); }
 .concept-name { font-weight: var(--weight-medium); color: var(--color-text); min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -118,7 +118,7 @@
 .pages-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .pages-cap { margin: 0; font-size: var(--text-small); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-subtle); }
 .pagerow { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
-.pagerow-done { border-color: var(--cyan-300); background: var(--cyan-50); }
+.pagerow-done { border-color: var(--color-secondary-line); background: var(--color-secondary-soft); }
 .pagethumb { inline-size: 54px; block-size: 40px; border-radius: 6px; background: var(--color-panel); border: 1px solid var(--color-border); flex: none; object-fit: cover; }
 .pagerow .pn { font-weight: var(--weight-medium); }
 .pagerow .pc { font-size: var(--text-caption); color: var(--color-text-subtle); }
@@ -149,7 +149,7 @@
 .locknote .lock { color: var(--color-locked); }
 
 /* 4 · E-signature */
-.sign-done { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--cyan-300); background: var(--cyan-50); border-radius: var(--radius-sm); }
+.sign-done { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-secondary-line); background: var(--color-secondary-soft); border-radius: var(--radius-sm); }
 .sign-name { font-family: 'Vazirmatn Variable', 'Vazirmatn', cursive; font-size: var(--text-h3); color: var(--color-text); }
 .sign-row { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
 .sign-field { flex: 1 1 220px; }
@@ -274,7 +274,7 @@
 
 .overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
 .overlay-drawer { justify-content: flex-end; align-items: stretch; padding: 0; }
-.overlay-scrim { position: absolute; inset: 0; background: var(--color-inverse); opacity: 0.45; }
+.overlay-scrim { position: absolute; inset: 0; background: var(--color-scrim); }
 .modal, .drawer { position: relative; background: var(--color-raised); box-shadow: var(--shadow-lg); overflow-y: auto; }
 .modal { inline-size: 100%; max-inline-size: 36rem; max-block-size: 100%; border-radius: var(--radius-md); padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); }
 .modal-actions { display: flex; gap: var(--space-3); }

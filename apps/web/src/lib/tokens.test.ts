@@ -113,6 +113,21 @@ test('every var(--x) written in a component (an inline style or a class string) 
   assert.deepEqual([...new Set(problems)], []);
 });
 
+// A dark appearance can only redefine the semantic names. A component that read
+// a raw ramp (--indigo-200, --gold-600) or wrote a hex would be the one thing
+// that did not switch — and would fail every contrast figure in section 2
+// without the test ever seeing it. print.css is exempt: paper is always light.
+test('component CSS reads semantic tokens only: no raw ramp, no hard-coded colour', () => {
+  const problems: string[] = [];
+  for (const file of readdirSync(STYLES).filter((f) => f.endsWith('.css') && f !== 'tokens.css' && f !== 'print.css')) {
+    const css = readCss(file);
+    for (const m of css.matchAll(/var\(\s*(--(?:neutral|indigo|clay|cyan|gold)-\d+)/g)) problems.push(`${file}: reads the raw ramp ${m[1]}`);
+    for (const m of css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)) problems.push(`${file}: hard-codes ${m[0]}`);
+    for (const m of css.matchAll(/\brgba?\(/g)) problems.push(`${file}: hard-codes an ${m[0]}…) colour`);
+  }
+  assert.deepEqual(problems, []);
+});
+
 // ---------------------------------------------------------------------------
 // 2 · Contrast, computed, in both appearances.
 
@@ -198,12 +213,17 @@ const PAIRS: Pair[] = [
   ['--color-text-subtle', '--color-panel', 4.5, 'discarded badge'],
   ['--avatar-you-fg', '--avatar-you-bg', 4.5, 'the customer’s own avatar'],
   ['--color-text', '--color-mark-bg', 4.5, 'a review highlight'],
+  ['--color-text', '--color-secondary-soft', 4.5, 'text on a notice (auth-notice, a finished row)'],
+  ['--color-error', '--color-accent-soft', 4.5, 'error text on its soft ground (auth-error, a removed change)'],
+  ['--color-text', '--color-accent-soft', 4.5, 'text on the soft action ground'],
+  ['--color-placeholder-ink', '--color-panel', 3, 'the big letter on a concept preview — LARGE text (32px bold)'],
   // Non-text: control boundaries, focus rings (WCAG 1.4.11, 3:1).
   ['--color-border-control', '--color-bg', 3, 'input / checkbox boundary on the page'],
   ['--color-border-control', '--color-raised', 3, 'input / checkbox boundary on a raised ground'],
   ['--color-focus', '--color-bg', 3, 'focus ring on the page'],
   ['--color-focus', '--color-raised', 3, 'focus ring on a raised ground'],
   ['--color-focus', '--color-panel', 3, 'focus ring on a panel'],
+  ['--color-focus-on-inverse', '--color-inverse', 3, 'focus ring on the indigo ground'],
   // The tagline's gold word is large type (the hero's rung is 48/64px), so 3:1.
   ['--color-beauty', '--color-bg', 3, 'beauty — LARGE text only (hero tagline)'],
   ['--color-locked', '--color-bg', 3, 'the padlock — a meaningful icon, not text'],

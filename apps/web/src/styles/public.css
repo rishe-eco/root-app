@@ -78,8 +78,8 @@
 .auth-head p { margin: 0; }
 .auth-form { display: flex; flex-direction: column; gap: var(--space-4); }
 .auth-foot { display: flex; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
-.auth-notice { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--cyan-50); border: 1px solid var(--cyan-200); font-size: var(--text-small); }
-.auth-error { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--clay-50); border: 1px solid var(--clay-200); font-size: var(--text-small); color: var(--color-error); }
+.auth-notice { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--color-secondary-soft); border: 1px solid var(--color-secondary-border); font-size: var(--text-small); }
+.auth-error { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--color-accent-soft); border: 1px solid var(--color-accent-border); font-size: var(--text-small); color: var(--color-error); }
 
 /* ---- Not found --------------------------------------------------------- */
 .notfound { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); padding: var(--space-24) var(--space-6); text-align: center; }

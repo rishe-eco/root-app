@@ -191,7 +191,7 @@
 .theme-check { display: inline-flex; align-items: center; gap: var(--space-2); }
 
 .dirty-note { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); color: var(--color-text-muted); }
-.dirty-dot { inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--gold-600); flex: none; }
+.dirty-dot { inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--color-pending); flex: none; }
 .dirty-dot-clean { background: var(--color-border-strong); }
 
 .thumb {
@@ -225,7 +225,7 @@
 .change-tag-removed { background: var(--color-accent-soft); color: var(--color-error); }
 
 .live-banner {
-  border-inline-start: 3px solid var(--gold-600);
+  border-inline-start: 3px solid var(--color-pending);
   background: var(--color-panel);
   padding: var(--space-4);
   border-radius: var(--radius-sm);
