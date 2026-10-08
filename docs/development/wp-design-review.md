@@ -388,3 +388,51 @@ API change; adding a hero CTA.
 - The final light and dark token tables with computed ratios (paste the test's pair list).
 - Every Persian string you wrote that this brief did not give.
 - Every place you deviated from a value or rule in this brief, and why.
+
+---
+
+## Record: built and reviewed (2026-10-08)
+
+**Built:** Sonnet lane, branch `wp-design-review`, commits `af6bf60`…`6863a23`, on `9650aa2`.
+**Reviewed:** Claude Opus, who reran every suite from the lane's worktree. Ports 5241/5245 were used for the rerun.
+
+### Suites (reviewer's run)
+- `npm run typecheck`: clean, web and api.
+- `npm test`: api 1064/1064, web 334/334. The web count includes the 7 tests in `tokens.test.ts`.
+- `npm run e2e` (msedge): **129 passed (15.0m)**. That is the 114 existing tests plus 15 in `26-design-review.spec.ts`.
+- `test:integration` was not run, because the API is untouched.
+
+### What the review checked
+- **The diff, against each phase.**
+- **The before, after and dark screenshots** (`apps/web/.playwright/design-review/`, gitignored). Phone and desktop, in fa and en, for:
+  - the landing page, About and the Library;
+  - the sign-in page;
+  - the customer Dashboard, Contracts, Invoices, Support and a contract detail page.
+- **The dark token block, against the brief's table.** All values match.
+
+### Review fix (reviewer's commit)
+- `.shell > .footer { margin-block-start: auto; }` keeps the footer at the bottom of short pages. Without it, a band of page ground showed under the footer, in light and dark. This was already there before the package. Checked by measurement: the footer's bottom equals the viewport height at 1440×900 in both appearances.
+
+### Accepted deviations from the brief
+- **Phone tab bar padding** is `space-1`, and link `padding-inline` is 0, so the Persian «صورت‌حساب‌ها» fits at 390px.
+- **Topbar `start`** is an empty crumb on the five list pages. The desktop topbar's start side is now empty there. It's a founder call whether to put a non-heading label back.
+- **`placeholder-ink`** moves to indigo-400, and the focus ring on indigo grounds uses cyan-300. Both are contrast fixes found by the test.
+- **The "Clear filter" link** on the Library list now also clears search and type. One reset, one meaning.
+- **`tokens.test.ts` is stricter than briefed.** It rejects raw ramps and hex values outside `tokens.css` and `print.css`, and it checks the vars in TSX too. Kept.
+
+### Founder-visible (needs the founder's eye before merge)
+- The landing's growth cards lose their frame and keep the clay top rule (E1).
+- **Dark appearance** follows the system everywhere, the desk included, with no toggle. The dark palette is new brand colour. Paper documents and the customer-site frame stay light.
+- On a phone:
+  - the portal has a bottom tab bar with icons;
+  - the public nav sits behind a Menu button.
+- The topbar title is removed on the portal list pages.
+
+### Owed, not in this package
+- **Opacity on text** remains in three places, which the contrast test can't see: `.review-thread-resolved` (0.7), `.feedback-comment-pending`/`-declined` (0.85), and `.concept-dim` (0.5).
+- **The inline agreement sheet** on a contract page is cramped at 390px. This is a pre-existing layout problem in the two-column `doc-facts` and the `.doc` padding.
+- **A native speaker** should read the new Persian strings: `nav.menu`, `nav.close` and the five `library.list.*` strings.
+- **Real-device checks** are still needed: safe-area on a notched phone, VoiceOver and TalkBack.
+- **`.side-soon-tag`** is dead CSS.
+- **"About Us"** is still the wording of the desk template page name, `pages.about` in `en.json` and the API `templates.ts`.
+- **Evidence path, for future briefs:** don't use `test-results/`, because Playwright empties it on every run. Use `.playwright/`.

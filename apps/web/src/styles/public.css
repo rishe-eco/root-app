@@ -2,6 +2,10 @@
    Every colour, size, space and radius here is a token. */
 
 .shell { min-block-size: 100vh; display: flex; flex-direction: column; }
+/* The footer sits at the bottom of a short page (the Landing, a Reserved
+   room) instead of leaving a band of page ground under it. Pages whose main
+   already takes `flex: 1` are unchanged: there is no space left to push. */
+.shell > .footer { margin-block-start: auto; }
 
 /* ---- Nav: the locked slots ---------------------------------------------
    The name is present but unreadable, with the lock sitting on top of the
