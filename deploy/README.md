@@ -201,6 +201,8 @@ admin login — and the desk opens at `/fa/desk`, where invites are issued from
 
 ## Somewhere else on the box
 
+**Another tenant: IMNSTR.com.** This box also runs IMNSTR: `/srv/imnstr`, compose project `imnstr` on `127.0.0.1:4100`, `/etc/nginx/sites-available/imnstr`, limit zone `imnstr_auth`, cron `/etc/cron.d/imnstr-backup`. Its setup is in `deploy/README.md` of `rishe-eco/i-monster`.
+
 Nothing above is load-bearing except the *agreement* between the pieces. Two
 things move, and each has a short list of places that must move with it.
 
