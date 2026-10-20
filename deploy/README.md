@@ -144,8 +144,12 @@ would put every private file behind a guessable URL, served by Nginx with no
 check at all. Confirm after reloading:
 
 ```bash
-curl -sI https://yourdomain.com/public-files/../private/   # want 400 or 404
+curl -sI --path-as-is https://yourdomain.com/public-files/../private/   # want 400, 404, or 200 with the SPA's index.html
 ```
+
+Nginx resolves the `..` before it picks a location, so a correct alias answers
+with a refusal or with the SPA's own page. What must never come back is a file
+from `storage/`. `deploy/checks.sh` makes this check after every deploy.
 
 **5. The first release**, from your machine, in the repo root:
 
@@ -242,7 +246,49 @@ the repo-root `.env` and only that one.
 
 ## Routine deploys
 
-**Web** — from your machine, in the repo root:
+**A push to `main` deploys**, once *Server setup for CI* (below) is done.
+`.github/workflows/deploy.yml` runs on every push to `main`:
+
+1. **`check`** runs `npm ci`, `prisma generate`, shellcheck and the deploy
+   script's own test harness (`deploy/test/root-deploy.test.sh`), `typecheck`,
+   both unit suites, the integration suite against a Postgres service, and the
+   web build. There is no Playwright: e2e stays on your machine.
+2. If that is green, **`deploy`** builds the web app on the runner, packs it with
+   the commit's id, and sends it as the input of one SSH connection to the box
+   as `root-deploy`. That key can only run `/usr/local/sbin/root-deploy`, as root
+   through `sudo`, with no arguments. The job runs only for `main`, and only
+   while the repository variable `DEPLOY_ENABLED` is `true`; any other value
+   switches automatic deploys off, and `check` still runs.
+3. The script deploys **exactly that commit**, never a newer tip of `main`, so
+   the API and the web always come from one commit. It fast-forwards
+   `/srv/root/app` to it, dumps the database if the commit adds a migration,
+   builds the API image on the box, runs `up -d --wait`, checks the container's
+   health and `nginx -t`, makes the web build live with the same atomic swap
+   `release-web.sh` uses, and runs `deploy/checks.sh` as `nobody`. A green run
+   ends with `DEPLOYED <sha>`, and the job fails unless that is the pushed commit.
+
+The web is built on the runner for the reason `release-web.sh` builds it on
+your machine: `vite build` is the step most likely to exhaust this box's memory.
+The API is still built on the box, because that is where it runs.
+
+**The script never changes Nginx, the compose file, `.env` or itself.** If
+anything under `deploy/nginx/`, `docker-compose.prod.yml` or
+`.env.production.example` changed since the commit the box has, or
+`deploy/root-deploy.sh` differs from the installed copy, it stops before it
+changes anything and exits 2 (*What each exit code means*). It never reloads
+Nginx, never prunes images and never rolls back. Any other one-off server step
+(a new cron line, a certificate) is still yours, by hand, before the push that
+needs it.
+
+The repository is public, and so is the Actions log. Nothing in the workflow or
+the script prints a secret or a line of `.env`.
+
+### Deploying by hand
+
+The fallback when CI is off or red, and the way through a stop (exit 2). The
+two halves, as before CI:
+
+**Web**, from your machine, in the repo root:
 
 ```bash
 ./deploy/release-web.sh you@your-vps
@@ -251,29 +297,131 @@ the repo-root `.env` and only that one.
 It refuses to run on a dirty tree, because the release is named after the
 commit and that name has to be true. `ALLOW_DIRTY=1` overrides.
 
-**API** — on the server:
+**API**, on the server:
 
 ```bash
-cd /srv/root/app && git pull
+cd /srv/root/app && git pull --ff-only
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 Migrations apply on start. A failed migration means the container refuses to
 boot, which is the intent: a server running against a schema it does not expect
 is worse than one that is down. Check with `docker compose -f
-docker-compose.prod.yml logs -f api`.
+docker-compose.prod.yml logs -f api`. A by-hand deploy takes no database dump;
+take one first (*Backups*) when the commit adds a migration.
+
+After a by-hand step, **Run workflow** on the repository's Actions page (the
+`deploy` workflow, branch `main`). That deploys the tip of `main` through CI.
+The checkout is already current, so the stop files no longer differ, the image
+builds from cache, and the run ends with every check passed.
 
 The P0-7 deploy (the `__Host-root_session` cookie rename) signs everyone out
 once, on that one deploy only — free, since production has no real users yet.
 
-**Rollback (web)** — the previous releases are still on disk:
+### What each exit code means
+
+| Exit | Meaning | What to do |
+|---|---|---|
+| **0** | Deployed, and every check passed. The last line is `DEPLOYED <sha>`. | Nothing. |
+| **2** | **Stopped, and nothing was changed.** The API and the live web release are as they were. The line says why, and the line after it says what to do by hand. | The list below, then **Run workflow**. |
+| **1** | **Failed after something may have changed.** The line names the step: `checkout`, `dump`, `build`, `up`, `health`, `nginx`, `web` or `checks`. There is no automatic rollback, because migrations run at boot and old code against a migrated database is the riskier move. | Read the step's output, fix forward on `main`, or roll back by hand (below). A failed `dump` or `build` leaves the old container serving, and every failure before `web` leaves the old web release live. |
+
+What to do for each exit 2. `git` runs as the account that owns
+`/srv/root/app`, not with `sudo`:
+
+- **Another deploy holds the lock.** Wait for it, then re-run.
+- **No web build on stdin.** The script was run from a shell. It only takes
+  input from CI: use **Run workflow**, or deploy by hand.
+- **The stream is not a gzipped tar, or its `COMMIT` is wrong.** Re-run. If it
+  repeats, read the job's *Package the web build* step.
+- **The checkout has uncommitted changes.** `cd /srv/root/app && git status`
+  shows them. Commit, stash or discard them, then re-run.
+- **The commit is not on `main`.** Only `main` deploys.
+- **The commit is older than the checkout.** An old run was re-run, or the
+  checkout was moved by hand. Use **Run workflow**. To go back on purpose, see
+  *Rolling back by hand*.
+- **Not a fast-forward** (history was rewritten). The script never resets the
+  checkout. Compare `git log` in `/srv/root/app` with `main` and decide there.
+- **`deploy/nginx/` changed.** The live files can't be compared with the
+  repository's, because certbot rewrote the site and your domain was put in by
+  hand, so carry the change across yourself. See it with
+  `cd /srv/root/app && git fetch && git diff HEAD origin/main -- deploy/nginx`.
+  Apply it to `/etc/nginx/sites-available/root`,
+  `/etc/nginx/snippets/root-security-headers.conf` or
+  `/etc/nginx/sites-available/root-mockup`, keeping a copy of the old file. Then
+  `sudo nginx -t && sudo systemctl reload nginx`, then `git pull --ff-only`,
+  then **Run workflow**.
+- **`docker-compose.prod.yml` changed.** Read the diff the same way, deploy the
+  API by hand (above), then **Run workflow**.
+- **`.env.production.example` changed.** Read the diff the same way, add what
+  the new lines need to `/srv/root/app/.env`, then `git pull --ff-only`, then
+  **Run workflow**.
+- **The installed script differs from the commit's.** `git pull --ff-only`,
+  reinstall it (*Server setup for CI*, step 5), then **Run workflow**.
+
+Each of these names everything it found in one run, so fix all of them before
+re-running.
+
+### Rolling back by hand
+
+**Web**: the previous releases are still on disk (five, plus the live one):
 
 ```bash
 ssh you@your-vps 'cd /srv/root && ls releases/'
 ssh you@your-vps 'cd /srv/root && ln -sfn releases/<name> .current.tmp && mv -T .current.tmp current'
 ```
 
-No Nginx reload needed; it resolves the root per request.
+No Nginx reload is needed, because Nginx resolves the root per request.
+
+**API**: roll it back only when the bad commit added no migration
+(`git diff --stat <good>..HEAD -- apps/api/prisma/migrations` prints nothing),
+because a migrated database under old code is worse than the bug. If it did add
+one, fix forward. The dump taken before that migration is in
+`/srv/root/backups/pre-migrate-<stamp>-<sha>.sql.gz` (root only; the newest
+five are kept).
+
+1. In GitHub, **Settings, Secrets and variables, Actions, Variables**: set
+   `DEPLOY_ENABLED` to `false`, so a push can't redeploy the bad commit while
+   you work.
+2. On the box, check out the last good commit and rebuild:
+   ```bash
+   cd /srv/root/app && git checkout --detach <good sha>
+   docker compose -f docker-compose.prod.yml up -d --build
+   ```
+   Roll the web back to that commit's release too (above).
+3. Revert the bad commit on `main`. On the box, run `git checkout main` in
+   `/srv/root/app`, then set `DEPLOY_ENABLED` back to `true`. The next push
+   deploys the revert.
+
+### Checks after every deploy
+
+`deploy/checks.sh` is the one list. The deploy script runs it as `nobody` from
+the new checkout, so a change that adds a check edits that file in its own diff,
+and nobody reinstalls the root script. By hand, on the box:
+
+```bash
+bash /srv/root/app/deploy/checks.sh /srv/root/current
+```
+
+An optional second argument is the origin (default `https://m-root.com`). It
+stops at the first failure and prints `FAILED <check name>: <why>`. It never
+reads `.env`. It checks that:
+
+- `/` serves the live release's `index.html` byte for byte, with the CSP from
+  the **committed** `security-headers.conf`. A snippet that was edited in the
+  repository but never copied to the box fails here;
+- `X-Frame-Options`, `nosniff`, `Referrer-Policy` and `no-cache` are set, and
+  no cookie is set;
+- a client-side route (`/fa/portal`) falls back to the same page;
+- the script `index.html` names is served from the release, `immutable`;
+- `/graphql` answers an anonymous `{ __typename }` through Nginx;
+- a climb out of `/public-files/` reaches nothing private;
+- `http://` redirects to `https://` with a 301.
+
+The two checks that need root stay in the script: the API container's `healthy`
+and `nginx -t`. The mockup wildcard's headers (*Staging and mockup domains*)
+are not checked here yet, because that block is not live until its DNS and
+certificate exist.
 
 **After any deploy that touches Nginx** — a new release, an edited
 `security-headers.conf`, a certbot run — confirm the header a browser will
@@ -290,6 +438,129 @@ The line must show a `frame-src` naming both `https://*.staging.m-root.com`
 and `https://*.mockup.m-root.com` (P0-2, defect D-1) — no test in this
 repository can see an Nginx header, so this `curl` is the only check that
 exists for it.
+
+---
+
+## Server setup for CI
+
+Once, by you, as your sudo user. **Before you start**, deploy the commit that
+carries these files by hand (*Deploying by hand*: web and API), and bring the
+live Nginx files and `.env` up to that commit. The first CI run then starts
+from a checkout that is current, and `/srv/root/app/deploy/root-deploy.sh`
+exists. The checkout must be on `main`, cloned by your own account (*First
+time*, step 2). One command per line, with `sudo` on each.
+
+**`root-deploy` is a separate account from your own sudo user and from IMNSTR's
+`imnstr-deploy`. Never give CI's key to either.**
+
+1. **The key pair, on your own machine, never on the box and never in the
+   repository.** It has no passphrase, because CI cannot type one:
+   ```bash
+   ssh-keygen -t ed25519 -N '' -C root-ci -f ./root-ci-key
+   ```
+   `root-ci-key.pub` is the public half, one line. `root-ci-key` is the private
+   half. Both are deleted at step 8.
+
+2. **The user**: no password, `/bin/sh` as its shell (`sshd` runs the forced
+   command through the user's shell, so `nologin` would block it), and no group
+   but its own:
+   ```bash
+   sudo adduser --disabled-password --gecos '' --shell /bin/sh root-deploy
+   ```
+   If a login later says the account is locked, `sudo usermod -p '*'
+   root-deploy` makes the password unusable without locking the account.
+
+3. **The key's line**, with the forced command. Paste the public key where
+   `<public key>` is, keeping the single quotes. The directory and the file
+   belong to root, so the user cannot rewrite its own line:
+   ```bash
+   sudo install -d -m 0755 -o root -g root /home/root-deploy/.ssh
+   printf '%s\n' 'restrict,command="sudo -n /usr/local/sbin/root-deploy" <public key>' | sudo tee /home/root-deploy/.ssh/authorized_keys
+   sudo chmod 0644 /home/root-deploy/.ssh/authorized_keys
+   ```
+   The line must read `restrict,command="sudo -n /usr/local/sbin/root-deploy"
+   ssh-ed25519 AAAA… root-ci`. `restrict` gives no pty, no forwarding and no
+   agent. Any command the client sends runs the script and nothing else.
+
+4. **The sudoers line.** A broken file in `/etc/sudoers.d/` breaks `sudo` for
+   everyone on the box, so write it to a temporary file, check it with
+   `visudo -cf`, and only then install it. The name has no dot, because `sudo`
+   skips names with one. The empty `""` forbids arguments:
+   ```bash
+   F=$(mktemp /tmp/root-deploy.XXXXXX)
+   printf 'root-deploy ALL=(root) NOPASSWD: /usr/local/sbin/root-deploy ""\n' > "$F"
+   sudo visudo -cf "$F"
+   ```
+   Only if the last command printed `parsed OK`:
+   ```bash
+   sudo install -m 0440 -o root -g root "$F" /etc/sudoers.d/root-deploy
+   rm "$F"
+   sudo -n true
+   ```
+   The last line proves your own `sudo` still works.
+
+5. **The script**, from the checkout:
+   ```bash
+   sudo install -o root -g root -m 0755 /srv/root/app/deploy/root-deploy.sh /usr/local/sbin/root-deploy
+   ```
+
+6. **Prove the account.** `id` shows no `docker` group, `sudo -l` lists the one
+   command with `""`, the third command is refused, and `nobody` can run the
+   checks:
+   ```bash
+   id root-deploy
+   sudo -l -U root-deploy
+   sudo -u root-deploy docker ps
+   sudo runuser -u nobody -- bash /srv/root/app/deploy/checks.sh /srv/root/current
+   ```
+
+7. **On GitHub (web)**, in `rishe-eco/root-app`. Settings, **Environments**,
+   `production` (deployment branches: `main` only; no reviewers and no wait
+   timer, since either would make every deploy wait for a click). Add four
+   **environment secrets**:
+   - `DEPLOY_HOST`: the box's hostname or address;
+   - `DEPLOY_PORT`: `22`;
+   - `DEPLOY_KEY`: the whole private key file, including its `-----BEGIN` and
+     `-----END` lines;
+   - `DEPLOY_KNOWN_HOSTS`: one line, the box's own host key. Make it on the box,
+     with the same name or address as `DEPLOY_HOST` in place of `<host>`:
+     ```bash
+     echo "<host> $(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"
+     ```
+
+   Then, under Settings, **Secrets and variables, Actions, Variables**, add
+   the variable `DEPLOY_ENABLED` = `true` under *Repository variables*. **Set
+   it last.** Anything but `true` switches automatic deploys off. **Don't make
+   it an environment variable of `production`:** GitHub decides whether to run a
+   job before it loads the job's environment, so the `deploy` job's `if` can't
+   see one there, and every run shows `deploy` as skipped (found on IMNSTR).
+
+8. **Delete the private half** once it is pasted into `DEPLOY_KEY`, on your own
+   machine:
+   ```bash
+   rm root-ci-key root-ci-key.pub
+   ```
+   (`Remove-Item` in PowerShell.) GitHub keeps the secret, and nobody can read
+   it back.
+
+9. **Run workflow** (Actions, `deploy`, branch `main`). The checkout is
+   current, so the image builds from cache, the web build goes live as a new
+   release, and the checks run. The run is green with `DEPLOYED <sha>` equal to
+   the pushed commit.
+
+If a run cannot connect, either the provider's firewall limits SSH by address
+(hosted runners come from a wide, changing range) or the key line is wrong.
+`sudo journalctl -u ssh --since '10 minutes ago'` on the box says which. If
+`AllowUsers` or `AllowGroups` is ever added to `sshd_config`, add `root-deploy`
+to it, then `sudo sshd -t && sudo systemctl reload ssh`.
+
+The script is tested without a box by `deploy/test/root-deploy.test.sh`
+(stubbed Docker and Nginx, a scratch origin and checkout). It needs Linux. On
+Windows, run it in a container:
+
+```bash
+docker run --rm -v "$PWD:/src:ro" -w /src buildpack-deps:bookworm-scm bash deploy/test/root-deploy.test.sh
+```
 
 ---
 
