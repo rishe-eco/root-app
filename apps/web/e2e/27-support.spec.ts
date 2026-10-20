@@ -175,3 +175,21 @@ test('verify: closing a card refetches on its own, before any reopen', async ({ 
   await refetched;
   await expect(card(page, SUBJECT).locator('textarea')).toHaveCount(0);
 });
+
+test('verify: a focus refetch that fails keeps the list and a half-typed reply', async ({ page }) => {
+  await signIn(page, CUSTOMER, 'en');
+  await page.goto('/en/app/support');
+  await card(page, SUBJECT).locator('button.workspace-row').click();
+  await card(page, SUBJECT).locator('textarea').fill('typed while offline');
+  await page.waitForLoadState('networkidle');
+  await mark(page);
+
+  await page.route('**/graphql*', (route) => (isMyTickets(route.request()) ? route.abort() : route.fallback()));
+  const failed = page.waitForEvent('requestfailed', isMyTickets);
+  await focus(page);
+  await failed;
+
+  await expect(card(page, SUBJECT).locator('textarea')).toHaveValue('typed while offline');
+  await expect(page.locator('.empty')).toHaveCount(0);
+  await expectNotReloaded(page);
+});

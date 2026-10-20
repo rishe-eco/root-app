@@ -128,7 +128,7 @@ export default function Support() {
   const { t } = useTranslation();
   const me = useOutletContext<User>();
 
-  const { data, loading, error, refetch } = useQuery<{ myTickets: Ticket[] }>(MY_TICKETS);
+  const { data, previousData, loading, error, refetch } = useQuery<{ myTickets: Ticket[] }>(MY_TICKETS);
   // Awaited: the form closes only once the new ticket is in the list, so the
   // customer never sees an empty gap where they expect it. A failed refetch
   // fails the submit and shows the form error, the same as a failed create.
@@ -167,7 +167,10 @@ export default function Support() {
     }
   }
 
-  const tickets = data?.myTickets ?? [];
+  // The list outlives a failed refetch: a focus or a card click while the
+  // network is down keeps what the customer was reading (and a half-typed
+  // reply). The error panel is for a page that never got its list.
+  const tickets = (data ?? previousData)?.myTickets ?? [];
 
   return (
     <>
@@ -221,23 +224,23 @@ export default function Support() {
           </form>
         ) : null}
 
-        {error ? (
+        {tickets.length > 0 ? (
+          <div className="editor-list">
+            {tickets.map((ticket) => (
+              <TicketCard key={ticket.id} ticket={ticket} me={me} onToggle={() => void refetch()} />
+            ))}
+          </div>
+        ) : error ? (
           <div className="empty">
             <p className="t-small">{t('portal.errorTitle')}</p>
             <button className="btn btn-secondary btn-sm" type="button" onClick={() => refetch()}>
               {t('portal.retry')}
             </button>
           </div>
-        ) : loading && tickets.length === 0 ? (
+        ) : loading ? (
           <div className="empty">{t('portal.loading')}</div>
-        ) : tickets.length === 0 ? (
-          <div className="empty">{t('support.empty')}</div>
         ) : (
-          <div className="editor-list">
-            {tickets.map((ticket) => (
-              <TicketCard key={ticket.id} ticket={ticket} me={me} onToggle={() => void refetch()} />
-            ))}
-          </div>
+          <div className="empty">{t('support.empty')}</div>
         )}
       </div>
     </>
