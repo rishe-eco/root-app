@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
@@ -32,7 +32,7 @@ function errorMessage(err: unknown, t: T): string {
   return (err as { message?: string })?.message ?? String(err);
 }
 
-function TicketCard({ ticket, me }: { ticket: Ticket; me: User }) {
+function TicketCard({ ticket, me, onToggle }: { ticket: Ticket; me: User; onToggle: () => void }) {
   const { t } = useTranslation();
   const locale = useLocale();
   const [open, setOpen] = useState(false);
@@ -50,7 +50,14 @@ function TicketCard({ ticket, me }: { ticket: Ticket; me: User }) {
 
   return (
     <div className="card editor-card">
-      <button type="button" className="workspace-row" style={{ width: '100%', textAlign: 'start' }} onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="workspace-row" style={{ width: '100%', textAlign: 'start' }} onClick={() => {
+          setOpen((v) => !v);
+          // Opening or closing is a moment the customer is looking at the
+          // conversation: fetch the list again so an answer that arrived since
+          // the page loaded is there. The card's own state (`open`, a half-typed
+          // reply) lives here, keyed by ticket id, so the refetch can't reset it.
+          onToggle();
+        }}>
         <span className={`badge ticket-status-${ticket.status.toLowerCase()}`}>{t(`support.status.${ticket.status}`)}</span>
         <span className="badge">{t(`support.type.${ticket.type}`)}</span>
         <span className="t-small" style={{ flex: 1 }}>
@@ -122,7 +129,22 @@ export default function Support() {
   const me = useOutletContext<User>();
 
   const { data, loading, error, refetch } = useQuery<{ myTickets: Ticket[] }>(MY_TICKETS);
-  const [createTicket, { loading: creating }] = useMutation(CREATE_TICKET);
+  // Awaited: the form closes only once the new ticket is in the list, so the
+  // customer never sees an empty gap where they expect it. A failed refetch
+  // fails the submit and shows the form error, the same as a failed create.
+  const [createTicket, { loading: creating }] = useMutation(CREATE_TICKET, {
+    refetchQueries: [{ query: MY_TICKETS }],
+    awaitRefetchQueries: true,
+  });
+
+  // No websocket (as RequestDrawer.tsx, J2): the list is fresh on mount, on a
+  // card opening or closing, and whenever the window regains focus, which is
+  // when a customer comes back from the email or SMS that said Root had answered.
+  useEffect(() => {
+    const refresh = () => void refetch();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [refetch]);
 
   const [type, setType] = useState<TicketType>('QUESTION');
   const [subject, setSubject] = useState('');
@@ -213,7 +235,7 @@ export default function Support() {
         ) : (
           <div className="editor-list">
             {tickets.map((ticket) => (
-              <TicketCard key={ticket.id} ticket={ticket} me={me} />
+              <TicketCard key={ticket.id} ticket={ticket} me={me} onToggle={() => void refetch()} />
             ))}
           </div>
         )}
