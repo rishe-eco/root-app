@@ -107,6 +107,8 @@ The customer's Support page (`/:lang/app/support`) used to show only what it loa
   - real window focus: **owed (after the deploy), founder**;
   - the rest: not applicable.
 
+**Deploy run:** https://github.com/rishe-eco/root-app/actions/runs/39472536519 (TK1's push to `main`). Added by NR1's review, from the main session's handoff (root-sot `STATE.md`, the 8b land NR1 block); the run itself wasn't read here.
+
 **Environment notes:**
 - `psql` by hand needs `PGPASSWORD=root` here: there is no `~/.pgpass`, and `psql -w` gave "no password supplied". The lane's claim checks out. The e2e helpers don't call `psql`.
 - No Docker. Native Postgres.

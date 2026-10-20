@@ -118,6 +118,7 @@ WP    the founder's dashboards review — 11 items, 2 decisions   recorded 2026-
 WP    design review of the public site and portal (HIG) — contrast, phone nav, dark   ✔ 2026-10-08 [wp-design-review.md] · unit 1064+334 · e2e 129
 ──── changes (the lifecycle's Change track, from root-sot's module folder) ─────
 TK1   the Support page refreshes on create, card open/close and focus (wp-dashboards #9)   ✔ verified 2026-10-20 [TK1.md]
+NR1   the Overview's "Waiting on Root" tile counts what Root owes (wp-dashboards #2)   ✔ verified 2026-10-21 [NR1.md]
 ```
 
 **R3 and the Persian pass each have their own build-ready file; L8 and the
@@ -368,6 +369,11 @@ plan did not know, and that list is the most useful thing each stage produces.
 - **Postgres version drift:** `docker-compose.yml` pins 16, some development has
   run against a local 14. Nothing needs 15+ yet. If you add something that does
   (`MERGE`, `NULLS NOT DISTINCT`, multirange types), say so out loud.
+- **Timestamps are UTC, but raw SQL's `now()` is the server's local time.** Prisma
+  stores `timestamp(3)` without a zone, in UTC. A native Postgres here runs in
+  `Asia/Tehran`, so a test that writes `now()` by hand lands 3.5 h ahead: write
+  `(now() AT TIME ZONE 'UTC')` wherever the time has to compare with the API's
+  clock (NR1 Decided #9).
 
 ---
 
@@ -409,6 +415,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`wp-dashboards.md`](wp-dashboards.md) | the founder's review of the desk and the portal: 11 items, 2 decisions | recorded · #10 ✔ |
 | [`wp-design-review.md`](wp-design-review.md) | the design review: contrast, spacing tokens, phone nav, one heading, Library, dark appearance | ✔ built |
 | [`TK1.md`](TK1.md) | Change: the Support page refreshes on create, on card open/close and on window focus (wp-dashboards #9) | ✔ built · verified |
+| [`NR1.md`](NR1.md) | Change: the Overview's "Waiting on Root" tile reads `needsRootCount`, the Needs-Root queue's rule (wp-dashboards #2) | ✔ built · verified |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |
