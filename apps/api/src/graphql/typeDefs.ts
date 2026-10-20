@@ -2756,6 +2756,11 @@ export const typeDefs = /* GraphQL */ `
     """
     needsRootQueue(limit: Int = 20): [NeedsRootEntry!]!
     """
+    Staff (contracts.readAll). How many contracts Root owes something on: the
+    queue's rule, without its limit. The Overview's "Waiting on Root" tile.
+    """
+    needsRootCount: Int!
+    """
     Staff. Recent activity across every contract, newest first. reviewOnly
     narrows it to customer actions that want a response from Root.
     """

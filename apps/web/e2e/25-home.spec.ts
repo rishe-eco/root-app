@@ -231,4 +231,17 @@ test('sales’ Overview keeps its tiles and a Needs-Root queue that lists the co
   const row = page.getByTestId('needs-root-row').filter({ hasText: WIZARD_CONTRACT_REF });
   await expect(row).toHaveCount(1);
   await expect(row).toContainText('things owed');
+
+  // The "Waiting on Root" tile follows attention, as the box does (change note 02): its number is the number of rows in the box.
+  // Polled, not read once: the tiles render 0 until their query lands.
+  const rootTile = page.locator('[data-status="WAITING_ON_ROOT"] .tile-count');
+  const rows = await page.getByTestId('needs-root-row').count();
+  expect(rows).toBeGreaterThan(0);
+  await expect(rootTile).toHaveText(String(rows));
+
+  // On /fa the same number is written in the locale's digits (formatCount), not the Latin ones.
+  await page.goto('/fa/desk/overview');
+  await expect(page.getByTestId('needs-root-row')).toHaveCount(rows);
+  const persian = String(rows).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+  await expect(page.locator('[data-status="WAITING_ON_ROOT"] .tile-count')).toHaveText(persian);
 });

@@ -6,6 +6,7 @@ import { can } from '@/lib/access';
 import {
   ACTIVITY,
   ALL_CONTRACT_STATUS_COUNTS,
+  NEEDS_ROOT_COUNT,
   NEEDS_ROOT_QUEUE,
   OVERDUE_DEPENDENCIES,
   type ActivityItem,
@@ -29,9 +30,10 @@ import StatusBadge from '@/components/StatusBadge';
  * this section the one capability that reads the whole book, so nobody else
  * lands here: the nav row is `contracts.readAll`, and a typed URL from anyone
  * without it is sent to My work rather than shown four empty panels. The tiles
- * still count `Contract.status` — what sales *set* — while the **Needs-Root
- * queue is read from the attention module**: a contract is in it because Root
- * owes something on it, not because its status says so.
+ * count `Contract.status` — what sales *set* — except "Waiting on Root", which
+ * reads `needsRootCount`, like the **Needs-Root queue, from the attention
+ * module**: a contract is in both because Root owes something on it, not
+ * because its status says so (change note 02).
  */
 export default function Overview() {
   const { t } = useTranslation();
@@ -43,6 +45,9 @@ export default function Overview() {
     ALL_CONTRACT_STATUS_COUNTS,
     { skip: !allowed },
   );
+  const { data: rootCountData } = useQuery<{ needsRootCount: number }>(NEEDS_ROOT_COUNT, {
+    skip: !allowed,
+  });
   const { data: queueData } = useQuery<{ needsRootQueue: NeedsRootEntry[] }>(NEEDS_ROOT_QUEUE, {
     skip: !allowed,
   });
@@ -76,11 +81,14 @@ export default function Overview() {
 
       <div className="tile-row">
         {ALL_STATUSES.map((s) => (
-          <div className="tile" key={s}>
+          <div className="tile" key={s} data-status={s}>
             {/* Not num-latin: T6 wants the count in the locale's own digits
                 (formatCount already runs it through Intl.NumberFormat), and
                 num-latin would force the Latin figure font onto them. */}
-            <span className="tile-count">{formatCount(counts.get(s) ?? 0, locale)}</span>
+            <span className="tile-count">{formatCount(
+                s === 'WAITING_ON_ROOT' ? (rootCountData?.needsRootCount ?? 0) : (counts.get(s) ?? 0),
+                locale,
+              )}</span>
             <span className="tile-label">{t(`status.${s}`)}</span>
           </div>
         ))}

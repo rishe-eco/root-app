@@ -170,8 +170,8 @@ export const resolvers = {
     // journeys build plan J9: mockupViewUrl mints a viewer's grant — see
     // resolvers/mockups.ts and routes/mockups.ts.
     ...mockupQueries,
-    // journeys build plan J12: myAttention (the home screens) and the Needs-Root
-    // queue, re-pointed at the attention module — see resolvers/home.ts.
+    // journeys build plan J12: myAttention (the home screens), the Needs-Root
+    // queue, re-pointed at the attention module, and its count (needsRootCount) — see resolvers/home.ts.
     ...homeQueries,
   },
 

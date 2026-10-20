@@ -179,6 +179,17 @@ export async function loadHomeContracts(where: Prisma.ContractWhereInput, now: D
   });
 }
 
+/**
+ * The contracts Root owes something on, for `user`: the one load-and-filter
+ * that both the Needs-Root queue and its count run, so the Overview's tile and
+ * its box cannot drift (change note 02). Not capped: the queue slices, the
+ * count does not.
+ */
+async function loadNeedsRoot(user: Parameters<typeof needsRoot>[0]) {
+  const contracts = await loadHomeContracts({ status: { not: 'DISCARDED' }, deliveredAt: null }, new Date());
+  return { contracts, owed: needsRoot(user, contracts) };
+}
+
 export const homeQueries = {
   /**
    * What is waiting on the caller (J12). Any signed-in account: **which
@@ -309,9 +320,9 @@ export const homeQueries = {
    */
   needsRootQueue: async (_p: unknown, args: { limit?: number }, ctx: Context) => {
     const user = requireCapability(ctx, 'contracts.readAll');
-    const contracts = await loadHomeContracts({ status: { not: 'DISCARDED' }, deliveredAt: null }, new Date());
+    const { contracts, owed } = await loadNeedsRoot(user);
     const byId = new Map(contracts.map((c) => [c.id, c] as const));
-    return needsRoot(user, contracts)
+    return owed
       .slice(0, clampLimit(args.limit, 20, 100))
       .map((e) => {
         const c = byId.get(e.contractId)!;
@@ -329,5 +340,16 @@ export const homeQueries = {
           count: e.count,
         };
       });
+  },
+
+  /**
+   * How many contracts Root owes something on: the Needs-Root queue's rule
+   * (`loadNeedsRoot`), whole and not sliced by the queue's limit. The Overview's
+   * "Waiting on Root" tile reads it, so it agrees with the box beside it
+   * (change note 02). `contracts.readAll`, as the queue.
+   */
+  needsRootCount: async (_p: unknown, _a: unknown, ctx: Context) => {
+    const user = requireCapability(ctx, 'contracts.readAll');
+    return (await loadNeedsRoot(user)).owed.length;
   },
 };

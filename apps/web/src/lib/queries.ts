@@ -2520,6 +2520,14 @@ export const NEEDS_ROOT_QUEUE = gql`
   }
 `;
 
+/** How many contracts Root owes something on (change note 02): the Needs-Root
+ *  queue's rule without its limit, for the Overview's "Waiting on Root" tile. */
+export const NEEDS_ROOT_COUNT = gql`
+  query NeedsRootCount {
+    needsRootCount
+  }
+`;
+
 /**
  * The home screens (journeys build plan J12): what is waiting on the signed-in
  * person, derived on every read by the API. The customer's dashboard and each
