@@ -307,12 +307,16 @@ export function insertPublishedMockup(bundleFileId: string) {
   });
 }
 
-/** Every view grant expires a minute ago — the clock cannot be moved in a browser test, the row can. */
+/**
+ * Every view grant expires a minute ago — the clock cannot be moved in a browser test, the row can.
+ * In UTC, as Prisma stores `timestamp(3)`: a bare `now()` is the server's local time, which on a
+ * Postgres whose TimeZone isn't UTC (Asia/Tehran) puts the "expired" grant hours ahead.
+ */
 export function expireMockupGrants() {
   if (!TEST_DATABASE_URL.includes('_test')) throw new Error('refusing: not a test database');
   execSync(`npx prisma db execute --stdin --url "${TEST_DATABASE_URL}"`, {
     cwd: API_DIR,
-    input: `UPDATE "MockupViewGrant" SET "expiresAt" = now() - interval '1 minute';`,
+    input: `UPDATE "MockupViewGrant" SET "expiresAt" = (now() AT TIME ZONE 'UTC') - interval '1 minute';`,
     stdio: 'pipe',
     timeout: 60_000,
   });
