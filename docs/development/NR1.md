@@ -100,3 +100,5 @@ The Overview's six status tiles counted `Contract.status`, what sales *set*. The
   - screen readers: not applicable (no new control);
   - the live desk check: **owed (after the deploy), founder**;
   - the rest: not applicable.
+
+**Deploy run:** https://github.com/rishe-eco/root-app/actions/runs/39501139100 (NR1 fast-forwarded to `main @ a94c339`, pushed 2026-10-21): `check` and `deploy` green, ending `DEPLOYED a94c33926b859f3d7be80cd5c057e613734eafc3` with `deploy/checks.sh` passed.
