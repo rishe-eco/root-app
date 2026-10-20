@@ -21,3 +21,6 @@ blob-report/
 
 # Agent worktrees (Claude Code); each is its own checkout, never content.
 .claude/worktrees/
+
+# Lane reports and suite logs (lifecycle); never content.
+.tmp/
