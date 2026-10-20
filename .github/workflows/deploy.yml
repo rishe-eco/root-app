@@ -1,0 +1,123 @@
+# A push to main checks, then deploys. The deploy is one SSH connection as the deploy user, whose
+# key is locked to the one root-owned script (deploy/README.md, "Server setup for CI"). This file
+# can't widen what that key does: whatever it sends, the box runs deploy/root-deploy.sh and
+# nothing else, and all it takes from here is the web build on stdin.
+# The repo is public, so this log is public: nothing below prints a secret, and nothing sets -x.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  # For a re-run after a manual step (an Nginx copy, a compose change, a new .env line, a
+  # reinstalled script).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    # The integration suite's database. ROOT_TEST_PG's default (apps/api/prisma/test-db.ts) is
+    # root:root on localhost:5432, as the docker-compose one is on your machine.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U root"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # The API image's base is node:22 (apps/api/Dockerfile).
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate --workspace=apps/api
+      # The runner image ships shellcheck. The deploy script runs as root on a shared box.
+      - run: shellcheck deploy/root-deploy.sh deploy/checks.sh deploy/test/root-deploy.test.sh
+      - run: bash deploy/test/root-deploy.test.sh
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          TZ: UTC
+      - run: npm run test:integration
+        env:
+          TZ: UTC
+      # The same build the deploy job ships, so a broken build fails here, before anything deploys.
+      - run: npm run build
+
+  deploy:
+    needs: check
+    # DEPLOY_ENABLED is a repository variable: anything but "true" switches automatic deploys off.
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    environment: production
+    # One deploy at a time. A newer push waits behind the running one and replaces any older
+    # waiting run. The box refuses a commit older than the one it has, so order can't go back.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # VITE_GRAPHQL_URL stays unset: the client keeps the relative /graphql, on the one origin
+      # the session cookie needs (deploy/README.md).
+      - run: npm run build
+      - name: Package the web build
+        run: |
+          set -euo pipefail
+          test -f apps/web/dist/index.html
+          pkg="$RUNNER_TEMP/pkg"
+          mkdir -p "$pkg"
+          printf '%s\n' "$GITHUB_SHA" > "$pkg/COMMIT"
+          cp -R apps/web/dist "$pkg/web"
+          tar -czf "$RUNNER_TEMP/web.tgz" -C "$pkg" COMMIT web
+          ls -l "$RUNNER_TEMP/web.tgz"
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/deploy_key"
+          known_hosts="$RUNNER_TEMP/known_hosts"
+          out="$RUNNER_TEMP/deploy.out"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          # The host key comes from a secret, never from ssh-keyscan at run time.
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$known_hosts"
+          # No remote command: the key's forced command runs the deploy script, whatever is sent.
+          # Its output is the log; it prints no secret and no .env line. `|| status=$?` keeps the
+          # remote exit code (0 deployed, 2 stopped, 1 failed) for the verdict below.
+          status=0
+          ssh -T -i "$key" -p "$DEPLOY_PORT" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" \
+            "root-deploy@$DEPLOY_HOST" < "$RUNNER_TEMP/web.tgz" 2>&1 | tee "$out" || status=$?
+          rm -f "$key" "$known_hosts"
+          deployed=$(sed -n 's/^DEPLOYED \([0-9a-f]\{40\}\)$/\1/p' "$out" | tail -n 1)
+          if [ "$status" -ne 0 ]; then
+            echo "The deploy script exited $status (0 deployed, 2 stopped with nothing changed, 1 failed)."
+            exit "$status"
+          fi
+          if [ "$deployed" != "$GITHUB_SHA" ]; then
+            echo "No DEPLOYED $GITHUB_SHA line came back (got '${deployed:-none}'), so this run is not a deploy."
+            exit 1
+          fi
+          echo "DEPLOYED $deployed is the pushed commit."

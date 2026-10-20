@@ -1,0 +1,2 @@
+# Shell scripts run on Linux (the box, CI, a container on Windows): a CRLF line breaks bash.
+*.sh text eol=lf
