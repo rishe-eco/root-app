@@ -227,7 +227,9 @@ all). `STORAGE_DIR` does not have to sit under the app root; it only has to sit
 outside `current`, and outside any directory a release replaces.
 
 **Root's own box uses `/opt/stacks/root`**, with its Nginx site at
-`/etc/nginx/sites-available/m-root`, and the CI deploy is written for it. The deploy script reads its app root from the `ROOT=` line near the top of
+`/etc/nginx/sites-available/m-root` and `API_PORT=4009` (another container
+holds 4000, so `curl localhost:4009/health` there), and the CI deploy is
+written for it. The deploy script reads its app root from the `ROOT=` line near the top of
 `deploy/root-deploy.sh` and from nowhere else: `sudo` strips the environment,
 so the line has to say it. *Routine deploys* and *Server setup for CI* below use
 that path. If the app root ever moves, change that line, reinstall the script
