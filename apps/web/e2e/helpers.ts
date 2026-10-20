@@ -643,15 +643,18 @@ export async function publishTestRound(
 /**
  * Node's fetch keeps connections alive, and the API closes idle ones after a
  * few seconds; a request that lands on a socket the server has just closed
- * fails with ECONNRESET before it was ever processed (seen in the J1 e2e
- * run). Retried once, for these test-only helper calls alone.
+ * fails with ECONNRESET, or undici's UND_ERR_SOCKET ("other side closed"),
+ * before it was ever processed (seen in the J1 e2e run, and in 25-home at
+ * verify TK1). Retried once, for these test-only helper calls alone.
  */
 async function e2eFetch(url: string, init?: RequestInit): Promise<Response> {
   try {
     return await fetch(url, init);
   } catch (err) {
     const cause = (err as { cause?: { code?: string } }).cause;
-    if (cause?.code !== 'ECONNRESET') throw err;
+    // undici reports the same race as UND_ERR_SOCKET ("other side closed")
+    // when the server's close lands before the request is written.
+    if (cause?.code !== 'ECONNRESET' && cause?.code !== 'UND_ERR_SOCKET') throw err;
     return fetch(url, init);
   }
 }
