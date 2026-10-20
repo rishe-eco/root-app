@@ -61,7 +61,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <Topbar user={me} start={<h1 className="t-h3 topbar-title">{t('home.title')}</h1>} />
+      <Topbar user={me} start={<span className="crumb" />} />
 
       <div className="content" data-testid="dashboard">
         <div className="content-head">
@@ -73,16 +73,16 @@ export default function Dashboard() {
 
         {/* The three standing actions. A customer with no contract still has the first. */}
         <div className="home-actions" data-testid="home-actions">
-          <button className="btn btn-primary btn-sm" type="button" onClick={() => setComposing(true)}>
+          <button className="btn btn-primary" type="button" onClick={() => setComposing(true)}>
             {t('requests.newRequest')}
           </button>
           {current ? (
-            <Link className="btn btn-secondary btn-sm" to={lp(locale, `/app/contracts/${current.id}`)}>
+            <Link className="btn btn-secondary" to={lp(locale, `/app/contracts/${current.id}`)}>
               {t('home.openCurrent', { title: pick(current, 'title', locale) })}
             </Link>
           ) : null}
           {hasTools ? (
-            <Link className="btn btn-secondary btn-sm" to={lp(locale, '/app/tools')}>
+            <Link className="btn btn-secondary" to={lp(locale, '/app/tools')}>
               {t('home.openTool')}
             </Link>
           ) : null}

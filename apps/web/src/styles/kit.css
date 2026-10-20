@@ -27,6 +27,11 @@
   border-radius: var(--radius-sm);
 }
 
+/* On the indigo ground the ring would be 2.6:1; the ring on a dark ground is the
+   light cyan. (.view-as-banner is the other indigo surface — wizard.css.) */
+.card-inverse :focus-visible,
+.view-as-banner :focus-visible { outline-color: var(--color-focus-on-inverse); }
+
 /* ---- Typography ------------------------------------------------------- */
 
 .t-display { font-size: var(--text-display); line-height: var(--leading-tight); font-weight: var(--weight-bold); letter-spacing: -0.02em; }
@@ -76,9 +81,9 @@
 .link:hover { text-decoration-color: var(--color-text); }
 
 .link-action {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   text-decoration: underline;
-  text-decoration-color: var(--clay-200);
+  text-decoration-color: var(--color-accent-border);
   text-underline-offset: 0.25em;
   text-decoration-thickness: 1px;
 }
@@ -113,7 +118,7 @@
 
 .btn-primary {
   background: var(--color-accent);
-  color: var(--color-text-inverse);
+  color: var(--color-on-accent);
 }
 .btn-primary:hover { background: var(--color-accent-hover); }
 
@@ -133,6 +138,10 @@
 .btn-sm { font-size: var(--text-caption); padding-block: var(--space-2); padding-inline: var(--space-4); }
 .btn-lg { font-size: var(--text-body);    padding-block: var(--space-4); padding-inline: var(--space-8); }
 
+/* Disabled controls are exempt from the contrast requirement (WCAG 1.4.3), so
+   the opacity here is deliberate. Everywhere else, dim text with a colour
+   (--color-text-subtle): opacity on text defeats lib/tokens.test.ts, which can
+   only see colours. */
 .btn:disabled,
 .btn[aria-disabled="true"] {
   opacity: 0.45;
@@ -174,7 +183,7 @@
   font-weight: var(--weight-medium);
   color: var(--color-text);
 }
-.label .req { color: var(--color-accent); margin-inline-start: var(--space-1); }
+.label .req { color: var(--color-accent-text); margin-inline-start: var(--space-1); }
 
 .input,
 .textarea,
@@ -186,16 +195,16 @@
   background: var(--color-raised);
   padding-block: var(--space-3);
   padding-inline: var(--space-4);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-control);
   border-radius: var(--radius-sm);
   width: 100%;
   transition: border-color var(--dur-fast) var(--ease);
 }
 .input::placeholder,
 .textarea::placeholder { color: var(--color-text-subtle); }
-.input:hover, .textarea:hover, .select:hover { border-color: var(--color-border-strong); }
+.input:hover, .textarea:hover, .select:hover { border-color: var(--color-text-muted); }
 .input:focus, .textarea:focus, .select:focus {
-  border-color: var(--color-rule);
+  border-color: var(--color-focus);
   outline: 2px solid var(--color-focus);
   outline-offset: 1px;
 }
@@ -302,8 +311,8 @@
 }
 .card-inverse .t-small,
 .card-inverse .t-caption,
-.card-inverse .t-lead { color: var(--indigo-200); }
-.card-inverse .t-eyebrow { color: var(--cyan-300); }
+.card-inverse .t-lead { color: var(--color-text-on-inverse-muted); }
+.card-inverse .t-eyebrow { color: var(--color-eyebrow-on-inverse); }  /* 5.54:1 on indigo — About's CTA relies on this, not an override */
 
 .card-link {
   text-decoration: none;
@@ -325,10 +334,10 @@
   padding-inline: var(--space-3);
   border-radius: var(--radius-full);
   background: var(--color-secondary-soft);
-  color: var(--cyan-700);
+  color: var(--badge-cyan-fg);
 }
-.badge-locked  { background: var(--gold-100); color: var(--gold-600); }
-.badge-neutral { background: var(--color-panel); color: var(--color-text-muted); }
+.badge-locked  { background: var(--badge-gold-bg); color: var(--badge-gold-fg); }
+.badge-neutral { background: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
 
 /* ---- Navigation ------------------------------------------------------- */
 
@@ -400,7 +409,13 @@
   color: var(--color-text-muted);
   cursor: pointer;
 }
-.lang-switch button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-text-inverse); }
+.lang-switch button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-on-accent); }
+
+/* Touch targets (HIG: 44pt). Keyed to the input device, not the width: a narrow
+   desktop window keeps its density, and a tablet in landscape gets fat targets. */
+@media (pointer: coarse) {
+  .btn, .nav-link, .lang-switch button, .side-link, .chip, .menu-toggle { min-block-size: 44px; }
+}
 
 /* ---- Section rhythm --------------------------------------------------- */
 
@@ -503,9 +518,9 @@
 .feedback-comment { margin: 0; font-size: var(--text-small); }
 .feedback-comment-form { display: flex; flex-direction: column; gap: var(--space-2); }
 .feedback-intercept { display: flex; flex-direction: column; gap: var(--space-2); background: var(--color-panel); padding: var(--space-3); border-radius: var(--radius-md); }
-.feedback-status-open { background: var(--color-secondary-soft); color: var(--cyan-700); }
-.feedback-status-addressed, .feedback-status-accepted { background: var(--color-panel); color: var(--color-text-muted); }
-.feedback-status-declined, .feedback-status-moved { background: var(--color-panel); color: var(--color-text-muted); }
+.feedback-status-open { background: var(--color-secondary-soft); color: var(--badge-cyan-fg); }
+.feedback-status-addressed, .feedback-status-accepted { background: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
+.feedback-status-declined, .feedback-status-moved { background: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
 .feedback-panel { display: flex; flex-direction: column; gap: var(--space-3); }
 .feedback-resolution { margin-inline-start: var(--space-2); }
 /* A staff answer still waiting for sales, or sent back: visible to staff only, and visibly not yet the customer's. */
@@ -515,27 +530,27 @@
 
 /* Tickets and the three channels (build plan L4) — same shape as the
    feedback-status badges above, over TicketStatus's own four values. */
-.ticket-status-open { background: var(--color-secondary-soft); color: var(--cyan-700); }
-.ticket-status-in_progress { background: var(--gold-100); color: var(--gold-600); }
-.ticket-status-resolved, .ticket-status-closed { background: var(--color-panel); color: var(--color-text-muted); }
+.ticket-status-open { background: var(--color-secondary-soft); color: var(--badge-cyan-fg); }
+.ticket-status-in_progress { background: var(--badge-gold-bg); color: var(--badge-gold-fg); }
+.ticket-status-resolved, .ticket-status-closed { background: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
 
 /* The dependency board (build plan L5) — one board, two sides, so overdue
    gets one visual treatment regardless of which side owes it. */
 .dependency-board { display: flex; flex-direction: column; gap: var(--space-3); }
 .dependency-overdue { border-color: var(--color-error); }
-.dependency-overdue-badge { background: var(--color-error); color: #fff; }
+.dependency-overdue-badge { background: var(--color-error); color: var(--color-on-strong); }
 
 /* Services — the product-import panel (build plan L7). ServiceRunStatus
    mirrors the ticket-status badges' shape; ServiceRowAction gets its own
    set since REJECTED needs to read as a warning, not merely "closed." */
-.service-status-uploaded { background: var(--color-secondary-soft); color: var(--cyan-700); }
-.service-status-previewed { background: var(--gold-100); color: var(--gold-600); }
-.service-status-applied { background: var(--color-panel); color: var(--color-text-muted); }
-.service-status-failed { background: var(--color-error); color: #fff; }
-.service-action-create { background: var(--color-secondary-soft); color: var(--cyan-700); }
-.service-action-update { background: var(--gold-100); color: var(--gold-600); }
-.service-action-unchanged { background: var(--color-panel); color: var(--color-text-muted); }
-.service-action-rejected { background: var(--color-error); color: #fff; }
+.service-status-uploaded { background: var(--color-secondary-soft); color: var(--badge-cyan-fg); }
+.service-status-previewed { background: var(--badge-gold-bg); color: var(--badge-gold-fg); }
+.service-status-applied { background: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
+.service-status-failed { background: var(--color-error); color: var(--color-on-strong); }
+.service-action-create { background: var(--color-secondary-soft); color: var(--badge-cyan-fg); }
+.service-action-update { background: var(--badge-gold-bg); color: var(--badge-gold-fg); }
+.service-action-unchanged { background: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
+.service-action-rejected { background: var(--color-error); color: var(--color-on-strong); }
 
 /* ---- Portal coarse progress --------------------------------------------- */
 

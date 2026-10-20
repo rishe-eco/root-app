@@ -10,13 +10,15 @@
     "descriptor": "An ecosystem for knowing and growing yourself."
   },
   "nav": {
-    "about": "About Us",
+    "about": "About us",
     "studio": "Root Studio",
     "cast": "Root Cast",
     "library": "Library",
     "journey": "Journey",
     "portal": "Portal",
-    "locked": "Coming later"
+    "locked": "Coming later",
+    "menu": "Menu",
+    "close": "Close"
   },
   "landing": {
     "cta": "Start where you are",
@@ -38,7 +40,7 @@
     }
   },
   "about": {
-    "eyebrow": "About Us",
+    "eyebrow": "About us",
     "thesis": "The person authors their own life. Root never authors it for them.",
     "gistBody": "Root is an ecosystem for knowing and growing yourself — no rush, no lock-in, no game played with your attention. It's young and grows slowly: today it works closely with a small number of people, and the rest of the family — Root Cast, Journey, Root Studio — arrives when it's ready, not before.",
     "clientsEyebrow": "Clients",
@@ -76,7 +78,11 @@
         "NONE_YET": "Not yet translated"
       },
       "hasFile": "PDF",
-      "empty": "Nothing matches yet.",
+      "searchLabel": "Search the Library",
+      "typeLabel": "Type",
+      "emptyNone": "Nothing has been published here yet.",
+      "emptyQuery": "Nothing matches your search. Try fewer words, or clear the search.",
+      "clearSearch": "Clear search",
       "prevPage": "Previous",
       "nextPage": "Next"
     },

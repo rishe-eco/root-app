@@ -2,6 +2,10 @@
    Every colour, size, space and radius here is a token. */
 
 .shell { min-block-size: 100vh; display: flex; flex-direction: column; }
+/* The footer sits at the bottom of a short page (the Landing, a Reserved
+   room) instead of leaving a band of page ground under it. Pages whose main
+   already takes `flex: 1` are unchanged: there is no space left to push. */
+.shell > .footer { margin-block-start: auto; }
 
 /* ---- Nav: the locked slots ---------------------------------------------
    The name is present but unreadable, with the lock sitting on top of the
@@ -10,6 +14,12 @@
 .nav-link-locked .nav-label { filter: blur(4.5px); opacity: 0.5; user-select: none; }
 .nav-link-locked .lock { position: absolute; inset-block-start: 50%; inset-inline-start: 50%; transform: translate(-50%, -50%); }
 .nav-brand-link { text-decoration: none; color: inherit; }
+
+/* The menu is a disclosure below 769px (Nav.tsx). Above it, `display: contents`
+   dissolves the wrapper, so the links are the bar's own flex items and the
+   desktop layout is untouched; the toggle does not exist. */
+.nav-menu { display: contents; }
+.menu-toggle { display: none; }
 
 /* ---- Landing hero ------------------------------------------------------ */
 /* One centred line and its descriptor. The two-column split, the blurred
@@ -29,6 +39,11 @@
 .growth-heading { margin: 0 0 var(--space-6); }
 .growth-grid { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .growth-grid p { margin: 0; }
+/* The landing's signature is the clay rule across the top, not the card: these
+   do not link anywhere (and the hero's CTA is hidden by founder direction,
+   2026-08-09), so they must not wear the clickable frame. A rule, a title and a
+   line; no border, no radius, no inline padding. */
+.growth-item { display: flex; flex-direction: column; gap: var(--space-3); border-block-start: 3px solid var(--color-rule-strong); padding-block-start: var(--space-6); }
 
 /* ---- About ------------------------------------------------------------- */
 .about { flex: 1; inline-size: 100%; max-inline-size: 1040px; margin-inline: auto; padding-block: var(--space-24); padding-inline: var(--space-12); display: flex; flex-direction: column; gap: var(--space-16); }
@@ -37,10 +52,10 @@
 .gist .gist-title { margin: var(--space-4) 0 0; }
 .gist .gist-body { margin: var(--space-6) 0 0; }
 
-.clients-cta { border-radius: 24px; padding: var(--space-16); }
-.clients-cta .clients-eyebrow { margin: 0; color: #CBB9A6; }
+.clients-cta { border-radius: var(--radius-lg); padding: var(--space-16); }
+.clients-cta .clients-eyebrow { margin: 0; }
 .clients-cta .clients-title { margin: var(--space-6) 0 0; }
-.clients-cta .clients-body { margin: var(--space-6) 0 0; max-inline-size: 46ch; font-size: var(--text-body-lg); line-height: var(--leading-body); color: var(--indigo-200); }
+.clients-cta .clients-body { margin: var(--space-6) 0 0; max-inline-size: 46ch; font-size: var(--text-body-lg); line-height: var(--leading-body); color: var(--color-text-on-inverse-muted); }
 .clients-cta .clients-btn { margin-block-start: var(--space-8); }
 
 /* ---- Footer ------------------------------------------------------------ */
@@ -49,6 +64,10 @@
 .footer-brand { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); font-weight: var(--weight-bold); margin: 0; }
 .footer-dot { inline-size: 9px; block-size: 9px; border-radius: 50%; background: var(--color-rule-strong); flex: none; }
 .footer-descriptor { margin: var(--space-1) 0 0; }
+/* kit.css: `.beauty` is "the one gold thing on the page", and the hero already
+   spends it. Repeated here at 13px it was also 2.74:1 on the footer ground —
+   the footer's copy of the tagline reads in the ground's own ink. */
+.footer-descriptor .beauty { color: inherit; }
 .footer-refusal { margin: 0; font-style: italic; max-inline-size: 220px; }
 .footer-rule { margin-block: var(--space-4); }
 .footer-copy { margin: 0; }
@@ -63,8 +82,8 @@
 .auth-head p { margin: 0; }
 .auth-form { display: flex; flex-direction: column; gap: var(--space-4); }
 .auth-foot { display: flex; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
-.auth-notice { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--cyan-50); border: 1px solid var(--cyan-200); font-size: var(--text-small); }
-.auth-error { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--clay-50); border: 1px solid var(--clay-200); font-size: var(--text-small); color: var(--color-error); }
+.auth-notice { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--color-secondary-soft); border: 1px solid var(--color-secondary-border); font-size: var(--text-small); }
+.auth-error { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--color-accent-soft); border: 1px solid var(--color-accent-border); font-size: var(--text-small); color: var(--color-error); }
 
 /* ---- Not found --------------------------------------------------------- */
 .notfound { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); padding: var(--space-24) var(--space-6); text-align: center; }
@@ -95,7 +114,10 @@
 .library-strands { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .library-strand { position: relative; }
 .library-strand-count { margin: 0; }
-.library-strand-locked { opacity: 0.75; }
+/* Quieter than the live strand by colour, not by opacity (an opacity on text is
+   invisible to lib/tokens.test.ts, and 0.75 of muted was below 4.5:1). */
+.library-strand-locked,
+.library-strand-locked .t-small { color: var(--color-text-subtle); }
 .library-strand-locked .lock { align-self: flex-start; margin-block-start: var(--space-2); }
 
 .library-recent { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -106,6 +128,7 @@
 .library-list-controls { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .library-list-controls .input { flex: 1 1 280px; }
 .library-list-controls .select { flex: 0 0 auto; }
+.library-list-empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
 
 .library-cards { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .library-entry-card { gap: var(--space-2); }
@@ -185,6 +208,24 @@
 }
 @media (max-width: 768px) {
   .nav { flex-wrap: wrap; gap: var(--space-4); padding-inline: var(--space-6); }
+  /* Bar: brand, language switch, Menu. The links open in a column under it —
+     `order` and a full-width basis put the menu on its own row whatever its
+     place in the markup. */
+  .menu-toggle { display: inline-flex; }
+  .nav-menu {
+    display: none;
+    order: 1;
+    flex: 0 0 100%;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-block-start: var(--space-2);
+    border-block-start: 1px solid var(--color-border);
+  }
+  .nav-menu-open { display: flex; }
+  /* Each row at least 44px tall; the row hugs its text so the current-page
+     underline does not run edge to edge, and a locked slot's padlock (centred
+     on its own box) stays on its blurred label. */
+  .nav-menu .nav-link { align-self: flex-start; min-block-size: 44px; }
   .hero, .growth { padding-inline: var(--space-6); }
   .about { padding-inline: var(--space-6); }
   .clients-cta { padding: var(--space-12); }

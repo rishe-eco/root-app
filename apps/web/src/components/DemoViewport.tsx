@@ -152,13 +152,13 @@ export default function DemoViewport({
       </div>
 
       {showDesign && designImage ? (
-        <div className="demo-frame-outer">
+        <div className="demo-frame-outer force-light">
           <img className="demo-frame-design" src={designImage} alt="" />
         </div>
       ) : box ? (
         <ScaledFrame src={src} width={box.width} height={box.height} title={t('demo.viewport.frameTitle')} />
       ) : (
-        <div className="demo-frame-outer demo-frame-outer-native">
+        <div className="demo-frame-outer demo-frame-outer-native force-light">
           <iframe className="demo-frame-native" src={src} title={t('demo.viewport.frameTitle')} />
         </div>
       )}
@@ -194,7 +194,7 @@ function ScaledFrame({ src, width, height, title }: { src: string; width: number
   }, [width]);
 
   return (
-    <div ref={outerRef} className="demo-frame-outer" style={{ blockSize: height * scale }}>
+    <div ref={outerRef} className="demo-frame-outer force-light" style={{ blockSize: height * scale }}>
       <iframe
         className="demo-frame-scaled"
         src={src}

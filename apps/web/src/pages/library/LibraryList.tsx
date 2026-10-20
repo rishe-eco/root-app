@@ -41,6 +41,17 @@ export default function LibraryList() {
   const rows = data?.publicLibraryEntries.rows ?? [];
   const total = data?.publicLibraryEntries.total ?? 0;
 
+  /* Back to the unfiltered list: the concept filter (if one is active), the
+     search text, the type and the page. One handler, because "Clear filter"
+     and the empty state's "Clear search" mean the same reset. */
+  function clearFilter() {
+    setParams({});
+    setSearch('');
+    setType('');
+    setOffset(0);
+  }
+  const filtering = search.trim() !== '' || type !== '' || conceptSlug !== undefined;
+
   return (
     <div className="root-ui shell">
       <Nav />
@@ -59,10 +70,7 @@ export default function LibraryList() {
             <button
               type="button"
               className="link-action"
-              onClick={() => {
-                setParams({});
-                setOffset(0);
-              }}
+              onClick={clearFilter}
             >
               {t('library.list.clearFilter')}
             </button>
@@ -72,6 +80,8 @@ export default function LibraryList() {
         <div className="library-list-controls">
           <input
             className="input"
+            type="search"
+            aria-label={t('library.list.searchLabel')}
             placeholder={t('library.list.searchPlaceholder')}
             value={search}
             onChange={(e) => {
@@ -81,6 +91,7 @@ export default function LibraryList() {
           />
           <select
             className="select"
+            aria-label={t('library.list.typeLabel')}
             value={type}
             onChange={(e) => {
               setType(e.target.value as EntryType | '');
@@ -99,7 +110,16 @@ export default function LibraryList() {
         {loading ? (
           <p className="t-small">{t('portal.loading')}</p>
         ) : rows.length === 0 ? (
-          <p className="t-small">{t('library.list.empty')}</p>
+          filtering ? (
+            <div className="library-list-empty">
+              <p className="t-small">{t('library.list.emptyQuery')}</p>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={clearFilter}>
+                {t('library.list.clearSearch')}
+              </button>
+            </div>
+          ) : (
+            <p className="t-small">{t('library.list.emptyNone')}</p>
+          )
         ) : (
           <div className="library-cards">
             {rows.map((r) => (

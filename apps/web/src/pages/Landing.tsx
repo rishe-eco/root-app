@@ -38,7 +38,7 @@ export default function Landing() {
         <h2 className="t-eyebrow growth-heading">{t('landing.growthHeading')}</h2>
         <div className="growth-grid">
           {GROWTH.map((key) => (
-            <div className="card card-topruled" key={key}>
+            <div className="growth-item" key={key}>
               <p className="t-h3">{t(`landing.growth.${key}.title`)}</p>
               <p className="t-small">{t(`landing.growth.${key}.desc`)}</p>
             </div>

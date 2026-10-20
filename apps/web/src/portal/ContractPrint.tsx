@@ -197,7 +197,7 @@ export default function ContractPrint() {
         <span className="t-caption printbar-hint">{t('print.hint')}</span>
       </div>
 
-      <article className="doc" lang={locale} dir={dirOf(locale)}>
+      <article className="doc force-light" lang={locale} dir={dirOf(locale)}>
         {/*
           A table, and not for layout in the usual sense: `tfoot` is the only
           construct browsers repeat on every printed sheet *and* reserve space
