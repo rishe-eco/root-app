@@ -22,9 +22,20 @@ import { TEST_DATABASE_URL, TEST_DB, ensureTestDatabase } from './test-db.js';
 
 await ensureTestDatabase();
 
+// `npm run test:integration -- src/test/j12.test.ts …` runs only those files
+// (paths relative to apps/api); with none, the whole suite. Before NR1's review
+// the arguments were ignored and every call ran everything. Each one is held to
+// a plain path, because the command below goes through a shell.
+const files = process.argv.slice(2);
+const bad = files.find((f) => !/^[\w./-]+$/.test(f));
+if (bad) {
+  console.error(`test:integration: not a plain test path: ${bad}`);
+  process.exit(2);
+}
+
 // One string, not argv: with `shell` on, Node only concatenates argv anyway
-// (DEP0190), and none of it is input.
-const run = spawnSync('npx tsx --test --test-concurrency=1 src/test/*.test.ts', {
+// (DEP0190), and the arguments were checked above.
+const run = spawnSync(`npx tsx --test --test-concurrency=1 ${files.length ? files.join(' ') : 'src/test/*.test.ts'}`, {
   cwd: fileURLToPath(new URL('..', import.meta.url)),
   env: {
     ...process.env,

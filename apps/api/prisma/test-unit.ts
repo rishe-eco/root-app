@@ -16,7 +16,16 @@ import { fileURLToPath } from 'node:url';
  * a real send whatever `.env` holds.
  */
 
-const run = spawnSync('npx tsx --test src/lib/*.test.ts', {
+// As in test-integration.ts: `npm test --workspace=apps/api -- src/lib/home.test.ts`
+// runs only the files named (relative to apps/api); with none, the whole suite.
+const files = process.argv.slice(2);
+const bad = files.find((f) => !/^[\w./-]+$/.test(f));
+if (bad) {
+  console.error(`test: not a plain test path: ${bad}`);
+  process.exit(2);
+}
+
+const run = spawnSync(`npx tsx --test ${files.length ? files.join(' ') : 'src/lib/*.test.ts'}`, {
   cwd: fileURLToPath(new URL('..', import.meta.url)),
   env: {
     ...process.env,
