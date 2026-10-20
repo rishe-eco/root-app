@@ -226,8 +226,8 @@ must be run from inside it — it is the only path here that has no setting at
 all). `STORAGE_DIR` does not have to sit under the app root; it only has to sit
 outside `current`, and outside any directory a release replaces.
 
-**Root's own box uses `/opt/stacks/root`**, and the CI deploy is written for
-it. The deploy script reads its app root from the `ROOT=` line near the top of
+**Root's own box uses `/opt/stacks/root`**, with its Nginx site at
+`/etc/nginx/sites-available/m-root`, and the CI deploy is written for it. The deploy script reads its app root from the `ROOT=` line near the top of
 `deploy/root-deploy.sh` and from nowhere else: `sudo` strips the environment,
 so the line has to say it. *Routine deploys* and *Server setup for CI* below use
 that path. If the app root ever moves, change that line, reinstall the script
@@ -353,7 +353,7 @@ What to do for each exit 2. `git` runs as the account that owns
   repository's, because certbot rewrote the site and your domain was put in by
   hand, so carry the change across yourself. See it with
   `cd /opt/stacks/root/app && git fetch && git diff HEAD origin/main -- deploy/nginx`.
-  Apply it to `/etc/nginx/sites-available/root`,
+  Apply it to `/etc/nginx/sites-available/m-root` (this box's name for the site),
   `/etc/nginx/snippets/root-security-headers.conf` or
   `/etc/nginx/sites-available/root-mockup`, keeping a copy of the old file. Then
   `sudo nginx -t && sudo systemctl reload nginx`, then `git pull --ff-only`,
