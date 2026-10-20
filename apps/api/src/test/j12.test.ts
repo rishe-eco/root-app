@@ -646,6 +646,55 @@ test('the Needs-Root queue is read from attention, not from ContractStatus: a co
 });
 
 // =================================================================================================
+// The Overview's "Waiting on Root" tile (change note 02, NR1)
+// =================================================================================================
+
+const COUNT = 'query { needsRootCount }';
+
+test('needsRootCount counts what Root owes, as the queue lists it: a contract marked WAITING_ON_ROOT that owes nothing is not counted; one marked WAITING_ON_CUSTOMER that owes is (NR-1, NR-2)', async () => {
+  // The queue test's two contracts: A is marked WAITING_ON_ROOT and owed nothing; B is marked WAITING_ON_CUSTOMER with two notes owed.
+  await prisma.contract.update({ where: { id: f.contract.id }, data: { status: 'WAITING_ON_ROOT' } });
+  await openNote(contractB.id, 'DESIGN');
+  await openNote(contractB.id, 'DEMO');
+
+  const count = ok(await exec(COUNT, { as: staff.SALES })).needsRootCount as number;
+  const queue = ok(await exec(QUEUE, { as: staff.SALES })).needsRootQueue as QueueEntry[];
+  assert.equal(count, 1);
+  assert.equal(count, queue.length, 'the tile and the box are one rule');
+  assert.deepEqual(queue.map((e) => e.contract.ref), ['RC-TEST-002']);
+
+  // Owing something puts A in whatever status it carries; a delivered contract owes nothing.
+  await openNote(f.contract.id, 'DESIGN');
+  assert.equal(ok(await exec(COUNT, { as: staff.SALES })).needsRootCount, 2);
+  await prisma.contract.update({ where: { id: f.contract.id }, data: { deliveredAt: new Date() } });
+  assert.equal(ok(await exec(COUNT, { as: staff.SALES })).needsRootCount, 1);
+  // Discarded ones owe nothing either.
+  await prisma.contract.update({ where: { id: contractB.id }, data: { status: 'DISCARDED' } });
+  assert.equal(ok(await exec(COUNT, { as: staff.SALES })).needsRootCount, 0);
+});
+
+test('needsRootCount is not capped by the queue\u2019s limit (NR-4)', async () => {
+  await openNote(f.contract.id, 'DESIGN');
+  await openNote(contractB.id, 'DESIGN');
+  for (let n = 0; n < 3; n++) {
+    const project = await prisma.project.create({ data: { customerId: f.customer.id, titleFa: 'ا', titleEn: `P${n}` } });
+    const c = await prisma.contract.create({
+      data: { ref: `RC-CAP-${n}`, titleFa: 'ا', titleEn: `Cap ${n}`, customerId: f.customer.id, projectId: project.id, status: 'WAITING_ON_ROOT', publishedAt: new Date(), designerId: staff.DESIGNER.id, developerId: staff.DEVELOPER.id },
+    });
+    await openNote(c.id, 'DESIGN');
+  }
+  const limited = ok(await exec('query { needsRootQueue(limit: 2) { contract { id } } }', { as: staff.SALES })).needsRootQueue as unknown[];
+  assert.equal(limited.length, 2);
+  assert.equal(ok(await exec(COUNT, { as: staff.SALES })).needsRootCount, 5);
+});
+
+test('needsRootCount is contracts.readAll only: a designer and a customer are refused (NR-5)', async () => {
+  assert.equal((await exec(COUNT, { as: staff.DESIGNER })).code, 'FORBIDDEN');
+  assert.equal((await exec(COUNT, { as: f.customer })).code, 'FORBIDDEN');
+  assert.equal(typeof ok(await exec(COUNT, { as: staff.SALES })).needsRootCount, 'number');
+});
+
+// =================================================================================================
 // One rule set
 // =================================================================================================
 
