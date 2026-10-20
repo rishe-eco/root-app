@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Prisma, Role, User } from '@prisma/client';
 import { prisma, publishDraftDirect, resetDatabase, seedFixture, type Fixture } from './db.js';
+import { onDay } from './calendar.js';
 import { exec, ok, stop } from './graphql.js';
 import { __setMailTransportForTests, __resetMailTransportForTests, type MailMessage } from '../lib/mail.js';
 import { __setSmsTransportForTests, __resetSmsTransportForTests } from '../lib/sms.js';
@@ -109,8 +110,8 @@ const briefInput = (over: Record<string, unknown> = {}) => ({
   templateTypeId: type.id,
   designTier: 'THEME_PICK',
   budgetCap: '150000000',
-  idealDeadline: '2026-10-01',
-  hardDeadline: '2026-10-23',
+  idealDeadline: onDay('2026-10-01'),
+  hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
   domainProvidedBy: 'CUSTOMER',
   hostProvidedBy: 'ROOT',
@@ -119,9 +120,9 @@ const briefInput = (over: Record<string, unknown> = {}) => ({
   premadeRounds: 2,
   demoIterationsPerPhase: 2,
   commitments: [
-    { key: 'domain', dueAt: '2026-10-05' },
-    { key: 'host', dueAt: '2026-10-06' },
-    { key: 'content', dueAt: '2026-10-07' },
+    { key: 'domain', dueAt: onDay('2026-10-05') },
+    { key: 'host', dueAt: onDay('2026-10-06') },
+    { key: 'content', dueAt: onDay('2026-10-07') },
   ],
   ...over,
 });
@@ -383,10 +384,10 @@ test('setBrief writes the brief; dates come back as the day they were sent; the 
   assert.deepEqual(c.brief!.templateType, { id: type.id, slug: 'store' });
   assert.equal(c.brief!.budgetCap, '150000000');
   // A calendar day is midnight UTC on the wire, and a `date` in the table.
-  assert.equal(c.brief!.hardDeadline, '2026-10-23T00:00:00.000Z');
-  assert.equal(c.brief!.idealDeadline, '2026-10-01T00:00:00.000Z');
+  assert.equal(c.brief!.hardDeadline, `${onDay('2026-10-23')}T00:00:00.000Z`);
+  assert.equal(c.brief!.idealDeadline, `${onDay('2026-10-01')}T00:00:00.000Z`);
   const [row] = await prisma.$queryRawUnsafe<Array<{ d: string }>>(`SELECT to_char("hardDeadline", 'YYYY-MM-DD') AS d FROM "ContractBrief"`);
-  assert.equal(row.d, '2026-10-23');
+  assert.equal(row.d, onDay('2026-10-23'));
   assert.equal(c.brief!.wireframeIterations, 2, 'the default');
 
   // budgetCap is not Contract.amount: nothing prefills or moves one from the other, either way.
@@ -423,7 +424,7 @@ test('setBrief syncs the dependencies in the same write, and setting it twice le
   assert.equal(await prisma.contractBrief.count(), 1);
   // The commitment dates are calendar days the caller named.
   const domain = rowsAfter.find((r) => r.briefKey === 'domain')!;
-  assert.equal(domain.dueAt.toISOString(), '2026-10-05T00:00:00.000Z');
+  assert.equal(domain.dueAt.toISOString(), `${onDay('2026-10-05')}T00:00:00.000Z`);
 });
 
 test('switching a provider to Root flips the row’s side — and only its side — and a new date moves its date', async () => {
@@ -437,12 +438,12 @@ test('switching a provider to Root flips the row’s side — and only its side 
   assert.equal(flipped.side, 'ROOT');
   assert.equal(flipped.dueAt.toISOString(), before.dueAt.toISOString(), 'the date is kept when none is sent — the form re-sends it, this one did too');
 
-  await setBriefOk({ domainProvidedBy: 'ROOT', commitments: [{ key: 'domain', dueAt: '2026-11-02' }] });
-  assert.equal((await boardRows()).find((r) => r.briefKey === 'domain')!.dueAt.toISOString(), '2026-11-02T00:00:00.000Z');
+  await setBriefOk({ domainProvidedBy: 'ROOT', commitments: [{ key: 'domain', dueAt: onDay('2026-11-02') }] });
+  assert.equal((await boardRows()).find((r) => r.briefKey === 'domain')!.dueAt.toISOString(), `${onDay('2026-11-02')}T00:00:00.000Z`);
 });
 
 test('a commitment with no date is not created — the brief says so instead (COMMITMENT_UNDATED); the row appears once it has one', async () => {
-  const c = await setBriefOk({ commitments: [{ key: 'domain', dueAt: '2026-10-05' }] });
+  const c = await setBriefOk({ commitments: [{ key: 'domain', dueAt: onDay('2026-10-05') }] });
   assert.deepEqual((await boardRows()).map((r) => r.briefKey), ['domain']);
   const undated = c.briefCompleteness.filter((m) => m.code === 'COMMITMENT_UNDATED').map((m) => m.key).sort();
   assert.deepEqual(undated, ['content', 'host']);
@@ -468,9 +469,9 @@ test('a key no brief implies any more is removed — unless someone verified it,
 
 test('the board is the project’s: a sibling contract’s brief keeps a commitment alive, and adopts the same row', async () => {
   const second = await secondContract();
-  await setBriefOk({ commitments: [{ key: 'domain', dueAt: '2026-10-05' }] });
+  await setBriefOk({ commitments: [{ key: 'domain', dueAt: onDay('2026-10-05') }] });
   const [row] = await boardRows();
-  await setBriefOk({ commitments: [{ key: 'domain', dueAt: '2026-10-05' }] }, staff.SALES, second.id);
+  await setBriefOk({ commitments: [{ key: 'domain', dueAt: onDay('2026-10-05') }] }, staff.SALES, second.id);
   assert.equal((await boardRows()).length >= 1, true);
   assert.equal((await boardRows()).filter((r) => r.briefKey === 'domain').length, 1, 'one domain row for the project, not one per contract');
   assert.equal((await boardRows()).find((r) => r.briefKey === 'domain')!.id, row.id);
@@ -500,7 +501,7 @@ test('setBrief refuses, each with its own code, and writes nothing', async () =>
     ['a budget with a decimal', { budgetCap: '1.5' }, 'INVALID_BUDGET'],
     ['a date that is not a day', { hardDeadline: '2026-02-30' }, 'INVALID_DEADLINE'],
     ['a date in local-time shape', { hardDeadline: '2026-10-23T20:30:00Z' }, 'INVALID_DEADLINE'],
-    ['ideal after hard', { idealDeadline: '2026-11-01', hardDeadline: '2026-10-01' }, 'DEADLINES_OUT_OF_ORDER'],
+    ['ideal after hard', { idealDeadline: onDay('2026-11-01'), hardDeadline: onDay('2026-10-01') }, 'DEADLINES_OUT_OF_ORDER'],
     ['an existing site that is not a url', { kind: 'FEATURE_FOR_EXISTING', existingSiteUrl: 'nahal' }, 'INVALID_SITE_URL'],
     ['negative support', { supportMonths: -1 }, 'INVALID_SUPPORT_MONTHS'],
     ['a zero allowance', { premadeRounds: 0 }, 'INVALID_ALLOWANCE'],
@@ -566,7 +567,7 @@ test('setExtra moves an extra between declined and agreed — and only an extra'
 
 test('an extra that is in scope implies a commitment; switching it off removes the row — through setExtra and through the generic status setter alike', async () => {
   const payment = await extra('checklist.payment', 'AGREED');
-  await setBriefOk({ commitments: [{ key: 'gateway', dueAt: '2026-10-09' }] });
+  await setBriefOk({ commitments: [{ key: 'gateway', dueAt: onDay('2026-10-09') }] });
   const gateway = (await boardRows()).find((r) => r.briefKey === 'gateway')!;
   assert.equal(gateway.side, 'CUSTOMER');
   assert.equal(gateway.technical, false, 'the gateway is sales’ to verify');
@@ -578,7 +579,7 @@ test('an extra that is in scope implies a commitment; switching it off removes t
   const back = ok(await exec(SET_EXTRA, { as: staff.SALES, variables: { s: payment.id, in: true } })).setExtra as Contract;
   assert.equal((await boardRows()).some((r) => r.briefKey === 'gateway'), false);
   assert.ok(back.briefCompleteness.some((m) => m.code === 'COMMITMENT_UNDATED' && m.key === 'gateway'));
-  await setBriefOk({ commitments: [{ key: 'gateway', dueAt: '2026-10-09' }] });
+  await setBriefOk({ commitments: [{ key: 'gateway', dueAt: onDay('2026-10-09') }] });
   assert.equal((await boardRows()).some((r) => r.briefKey === 'gateway'), true);
 
   // The registry's own status setter is a second door to the same fact.
@@ -651,7 +652,7 @@ test('setPaymentPlan refuses bad rows and a phase that is not this contract’s,
 });
 
 test('a planned invoice may name one of this contract’s phases, and loses the link — not the row — when the phase goes', async () => {
-  const phase = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: '2026-11-10' } })).createPhase as Contract;
+  const phase = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: onDay('2026-11-10') } })).createPhase as Contract;
   const phaseId = phase.phases[0].id;
   ok(await exec(SET_PLAN, { as: staff.SALES, variables: { c: f.contract.id, s: 'INSTALLMENTS', r: rows(['On phase 1', '100', phaseId, 5]) } }));
   assert.equal((await prisma.plannedInvoice.findFirstOrThrow()).phaseId, phaseId);
@@ -666,11 +667,11 @@ test('a planned invoice may name one of this contract’s phases, and loses the 
 
 test('a phase names its contract; numbers are per contract; the two lists differ — Contract.phases is its own, Project.phases the project’s', async () => {
   const second = await secondContract();
-  const a = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: '2026-11-10' } })).createPhase as Contract;
+  const a = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: onDay('2026-11-10') } })).createPhase as Contract;
   ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: second.id, n: 1, end: null } }));
   assert.equal((await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: null } })).code, 'PHASE_NUMBER_TAKEN');
 
-  assert.deepEqual(a.phases.map((p) => [p.number, p.contractId, p.plannedEndAt]), [[1, f.contract.id, '2026-11-10T00:00:00.000Z']]);
+  assert.deepEqual(a.phases.map((p) => [p.number, p.contractId, p.plannedEndAt]), [[1, f.contract.id, `${onDay('2026-11-10')}T00:00:00.000Z`]]);
   const mine = await read(staff.SALES);
   const theirs = await read(staff.SALES, false, second.id);
   assert.equal(mine.phases.length, 1);
@@ -683,7 +684,7 @@ test('a phase names its contract; numbers are per contract; the two lists differ
 
 test('updatePhase: plannedEndAt is omitted (left), null (cleared) or a day (set); a bad day is INVALID_DATE; a contract that is not the phase’s is NOT_FOUND', async () => {
   const second = await secondContract();
-  const c = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: '2026-11-10' } })).createPhase as Contract;
+  const c = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: onDay('2026-11-10') } })).createPhase as Contract;
   const id = c.phases[0].id;
   const UPDATE = (extra: string, contractId?: string) =>
     exec(`mutation($p: ID!, $c: ID){ updatePhase(phaseId: $p, titleFa: "ب", titleEn: "Renamed", contractId: $c${extra}) { id phases { id plannedEndAt } } }`, {
@@ -693,9 +694,9 @@ test('updatePhase: plannedEndAt is omitted (left), null (cleared) or a day (set)
   const end = async () => (await prisma.phase.findUniqueOrThrow({ where: { id } })).plannedEndAt?.toISOString() ?? null;
 
   ok(await UPDATE(''));
-  assert.equal(await end(), '2026-11-10T00:00:00.000Z', 'omitted leaves it');
-  ok(await UPDATE(', plannedEndAt: "2026-12-01"'));
-  assert.equal(await end(), '2026-12-01T00:00:00.000Z');
+  assert.equal(await end(), `${onDay('2026-11-10')}T00:00:00.000Z`, 'omitted leaves it');
+  ok(await UPDATE(`, plannedEndAt: "${onDay('2026-12-01')}"`));
+  assert.equal(await end(), `${onDay('2026-12-01')}T00:00:00.000Z`);
   ok(await UPDATE(', plannedEndAt: null'));
   assert.equal(await end(), null, 'null clears it');
   assert.equal((await UPDATE(', plannedEndAt: "1 Aban"')).code, 'INVALID_DATE');
@@ -751,7 +752,7 @@ test('a developer’s claim on a phase is its own contract’s developer — not
 test('once the agreement is approved every J4 write is STEP_LOCKED — and writes nothing', async () => {
   const payment = await extra('checklist.payment');
   await setBriefOk();
-  const phase = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: '2026-11-10' } })).createPhase as Contract;
+  const phase = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: onDay('2026-11-10') } })).createPhase as Contract;
   const phaseId = phase.phases[0].id;
   ok(await exec(SET_PLAN, { as: staff.SALES, variables: { c: f.contract.id, s: 'LUMP_SUM', r: rows(['Only', '100', '', 0]) } }));
   const brief = await prisma.contractBrief.findFirstOrThrow();
@@ -801,7 +802,7 @@ test('every money field J4 adds is null for the designer and the developer and p
     const c = await read(who);
     // The rest of the brief is theirs to read; the money is not.
     assert.equal(c.brief!.kind, 'NEW_SITE');
-    assert.equal(c.brief!.hardDeadline, '2026-10-23T00:00:00.000Z');
+    assert.equal(c.brief!.hardDeadline, `${onDay('2026-10-23')}T00:00:00.000Z`);
     assert.equal(budget(c), null, `budgetCap for ${String(who.email)}`);
     assert.equal(c.paymentPlan, null, `payment plan for ${String(who.email)}`);
   }
@@ -1073,7 +1074,7 @@ test('REQUIREMENTS is done exactly when briefCompleteness is empty — and the c
   assert.equal(start.briefCompleteness.length > 0, true);
 
   await setBriefOk();
-  const phase = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: '2026-11-10' } })).createPhase as Contract;
+  const phase = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: onDay('2026-11-10') } })).createPhase as Contract;
   const midway = await read(staff.SALES);
   assert.deepEqual(midway.briefCompleteness.map((m) => m.code), ['PAYMENT_PLAN'], 'only the plan is left');
   assert.equal(road(midway).REQUIREMENTS, 'CURRENT');

@@ -14,6 +14,7 @@ import {
 } from 'graphql';
 import type { Role, User } from '@prisma/client';
 import { prisma, resetDatabase, seedFixture, completeDesign, type Fixture } from './db.js';
+import { onDay } from './calendar.js';
 import { exec, ok, stop } from './graphql.js';
 import { typeDefs } from '../graphql/typeDefs.js';
 import { assertStepOpenOn } from '../graphql/resolvers/wizard.js';
@@ -606,15 +607,15 @@ test('planned dates: staff read them from the start; the customer once a draft i
     where: { id: f.contract.id },
     data: {
       sequence: 'AGREEMENT_FIRST',
-      plannedStartAt: new Date('2026-10-01'),
-      plannedEndAt: new Date('2026-12-15'),
+      plannedStartAt: new Date(onDay('2026-10-01')),
+      plannedEndAt: new Date(onDay('2026-12-15')),
       currentContractRevisionId: null,
     },
   });
   await prisma.contractRevision.deleteMany({ where: { contractId: f.contract.id } });
   const staffView = await view(staff.DESIGNER);
-  assert.equal(staffView.statusSummary.plannedStartAt, '2026-10-01T00:00:00.000Z');
-  assert.equal(staffView.statusSummary.plannedEndAt, '2026-12-15T00:00:00.000Z');
+  assert.equal(staffView.statusSummary.plannedStartAt, `${onDay('2026-10-01')}T00:00:00.000Z`);
+  assert.equal(staffView.statusSummary.plannedEndAt, `${onDay('2026-12-15')}T00:00:00.000Z`);
   const before = await view(f.customer);
   assert.deepEqual([before.statusSummary.plannedStartAt, before.statusSummary.plannedEndAt], [null, null]);
   // "View as customer" hides them too — it is the customer's own answer.
@@ -627,13 +628,13 @@ test('planned dates: staff read them from the start; the customer once a draft i
   });
   await prisma.contract.update({ where: { id: f.contract.id }, data: { currentContractRevisionId: revision.id } });
   const shown = await view(f.customer);
-  assert.equal(shown.statusSummary.plannedStartAt, '2026-10-01T00:00:00.000Z');
-  assert.equal((await view(staff.SALES, { asCustomer: true })).statusSummary.plannedEndAt, '2026-12-15T00:00:00.000Z');
+  assert.equal(shown.statusSummary.plannedStartAt, `${onDay('2026-10-01')}T00:00:00.000Z`);
+  assert.equal((await view(staff.SALES, { asCustomer: true })).statusSummary.plannedEndAt, `${onDay('2026-12-15')}T00:00:00.000Z`);
 
   // ...and the approval keeps them shown (nothing un-publishes a draft).
   await prisma.stepApproval.create({ data: { contractId: f.contract.id, step: 'AGREEMENT', approvedById: f.admin.id } });
   const after = await view(f.customer);
-  assert.equal(after.statusSummary.plannedStartAt, '2026-10-01T00:00:00.000Z');
+  assert.equal(after.statusSummary.plannedStartAt, `${onDay('2026-10-01')}T00:00:00.000Z`);
 });
 
 test('the desk list can ask every contract for its current step and whose move it is', async () => {
@@ -799,7 +800,7 @@ async function enrich() {
   });
 
   // Planned dates, while still a proposal.
-  await prisma.contract.update({ where: { id: f.contract.id }, data: { plannedStartAt: new Date('2026-10-01'), plannedEndAt: new Date('2026-12-01') } });
+  await prisma.contract.update({ where: { id: f.contract.id }, data: { plannedStartAt: new Date(onDay('2026-10-01')), plannedEndAt: new Date(onDay('2026-12-01')) } });
 }
 
 for (const sequence of ['DESIGN_FIRST', 'AGREEMENT_FIRST'] as const) {

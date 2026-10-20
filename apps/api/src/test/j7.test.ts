@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Role, User } from '@prisma/client';
 import { prisma, resetDatabase, seedFixture, publishDraftDirect, type Fixture } from './db.js';
+import { onDay } from './calendar.js';
 import { exec, ok, stop, type ExecResult } from './graphql.js';
 import { __setMailTransportForTests, __resetMailTransportForTests, type MailMessage } from '../lib/mail.js';
 import { __setSmsTransportForTests, __resetSmsTransportForTests } from '../lib/sms.js';
@@ -89,7 +90,7 @@ after(async () => {
 
 const SET_BRIEF = 'mutation($c: ID!, $i: BriefInput!){ setBrief(contractId: $c, input: $i) { id } }';
 const CREATE_PHASE = (n = 1) =>
-  `mutation($c: ID!){ createPhase(contractId: $c, number: ${n}, titleFa: "فاز", titleEn: "Phase", plannedEndAt: "2026-11-10") { phases { id } } }`;
+  `mutation($c: ID!){ createPhase(contractId: $c, number: ${n}, titleFa: "فاز", titleEn: "Phase", plannedEndAt: "${onDay('2026-11-10')}") { phases { id } } }`;
 const SET_PLAN =
   'mutation($c: ID!, $r: [PlannedInvoiceInput!]!){ setPaymentPlan(contractId: $c, split: INSTALLMENTS, invoices: $r) { id } }';
 const SEED_SCOPE = 'mutation($c: ID!){ applyScopeTemplate(contractId: $c) { id } }';
@@ -118,7 +119,7 @@ const BRIEF_INPUT = {
   templateTypeId: '',
   designTier: 'THEME_PICK',
   budgetCap: '150000000',
-  hardDeadline: '2026-10-23',
+  hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
   domainProvidedBy: 'CUSTOMER',
   hostProvidedBy: 'ROOT',
@@ -127,9 +128,9 @@ const BRIEF_INPUT = {
   premadeRounds: 2,
   demoIterationsPerPhase: 2,
   commitments: [
-    { key: 'domain', dueAt: '2026-10-05' },
-    { key: 'host', dueAt: '2026-10-06' },
-    { key: 'content', dueAt: '2026-10-07' },
+    { key: 'domain', dueAt: onDay('2026-10-05') },
+    { key: 'host', dueAt: onDay('2026-10-06') },
+    { key: 'content', dueAt: onDay('2026-10-07') },
   ],
 };
 
@@ -149,7 +150,7 @@ async function stepsOneAndTwo({ dates = true }: { dates?: boolean } = {}) {
   ok(await exec(SET_PLAN, { as: staff.SALES, variables: { c: f.contract.id, r: PLAN_ROWS(phase.phases[0].id) } }));
   ok(await exec(SEED_SCOPE, { as: staff.SALES, variables: { c: f.contract.id } }));
   if (dates) {
-    ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-12', e: '2026-12-20' } }));
+    ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: onDay('2026-10-12'), e: onDay('2026-12-20') } }));
   }
   return { phaseId: phase.phases[0].id };
 }
@@ -221,9 +222,9 @@ test('PLAN_TOTAL_MISMATCH: the payment plan must add up to the fee — and no pl
 test('DATES_INCOMPLETE: the contract needs a planned start and end, and every phase its end', async () => {
   await stepsOneAndTwo({ dates: false });
   assert.equal((await approve()).code, 'DATES_INCOMPLETE');
-  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-12', e: null } }));
+  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: onDay('2026-10-12'), e: null } }));
   assert.equal((await approve()).code, 'DATES_INCOMPLETE', 'a start without an end is still incomplete');
-  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-12', e: '2026-12-20' } }));
+  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: onDay('2026-10-12'), e: onDay('2026-12-20') } }));
   // A phase with no planned end (a direct insert: the desk refuses to make one undated on this road).
   await prisma.phase.updateMany({ where: { contractId: f.contract.id }, data: { plannedEndAt: null } });
   const refused = await approve();
@@ -264,7 +265,7 @@ test('REVISION_STALE: the steps moved after the draft was published — approvin
   assert.equal(await prisma.stepApproval.count(), 0);
   // The plan's own change is stale too — and a planned date.
   ok(await publish());
-  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-13', e: '2026-12-20' } }));
+  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: onDay('2026-10-13'), e: onDay('2026-12-20') } }));
   assert.equal((await approve()).code, 'REVISION_STALE');
   ok(await publish());
   ok(await approve());
@@ -511,7 +512,7 @@ const lockTable: LockRow[] = [
       return publish();
     },
   },
-  { mutation: 'setPlannedDates', file: 'contracts.ts', as: () => staff.SALES, run: () => exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-11-01', e: '2026-12-01' } }) },
+  { mutation: 'setPlannedDates', file: 'contracts.ts', as: () => staff.SALES, run: () => exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: onDay('2026-11-01'), e: onDay('2026-12-01') } }) },
   // admin/registry.ts — what the scope *is* (J7 adds these three to the locked set)
   {
     mutation: 'addScopeItem',
@@ -641,7 +642,7 @@ test('the agreement’s approval is the only thing that locks: before it, every 
   ok(await exec(CREATE_PHASE(2), { as: staff.SALES, variables: { c: f.contract.id } }));
   ok(await exec('mutation($c: ID!){ updateContractDraft(contractId: $c, titleFa: "ت", titleEn: "T", amount: "180000000") { id } }', { as: staff.SALES, variables: { c: f.contract.id } }));
   ok(await exec('mutation($c: ID!){ setArticle(contractId: $c, number: 1, titleFa: "ت", titleEn: "T", bodyEn: "x") { id } }', { as: staff.SALES, variables: { c: f.contract.id } }));
-  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-12', e: '2026-12-20' } }));
+  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: onDay('2026-10-12'), e: onDay('2026-12-20') } }));
   assert.ok(steps.revisionId);
 });
 
@@ -730,12 +731,12 @@ test('a format-2 snapshot carries steps 1 and 2, and its hash is stable across t
     assert.ok(key in snapshot, key);
   }
   const brief = snapshot.brief as { budgetCap: string; templateType: { slug: string }; hardDeadline: string };
-  assert.deepEqual([brief.budgetCap, brief.templateType.slug, brief.hardDeadline], ['150000000', 'store', '2026-10-23']);
+  assert.deepEqual([brief.budgetCap, brief.templateType.slug, brief.hardDeadline], ['150000000', 'store', onDay('2026-10-23')]);
   assert.deepEqual(snapshot.allowances, { premadeRounds: 2, wireframeIterations: 2, mockupIterations: null, demoIterationsPerPhase: 2 });
-  assert.deepEqual([snapshot.plannedStartAt, snapshot.plannedEndAt], ['2026-10-12', '2026-12-20']);
+  assert.deepEqual([snapshot.plannedStartAt, snapshot.plannedEndAt], [onDay('2026-10-12'), onDay('2026-12-20')]);
   const plan = snapshot.paymentPlan as { invoices: Array<{ amount: string; phaseNumber: number | null }> };
   assert.deepEqual(plan.invoices.map((i) => [i.amount, i.phaseNumber]), [['100000000', 1], ['80000000', null]]);
-  assert.deepEqual((snapshot.phases as Array<{ number: number; plannedEndAt: string }>).map((p) => [p.number, p.plannedEndAt]), [[1, '2026-11-10']]);
+  assert.deepEqual((snapshot.phases as Array<{ number: number; plannedEndAt: string }>).map((p) => [p.number, p.plannedEndAt]), [[1, onDay('2026-11-10')]]);
   assert.ok((snapshot.scopeItems as Array<{ kind: string }>).every((s) => ['PAGE', 'FEATURE', 'DELIVERABLE', 'EXTRA'].includes(s.kind)));
   assert.deepEqual((snapshot.articles as Array<{ sensitive: boolean }>).map((a) => a.sensitive), [false, false, false]);
 
@@ -766,7 +767,7 @@ test('the dirty check sees steps 1 and 2: a changed brief, plan, phase or date r
   assert.equal(await dirty(), true);
   await prisma.phase.update({ where: { id: phaseId }, data: { titleEn: 'Phase' } });
   assert.equal(await dirty(), false);
-  await prisma.contract.update({ where: { id: f.contract.id }, data: { plannedEndAt: new Date('2026-12-21T00:00:00Z') } });
+  await prisma.contract.update({ where: { id: f.contract.id }, data: { plannedEndAt: new Date(`${onDay('2026-12-21')}T00:00:00Z`) } });
   assert.equal(await dirty(), true);
 });
 
@@ -785,7 +786,7 @@ test('the snapshot records the plan as approved, not as issued: an issued invoic
       descriptionEn: 'A',
       source: 'CONTRACT',
       issuedAt: new Date(),
-      dueAt: new Date('2026-12-01T00:00:00Z'),
+      dueAt: new Date(`${onDay('2026-12-01')}T00:00:00Z`),
       invoiceNumber: 'INV-000001',
       paymentTermDays: 7,
       paidAt: new Date(),

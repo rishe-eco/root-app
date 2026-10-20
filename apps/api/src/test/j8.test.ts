@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Role, User } from '@prisma/client';
 import { prisma, resetDatabase, seedFixture, type Fixture } from './db.js';
+import { onDay } from './calendar.js';
 import { exec, ok, stop, type ExecResult } from './graphql.js';
 import { startFileServer, cookieFor, PNG } from './http.js';
 import { storage } from '../lib/storage.js';
@@ -91,7 +92,7 @@ after(async () => {
 // ---- documents -----------------------------------------------------------------------
 
 const SET_BRIEF = 'mutation($c: ID!, $i: BriefInput!){ setBrief(contractId: $c, input: $i) { id } }';
-const CREATE_PHASE = `mutation($c: ID!){ createPhase(contractId: $c, number: 1, titleFa: "فاز", titleEn: "Phase", plannedEndAt: "2026-11-10") { phases { id } } }`;
+const CREATE_PHASE = `mutation($c: ID!){ createPhase(contractId: $c, number: 1, titleFa: "فاز", titleEn: "Phase", plannedEndAt: "${onDay('2026-11-10')}") { phases { id } } }`;
 const SET_PLAN =
   'mutation($c: ID!, $r: [PlannedInvoiceInput!]!){ setPaymentPlan(contractId: $c, split: INSTALLMENTS, invoices: $r) { id } }';
 const SEED_SCOPE = 'mutation($c: ID!){ applyScopeTemplate(contractId: $c) { id } }';
@@ -106,7 +107,7 @@ const BRIEF_INPUT = {
   templateTypeId: '',
   designTier: 'THEME_PICK',
   budgetCap: '150000000',
-  hardDeadline: '2026-10-23',
+  hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
   domainProvidedBy: 'CUSTOMER',
   hostProvidedBy: 'ROOT',
@@ -117,9 +118,9 @@ const BRIEF_INPUT = {
   mockupIterations: 2,
   demoIterationsPerPhase: 2,
   commitments: [
-    { key: 'domain', dueAt: '2026-10-05' },
-    { key: 'host', dueAt: '2026-10-06' },
-    { key: 'content', dueAt: '2026-10-07' },
+    { key: 'domain', dueAt: onDay('2026-10-05') },
+    { key: 'host', dueAt: onDay('2026-10-06') },
+    { key: 'content', dueAt: onDay('2026-10-07') },
   ],
 };
 
@@ -152,7 +153,7 @@ async function reachDesign(over: Record<string, unknown> = {}) {
     }),
   );
   ok(await exec(SEED_SCOPE, { as: staff.SALES, variables: { c: f.contract.id } }));
-  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: '2026-10-12', e: '2026-12-20' } }));
+  ok(await exec(SET_DATES, { as: staff.SALES, variables: { c: f.contract.id, s: onDay('2026-10-12'), e: onDay('2026-12-20') } }));
   ok(await exec(PUBLISH_DRAFT, { as: staff.SALES, variables: { c: f.contract.id } }));
   ok(await exec(APPROVE_AGREEMENT, { as: f.customer, variables: { c: f.contract.id } }));
   ok(await exec(SIGN, { as: f.customer, variables: { c: f.contract.id, n: 'Test Customer' } }));

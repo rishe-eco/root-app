@@ -2,6 +2,7 @@ import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Role, User } from '@prisma/client';
 import { prisma, publishDraftDirect, resetDatabase, seedFixture, type Fixture } from './db.js';
+import { onDay } from './calendar.js';
 import { exec, ok, stop } from './graphql.js';
 import { __setMailTransportForTests, __resetMailTransportForTests, type MailMessage } from '../lib/mail.js';
 import { __setSmsTransportForTests, __resetSmsTransportForTests } from '../lib/sms.js';
@@ -76,7 +77,7 @@ after(async () => {
 
 const PUBLISH = 'mutation($c: ID!){ publishContractRevision(contractId: $c) { id revision { id } contractRevisions { version } } }';
 const SET_BRIEF = 'mutation($c: ID!, $i: BriefInput!){ setBrief(contractId: $c, input: $i) { id } }';
-const CREATE_PHASE = 'mutation($c: ID!){ createPhase(contractId: $c, number: 1, titleFa: "فاز", titleEn: "Phase", plannedEndAt: "2026-11-10") { phases { id } } }';
+const CREATE_PHASE = `mutation($c: ID!){ createPhase(contractId: $c, number: 1, titleFa: "فاز", titleEn: "Phase", plannedEndAt: "${onDay('2026-11-10')}") { phases { id } } }`;
 const SET_PLAN =
   'mutation($c: ID!, $r: [PlannedInvoiceInput!]!){ setPaymentPlan(contractId: $c, split: INSTALLMENTS, invoices: $r) { id } }';
 const SEED_SCOPE = 'mutation($c: ID!){ applyScopeTemplate(contractId: $c) { id } }';
@@ -124,7 +125,7 @@ async function readyToPublish({ scope = true }: { scope?: boolean } = {}) {
           templateTypeId: type.id,
           designTier: 'THEME_PICK',
           budgetCap: '150000000',
-          hardDeadline: '2026-10-23',
+          hardDeadline: onDay('2026-10-23'),
           domainName: 'nahal.ir',
           domainProvidedBy: 'CUSTOMER',
           hostProvidedBy: 'ROOT',
@@ -133,9 +134,9 @@ async function readyToPublish({ scope = true }: { scope?: boolean } = {}) {
           premadeRounds: 2,
           demoIterationsPerPhase: 2,
           commitments: [
-            { key: 'domain', dueAt: '2026-10-05' },
-            { key: 'host', dueAt: '2026-10-06' },
-            { key: 'content', dueAt: '2026-10-07' },
+            { key: 'domain', dueAt: onDay('2026-10-05') },
+            { key: 'host', dueAt: onDay('2026-10-06') },
+            { key: 'content', dueAt: onDay('2026-10-07') },
           ],
         },
       },
@@ -253,7 +254,7 @@ test('STEP_LOCKED: publishing the draft, setting the dates and applying the temp
   await lock();
   assert.equal((await publish()).code, 'STEP_LOCKED');
   assert.equal(
-    (await exec('mutation($c: ID!){ setPlannedDates(contractId: $c, plannedStartAt: "2026-11-01") { id } }', { as: staff.SALES, variables: { c: f.contract.id } })).code,
+    (await exec(`mutation($c: ID!){ setPlannedDates(contractId: $c, plannedStartAt: "${onDay('2026-11-01')}") { id } }`, { as: staff.SALES, variables: { c: f.contract.id } })).code,
     'STEP_LOCKED',
   );
   await prisma.article.deleteMany({ where: { contractId: f.contract.id } });
@@ -431,30 +432,30 @@ const READ_DATES = 'query($c: ID!, $as: Boolean){ contract(id: $c, asCustomer: $
 test('setPlannedDates: calendar days, a replace, ordered — and shown to the customer beside the draft, not before there is one', async () => {
   const set = (s: string | null, e: string | null, as: User = staff.SALES) => exec(DATES, { as, variables: { c: f.contract.id, s, e } });
   assert.equal((await set('2026-13-40', null)).code, 'INVALID_DATE');
-  assert.equal((await set('2026-12-01', '2026-11-01')).code, 'DATES_OUT_OF_ORDER');
-  for (const who of [staff.DESIGNER, staff.DEVELOPER, f.customer]) assert.equal((await set('2026-11-01', null, who)).code, 'FORBIDDEN', who.email!);
+  assert.equal((await set(onDay('2026-12-01'), onDay('2026-11-01'))).code, 'DATES_OUT_OF_ORDER');
+  for (const who of [staff.DESIGNER, staff.DEVELOPER, f.customer]) assert.equal((await set(onDay('2026-11-01'), null, who)).code, 'FORBIDDEN', who.email!);
 
-  const done = ok(await set('2026-11-01', '2027-01-15')).setPlannedDates as { plannedStartAt: string; plannedEndAt: string };
-  assert.deepEqual([done.plannedStartAt, done.plannedEndAt], ['2026-11-01T00:00:00.000Z', '2027-01-15T00:00:00.000Z']);
+  const done = ok(await set(onDay('2026-11-01'), onDay('2027-01-15'))).setPlannedDates as { plannedStartAt: string; plannedEndAt: string };
+  assert.deepEqual([done.plannedStartAt, done.plannedEndAt], [`${onDay('2026-11-01')}T00:00:00.000Z`, `${onDay('2027-01-15')}T00:00:00.000Z`]);
   // A replace: an omitted day is cleared.
-  const cleared = ok(await set('2026-11-01', null)).setPlannedDates as { plannedEndAt: string | null };
+  const cleared = ok(await set(onDay('2026-11-01'), null)).setPlannedDates as { plannedEndAt: string | null };
   assert.equal(cleared.plannedEndAt, null);
-  ok(await set('2026-11-01', '2027-01-15'));
+  ok(await set(onDay('2026-11-01'), onDay('2027-01-15')));
 
   const read = async (as: User, asCustomer = false) =>
     ok(await exec(READ_DATES, { as, variables: { c: f.contract.id, as: asCustomer } })).contract as { plannedStartAt: string | null; statusSummary: { plannedStartAt: string | null } };
   // The fixture's v1 is a published draft, so the customer reads them.
-  assert.equal((await read(f.customer)).plannedStartAt, '2026-11-01T00:00:00.000Z');
-  assert.equal((await read(f.customer)).statusSummary.plannedStartAt, '2026-11-01T00:00:00.000Z', 'the status area and the panel agree');
+  assert.equal((await read(f.customer)).plannedStartAt, `${onDay('2026-11-01')}T00:00:00.000Z`);
+  assert.equal((await read(f.customer)).statusSummary.plannedStartAt, `${onDay('2026-11-01')}T00:00:00.000Z`, 'the status area and the panel agree');
   // Without a draft they are staff's.
   await prisma.contract.update({ where: { id: f.contract.id }, data: { currentContractRevisionId: null } });
   await prisma.contractRevision.deleteMany({ where: { contractId: f.contract.id } });
   assert.equal((await read(f.customer)).plannedStartAt, null);
   assert.equal((await read(staff.SALES, true)).plannedStartAt, null, 'view-as-customer is the customer’s answer');
-  assert.equal((await read(staff.DESIGNER)).plannedStartAt, '2026-11-01T00:00:00.000Z');
+  assert.equal((await read(staff.DESIGNER)).plannedStartAt, `${onDay('2026-11-01')}T00:00:00.000Z`);
 
   const legacy = await prisma.contract.update({ where: { id: f.contract.id }, data: { sequence: 'DESIGN_FIRST' } });
-  assert.equal((await exec(DATES, { as: staff.SALES, variables: { c: legacy.id, s: '2026-11-01', e: null } })).code, 'STEP_NOT_ON_ROAD');
+  assert.equal((await exec(DATES, { as: staff.SALES, variables: { c: legacy.id, s: onDay('2026-11-01'), e: null } })).code, 'STEP_NOT_ON_ROAD');
 });
 
 // ---- the wizard ---------------------------------------------------------------------------------
