@@ -154,3 +154,24 @@ test('TK-5: the same in Persian', async ({ page, request }) => {
   await expect(card(page, FA_SUBJECT).locator('.badge.ticket-status-resolved')).toHaveText('حل‌شده');
   await expectNotReloaded(page);
 });
+
+// ---- Added at verify TK1 -------------------------------------------------
+
+/** True for the page's `MyTickets` list query, as Apollo posts it. */
+function isMyTickets(req: { method(): string; postData(): string | null }): boolean {
+  return req.method() === 'POST' && (req.postData() ?? '').includes('"operationName":"MyTickets"');
+}
+
+test('verify: closing a card refetches on its own, before any reopen', async ({ page }) => {
+  await signIn(page, CUSTOMER, 'en');
+  await page.goto('/en/app/support');
+  const row = card(page, SUBJECT).locator('button.workspace-row');
+  await row.click(); // open
+  await expect(card(page, SUBJECT).locator('textarea')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+
+  const refetched = page.waitForRequest(isMyTickets, { timeout: 3_000 });
+  await row.click(); // close, and nothing else
+  await refetched;
+  await expect(card(page, SUBJECT).locator('textarea')).toHaveCount(0);
+});
