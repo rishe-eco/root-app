@@ -129,13 +129,9 @@ export default function Support() {
   const me = useOutletContext<User>();
 
   const { data, previousData, loading, error, refetch } = useQuery<{ myTickets: Ticket[] }>(MY_TICKETS);
-  // Awaited: the form closes only once the new ticket is in the list, so the
-  // customer never sees an empty gap where they expect it. A failed refetch
-  // fails the submit and shows the form error, the same as a failed create.
-  const [createTicket, { loading: creating }] = useMutation(CREATE_TICKET, {
-    refetchQueries: [{ query: MY_TICKETS }],
-    awaitRefetchQueries: true,
-  });
+  const [createTicket, { loading: creating }] = useMutation(CREATE_TICKET);
+  // True while the list is refetched after a create (see onCreate).
+  const [listing, setListing] = useState(false);
 
   // No websocket (as RequestDrawer.tsx, J2): the list is fresh on mount, on a
   // card opening or closing, and whenever the window regains focus, which is
@@ -159,12 +155,20 @@ export default function Support() {
     if (!subject.trim() || !body.trim()) return;
     try {
       await createTicket({ variables: { type, subject: subject.trim(), body: body.trim(), urgency } });
-      setSubject('');
-      setBody('');
-      setAdding(false);
     } catch (err) {
       setFormError(errorMessage(err, t));
+      return;
     }
+    // The ticket exists now. The form closes only once it is in the list, so
+    // the customer never sees a gap where they expect it. A failed refetch is
+    // not a failed create: showing it as one would invite a second, duplicate
+    // ticket. The next focus or card click brings the list up to date.
+    setListing(true);
+    await refetch().catch(() => undefined);
+    setListing(false);
+    setSubject('');
+    setBody('');
+    setAdding(false);
   }
 
   // The list outlives a failed refetch: a focus or a card click while the
@@ -217,7 +221,7 @@ export default function Support() {
             </div>
             {formError ? <p className="error">{formError}</p> : null}
             <div>
-              <button className="btn btn-primary btn-sm" type="submit" disabled={creating}>
+              <button className="btn btn-primary btn-sm" type="submit" disabled={creating || listing}>
                 {t('support.submit')}
               </button>
             </div>

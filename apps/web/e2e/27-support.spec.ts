@@ -193,3 +193,19 @@ test('verify: a focus refetch that fails keeps the list and a half-typed reply',
   await expect(page.locator('.empty')).toHaveCount(0);
   await expectNotReloaded(page);
 });
+
+test('verify: a ticket created while the list refetch fails shows no error, so it is not sent twice', async ({ page }) => {
+  const subject = 'Created while the list is unreachable';
+  await signIn(page, CUSTOMER, 'en');
+  await page.goto('/en/app/support');
+  await page.waitForLoadState('networkidle');
+  await page.route('**/graphql*', (route) => (isMyTickets(route.request()) ? route.abort() : route.fallback()));
+
+  await submitTicket(page, subject, 'The list query fails after this create succeeds.');
+  await expect(page.locator('form.auth-form')).toHaveCount(0);
+  await expect(page.locator('.error')).toHaveCount(0);
+
+  await page.unroute('**/graphql*');
+  await focus(page);
+  await expect(card(page, subject)).toHaveCount(1);
+});
