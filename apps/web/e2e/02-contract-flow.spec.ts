@@ -294,10 +294,12 @@ test('a revised design page shows a banner naming it, and approving it clears th
 });
 
 test('an admin sees a non-zero count on the Overview (V4)', async ({ page }) => {
-  // No reset: this is the cheap end of the story the flow above already paid
-  // for — real status and activity data to look at, not a seeded illusion of
-  // one. The value of this stage is in the integration tests; this just
-  // proves the screen renders what they already prove is correct.
+  // The value of this stage is in the integration tests; this just proves the
+  // screen renders what they already prove is correct. Its own reset, because
+  // the flow above leaves both contracts WAITING_ON_ROOT by status and owing
+  // Root nothing, and that tile counts what Root owes (NR1), so every tile
+  // reads 0. The fresh seed has RC-2026-014 WAITING_ON_CUSTOMER.
+  resetTestDatabase();
   await signIn(page, ADMIN);
   await page.goto('/en/desk/overview');
 
