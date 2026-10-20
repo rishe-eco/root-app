@@ -32,7 +32,7 @@ set -euo pipefail
 # Every path and command the script takes from its environment is in this block. On the box
 # sudo's env_reset strips the deploy user's environment, so none of these can be set from outside
 # the SSH session; the defaults below are what runs there.
-ROOT="${ROOTAPP_ROOT:-/srv/root}"
+ROOT="${ROOTAPP_ROOT:-/opt/stacks/root}"
 DIR="${ROOTAPP_DIR:-$ROOT/app}"
 REPO_URL="${ROOTAPP_REPO_URL:-https://github.com/rishe-eco/root-app.git}"
 LOCK="${ROOTAPP_LOCK:-/run/root-deploy.lock}"

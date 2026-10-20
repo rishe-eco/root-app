@@ -226,6 +226,13 @@ must be run from inside it — it is the only path here that has no setting at
 all). `STORAGE_DIR` does not have to sit under the app root; it only has to sit
 outside `current`, and outside any directory a release replaces.
 
+**Root's own box uses `/opt/stacks/root`**, and the CI deploy is written for
+it. The deploy script reads its app root from the `ROOT=` line near the top of
+`deploy/root-deploy.sh` and from nowhere else: `sudo` strips the environment,
+so the line has to say it. *Routine deploys* and *Server setup for CI* below use
+that path. If the app root ever moves, change that line, reinstall the script
+(*Server setup for CI*, step 5), and change those two sections.
+
 **The API port** — `4000` throughout, and there are two of them, which is the
 part worth being careful about:
 
@@ -261,7 +268,7 @@ the repo-root `.env` and only that one.
    switches automatic deploys off, and `check` still runs.
 3. The script deploys **exactly that commit**, never a newer tip of `main`, so
    the API and the web always come from one commit. It fast-forwards
-   `/srv/root/app` to it, dumps the database if the commit adds a migration,
+   `/opt/stacks/root/app` to it, dumps the database if the commit adds a migration,
    builds the API image on the box, runs `up -d --wait`, checks the container's
    health and `nginx -t`, makes the web build live with the same atomic swap
    `release-web.sh` uses, and runs `deploy/checks.sh` as `nobody`. A green run
@@ -291,7 +298,7 @@ two halves, as before CI:
 **Web**, from your machine, in the repo root:
 
 ```bash
-./deploy/release-web.sh you@your-vps
+./deploy/release-web.sh you@your-vps /opt/stacks/root
 ```
 
 It refuses to run on a dirty tree, because the release is named after the
@@ -300,7 +307,7 @@ commit and that name has to be true. `ALLOW_DIRTY=1` overrides.
 **API**, on the server:
 
 ```bash
-cd /srv/root/app && git pull --ff-only
+cd /opt/stacks/root/app && git pull --ff-only
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
@@ -327,25 +334,25 @@ once, on that one deploy only — free, since production has no real users yet.
 | **1** | **Failed after something may have changed.** The line names the step: `checkout`, `dump`, `build`, `up`, `health`, `nginx`, `web` or `checks`. There is no automatic rollback, because migrations run at boot and old code against a migrated database is the riskier move. | Read the step's output, fix forward on `main`, or roll back by hand (below). A failed `dump` or `build` leaves the old container serving, and every failure before `web` leaves the old web release live. |
 
 What to do for each exit 2. `git` runs as the account that owns
-`/srv/root/app`, not with `sudo`:
+`/opt/stacks/root/app`, not with `sudo`:
 
 - **Another deploy holds the lock.** Wait for it, then re-run.
 - **No web build on stdin.** The script was run from a shell. It only takes
   input from CI: use **Run workflow**, or deploy by hand.
 - **The stream is not a gzipped tar, or its `COMMIT` is wrong.** Re-run. If it
   repeats, read the job's *Package the web build* step.
-- **The checkout has uncommitted changes.** `cd /srv/root/app && git status`
+- **The checkout has uncommitted changes.** `cd /opt/stacks/root/app && git status`
   shows them. Commit, stash or discard them, then re-run.
 - **The commit is not on `main`.** Only `main` deploys.
 - **The commit is older than the checkout.** An old run was re-run, or the
   checkout was moved by hand. Use **Run workflow**. To go back on purpose, see
   *Rolling back by hand*.
 - **Not a fast-forward** (history was rewritten). The script never resets the
-  checkout. Compare `git log` in `/srv/root/app` with `main` and decide there.
+  checkout. Compare `git log` in `/opt/stacks/root/app` with `main` and decide there.
 - **`deploy/nginx/` changed.** The live files can't be compared with the
   repository's, because certbot rewrote the site and your domain was put in by
   hand, so carry the change across yourself. See it with
-  `cd /srv/root/app && git fetch && git diff HEAD origin/main -- deploy/nginx`.
+  `cd /opt/stacks/root/app && git fetch && git diff HEAD origin/main -- deploy/nginx`.
   Apply it to `/etc/nginx/sites-available/root`,
   `/etc/nginx/snippets/root-security-headers.conf` or
   `/etc/nginx/sites-available/root-mockup`, keeping a copy of the old file. Then
@@ -354,7 +361,7 @@ What to do for each exit 2. `git` runs as the account that owns
 - **`docker-compose.prod.yml` changed.** Read the diff the same way, deploy the
   API by hand (above), then **Run workflow**.
 - **`.env.production.example` changed.** Read the diff the same way, add what
-  the new lines need to `/srv/root/app/.env`, then `git pull --ff-only`, then
+  the new lines need to `/opt/stacks/root/app/.env`, then `git pull --ff-only`, then
   **Run workflow**.
 - **The installed script differs from the commit's.** `git pull --ff-only`,
   reinstall it (*Server setup for CI*, step 5), then **Run workflow**.
@@ -367,8 +374,8 @@ re-running.
 **Web**: the previous releases are still on disk (five, plus the live one):
 
 ```bash
-ssh you@your-vps 'cd /srv/root && ls releases/'
-ssh you@your-vps 'cd /srv/root && ln -sfn releases/<name> .current.tmp && mv -T .current.tmp current'
+ssh you@your-vps 'cd /opt/stacks/root && ls releases/'
+ssh you@your-vps 'cd /opt/stacks/root && ln -sfn releases/<name> .current.tmp && mv -T .current.tmp current'
 ```
 
 No Nginx reload is needed, because Nginx resolves the root per request.
@@ -377,7 +384,7 @@ No Nginx reload is needed, because Nginx resolves the root per request.
 (`git diff --stat <good>..HEAD -- apps/api/prisma/migrations` prints nothing),
 because a migrated database under old code is worse than the bug. If it did add
 one, fix forward. The dump taken before that migration is in
-`/srv/root/backups/pre-migrate-<stamp>-<sha>.sql.gz` (root only; the newest
+`/opt/stacks/root/backups/pre-migrate-<stamp>-<sha>.sql.gz` (root only; the newest
 five are kept).
 
 1. In GitHub, **Settings, Secrets and variables, Actions, Variables**: set
@@ -385,12 +392,12 @@ five are kept).
    you work.
 2. On the box, check out the last good commit and rebuild:
    ```bash
-   cd /srv/root/app && git checkout --detach <good sha>
+   cd /opt/stacks/root/app && git checkout --detach <good sha>
    docker compose -f docker-compose.prod.yml up -d --build
    ```
    Roll the web back to that commit's release too (above).
 3. Revert the bad commit on `main`. On the box, run `git checkout main` in
-   `/srv/root/app`, then set `DEPLOY_ENABLED` back to `true`. The next push
+   `/opt/stacks/root/app`, then set `DEPLOY_ENABLED` back to `true`. The next push
    deploys the revert.
 
 ### Checks after every deploy
@@ -400,7 +407,7 @@ the new checkout, so a change that adds a check edits that file in its own diff,
 and nobody reinstalls the root script. By hand, on the box:
 
 ```bash
-bash /srv/root/app/deploy/checks.sh /srv/root/current
+bash /opt/stacks/root/app/deploy/checks.sh /opt/stacks/root/current
 ```
 
 An optional second argument is the origin (default `https://m-root.com`). It
@@ -446,7 +453,7 @@ exists for it.
 Once, by you, as your sudo user. **Before you start**, deploy the commit that
 carries these files by hand (*Deploying by hand*: web and API), and bring the
 live Nginx files and `.env` up to that commit. The first CI run then starts
-from a checkout that is current, and `/srv/root/app/deploy/root-deploy.sh`
+from a checkout that is current, and `/opt/stacks/root/app/deploy/root-deploy.sh`
 exists. The checkout must be on `main`, cloned by your own account (*First
 time*, step 2). One command per line, with `sudo` on each.
 
@@ -501,7 +508,7 @@ time*, step 2). One command per line, with `sudo` on each.
 
 5. **The script**, from the checkout:
    ```bash
-   sudo install -o root -g root -m 0755 /srv/root/app/deploy/root-deploy.sh /usr/local/sbin/root-deploy
+   sudo install -o root -g root -m 0755 /opt/stacks/root/app/deploy/root-deploy.sh /usr/local/sbin/root-deploy
    ```
 
 6. **Prove the account.** `id` shows no `docker` group, `sudo -l` lists the one
@@ -511,7 +518,7 @@ time*, step 2). One command per line, with `sudo` on each.
    id root-deploy
    sudo -l -U root-deploy
    sudo -u root-deploy docker ps
-   sudo runuser -u nobody -- bash /srv/root/app/deploy/checks.sh /srv/root/current
+   sudo runuser -u nobody -- bash /opt/stacks/root/app/deploy/checks.sh /opt/stacks/root/current
    ```
 
 7. **On GitHub (web)**, in `rishe-eco/root-app`. Settings, **Environments**,

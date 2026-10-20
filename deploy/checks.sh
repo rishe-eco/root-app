@@ -3,7 +3,7 @@
 # new checkout, and by hand from the box:
 #
 #   bash deploy/checks.sh <live web dir> [origin]
-#   bash /srv/root/app/deploy/checks.sh /srv/root/current
+#   bash /opt/stacks/root/app/deploy/checks.sh /opt/stacks/root/current
 #
 # A change that adds a deploy check adds it here, in its own diff, so nobody reinstalls the
 # root-owned script to get it. It needs only bash, curl, grep, sed, tr and cmp, and it never reads
