@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
@@ -197,7 +197,19 @@ export default function Contracts() {
                         </td>
                         <td>{relativeTime(c.updatedAt, locale)}</td>
                         <td>
-                          <span className="cview">{t('contracts.view')} ›</span>
+                          {/* The real navigation lives here so the row is reachable by
+                              keyboard; the <tr> onClick is only a mouse convenience.
+                              stopPropagation keeps one click from navigating twice. */}
+                          <Link
+                            className="cview"
+                            to={href}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {t('contracts.view')}
+                            {/* Every row's link would otherwise read just "View". */}
+                            <span className="sr-only"> {pick(doc, 'title', locale)}</span>
+                            <span aria-hidden="true"> ›</span>
+                          </Link>
                         </td>
                       </tr>
                     );

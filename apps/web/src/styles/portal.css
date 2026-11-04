@@ -60,10 +60,13 @@
 .ctable td { padding: var(--space-4) var(--space-5); border-block-end: 1px solid var(--color-border); font-size: var(--text-body); vertical-align: middle; }
 .ctable tr:last-child td { border-block-end: none; }
 .crow { cursor: pointer; transition: background var(--dur-fast) var(--ease); }
-.crow:hover { background: var(--color-panel); }
+/* :focus-within so tabbing to the row's "View" link lights the row the same
+   way hovering it does — the keyboard equivalent of the pointer affordance. */
+.crow:hover, .crow:focus-within { background: var(--color-panel); }
 .cname { font-weight: var(--weight-semibold); color: var(--color-text); text-decoration: none; }
 .cclient { font-size: var(--text-small); color: var(--color-text-muted); margin-block-start: 2px; }
-.cview { color: var(--color-secondary); text-decoration: none; font-size: var(--text-small); white-space: nowrap; }
+.cview { display: inline-block; color: var(--color-secondary); text-decoration: none; font-size: var(--text-small); white-space: nowrap; }
+.cview:hover { text-decoration: underline; }
 
 /* ---- Status badges ----------------------------------------------------- */
 .st-badge { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-caption); font-weight: var(--weight-medium); padding: 4px 11px; border-radius: var(--radius-full); white-space: nowrap; }
