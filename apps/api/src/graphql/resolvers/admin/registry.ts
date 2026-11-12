@@ -10,6 +10,7 @@ import {
   reorderTargetIndex,
 } from '../../../lib/scope.js';
 import { scopeKindForKey } from '../../../lib/templates.js';
+import { checkScopeKey, nextCustomKey } from '../../../lib/scopeProposals.js';
 import { reload } from '../contracts.js';
 import { assertProjectActive, contractOnProject, primaryContractId, reloadOnProject } from './shared.js';
 import { syncBriefDependencies } from '../brief.js';
@@ -76,10 +77,18 @@ export const registryMutations = {
    * uses for the SCOPE template. An item that genuinely starts life only
    * proposed (the scoping-stage flow spec §4 stage 2 describes) has no screen
    * yet — that is L2/L3's to build.
+   *
+   * **SC1 — step 2a's own "add an item".** `key` is optional: without one the
+   * item takes the next `custom.<n>` on the project (`nextCustomKey`, the rule
+   * a confirmed customer proposal uses), so sales types a label, not an
+   * identifier. A typed key must pass `checkScopeKey` (`INVALID_KEY`), and one
+   * already on the project is `KEY_TAKEN` rather than a database error. Both
+   * labels are required (`LABEL_REQUIRED`). The project row is locked with the
+   * contract, so two items added at once cannot choose the same number.
    */
   addScopeItem: async (
     _p: unknown,
-    args: { contractId: string; key: string; labelFa: string; labelEn: string; kind?: ScopeKind | null },
+    args: { contractId: string; key?: string | null; labelFa: string; labelEn: string; kind?: ScopeKind | null },
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
@@ -87,26 +96,44 @@ export const registryMutations = {
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
     }
-    await prisma.$transaction(async (tx) => {
-      await lockContract(tx, contract.id);
-      await assertStepOpenOn(contract.id, 'SCOPE', null, tx);
-      const count = await tx.scopeItem.count({ where: { projectId: contract.projectId } });
-      await tx.scopeItem.create({
-        data: {
-          projectId: contract.projectId,
-          key: args.key,
-          labelFa: args.labelFa,
-          labelEn: args.labelEn,
-          position: count,
-          status: 'AGREED',
-          // T1: an explicit kind wins; without one the key decides, by the same
-          // rule the migration classified existing rows with.
-          kind: args.kind ?? scopeKindForKey(args.key),
-          // Agreed by this contract — it is the one the desk typed it into.
-          contractId: contract.id,
-        },
+    const labelFa = args.labelFa.trim();
+    const labelEn = args.labelEn.trim();
+    if (!labelFa || !labelEn) {
+      throw new GraphQLError('Both labels are required.', { extensions: { code: 'LABEL_REQUIRED' } });
+    }
+    const typedKey = args.key?.trim() || null;
+    if (typedKey && checkScopeKey(typedKey)) {
+      throw new GraphQLError('That key is not valid.', { extensions: { code: 'INVALID_KEY' } });
+    }
+    try {
+      await prisma.$transaction(async (tx) => {
+        await lockContract(tx, contract.id);
+        await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${contract.projectId} FOR UPDATE`;
+        await assertStepOpenOn(contract.id, 'SCOPE', null, tx);
+        const taken = await tx.scopeItem.findMany({ where: { projectId: contract.projectId }, select: { key: true } });
+        const key = typedKey ?? nextCustomKey(taken.map((t) => t.key));
+        await tx.scopeItem.create({
+          data: {
+            projectId: contract.projectId,
+            key,
+            labelFa,
+            labelEn,
+            position: taken.length,
+            status: 'AGREED',
+            // T1: an explicit kind wins; without one the key decides, by the same
+            // rule the migration classified existing rows with.
+            kind: args.kind ?? scopeKindForKey(key),
+            // Agreed by this contract — it is the one the desk typed it into.
+            contractId: contract.id,
+          },
+        });
       });
-    });
+    } catch (err) {
+      if (err && typeof err === 'object' && (err as { code?: unknown }).code === 'P2002') {
+        throw new GraphQLError('That key is already used on this project.', { extensions: { code: 'KEY_TAKEN' } });
+      }
+      throw err;
+    }
     return reload(args.contractId);
   },
 
@@ -131,9 +158,27 @@ export const registryMutations = {
     return reloadOnProject(item.projectId, args.contractId);
   },
 
+  /**
+   * **SC1: never takes the customer's words with it.** A note anchored on the
+   * item and a proposal naming it both cascade on delete, and a trade
+   * restricts it — so an item anything points at is `ITEM_IN_USE`, and the
+   * way to take it out is to decline it (`setScopeItemStatus`), which the
+   * customer sees with its reason. Deleting is for an item nobody has
+   * touched: in practice one Root added by mistake before the handover.
+   */
   deleteScopeItem: async (_p: unknown, args: { scopeItemId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const item = await loadScopeItem(args.scopeItemId);
+    const [notes, proposals, trades] = await Promise.all([
+      prisma.feedbackItem.count({ where: { anchorScopeItemId: item.id } }),
+      prisma.scopeProposal.count({ where: { OR: [{ scopeItemId: item.id }, { createdItemId: item.id }] } }),
+      prisma.scopeTrade.count({ where: { OR: [{ outItemId: item.id }, { inItemId: item.id }] } }),
+    ]);
+    if (notes + proposals + trades > 0) {
+      throw new GraphQLError('Something already refers to this item; decline it instead.', {
+        extensions: { code: 'ITEM_IN_USE' },
+      });
+    }
     await inOpenScope(item, args.contractId, (tx) => tx.scopeItem.delete({ where: { id: item.id } }));
     return reloadOnProject(item.projectId, args.contractId);
   },

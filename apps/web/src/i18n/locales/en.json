@@ -1610,11 +1610,11 @@
   "scope": {
     "lede": {
       "customer": "This is what Root has agreed to build for you. Ask for anything to be added, removed or brought back — Root answers every request, and you will see what became of it.",
-      "staff": "The pages, features and deliverables this contract agrees to. Start from the site type’s list, then confirm or decline each request the customer makes."
+      "staff": "The pages, features and deliverables this contract agrees to. Start from the site type’s list or add items yourself, then confirm or decline each request the customer makes."
     },
     "empty": {
       "customer": "Root has not set out the list yet.",
-      "staff": "Nothing here yet. Apply the site type’s starting list, or add items in the Scope tab."
+      "staff": "Nothing here yet. Apply the site type’s starting list, or add an item below."
     },
     "group": {
       "PAGE": "Pages",
@@ -1738,15 +1738,28 @@
       "ALREADY_DECIDED": "That proposal has already been decided.",
       "REASON_REQUIRED": "Declining a proposal needs a reason — the customer reads it.",
       "REASON_TOO_LONG": "That reason is too long.",
-      "LABEL_REQUIRED": "Confirming an addition needs its label in both languages.",
+      "LABEL_REQUIRED": "Both labels, Persian and English, are needed.",
       "INVALID_KEY": "A key is Latin letters and digits joined by dots or hyphens.",
       "KEY_TAKEN": "That key is already used on this project.",
       "ITEM_STATE_CHANGED": "That item is no longer in the state it was in when the proposal was made.",
-      "SCOPE_ALREADY_SEEDED": "This contract already has pages, features or deliverables.",
+      "SCOPE_ALREADY_SEEDED": "The site type’s list is already applied to this contract.",
       "BRIEF_MISSING": "Choose the site type in step 1 first.",
       "TEMPLATE_SCOPE_EMPTY": "That site type’s list is still empty.",
       "ALREADY_CONFIRMED": "Already confirmed.",
-      "ALREADY_EXECUTED": "That trade has already been carried out."
+      "ALREADY_EXECUTED": "That trade has already been carried out.",
+      "ITEM_IN_USE": "Something already refers to this item — take it out with a reason instead."
+    },
+    "add": {
+      "title": "Add an item",
+      "help": "Added straight to this contract, as agreed. The site type’s list is not changed.",
+      "submit": "Add",
+      "done": "Added to the list."
+    },
+    "staffRemove": {
+      "action": "Remove",
+      "confirmDelete": "Remove “{{label}}” from this contract? The customer has not been handed the list yet, so it is simply deleted.",
+      "decline": "Take out…",
+      "declineSend": "Take it out with this reason"
     }
   },
   "draft": {

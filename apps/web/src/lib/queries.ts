@@ -868,6 +868,8 @@ export type Contract = {
   phases?: Array<Pick<Phase, 'id' | 'number' | 'titleFa' | 'titleEn' | 'contractId' | 'plannedEndAt'>>;
   /** Journeys build plan J5 — step 2a: the customer's proposals, oldest first. */
   scopeProposals?: ScopeProposal[];
+  /** SC1 — the site type's list has been applied to this contract (hand-added items do not count). */
+  scopeTemplateApplied?: boolean;
   /** Journeys build plan J6 — the planned start and end (Q12), calendar days: null
    *  to a customer until a draft is published, and while unset. */
   plannedStartAt?: string | null;
@@ -1179,6 +1181,7 @@ export const WIZARD_FIELDS = gql`
       position
     }
     designMissing
+    scopeTemplateApplied
     scopeProposals {
       id
       kind
@@ -2974,8 +2977,8 @@ export const APPROVE_DESIGN = gql`
 
 export const ADD_SCOPE_ITEM = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation AddScopeItem($contractId: ID!, $key: String!, $labelFa: String!, $labelEn: String!) {
-    addScopeItem(contractId: $contractId, key: $key, labelFa: $labelFa, labelEn: $labelEn) {
+  mutation AddScopeItem($contractId: ID!, $key: String, $labelFa: String!, $labelEn: String!, $kind: ScopeKind) {
+    addScopeItem(contractId: $contractId, key: $key, labelFa: $labelFa, labelEn: $labelEn, kind: $kind) {
       ...ContractWorkspaceFields
     }
   }

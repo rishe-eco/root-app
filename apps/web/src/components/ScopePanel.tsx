@@ -18,6 +18,7 @@ import {
   type ProposableKind,
 } from '@/lib/scopeStep';
 import {
+  ADD_SCOPE_ITEM,
   APPLY_SCOPE_TEMPLATE,
   CONFIRM_SCOPE_TRADE_CUSTOMER,
   CONTRACT_FEEDBACK,
@@ -25,6 +26,8 @@ import {
   PROPOSE_RESTORE,
   PROPOSE_SCOPE_ADDITION,
   PROPOSE_SCOPE_REMOVAL,
+  DELETE_SCOPE_ITEM,
+  SET_SCOPE_ITEM_STATUS,
   type Contract,
   type FeedbackItem,
   type ScopeItem,
@@ -50,8 +53,12 @@ import type { StepPanelProps } from '@/components/StepPanels';
  * **Staff see the same list and the queue that empties it**: each undecided
  * proposal with its confirm/decline controls (an ADD is confirmed with both
  * labels — the customer wrote one language, the registry needs two), the
- * "apply the site type's list" button while the contract has no scope of its
- * own, and the history of what was decided.
+ * "apply the site type's list" button until that list has been applied, and
+ * the history of what was decided. **SC1:** sales can also add an item
+ * straight to this contract — agreed, with both labels, the site type's own
+ * list untouched — and take one out: deleted while nothing refers to it (in
+ * practice, before the handover), declined with a reason the customer reads
+ * once it is theirs to see.
  *
  * A locked step (`step.locked`) draws no form: a control that can only fail is
  * worse than one that is not there, and the API refuses with `STEP_LOCKED`
@@ -128,6 +135,167 @@ function ItemActions({ item, waiting, canPropose }: { item: ScopeItem; waiting: 
         </button>
       </div>
       {error ? <p className="error" role="alert">{error}</p> : null}
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Root's own controls on one item (SC1): take it out
+// ---------------------------------------------------------------------------
+
+/**
+ * Before the handover the customer has never seen the list, so a mistaken item
+ * is simply deleted. After it, the customer may have read or noted on it, so
+ * taking it out is a decline with a reason — it stays on their list under
+ * "left out", and they can ask for it back. The API refuses a delete of an
+ * item anything refers to (`ITEM_IN_USE`), whichever the screen offered.
+ */
+function StaffItemActions({ item, contract }: { item: ScopeItem; contract: Contract }) {
+  const { t } = useTranslation();
+  const locale = useLocale();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [del, { loading: deleting }] = useMutation(DELETE_SCOPE_ITEM);
+  const [setStatus, { loading: declining }] = useMutation(SET_SCOPE_ITEM_STATUS);
+  if (item.status !== 'AGREED') return null;
+  const handedOver = !!contract.publishedAt;
+
+  async function onDelete() {
+    if (!window.confirm(t('scope.staffRemove.confirmDelete', { label: pick(item, 'label', locale) }))) return;
+    setError(null);
+    try {
+      await del({ variables: { scopeItemId: item.id, contractId: contract.id } });
+    } catch (err) {
+      setError(refusalText(t, err));
+    }
+  }
+
+  async function onDecline(e: FormEvent) {
+    e.preventDefault();
+    if (!reason.trim()) return;
+    setError(null);
+    try {
+      await setStatus({ variables: { scopeItemId: item.id, status: 'DECLINED', reason: reason.trim(), contractId: contract.id } });
+      setOpen(false);
+      setReason('');
+    } catch (err) {
+      setError(refusalText(t, err));
+    }
+  }
+
+  if (!handedOver) {
+    return (
+      <>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onDelete} disabled={deleting} data-testid="scope-staff-delete">
+          {t('scope.staffRemove.action')}
+        </button>
+        {error ? <p className="error" role="alert">{error}</p> : null}
+      </>
+    );
+  }
+  if (!open) {
+    return (
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)} data-testid="scope-staff-decline">
+        {t('scope.staffRemove.decline')}
+      </button>
+    );
+  }
+  return (
+    <form className="scope-propose-form" onSubmit={onDecline} data-testid="scope-staff-decline-form">
+      <textarea
+        className="input"
+        rows={2}
+        dir="auto"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder={t('scope.decide.reason')}
+        aria-label={t('scope.decide.reason')}
+      />
+      <p className="t-caption">{t('scope.decide.reasonHelp')}</p>
+      <div className="workspace-row">
+        <button className="btn btn-primary btn-sm" type="submit" disabled={declining || !reason.trim()}>
+          {t('scope.staffRemove.declineSend')}
+        </button>
+        <button className="btn btn-ghost btn-sm" type="button" onClick={() => setOpen(false)}>
+          {t('feedback.cancel')}
+        </button>
+      </div>
+      {error ? <p className="error" role="alert">{error}</p> : null}
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Root adds an item straight to this contract (SC1)
+// ---------------------------------------------------------------------------
+
+function AddItemForm({ contract }: { contract: Contract }) {
+  const { t } = useTranslation();
+  const [kind, setKind] = useState<ProposableKind>('PAGE');
+  const [labelFa, setLabelFa] = useState('');
+  const [labelEn, setLabelEn] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [added, setAdded] = useState(false);
+  const [add, { loading }] = useMutation(ADD_SCOPE_ITEM);
+  const ready = labelFa.trim() !== '' && labelEn.trim() !== '';
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setAdded(false);
+    if (!ready) return;
+    try {
+      await add({ variables: { contractId: contract.id, labelFa: labelFa.trim(), labelEn: labelEn.trim(), kind } });
+      setLabelFa('');
+      setLabelEn('');
+      setAdded(true);
+    } catch (err) {
+      setError(refusalText(t, err));
+    }
+  }
+
+  return (
+    <form className="card editor-card scope-add" onSubmit={submit} data-testid="scope-add">
+      <h4 className="t-h4">{t('scope.add.title')}</h4>
+      <p className="sec-help">{t('scope.add.help')}</p>
+      <div className="field">
+        <label className="label" htmlFor="scope-add-kind">
+          {t('scope.decide.kind')}
+        </label>
+        <select id="scope-add-kind" className="input" value={kind} onChange={(e) => setKind(e.target.value as ProposableKind)}>
+          {PROPOSABLE_KINDS.map((k) => (
+            <option key={k} value={k}>
+              {t(`scope.kind.${k}`)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="editor-grid-2">
+        <div className="field">
+          <label className="label" htmlFor="scope-add-fa">
+            {t('scope.decide.labelFa')}
+          </label>
+          <input id="scope-add-fa" className="input" dir="rtl" value={labelFa} onChange={(e) => setLabelFa(e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="scope-add-en">
+            {t('scope.decide.labelEn')}
+          </label>
+          <input id="scope-add-en" className="input" dir="ltr" value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
+        </div>
+      </div>
+      <div>
+        <button className="btn btn-primary btn-sm" type="submit" disabled={loading || !ready} data-testid="scope-add-submit">
+          {t('scope.add.submit')}
+        </button>
+      </div>
+      {added ? (
+        <p className="t-small" role="status" data-testid="scope-add-done">
+          {t('scope.add.done')}
+        </p>
+      ) : null}
+      {error ? <p className="error" role="alert" data-testid="scope-add-error">{error}</p> : null}
     </form>
   );
 }
@@ -473,7 +641,11 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
         ) : null}
       </span>
     ),
-    actions: <ItemActions item={item} waiting={waitingProposalFor(proposals, item.id)} canPropose={canPropose} />,
+    actions: canDecide ? (
+      <StaffItemActions item={item} contract={contract} />
+    ) : (
+      <ItemActions item={item} waiting={waitingProposalFor(proposals, item.id)} canPropose={canPropose} />
+    ),
     input: { scopeItemId: item.id },
     item: noteFor(item.id),
   });
@@ -495,7 +667,7 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
         </p>
       ) : null}
 
-      {canDecide && items.length === 0 ? <SeedCard contract={contract} /> : null}
+      {canDecide && !contract.scopeTemplateApplied ? <SeedCard contract={contract} /> : null}
 
       {staff && waiting.length > 0 ? (
         <section className="scope-queue" data-testid="scope-queue">
@@ -545,6 +717,8 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
           {staff ? t('scope.locked.staff') : t('scope.locked.customer')}
         </p>
       ) : null}
+
+      {canDecide ? <AddItemForm contract={contract} /> : null}
 
       {canPropose ? <AskForm contract={contract} /> : null}
 

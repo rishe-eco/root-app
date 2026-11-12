@@ -1508,6 +1508,8 @@ export const typeDefs = /* GraphQL */ `
     "This contract's own phases (PD-5). Project.phases is every phase of the project."
     phases: [Phase!]!
 
+    "SC1: the brief's site type has been applied to this contract's scope (hand-added items do not count)."
+    scopeTemplateApplied: Boolean!
     "Journeys build plan J5 — step 2a. Oldest first; the customer's words and Root's decisions."
     scopeProposals: [ScopeProposal!]!
     """
@@ -3166,9 +3168,11 @@ export const typeDefs = /* GraphQL */ `
     """
     Created AGREED — Root adding it here is the agreement act. See CHECKLIST for
     the DECLINED-by-default seed. kind omitted: classified by its key, the way
-    the T1 migration classified the rows that already existed.
+    the T1 migration classified the rows that already existed. key omitted (SC1):
+    the next custom.<n> on the project. LABEL_REQUIRED, INVALID_KEY, KEY_TAKEN,
+    STEP_LOCKED.
     """
-    addScopeItem(contractId: ID!, key: String!, labelFa: String!, labelEn: String!, kind: ScopeKind): Contract!
+    addScopeItem(contractId: ID!, key: String, labelFa: String!, labelEn: String!, kind: ScopeKind): Contract!
     "Live to the customer the instant it is saved — ScopeItem is not versioned."
     updateScopeItem(scopeItemId: ID!, labelFa: String!, labelEn: String!, contractId: ID): Contract!
     deleteScopeItem(scopeItemId: ID!, contractId: ID): Contract!

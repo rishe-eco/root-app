@@ -84,6 +84,34 @@ export function scopeSeeded(items: ReadonlyArray<{ kind: string; contractId: str
 }
 
 /**
+ * Whether the site type's template has already been applied to this contract:
+ * some page, feature or deliverable of the contract's own carries a template
+ * key — the plain key, or the suffixed one `seedRows` gives it on a project
+ * whose registry already holds the plain one (`home`, `home.2`).
+ *
+ * **Not the same question as `scopeSeeded`** (SC1). `scopeSeeded` asks "does
+ * this contract have a scope at all" — the step's done signal. Root can now
+ * add items by hand on step 2a, before or after seeding, so "has items" no
+ * longer means "was seeded": an item typed in first must not make the
+ * template unreachable. A hand-added item takes a `custom.<n>` key and never
+ * counts here; one typed with a template's own key does, and is then already
+ * that template row.
+ */
+export function templateApplied(
+  items: ReadonlyArray<{ key: string; kind: string; contractId: string | null }>,
+  contractId: string,
+  templateKeys: Iterable<string>,
+): boolean {
+  const keys = new Set(templateKeys);
+  return items.some((i) => {
+    if (i.kind === 'EXTRA' || i.contractId !== contractId) return false;
+    if (keys.has(i.key)) return true;
+    const suffixed = /^(.*)\.\d+$/.exec(i.key);
+    return suffixed !== null && keys.has(suffixed[1]);
+  });
+}
+
+/**
  * Step 2a's "done" signal (`resolvers/wizard.ts`) and the gate on publishing
  * the draft (`publishContractRevision`): the scope exists **and** nothing
  * awaits Root's decision. One function, so the wizard cannot call the step done

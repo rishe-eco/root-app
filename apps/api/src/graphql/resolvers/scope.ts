@@ -14,8 +14,8 @@ import {
   isProposalLang,
   removable,
   restorable,
-  scopeSeeded,
   seedRows,
+  templateApplied,
   type DecisionInput,
   type DecisionProblem,
   type ProposalKind,
@@ -372,8 +372,9 @@ export const scopeMutations = {
    * Seeds this contract's scope from the template type its brief chose
    * (`contracts.author`): every page, feature and deliverable the type lists,
    * agreed, of this contract's own. **`SCOPE_ALREADY_SEEDED`** when the
-   * contract already has any (`scopeSeeded` — L1's own guard, made per
-   * contract).
+   * template is already applied to this contract (`templateApplied`, SC1).
+   * Items Root added by hand do not count: they take `custom.<n>` keys, and
+   * the template's rows are written beside them.
    *
    * **A second contract on the same project** (J2) has none of its own even
    * though the project's registry is full, so it can be seeded: a key the
@@ -420,8 +421,9 @@ export const scopeMutations = {
         where: { projectId: contract.projectId },
         select: { key: true, kind: true, contractId: true },
       });
-      if (scopeSeeded(registry, contract.id)) {
-        throw refuse('SCOPE_ALREADY_SEEDED', 'This contract already has pages, features or deliverables.');
+      // SC1: items Root added by hand do not count — only the template's own.
+      if (templateApplied(registry, contract.id, template.map((t) => t.key))) {
+        throw refuse('SCOPE_ALREADY_SEEDED', 'The site type’s template is already applied to this contract.');
       }
 
       const rows = seedRows(template, registry.map((r) => r.key), registry.length);
@@ -489,6 +491,21 @@ export const scopeMutations = {
  * meant to see, and no money. Spread into `Contract` in `resolvers/index.ts`.
  */
 export const contractScopeFields = {
+  /**
+   * SC1: whether the brief's site type has been applied to this contract's
+   * scope, so the desk offers "start from the template" exactly while
+   * `applyScopeTemplate` would accept it. False with no brief, or a type with
+   * nothing in its template.
+   */
+  scopeTemplateApplied: async (c: FullContract) => {
+    const brief = await prisma.contractBrief.findUnique({ where: { contractId: c.id }, select: { templateTypeId: true } });
+    if (!brief) return false;
+    const [template, items] = await Promise.all([
+      prisma.templateScopeItem.findMany({ where: { typeId: brief.templateTypeId }, select: { key: true } }),
+      prisma.scopeItem.findMany({ where: { contractId: c.id }, select: { key: true, kind: true, contractId: true } }),
+    ]);
+    return templateApplied(items, c.id, template.map((t) => t.key));
+  },
   scopeProposals: (c: FullContract) =>
     prisma.scopeProposal.findMany({
       where: { contractId: c.id },

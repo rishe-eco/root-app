@@ -17,6 +17,7 @@ import {
   scopeSeeded,
   scopeStepDone,
   seedRows,
+  templateApplied,
 } from './scopeProposals.js';
 import { scopeKindForKey } from './templates.js';
 
@@ -223,6 +224,19 @@ test('seedRows: keys keep their own kind, and a taken key takes the next free su
     seedRows([{ key: 'x', labelFa: 'ا', labelEn: 'A' }, { key: 'x', labelFa: 'ا', labelEn: 'A' }], [], 0).map((r) => r.key),
     ['x', 'x.2'],
   );
+});
+
+test('templateApplied (SC1): a template key of this contract’s own, plain or suffixed — never a hand-added custom.<n>, another contract’s, or an extra', () => {
+  const keys = ['home', 'checkout', 'blog.archive'];
+  const own = (key: string, kind = 'PAGE') => ({ key, kind, contractId: 'c1' });
+  assert.equal(templateApplied([], 'c1', keys), false);
+  assert.equal(templateApplied([own('custom.1'), own('custom.2', 'FEATURE')], 'c1', keys), false, 'hand-added only');
+  assert.equal(templateApplied([own('custom.1'), own('home')], 'c1', keys), true);
+  assert.equal(templateApplied([own('home.2')], 'c1', keys), true, 'the suffix seedRows gives on a shared project');
+  assert.equal(templateApplied([own('blog.archive.3')], 'c1', keys), true, 'a dotted template key, suffixed');
+  assert.equal(templateApplied([own('homepage')], 'c1', keys), false, 'a prefix is not the key');
+  assert.equal(templateApplied([{ key: 'home', kind: 'PAGE', contractId: 'c2' }], 'c1', keys), false, 'another contract’s');
+  assert.equal(templateApplied([own('home', 'EXTRA')], 'c1', keys), false, 'the checklist never counts');
 });
 
 test('the enums agree across the schema and the SDL', () => {
