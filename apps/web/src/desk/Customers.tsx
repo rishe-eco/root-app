@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { can } from '@/lib/access';
 import { ALL_CUSTOMERS, INVITE_CUSTOMER, type User } from '@/lib/queries';
+import { InviteLinkBox } from './AccountTools';
 
 export default function Customers() {
   const { t } = useTranslation();
@@ -109,14 +110,7 @@ export default function Customers() {
         </form>
 
         {error ? <p className="error">{error}</p> : null}
-        {inviteUrl ? (
-          <div className="auth-notice">
-            <p className="t-small">{t('desk.inviteOnce')}</p>
-            <code className="desk-code" dir="ltr">
-              {inviteUrl}
-            </code>
-          </div>
-        ) : null}
+        {inviteUrl ? <InviteLinkBox url={inviteUrl} note={t('desk.inviteOnce')} /> : null}
 
         <div className="table-wrap">
           <table className="ctable">

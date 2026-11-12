@@ -18,6 +18,7 @@ import { normalizePhone } from '../../lib/phone.js';
 import { resolveLocale } from '../../lib/mailTemplates.js';
 import { notify } from '../../lib/notify.js';
 import { newLinkToken } from '../../auth/tokens.js';
+import { ERASED_NAME, erasedEmailFor, isErased } from '../../lib/erasure.js';
 import { contractInclude } from './contracts.js';
 import { ticketInclude } from './tickets.js';
 
@@ -80,6 +81,38 @@ function asLastRole(err: unknown): unknown {
 
 const isUniqueViolation = (err: unknown) =>
   !!err && typeof err === 'object' && (err as { code?: unknown }).code === 'P2002';
+const isForeignKeyViolation = (err: unknown) =>
+  !!err && typeof err === 'object' && (err as { code?: unknown }).code === 'P2003';
+
+/**
+ * The account-administration rule `setUserState` states, as one function for
+ * every act on someone else's account (US1): `staff.manage` for an account
+ * holding any staff role — a mixed account is a staff account — and
+ * `customers.manage` for a customer. Refuses FORBIDDEN; returns the target.
+ */
+async function loadManagedAccount(actor: User, userId: string): Promise<User> {
+  if (!can(actor, 'customers.manage') && !can(actor, 'staff.manage')) throw forbidden();
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) throw notFound('account');
+  if (!can(actor, hasStaffRole(target) ? 'staff.manage' : 'customers.manage')) throw forbidden();
+  return target;
+}
+
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** A fresh invite link for an account, revoking any it was sent before. */
+async function issueInvite(user: User) {
+  const { raw, hash } = newLinkToken();
+  const expiresAt = new Date(Date.now() + env.INVITE_DAYS * 24 * 60 * 60 * 1000);
+  await prisma.$transaction([
+    prisma.authToken.updateMany({
+      where: { userId: user.id, purpose: 'INVITE', usedAt: null, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+    prisma.authToken.create({ data: { userId: user.id, purpose: 'INVITE', tokenHash: hash, expiresAt } }),
+  ]);
+  return { userId: user.id, email: user.email, inviteUrl: `${env.APP_ORIGIN}/${user.locale}/portal/invite/${raw}`, expiresAt };
+}
 
 /**
  * One customer, everything sales needs on a single page. Returned as a
@@ -209,6 +242,10 @@ export const peopleMutations = {
         return tx.user.update({ where: { id: target.id }, data: { state: 'DISABLED' } });
       });
     }
+
+    // An erased account has no identifier to sign in with and no person
+    // behind it: restoring it would be an account nobody can reach.
+    if (isErased(target)) throw refuse('ACCOUNT_ERASED', 'That account was anonymized and cannot be restored.');
 
     // Restoring puts the account back where it was: a person who never
     // accepted their invite has no password to be "active" with, and their
@@ -374,5 +411,186 @@ export const peopleMutations = {
     } catch (err) {
       throw asLastRole(err);
     }
+  },
+  /**
+   * US1 — edit an account's name, phone and email (and a customer's company
+   * name). Who may: the same rule as disabling (`loadManagedAccount`), so sales
+   * edits customers and only an administrator edits staff.
+   *
+   * The phone and email are **sign-in identifiers**, so they get the checks an
+   * invite gives them: the phone is normalized (`PHONE_INVALID`), the email
+   * lower-cased and shaped (`EMAIL_INVALID`), at least one stays
+   * (`IDENTIFIER_REQUIRED` — the `User_has_identifier` CHECK, as a refusal
+   * someone can act on), one belonging to another account is
+   * `IDENTIFIER_CONFLICT`, and an account whose roles sign in with a code keeps
+   * its phone (`PHONE_REQUIRED_FOR_STAFF`).
+   *
+   * **Changing either identifier revokes every outstanding link and code**
+   * (invite, reset, login code, factor): each was sent to the old address, and
+   * the reason to change an address is usually that the old one is wrong or
+   * no longer theirs. The desk can issue a fresh invite (`reissueInvite`).
+   */
+  updateUser: async (
+    _p: unknown,
+    args: { userId: string; name: string; phone?: string | null; email?: string | null; clientName?: string | null },
+    ctx: Context,
+  ) => {
+    const actor = requireUser(ctx);
+    const target = await loadManagedAccount(actor, args.userId);
+    if (isErased(target)) throw refuse('ACCOUNT_ERASED', 'That account was anonymized.');
+
+    const name = args.name.trim();
+    if (!name) throw refuse('NAME_REQUIRED', 'A name is required.');
+    const rawPhone = args.phone?.trim();
+    const phone = rawPhone ? normalizePhone(rawPhone) : null;
+    if (rawPhone && !phone) throw refuse('PHONE_INVALID', 'That does not look like a phone number.');
+    const email = args.email?.trim().toLowerCase() || null;
+    if (email && !EMAIL_SHAPE.test(email)) throw refuse('EMAIL_INVALID', 'That does not look like an email address.');
+    if (!phone && !email) throw refuse('IDENTIFIER_REQUIRED', 'A phone number or an email is required.');
+    if (requiresSecondFactor(target) && !phone) {
+      throw refuse('PHONE_REQUIRED_FOR_STAFF', 'This account signs in with a code sent to a phone; a phone number is required.');
+    }
+    const clientName = args.clientName === undefined ? target.clientName : args.clientName?.trim() || null;
+    const identifiersChanged = phone !== target.phone || email !== target.email;
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        if (identifiersChanged) {
+          await tx.authToken.updateMany({
+            where: { userId: target.id, usedAt: null, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
+        }
+        return tx.user.update({ where: { id: target.id }, data: { name, phone, email, clientName } });
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) throw refuse('IDENTIFIER_CONFLICT', 'That phone or email belongs to another account.');
+      throw err;
+    }
+  },
+
+  /**
+   * US1 — a fresh invite link for an account that has not accepted one yet,
+   * for when the first was never copied or never arrived. The raw link is
+   * never stored (only its hash), so the old one cannot be shown again: this
+   * **revokes every earlier invite link** and returns a new one. Nothing is
+   * sent — the desk copies it — so it works with no SMS or mail provider.
+   *
+   * Refused: `ALREADY_ACTIVE` (they have a password; a reset is the way back),
+   * `ACCOUNT_DISABLED` (restore first — an invite is a way in), FORBIDDEN by
+   * the usual rule.
+   */
+  reissueInvite: async (_p: unknown, args: { userId: string }, ctx: Context) => {
+    const actor = requireUser(ctx);
+    const target = await loadManagedAccount(actor, args.userId);
+    if (target.state === 'ACTIVE') throw refuse('ALREADY_ACTIVE', 'That account is already active.');
+    if (target.state === 'DISABLED') throw refuse('ACCOUNT_DISABLED', 'That account is disabled; restore it first.');
+    return issueInvite(target);
+  },
+
+  /**
+   * US1 — delete an account outright, **only when nothing records it**: an
+   * invite never accepted, an account made with a typo. Anything that does
+   * record it — a contract, a request, a signature, a log line, an answer, a
+   * tool grant, an assignment — is `HAS_HISTORY`, and the desk then offers
+   * disabling or `anonymizeUser`.
+   *
+   * Most such edges are `Restrict`, so the database itself refuses (caught as
+   * `P2003`). The rest are checked first, because the database would *not*
+   * refuse them: a contract's designer, developer and deliverer, a handed-over
+   * item and an archived request are `SetNull` (a delete would quietly blank
+   * who did the work), and a customer's tool grants cascade.
+   *
+   * Never yourself (`CANNOT_DELETE_SELF`), never the last active administrator
+   * (`LAST_SUPERUSER`, under the same row lock as disabling).
+   */
+  deleteUser: async (_p: unknown, args: { userId: string }, ctx: Context) => {
+    const actor = requireUser(ctx);
+    const target = await loadManagedAccount(actor, args.userId);
+    if (target.id === actor.id) throw refuse('CANNOT_DELETE_SELF', 'You cannot delete your own account.');
+
+    const silentHistory = await prisma.user.findUniqueOrThrow({
+      where: { id: target.id },
+      select: {
+        _count: {
+          select: {
+            designedContracts: true,
+            developedContracts: true,
+            deliveredContracts: true,
+            handedOverItems: true,
+            archivedProjects: true,
+            toolGrants: true,
+          },
+        },
+      },
+    });
+    if (Object.values(silentHistory._count).some((n) => n > 0)) {
+      throw refuse('HAS_HISTORY', 'This account has records; disable or anonymize it instead.');
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await lockActiveSuperusers(tx);
+        const fresh = await tx.user.findUniqueOrThrow({ where: { id: target.id } });
+        if (await isLastActiveSuperuser(tx, fresh)) {
+          throw refuse('LAST_SUPERUSER', 'That is the last active administrator.');
+        }
+        await tx.user.delete({ where: { id: target.id } });
+      });
+    } catch (err) {
+      if (isForeignKeyViolation(err)) {
+        throw refuse('HAS_HISTORY', 'This account has records; disable or anonymize it instead.');
+      }
+      throw err;
+    }
+    return true;
+  },
+
+  /**
+   * US1 — the dangerous half of delete, for an account with history: erase it
+   * in place (`lib/erasure.ts` says why in place). The name becomes
+   * `ERASED_NAME`, the phone, company name and password go, the email becomes
+   * the unroutable sentinel, the account is disabled, and every way back in —
+   * links, codes, API tokens, mockup view grants — is revoked or removed in
+   * the same transaction. Every record that points at the account keeps
+   * pointing at it; none of them names the person any more.
+   *
+   * **Irreversible**, so the caller types the account's current name
+   * (`confirmName`, compared trimmed; `CONFIRM_MISMATCH`), and an erased
+   * account can never be restored or edited (`ACCOUNT_ERASED`). Never
+   * yourself, never the last active administrator.
+   */
+  anonymizeUser: async (_p: unknown, args: { userId: string; confirmName: string }, ctx: Context) => {
+    const actor = requireUser(ctx);
+    const target = await loadManagedAccount(actor, args.userId);
+    if (target.id === actor.id) throw refuse('CANNOT_DELETE_SELF', 'You cannot anonymize your own account.');
+    if (isErased(target)) throw refuse('ACCOUNT_ERASED', 'That account is already anonymized.');
+    if (args.confirmName.trim() !== target.name.trim()) {
+      throw refuse('CONFIRM_MISMATCH', 'Type the account’s name exactly to confirm.');
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await lockActiveSuperusers(tx);
+      const fresh = await tx.user.findUniqueOrThrow({ where: { id: target.id } });
+      if (await isLastActiveSuperuser(tx, fresh)) {
+        throw refuse('LAST_SUPERUSER', 'That is the last active administrator.');
+      }
+      const now = new Date();
+      await tx.authToken.updateMany({ where: { userId: target.id, usedAt: null, revokedAt: null }, data: { revokedAt: now } });
+      await tx.apiToken.updateMany({ where: { userId: target.id, revokedAt: null }, data: { revokedAt: now } });
+      await tx.mockupViewGrant.deleteMany({ where: { viewerId: target.id } });
+      return tx.user.update({
+        where: { id: target.id },
+        data: {
+          name: ERASED_NAME,
+          email: erasedEmailFor(target.id),
+          phone: null,
+          clientName: null,
+          passwordHash: null,
+          passwordChangeRequired: false,
+          state: 'DISABLED',
+        },
+      });
+    });
   },
 };

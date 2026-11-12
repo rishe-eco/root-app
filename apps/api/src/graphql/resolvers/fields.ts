@@ -25,6 +25,7 @@ import { conceptsInclude, type FullContract } from './contracts.js';
 import { feedbackItemInclude } from './feedback.js';
 import { withArticleSensitivity } from './articleSensitivity.js';
 import { agreementView, draftStateOn } from './agreement.js';
+import { isErased } from '../../lib/erasure.js';
 import { isTemplateSensitiveArticle } from '../../lib/templates.js';
 
 /**
@@ -903,9 +904,12 @@ export const User = {
    * hides staff contacts exactly as the customer's own read does.
    */
   email: (u: { id: string; email: string | null }, _a: unknown, ctx: Context) => {
+    // US1: an erased account's sentinel address is a marker, not a contact.
+    if (isErased(u)) return null;
     const viewer = ctx.viewAs ?? ctx.user;
     return !viewer || mayReadContactOf(viewer, u) ? u.email : null;
   },
+  erased: (u: { email: string | null }) => isErased(u),
   phone: (u: { id: string; phone: string | null }, _a: unknown, ctx: Context) => {
     const viewer = ctx.viewAs ?? ctx.user;
     return !viewer || mayReadContactOf(viewer, u) ? u.phone : null;

@@ -47,6 +47,8 @@ export type User = {
   passwordChangeRequired: boolean;
   /** Journeys build plan S3. */
   state: UserState;
+  /** US1: anonymized — the row stays for its records and names no one. */
+  erased?: boolean;
 };
 
 export type UserState = 'INVITED' | 'ACTIVE' | 'DISABLED';
@@ -937,6 +939,7 @@ const USER_FIELDS = gql`
     locale
     passwordChangeRequired
     state
+    erased
   }
 `;
 
@@ -2429,6 +2432,44 @@ export const SET_USER_ROLES = gql`
   ${USER_FIELDS}
   mutation SetUserRoles($userId: ID!, $roles: [Role!]!) {
     setUserRoles(userId: $userId, roles: $roles) {
+      ...UserFields
+    }
+  }
+`;
+
+/** US1. The setUserState rule: staff.manage for staff, customers.manage for customers. */
+export const UPDATE_USER = gql`
+  ${USER_FIELDS}
+  mutation UpdateUser($userId: ID!, $name: String!, $phone: String, $email: String, $clientName: String) {
+    updateUser(userId: $userId, name: $name, phone: $phone, email: $email, clientName: $clientName) {
+      ...UserFields
+    }
+  }
+`;
+
+/** US1. A fresh link for an INVITED account; every earlier one stops working. */
+export const REISSUE_INVITE = gql`
+  mutation ReissueInvite($userId: ID!) {
+    reissueInvite(userId: $userId) {
+      userId
+      inviteUrl
+      expiresAt
+    }
+  }
+`;
+
+/** US1. Only an account nothing records; otherwise HAS_HISTORY. */
+export const DELETE_USER = gql`
+  mutation DeleteUser($userId: ID!) {
+    deleteUser(userId: $userId)
+  }
+`;
+
+/** US1. Irreversible erasure in place; confirmName must equal the current name. */
+export const ANONYMIZE_USER = gql`
+  ${USER_FIELDS}
+  mutation AnonymizeUser($userId: ID!, $confirmName: String!) {
+    anonymizeUser(userId: $userId, confirmName: $confirmName) {
       ...UserFields
     }
   }

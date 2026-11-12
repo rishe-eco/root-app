@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { Fragment, useState, type FormEvent } from 'react';
 import { Navigate, useOutletContext } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
@@ -6,6 +6,7 @@ import { useLocale, lp } from '@/lib/locale';
 import { can, type Role } from '@/lib/access';
 import { ALL_USERS, INVITE_STAFF, SET_USER_ROLES, SET_USER_STATE, type User } from '@/lib/queries';
 import { peopleError } from './peopleErrors';
+import { AccountEditForm, DeleteAccount, InviteLinkBox, ReissueInvite } from './AccountTools';
 
 /**
  * **The Users place — its first slice** (journeys build plan S3, PD-12). Every
@@ -60,9 +61,22 @@ function RoleBoxes({
   );
 }
 
-function UserRow({ user, isMe, onError }: { user: User; isMe: boolean; onError: (message: string | null) => void }) {
+function UserRow({
+  user,
+  isMe,
+  onError,
+  onDeleted,
+}: {
+  user: User;
+  isMe: boolean;
+  onError: (message: string | null) => void;
+  onDeleted: () => void;
+}) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
+  // US1: the account panel under the row — its details form, a fresh invite
+  // link, and delete / anonymize.
+  const [panel, setPanel] = useState(false);
   const [draft, setDraft] = useState<Role[]>(user.roles);
   const [setRoles, { loading: rolesBusy }] = useMutation(SET_USER_ROLES);
   const [setState, { loading: stateBusy }] = useMutation(SET_USER_STATE);
@@ -91,8 +105,27 @@ function UserRow({ user, isMe, onError }: { user: User; isMe: boolean; onError: 
     }
   }
 
+  // An anonymized account keeps its row for the records that point at it; it
+  // has nothing left to edit, invite, restore or delete.
+  if (user.erased) {
+    return (
+      <tr data-testid="user-row" data-erased="true">
+        <td>
+          <span className="desk-muted">{t('desk.people.account.erasedName')}</span>
+        </td>
+        <td>—</td>
+        <td />
+        <td>
+          <span className="badge badge-neutral">{t('desk.people.account.erasedBadge')}</span>
+        </td>
+        <td />
+      </tr>
+    );
+  }
+
   return (
-    <tr>
+    <Fragment>
+    <tr data-testid="user-row" data-user={user.id}>
       <td>
         {user.name}
         {isMe ? <span className="badge badge-neutral people-you">{t('desk.people.users.you')}</span> : null}
@@ -160,9 +193,31 @@ function UserRow({ user, isMe, onError }: { user: User; isMe: boolean; onError: 
               {disabled ? t('desk.people.users.restore') : t('desk.people.users.disable')}
             </button>
           )}
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            aria-expanded={panel}
+            onClick={() => setPanel((v) => !v)}
+            data-testid="user-manage"
+          >
+            {t('desk.people.account.manage')}
+          </button>
         </div>
       </td>
     </tr>
+    {panel ? (
+      <tr data-testid="user-panel">
+        <td colSpan={5}>
+          <div className="account-tools">
+            <AccountEditForm user={user} withClientName={user.roles.includes('CUSTOMER')} onDone={() => setPanel(false)} />
+            <ReissueInvite user={user} />
+            {/* Nobody deletes themselves — the API refuses it (CANNOT_DELETE_SELF). */}
+            {isMe ? null : <DeleteAccount user={user} onDeleted={onDeleted} />}
+          </div>
+        </td>
+      </tr>
+    ) : null}
+    </Fragment>
   );
 }
 
@@ -172,7 +227,7 @@ export default function Users() {
   const me = useOutletContext<User>();
   const allowed = can(me, 'staff.manage');
 
-  const { data, loading } = useQuery<{ allUsers: User[] }>(ALL_USERS, { skip: !allowed });
+  const { data, loading, refetch } = useQuery<{ allUsers: User[] }>(ALL_USERS, { skip: !allowed });
   const [invite, { loading: inviting }] = useMutation(INVITE_STAFF, { refetchQueries: [{ query: ALL_USERS }] });
 
   const [name, setName] = useState('');
@@ -261,14 +316,7 @@ export default function Users() {
         </form>
 
         {error ? <p className="error">{error}</p> : null}
-        {inviteUrl ? (
-          <div className="auth-notice">
-            <p className="t-small">{t('desk.inviteOnce')}</p>
-            <code className="desk-code" dir="ltr">
-              {inviteUrl}
-            </code>
-          </div>
-        ) : null}
+        {inviteUrl ? <InviteLinkBox url={inviteUrl} note={t('desk.inviteOnce')} /> : null}
       </section>
 
       <section className="card">
@@ -288,7 +336,7 @@ export default function Users() {
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <UserRow key={u.id} user={u} isMe={u.id === me.id} onError={setError} />
+                  <UserRow key={u.id} user={u} isMe={u.id === me.id} onError={setError} onDeleted={() => void refetch()} />
                 ))}
               </tbody>
             </table>

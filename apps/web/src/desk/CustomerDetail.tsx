@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Navigate, useOutletContext, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
@@ -16,6 +16,7 @@ import {
 import { formatAmount, fullDateTime, pick } from '@/lib/format';
 import StatusBadge from '@/components/StatusBadge';
 import { peopleError } from './peopleErrors';
+import { AccountEditForm, DeleteAccount, ReissueInvite } from './AccountTools';
 
 /**
  * One customer, on one page (journeys build plan S3): who they are, whether
@@ -50,6 +51,8 @@ export default function CustomerDetail() {
   const [grant, { loading: grantBusy }] = useMutation(GRANT_TOOL);
   const [revoke, { loading: revokeBusy }] = useMutation(REVOKE_TOOL);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const navigate = useNavigate();
 
   if (!allowed) return <Navigate to={lp(locale, '/desk')} replace />;
 
@@ -106,26 +109,49 @@ export default function CustomerDetail() {
       <section className="card">
         <div className="workspace-row">
           <div>
-            <h2 className="t-h2">{user.name}</h2>
+            <h2 className="t-h2">{user.erased ? t('desk.people.account.erasedName') : user.name}</h2>
             {user.clientName ? <p className="t-small desk-muted">{user.clientName}</p> : null}
           </div>
           <div className="editor-card-actions">
             <span className={disabled ? 'badge badge-danger' : 'badge badge-neutral'}>
               {t(`desk.people.state.${user.state}`)}
             </span>
-            <button className="btn btn-secondary btn-sm" type="button" disabled={stateBusy} onClick={onToggleState}>
-              {disabled ? t('desk.people.customer.restore') : t('desk.people.customer.disable')}
-            </button>
+            {user.erased ? null : (
+              <button className="btn btn-secondary btn-sm" type="button" disabled={stateBusy} onClick={onToggleState}>
+                {disabled ? t('desk.people.customer.restore') : t('desk.people.customer.disable')}
+              </button>
+            )}
           </div>
         </div>
         {error ? <p className="error">{error}</p> : null}
 
-        <dl className="people-facts">
-          <dt>{t('desk.invitePhone')}</dt>
-          <dd dir="ltr">{user.phone ?? '—'}</dd>
-          <dt>{t('desk.people.customer.email')}</dt>
-          <dd dir="ltr">{user.email ?? '—'}</dd>
-        </dl>
+        {editing ? (
+          <AccountEditForm user={user} withClientName onDone={() => setEditing(false)} />
+        ) : (
+          <dl className="people-facts">
+            <dt>{t('desk.invitePhone')}</dt>
+            <dd dir="ltr">{user.phone ?? '—'}</dd>
+            <dt>{t('desk.people.customer.email')}</dt>
+            <dd dir="ltr">{user.email ?? '—'}</dd>
+          </dl>
+        )}
+
+        {/* US1. An anonymized account has nothing left to edit, invite or delete. */}
+        {user.erased ? null : (
+          <div className="account-tools">
+            {editing ? null : (
+              <div>
+                <button className="btn btn-secondary btn-sm" type="button" onClick={() => setEditing(true)} data-testid="account-edit-open">
+                  {t('desk.people.account.edit')}
+                </button>
+              </div>
+            )}
+            <ReissueInvite user={user} />
+            <div>
+              <DeleteAccount user={user} onDeleted={() => navigate(lp(locale, '/desk/customers'))} />
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="card">

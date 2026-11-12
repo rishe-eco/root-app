@@ -390,3 +390,23 @@
 .people-role-option { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); }
 .people-you { margin-inline-start: var(--space-2); }
 .people-fieldset { border: 0; padding: 0; margin: 0; }
+
+/* ---- Account tools (US1): edit, invite link, delete / anonymize ---------- */
+
+.account-tools { display: flex; flex-direction: column; gap: var(--space-3); }
+.invite-link { display: flex; flex-direction: column; gap: var(--space-2); }
+.invite-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.invite-link-row .desk-code { flex: 1 1 16rem; min-width: 0; }
+
+/* The one irreversible act on this page: bordered in the error colour so it
+   cannot be mistaken for the forms around it. */
+.danger-zone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+}
+.btn-danger { background: var(--color-error); color: var(--color-text-inverse); border-color: var(--color-error); }
+.btn-danger:disabled { opacity: 0.5; }

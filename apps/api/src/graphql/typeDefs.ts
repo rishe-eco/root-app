@@ -86,6 +86,8 @@ export const typeDefs = /* GraphQL */ `
     passwordChangeRequired: Boolean!
     "Journeys build plan S3. DISABLED accounts lose their session on the next request."
     state: UserState!
+    "US1: anonymized by anonymizeUser — the row stays for the records that point at it, and identifies no one. Such an account's email reads as null."
+    erased: Boolean!
   }
 
   "An active tool grant (journeys build plan S3). A revoked one is history and is not listed."
@@ -3048,6 +3050,35 @@ export const typeDefs = /* GraphQL */ `
     PHONE_REQUIRED_FOR_STAFF (a factor role for an account with no phone).
     """
     setUserRoles(userId: ID!, roles: [Role!]!): User!
+    """
+    US1. Name, phone, email and company name. The setUserState rule: staff.manage
+    for an account with any staff role, customers.manage for a customer. Changing
+    the phone or email revokes every outstanding link and code. Refused:
+    NAME_REQUIRED, PHONE_INVALID, EMAIL_INVALID, IDENTIFIER_REQUIRED,
+    PHONE_REQUIRED_FOR_STAFF, IDENTIFIER_CONFLICT, ACCOUNT_ERASED, FORBIDDEN.
+    clientName omitted: unchanged.
+    """
+    updateUser(userId: ID!, name: String!, phone: String, email: String, clientName: String): User!
+    """
+    US1. A fresh invite link for an INVITED account; every earlier one stops
+    working (only a hash was ever stored). Sends nothing — the desk copies it.
+    Refused: ALREADY_ACTIVE, ACCOUNT_DISABLED, FORBIDDEN.
+    """
+    reissueInvite(userId: ID!): InviteResult!
+    """
+    US1. Deletes an account only when nothing records it; otherwise HAS_HISTORY
+    (disable or anonymize instead). Also CANNOT_DELETE_SELF, LAST_SUPERUSER,
+    FORBIDDEN.
+    """
+    deleteUser(userId: ID!): Boolean!
+    """
+    US1. Irreversible erasure in place for an account with history: name,
+    phone, email, company and password removed, disabled, every link, code,
+    API token and mockup grant revoked; every record pointing at it stays.
+    confirmName must equal the current name (CONFIRM_MISMATCH). Also
+    ACCOUNT_ERASED, CANNOT_DELETE_SELF, LAST_SUPERUSER, FORBIDDEN.
+    """
+    anonymizeUser(userId: ID!, confirmName: String!): User!
     "review.admin, not customers.manage — inviting a specialist to read a corpus is not account administration (C2.md §5)."
     inviteReviewer(email: String!, name: String!, locale: String): InviteResult!
     "Drops REVIEWER from the account's role set. Refused if it is their only role — that would violate the non-empty-roles constraint (C2.md §5). Comments and threads are untouched."
