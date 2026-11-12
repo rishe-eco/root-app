@@ -59,6 +59,10 @@ export default function AgreementPanel({ contract, audience, asCustomer = false 
   // panel only ever *acts* on the new road (it can still be drawn read-only in
   // the desk's Steps tab for a legacy contract).
   const mayAct = audience === 'customer' && !asCustomer && contract.sequence === 'AGREEMENT_FIRST';
+  // Staff looking through the customer's eyes: the controls are hidden, so
+  // the fallback must not say Root is behind — it says what the customer does
+  // here, and that this view cannot.
+  const viewOnly = audience === 'customer' && asCustomer && contract.sequence === 'AGREEMENT_FIRST';
 
   function refusal(err: unknown): string {
     const code = errorCode(err);
@@ -128,7 +132,9 @@ export default function AgreementPanel({ contract, audience, asCustomer = false 
                 </button>
               </form>
             ) : (
-              <p className="t-small desk-muted">{t(`agreement.awaitingSignature.${audience}`)}</p>
+              <p className="t-small desk-muted" data-testid={viewOnly ? 'agreement-view-only' : undefined}>
+                {viewOnly ? t('agreement.viewOnly.sign') : t(`agreement.awaitingSignature.${audience}`)}
+              </p>
             )}
           </>
         ) : mayAct ? (
@@ -139,7 +145,9 @@ export default function AgreementPanel({ contract, audience, asCustomer = false 
             </button>
           </div>
         ) : (
-          <p className="t-small desk-muted">{t(`agreement.awaitingApproval.${audience}`)}</p>
+          <p className="t-small desk-muted" data-testid={viewOnly ? 'agreement-view-only' : undefined}>
+            {viewOnly ? t('agreement.viewOnly.approve') : t(`agreement.awaitingApproval.${audience}`)}
+          </p>
         )}
         {error ? (
           <p className="error" role="alert" data-testid="agreement-error">

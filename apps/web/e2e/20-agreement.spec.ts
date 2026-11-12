@@ -135,3 +135,28 @@ test('the same, in Persian: right-to-left, translated, and locked', async ({ pag
   // The approved line and the signature state are in Persian, not English.
   await expect(page.locator('[data-fact="agreement"]')).toContainText('امضا شد');
 });
+
+test('view as customer: step 3 says it is read-only, not that Root is behind — before and after approval', async ({ page }) => {
+  test.setTimeout(120_000);
+  await signIn(page, SALES, 'en');
+  await page.goto(`/en/desk/contracts/${contractId}/as-customer`);
+  await expect(page.getByTestId('view-as-banner')).toBeVisible();
+  const panel = page.getByTestId('agreement-panel');
+  await expect(panel).toHaveAttribute('data-state', 'open');
+  await expect(panel.getByTestId('agreement-view-only')).toContainText('The customer approves the agreement here');
+  await expect(panel).not.toContainText('Root has not finished');
+  await expect(page.getByTestId('agreement-approve')).toHaveCount(0);
+
+  // In Persian, the same line, translated.
+  await page.goto(`/fa/desk/contracts/${contractId}/as-customer`);
+  await expect(page.getByTestId('agreement-view-only')).toContainText('فقط برای دیدن است');
+
+  // After the customer approves, the line names the signing instead.
+  await openAgreement(page, 'en');
+  await page.getByTestId('agreement-approve').click();
+  await expect(page.getByTestId('agreement-panel')).toHaveAttribute('data-state', 'approved');
+  await signIn(page, SALES, 'en');
+  await page.goto(`/en/desk/contracts/${contractId}/as-customer`);
+  await expect(page.getByTestId('agreement-view-only')).toContainText('types their full name and signs here');
+  await expect(page.locator('#agreement-signname')).toHaveCount(0);
+});

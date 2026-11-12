@@ -2217,6 +2217,10 @@
       "customer": "Root has not finished this yet.",
       "staff": "Waiting for the customer to approve."
     },
+    "viewOnly": {
+      "approve": "The customer approves the agreement here. This view is read-only, so the button is not shown.",
+      "sign": "Approved. The customer types their full name and signs here. This view is read-only, so the form is not shown."
+    },
     "awaitingSignature": {
       "customer": "Approved — sign to finish.",
       "staff": "Approved. Waiting for the customer to sign."
