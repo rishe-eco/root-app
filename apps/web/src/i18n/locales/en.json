@@ -936,7 +936,21 @@
     "tabNotes": "Notes",
     "dependencyFromBrief": "From the requirements",
     "dependencyTechnical": "Technical",
-    "dependencyBriefOwnedHelp": "This commitment comes from the requirements: its title and who provides it are set there. Only its due date is changed here."
+    "dependencyBriefOwnedHelp": "This commitment comes from the requirements: its title and who provides it are set there. Only its due date is changed here.",
+    "customerLine": "Customer: {{name}}",
+    "changeCustomer": "Change customer",
+    "customerSave": "Move to this customer",
+    "customerConfirm": "Move this contract and its project to {{name}}? Draft invoices move with it.",
+    "customerHelp": "Possible only until the customer approves or signs, and before any invoice is issued.",
+    "customerError": {
+      "CONTRACT_SIGNED": "This contract is signed, so its customer can't change.",
+      "CONTRACT_APPROVED": "The customer has approved this contract, so its customer can't change.",
+      "INVOICED": "An invoice has been issued on this contract, so its customer can't change.",
+      "PROJECT_SHARED": "This contract's project has other contracts. Its customer can't change on its own.",
+      "PROJECT_HAS_REQUEST": "This contract began as a customer's request, and that conversation is theirs. Its customer can't change.",
+      "CUSTOMER_INACTIVE": "That customer account is disabled.",
+      "NOT_FOUND": "That is not a customer account."
+    }
   },
   "upload": {
     "errAuth": "You do not have access to upload this.",
@@ -1204,6 +1218,7 @@
     "reSigned": "re-signed the contract",
     "amendmentSigned": "signed amendment {{arg}}",
     "amendmentApproved": "approved amendment {{arg}}",
+    "customerChanged": "changed the contract’s customer",
     "justNow": "Just now"
   },
   "notFound": {

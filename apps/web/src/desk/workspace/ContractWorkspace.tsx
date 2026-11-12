@@ -6,14 +6,17 @@ import { useTranslation } from 'react-i18next';
 import { useLocale, lp } from '@/lib/locale';
 import { can } from '@/lib/access';
 import {
+  ALL_CUSTOMERS,
   ASSIGNABLE_USERS,
   ASSIGN_CONTRACT,
+  CHANGE_CONTRACT_CUSTOMER,
   CONTRACT_WORKSPACE,
   type Contract,
   type User,
 } from '@/lib/queries';
 import { pick } from '@/lib/format';
 import StatusBadge from '@/components/StatusBadge';
+import { errorCode } from '@/components/FeedbackPanel';
 import StatusArea from '@/components/StatusArea';
 import StepList from '@/components/StepList';
 
@@ -77,6 +80,85 @@ function assignErrorMessage(err: unknown, t: (key: string) => string): string {
  * Read-only for everyone else: this is sales's edge to move, not the
  * designer's or developer's own to reassign.
  */
+/**
+ * CC1 — who the contract is for, and moving it to another customer (with its
+ * project) while nothing binds it to the first. Offered to whoever may both
+ * author contracts and see the customer list; the API's refusals say exactly
+ * what binds it (signed, approved, invoiced, a shared project, a request).
+ */
+function CustomerControl({ contract, canChange }: { contract: Contract; canChange: boolean }) {
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState(false);
+  const [customerId, setCustomerId] = useState(contract.customer.id);
+  const [error, setError] = useState<string | null>(null);
+  const { data } = useQuery<{ allCustomers: User[] }>(ALL_CUSTOMERS, { skip: !editing });
+  const [change, { loading }] = useMutation(CHANGE_CONTRACT_CUSTOMER);
+  const label = (u: Pick<User, 'name' | 'clientName'>) => (u.clientName ? `${u.clientName} · ${u.name}` : u.name);
+  const line = t('workspace.customerLine', { name: label(contract.customer) });
+
+  if (!canChange || !editing) {
+    return (
+      <div className="workspace-row">
+        <p className="t-caption desk-muted" data-testid="contract-customer">{line}</p>
+        {canChange ? (
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            data-testid="change-customer"
+            onClick={() => {
+              setCustomerId(contract.customer.id);
+              setError(null);
+              setEditing(true);
+            }}
+          >
+            {t('workspace.changeCustomer')}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  const options = (data?.allCustomers ?? []).filter((u) => !u.erased && u.state !== 'DISABLED');
+
+  async function onSave(e: FormEvent) {
+    e.preventDefault();
+    if (customerId === contract.customer.id) {
+      setEditing(false);
+      return;
+    }
+    const next = options.find((u) => u.id === customerId);
+    if (!confirm(t('workspace.customerConfirm', { name: next ? label(next) : '' }))) return;
+    setError(null);
+    try {
+      await change({ variables: { contractId: contract.id, customerId } });
+      setEditing(false);
+    } catch (err) {
+      const code = errorCode(err);
+      setError(code && t(`workspace.customerError.${code}`, { defaultValue: '' }) ? t(`workspace.customerError.${code}`) : (err as Error).message);
+    }
+  }
+
+  return (
+    <form className="workspace-row" onSubmit={onSave} data-testid="change-customer-form">
+      <select className="select" aria-label={t('desk.colCustomer')} value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+        {options.map((u) => (
+          <option key={u.id} value={u.id}>
+            {label(u)}
+          </option>
+        ))}
+      </select>
+      <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
+        {t('workspace.customerSave')}
+      </button>
+      <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing(false)}>
+        {t('feedback.cancel')}
+      </button>
+      <p className="t-caption desk-muted">{t('workspace.customerHelp')}</p>
+      {error ? <p className="error" role="alert" data-testid="change-customer-error">{error}</p> : null}
+    </form>
+  );
+}
+
 function AssignmentControl({ contract, canAssign }: { contract: Contract; canAssign: boolean }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
@@ -195,6 +277,7 @@ export default function ContractWorkspace() {
         <div>
           <p className="t-caption num-latin">{contract.ref}</p>
           <h2 className="t-h2">{pick(contract, 'title', locale)}</h2>
+          <CustomerControl key={contract.customer.id} contract={contract} canChange={can(me, 'contracts.author') && can(me, 'customers.manage')} />
           <AssignmentControl contract={contract} canAssign={can(me, 'contracts.author')} />
           {/* J2: the request this contract began as (its thread, read-only) —
               only for those who may read one, so a designer never sees the link. */}

@@ -119,6 +119,11 @@ WP    design review of the public site and portal (HIG) — contrast, phone nav,
 ──── changes (the lifecycle's Change track, from root-sot's module folder) ─────
 TK1   the Support page refreshes on create, card open/close and focus (wp-dashboards #9)   ✔ verified 2026-10-20 [TK1.md]
 NR1   the Overview's "Waiting on Root" tile counts what Root owes (wp-dashboards #2)   ✔ verified 2026-10-21 [NR1.md]
+──── the founder's portal walk, 2026-11-12 (stacked branches, merge in this order) ───────
+VA1   view as customer: step 3 says it is read-only, not "Root has not finished"   ✔ built 2026-11-12 [VA1.md]
+SC1   Root adds pages, features and deliverables straight into step 2a   ✔ built 2026-11-12 [SC1.md]
+US1   edit, delete and anonymize accounts; a fresh invite link to copy   ✔ built 2026-11-12 [US1.md]
+CC1   the title on the draft step; moving a contract to another customer (one migration)   ✔ built 2026-11-12 [CC1.md]
 ```
 
 **R3 and the Persian pass each have their own build-ready file; L8 and the
@@ -416,6 +421,10 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`wp-design-review.md`](wp-design-review.md) | the design review: contrast, spacing tokens, phone nav, one heading, Library, dark appearance | ✔ built |
 | [`TK1.md`](TK1.md) | Change: the Support page refreshes on create, on card open/close and on window focus (wp-dashboards #9) | ✔ built · verified |
 | [`NR1.md`](NR1.md) | Change: the Overview's "Waiting on Root" tile reads `needsRootCount`, the Needs-Root queue's rule (wp-dashboards #2) | ✔ built · verified |
+| [`VA1.md`](VA1.md) | Change: view as customer, step 3 says it is read-only | ✔ built |
+| [`SC1.md`](SC1.md) | Change: add and remove items on step 2a without touching the site type | ✔ built |
+| [`US1.md`](US1.md) | Change: edit, delete, anonymize accounts; reissue an invite link | ✔ built |
+| [`CC1.md`](CC1.md) | Change: the title on the draft step; change a contract's customer before signature | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |

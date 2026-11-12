@@ -31,7 +31,8 @@ export type ChangeAction =
   | 'RE_APPROVED'
   | 'RE_SIGNED'
   | 'AMENDMENT_SIGNED'
-  | 'AMENDMENT_APPROVED';
+  | 'AMENDMENT_APPROVED'
+  | 'CUSTOMER_CHANGED';
 
 export type User = {
   id: string;
@@ -2433,6 +2434,16 @@ export const SET_USER_ROLES = gql`
   mutation SetUserRoles($userId: ID!, $roles: [Role!]!) {
     setUserRoles(userId: $userId, roles: $roles) {
       ...UserFields
+    }
+  }
+`;
+
+/** CC1. contracts.author. Only before approval, signature or an issued invoice. */
+export const CHANGE_CONTRACT_CUSTOMER = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation ChangeContractCustomer($contractId: ID!, $customerId: ID!) {
+    changeContractCustomer(contractId: $contractId, customerId: $customerId) {
+      ...ContractWorkspaceFields
     }
   }
 `;

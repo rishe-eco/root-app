@@ -2271,6 +2271,8 @@ enum ChangeAction {
   RE_SIGNED
   AMENDMENT_SIGNED
   AMENDMENT_APPROVED
+  /// CC1 — `changeContractCustomer`: the contract (and its project) moved to another customer before signature.
+  CUSTOMER_CHANGED
 }
 
 model ChangeLog {

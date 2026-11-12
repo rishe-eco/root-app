@@ -2,7 +2,8 @@ import { GraphQLError } from 'graphql';
 import type { ContractStatus } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { requireCapability, type Context } from '../../../context.js';
-import { can, type Capability } from '../../../lib/capabilities.js';
+import { can, hasCustomerRole, type Capability } from '../../../lib/capabilities.js';
+import { isErased } from '../../../lib/erasure.js';
 import { draftStateOn } from '../agreement.js';
 import { SEQUENCE_FOR_NEW_CONTRACTS, stepOnRoad } from '../../../lib/steps.js';
 import { lockContract } from '../../../lib/stepApproval.js';
@@ -693,6 +694,93 @@ export const contractAdminMutations = {
     await prisma.contract.update({
       where: { id: contract.id },
       data: { designerId: args.designerId, developerId: args.developerId },
+    });
+    return reload(contract.id);
+  },
+  /**
+   * CC1 — move a contract to another customer, for a contract made for the
+   * wrong one. **Only before anything binds it to the first**:
+   *
+   * - `CONTRACT_SIGNED` — any revision or amendment of it signed (the
+   *   founder's rule); `CONTRACT_APPROVED` — any revision approved, since
+   *   approving is the customer's own act on that text (J7's gate);
+   * - `INVOICED` — an invoice issued on it, or on a subscription of its
+   *   project: an issued invoice is a numbered document addressed to a person;
+   * - `PROJECT_SHARED` — its project holds another contract; the project (the
+   *   registry, demos, dependencies) moves with the contract, and must not
+   *   carry another contract along;
+   * - `PROJECT_HAS_REQUEST` — the project began as a customer's own request:
+   *   its thread is that person's words, not the new customer's to read.
+   *
+   * The new customer must be a customer account (`NOT_FOUND` otherwise, as
+   * for an id that does not exist) that is not disabled or erased
+   * (`CUSTOMER_INACTIVE`). What moves, in one transaction under the contract
+   * lock: the contract, its project, the project's subscriptions and every
+   * unissued billing entry of either; the old customer's mockup view grants
+   * on the project's builds are removed (each is a live subdomain). Logged
+   * `CUSTOMER_CHANGED`, with no name in it — the log is read by the new
+   * customer, and outlives an erasure.
+   */
+  changeContractCustomer: async (_p: unknown, args: { contractId: string; customerId: string }, ctx: Context) => {
+    const actor = requireCapability(ctx, 'contracts.author');
+    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    if (!contract) throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
+    if (contract.customerId === args.customerId) return reload(contract.id);
+
+    const customer = await prisma.user.findUnique({ where: { id: args.customerId } });
+    if (!customer || !hasCustomerRole(customer)) {
+      throw new GraphQLError('No such customer.', { extensions: { code: 'NOT_FOUND' } });
+    }
+    if (customer.state === 'DISABLED' || isErased(customer)) {
+      throw new GraphQLError('That customer account is not active.', { extensions: { code: 'CUSTOMER_INACTIVE' } });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await lockContract(tx, contract.id);
+      await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${contract.projectId} FOR UPDATE`;
+
+      const [signed, approved, otherContracts, requestMessages, subscriptions] = await Promise.all([
+        tx.signature.count({
+          where: {
+            OR: [
+              { contractRevision: { contractId: contract.id } },
+              { amendment: { contractRevision: { contractId: contract.id } } },
+            ],
+          },
+        }),
+        tx.contractRevision.count({ where: { contractId: contract.id, approvedAt: { not: null } } }),
+        tx.contract.count({ where: { projectId: contract.projectId, id: { not: contract.id } } }),
+        tx.requestMessage.count({ where: { projectId: contract.projectId } }),
+        tx.subscription.findMany({ where: { projectId: contract.projectId }, select: { id: true } }),
+      ]);
+      if (signed > 0) {
+        throw new GraphQLError('This contract is signed; its customer cannot change.', { extensions: { code: 'CONTRACT_SIGNED' } });
+      }
+      if (approved > 0) {
+        throw new GraphQLError('The customer has approved this contract; its customer cannot change.', {
+          extensions: { code: 'CONTRACT_APPROVED' },
+        });
+      }
+      if (otherContracts > 0) {
+        throw new GraphQLError('This contract’s project holds other contracts.', { extensions: { code: 'PROJECT_SHARED' } });
+      }
+      if (requestMessages > 0) {
+        throw new GraphQLError('This project began as a customer’s request.', { extensions: { code: 'PROJECT_HAS_REQUEST' } });
+      }
+      const subscriptionIds = subscriptions.map((s) => s.id);
+      const billedHere = { OR: [{ contractId: contract.id }, { subscriptionId: { in: subscriptionIds } }] };
+      if ((await tx.billingEntry.count({ where: { ...billedHere, issuedAt: { not: null } } })) > 0) {
+        throw new GraphQLError('An invoice has been issued on this contract.', { extensions: { code: 'INVOICED' } });
+      }
+
+      await tx.contract.update({ where: { id: contract.id }, data: { customerId: customer.id } });
+      await tx.project.update({ where: { id: contract.projectId }, data: { customerId: customer.id } });
+      await tx.subscription.updateMany({ where: { id: { in: subscriptionIds } }, data: { customerId: customer.id } });
+      await tx.billingEntry.updateMany({ where: { ...billedHere, issuedAt: null }, data: { customerId: customer.id } });
+      await tx.mockupViewGrant.deleteMany({
+        where: { viewerId: contract.customerId, build: { projectId: contract.projectId } },
+      });
+      await log(contract.id, actor.id, 'CUSTOMER_CHANGED', null, tx);
     });
     return reload(contract.id);
   },

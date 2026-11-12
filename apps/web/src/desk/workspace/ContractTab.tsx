@@ -14,7 +14,6 @@ import {
   PUBLISH_CONTRACT_REVISION,
   SET_ARTICLE,
   UPDATE_AMENDMENT,
-  UPDATE_CONTRACT_DRAFT,
   type Amendment,
   type Article,
 } from '@/lib/queries';
@@ -22,6 +21,7 @@ import { fullDateTime, instantDate, pick } from '@/lib/format';
 import { isPaymentScheduleArticle } from '@/lib/agreement';
 import { errorCode } from '@/components/FeedbackPanel';
 import Lock from '@/components/Lock';
+import TitleFeeCard from '@/components/TitleFeeCard';
 import type { WorkspaceContext } from './ContractWorkspace';
 
 function errorMessage(err: unknown, t?: (key: string, opts?: Record<string, unknown>) => string): string {
@@ -29,80 +29,6 @@ function errorMessage(err: unknown, t?: (key: string, opts?: Record<string, unkn
   const code = errorCode(err);
   if (t && code && ['STEP_LOCKED', 'SCHEDULE_IS_GENERATED'].includes(code)) return t(`workspace.error.${code}`);
   return (err as { message?: string })?.message ?? String(err);
-}
-
-/** Title and fee. `ref` is shown in the workspace header, not here — it is
- *  frozen at creation (T1) and never editable, so there is no form for it. */
-function TitleFeeCard({
-  contractId,
-  draft,
-  locked,
-}: {
-  contractId: string;
-  draft: NonNullable<WorkspaceContext['contract']['draft']> | undefined;
-  /** The agreement is approved (J7): the draft is sealed, the API would refuse. */
-  locked: boolean;
-}) {
-  const { t } = useTranslation();
-  const [titleFa, setTitleFa] = useState(draft?.titleFa ?? '');
-  const [titleEn, setTitleEn] = useState(draft?.titleEn ?? '');
-  const [amount, setAmount] = useState(draft?.amount ?? '');
-  const [error, setError] = useState<string | null>(null);
-  const [update, { loading }] = useMutation(UPDATE_CONTRACT_DRAFT);
-
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await update({
-        variables: { contractId, titleFa, titleEn, amount: amount || null },
-      });
-    } catch (err) {
-      setError(errorMessage(err, t));
-    }
-  }
-
-  return (
-    <section className="card editor-card">
-      <form className="auth-form" onSubmit={onSave}>
-        <div className="editor-grid-2">
-          <div className="field">
-            <label className="label" htmlFor="ct-fa">
-              {t('workspace.titleFa')}
-            </label>
-            <input id="ct-fa" className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="label" htmlFor="ct-en">
-              {t('workspace.titleEn')}
-            </label>
-            <input id="ct-en" className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-          </div>
-        </div>
-        <div className="editor-grid-2">
-          <div className="field">
-            <label className="label" htmlFor="ct-amount">
-              {t('workspace.amount')}
-            </label>
-            <input
-              id="ct-amount"
-              className="input num-latin"
-              dir="ltr"
-              inputMode="numeric"
-              value={amount ?? ''}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
-            />
-          </div>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-        <div>
-          <button className="btn btn-primary btn-sm" type="submit" disabled={loading || locked}>
-            {t('workspace.save')}
-          </button>
-        </div>
-      </form>
-    </section>
-  );
 }
 
 function ArticleCard({

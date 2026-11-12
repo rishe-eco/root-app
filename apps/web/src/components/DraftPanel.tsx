@@ -21,6 +21,7 @@ import FeedbackPanel, { errorCode, type FeedbackTarget } from '@/components/Feed
 import { PaymentSchedule } from '@/components/AgreementDocument';
 import { isPaymentScheduleArticle } from '@/lib/agreement';
 import type { StepPanelProps } from '@/components/StepPanels';
+import TitleFeeCard from '@/components/TitleFeeCard';
 
 /**
  * Step 2b — the draft and its notes (journeys build plan J6), one panel for
@@ -283,6 +284,8 @@ export default function DraftPanel({ contract, step, audience, me, asCustomer = 
         </p>
       ) : null}
 
+      {/* CC1: the title (and fee) where sales looks for it — on this step, not only the Contract tab. */}
+      {canAuthor ? <TitleFeeCard key={contract.id} contractId={contract.id} draft={contract.draft} locked={false} /> : null}
       {canAuthor ? <DraftControls contract={contract} /> : null}
       <PlannedDates contract={contract} canEdit={canAuthor} />
 

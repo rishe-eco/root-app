@@ -60,6 +60,7 @@ export const typeDefs = /* GraphQL */ `
     RE_SIGNED
     AMENDMENT_SIGNED
     AMENDMENT_APPROVED
+    CUSTOMER_CHANGED
   }
 
   type User {
@@ -3666,6 +3667,13 @@ export const typeDefs = /* GraphQL */ `
     ASSIGNEE_INACTIVE (their account is not active).
     """
     assignContract(contractId: ID!, designerId: ID, developerId: ID): Contract!
+    """
+    CC1. contracts.author. Moves the contract and its project to another customer,
+    only before anything binds it to the first. Refused: CONTRACT_SIGNED,
+    CONTRACT_APPROVED, INVOICED, PROJECT_SHARED, PROJECT_HAS_REQUEST,
+    CUSTOMER_INACTIVE, NOT_FOUND (no such contract, or not a customer).
+    """
+    changeContractCustomer(contractId: ID!, customerId: ID!): Contract!
     """
     Staff (contracts.readActive or contracts.readAll, and the contract visible
     to them). Journeys build plan J3: a private note on a contract — never read

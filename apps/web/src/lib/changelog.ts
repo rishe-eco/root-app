@@ -39,6 +39,7 @@ export function actionLogKey(e: LogEntry): string {
     RE_SIGNED: 'reSigned',
     AMENDMENT_SIGNED: 'amendmentSigned',
     AMENDMENT_APPROVED: 'amendmentApproved',
+    CUSTOMER_CHANGED: 'customerChanged',
   }[e.action];
   return key;
 }
