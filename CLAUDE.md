@@ -21,7 +21,7 @@ npm run e2e                  # the browser, against the built app
 npm run dev                  # web;  npm run dev:api for the API
 ```
 
-Run test files **targeted** while working (`npm run test:integration -- <file>`, `npm run e2e -- <spec> -g <name> --workers=1`). The full integration and e2e suites run at milestones and before a deploy, one heavy suite at a time on a machine.
+Run test files **targeted** while working (`npm run test:integration -- <file>`, `npm run e2e --workspace=apps/web -- <spec> -g <name> --workers=1`). Not `npm run e2e -- … -g`: the root script calls npm again, which takes `-g` as `--global` and fails (TK1.md). The full integration and e2e suites run at milestones and before a deploy, one heavy suite at a time on a machine.
 
 ## Environment
 
