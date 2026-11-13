@@ -49,7 +49,8 @@ async function openFirstContract(page: import('@playwright/test').Page) {
 test('a customer signs a contract, one gate at a time', async ({ page }) => {
   await signInToList(page);
 
-  await expect(page.getByText(CONTRACT_TITLE)).toBeVisible();
+  // The visible title: the row's View link repeats it in an sr-only span.
+  await expect(page.locator('.cname', { hasText: CONTRACT_TITLE })).toBeVisible();
   await openFirstContract(page);
   await expect(page.getByText('Design selection & approval')).toBeVisible();
 
@@ -215,7 +216,7 @@ test('renaming the draft after publishing does not change what the customer read
   await signInToList(page);
 
   // The list names the published document.
-  await expect(page.getByText(CONTRACT_TITLE)).toBeVisible();
+  await expect(page.locator('.cname', { hasText: CONTRACT_TITLE })).toBeVisible();
   await expect(page.getByText('DRAFT RENAME — NOT PUBLISHED')).toHaveCount(0);
 
   await openFirstContract(page);
