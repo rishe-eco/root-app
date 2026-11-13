@@ -1201,6 +1201,7 @@
   "log": {
     "created": "قرارداد را ساخت",
     "published": "برای تو منتشر کرد",
+    "published_staff": "برای مشتری منتشر کرد",
     "chose": "طرح {{arg}} را انتخاب کرد",
     "approvedPage": "طرحِ «{{arg}}» را تأیید کرد",
     "unapprovedPage": "تأییدِ طرحِ «{{arg}}» را برداشت",

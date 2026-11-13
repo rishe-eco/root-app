@@ -70,7 +70,24 @@ function argFor(e: LogEntry, t: T, helpers: LogHelpers): string {
   return e.arg ?? '';
 }
 
+/**
+ * Who is reading. Most sentences read the same to both sides, but a few are
+ * written to the customer ("published it to you"); on the desk those have a
+ * staff variant, `log.<key>_staff`. It goes through i18next's `context`, so
+ * an action with no `_staff` key falls back to the shared sentence on its own
+ * — only the sentences that differ are written twice.
+ */
+export type LogAudience = 'customer' | 'staff';
+
 /** A change-log entry, rendered as a sentence in the reader's language. */
-export function logText(e: LogEntry, t: T, helpers: LogHelpers = {}): string {
-  return t(`log.${actionLogKey(e)}`, { arg: argFor(e, t, helpers) });
+export function logText(
+  e: LogEntry,
+  t: T,
+  helpers: LogHelpers = {},
+  audience: LogAudience = 'customer',
+): string {
+  return t(`log.${actionLogKey(e)}`, {
+    arg: argFor(e, t, helpers),
+    context: audience === 'staff' ? 'staff' : undefined,
+  });
 }

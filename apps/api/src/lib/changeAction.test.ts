@@ -74,6 +74,14 @@ const logKeys = (locale: string): Set<string> =>
  */
 const NON_ACTION_LOG_KEYS = new Set(['justNow']);
 
+/**
+ * The desk's wording of a sentence the customer reads differently
+ * (`logText`'s `audience`, via i18next context): `published_staff` is used
+ * whenever `published` is.
+ */
+const STAFF_SUFFIX = '_staff';
+const baseKey = (k: string) => (k.endsWith(STAFF_SUFFIX) ? k.slice(0, -STAFF_SUFFIX.length) : k);
+
 const PRISMA = enumValues(read('apps/api/prisma/schema.prisma'), 'schema.prisma');
 
 test('the Prisma enum is not empty (the parse actually found something)', () => {
@@ -108,7 +116,7 @@ for (const locale of ['en', 'fa']) {
   test(`the ${locale} log namespace has no orphan keys`, () => {
     const used = new Set(actionKeyMap().values());
     const orphans = [...logKeys(locale)].filter(
-      (k) => !used.has(k) && !NON_ACTION_LOG_KEYS.has(k),
+      (k) => !used.has(baseKey(k)) && !NON_ACTION_LOG_KEYS.has(k),
     );
     assert.deepEqual(orphans, [], `no action points at these: ${orphans.join(', ')}`);
   });

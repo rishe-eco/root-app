@@ -3,26 +3,10 @@ import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
-import { clockTime, formatCount, initialOf, relativeTime } from '@/lib/format';
+import { logText } from '@/lib/changelog';
+import { clockTime, formatCount, initialOf, pick, relativeTime } from '@/lib/format';
 import { ADD_COMMENT, type Contract } from '@/lib/queries';
 import type { WorkspaceContext } from './ContractWorkspace';
-
-/**
- * A plain change log rather than rendered sentences (V2.md §2: "V1b already
- * returns [the lineages]; a plain change log is enough"). Reusing
- * ContractDetail's per-action sentence map here would be a second copy of
- * it — exactly the drift `changeAction.test.ts` exists to catch, and it
- * only reads that map from one place. Extracting a shared sentence-builder
- * is V4's job (T5 in V4.md); until then this reads generically off the
- * enum, which needs no per-action table to stay correct.
- */
-function actionLabel(action: string): string {
-  return action
-    .toLowerCase()
-    .split('_')
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(' ');
-}
 
 function errorMessage(err: unknown): string {
   return (err as { message?: string })?.message ?? String(err);
@@ -128,6 +112,21 @@ export default function ActivityTab() {
   const contractRevisions = contract.contractRevisions ?? [];
   const designRevisions = contract.designRevisions ?? [];
 
+  // The same sentences the customer reads on the portal (lib/changelog.ts),
+  // in staff wording where the two differ, with page and scope keys named
+  // from this contract the way ContractDetail.tsx names them.
+  const chosen = contract.concepts.find((c) => c.chosen);
+  const helpers = {
+    labelForPage: (key: string) => {
+      const page = chosen?.pages.find((p) => p.key === key);
+      return page ? pick(page, 'label', locale) : null;
+    },
+    labelForScope: (key: string) => {
+      const item = contract.scopeItems.find((s) => s.key === key);
+      return item ? pick(item, 'label', locale) : null;
+    },
+  };
+
   return (
     <>
       {/* First on the tab, ahead of the history. Arriving here from the
@@ -197,8 +196,7 @@ export default function ActivityTab() {
           {contract.changeLog.map((e) => (
             <div key={e.id} className="lineage-row">
               <span className="t-small">
-                {e.actor.name} — {actionLabel(e.action)}
-                {e.arg ? `: ${e.arg}` : ''}
+                {e.actor.name} — {logText(e, t, helpers, 'staff')}
               </span>
               <span className="t-caption desk-muted">{relativeTime(e.createdAt, locale)}</span>
             </div>

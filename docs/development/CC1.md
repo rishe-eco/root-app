@@ -28,7 +28,7 @@
 
 ## Found, not fixed here
 
-- **The desk's Activity tab prints raw action names** (`Customer Changed`) for every action, untranslated, which breaks house rule 6. It's older than this change; a separate task is proposed.
+- **The desk's Activity tab printed raw action names** (`Customer Changed`) for every action, untranslated, which broke house rule 6. Fixed in a follow-up: the tab now renders `logText`'s sentences, with a `log.<key>_staff` variant where the customer's wording ("published it to you") would be wrong on the desk.
 - **`02-contract-flow` fails on `main`** since `1b83b59`: the portal list's screen-reader title makes `getByText(title)` match twice. Separate task proposed.
 
 ## Verification

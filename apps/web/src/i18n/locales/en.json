@@ -1201,6 +1201,7 @@
   "log": {
     "created": "created the contract",
     "published": "published it to you",
+    "published_staff": "published it to the customer",
     "chose": "chose concept {{arg}}",
     "approvedPage": "approved the “{{arg}}” page",
     "unapprovedPage": "un-approved the “{{arg}}” page",

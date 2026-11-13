@@ -136,7 +136,7 @@ export default function Overview() {
                 >
                   <div className="queue-row-main">
                     <span className="t-small">
-                      {item.actor.name} — {logText(item, t)}
+                      {item.actor.name} — {logText(item, t, {}, 'staff')}
                     </span>
                     <span className="t-caption desk-muted">{pick(item.contract, 'title', locale)}</span>
                   </div>

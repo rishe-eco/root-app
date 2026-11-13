@@ -71,10 +71,9 @@ test('sales moves a contract to another customer and back; the line names who it
   await page.getByTestId('change-customer-form').getByRole('button', { name: 'Move to this customer' }).click();
   await expect(page.getByTestId('contract-customer')).toContainText('استودیو نهال');
 
-  // The activity log records both moves. (The desk's Activity tab prints raw
-  // action names for every action — a gap older than this change.)
+  // The activity log records both moves, as sentences.
   await page.goto(`/en/desk/contracts/${soloId}/activity`);
-  await expect(page.getByText(/Customer Changed$/)).toHaveCount(2);
+  await expect(page.getByText(/changed the contract’s customer$/)).toHaveCount(2);
 });
 
 test('once the customer approves, the move is refused — and the refusal says why, in both languages', async ({ page, request }) => {
