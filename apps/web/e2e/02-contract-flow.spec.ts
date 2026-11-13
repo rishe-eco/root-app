@@ -30,10 +30,9 @@ test.beforeAll(() => {
 /**
  * Opens the first row of the contracts list.
  *
- * Deliberately a click on the row itself: `Contracts.tsx` renders
- * `<tr className="crow" onClick={…}>`, and the "View ›" beside it is a plain
- * span. There is no link and no button to target, which is the subject of the
- * last test in this file.
+ * Deliberately a click on the row itself: `Contracts.tsx` keeps
+ * `<tr className="crow" onClick={…}>` as a mouse convenience. The real
+ * navigation is the row's "View" link, which the keyboard test below drives.
  */
 /** Signing in lands on the Dashboard (J12); these tests start from the contracts list. */
 async function signInToList(page: import('@playwright/test').Page) {
@@ -129,19 +128,17 @@ test('commenting is never gated', async ({ page }) => {
 });
 
 test('a keyboard user can open a contract', async ({ page }) => {
-  test.fail(
-    true,
-    'Known gap: Contracts.tsx renders <tr className="crow" onClick={…}> with no role, ' +
-      'no tabindex and no key handler, so the list is unreachable without a mouse. ' +
-      'Delete this annotation when the row becomes a link or a button.',
-  );
-
-  // Marked expected-to-fail rather than deleted: this asserts the behaviour
-  // that *should* hold, so the day someone fixes the component Playwright
-  // reports an unexpected pass and this annotation has to go. A test that
-  // asserted the broken behaviour instead would quietly cement it.
   await signInToList(page);
-  await page.locator('.crow').first().press('Enter');
+
+  // Reached by Tab alone, not focus(): the point is that the link sits in the
+  // tab order. Its name carries the title, so it isn't one of several "View"s.
+  const view = page.getByRole('link', { name: `View ${CONTRACT_TITLE}` });
+  for (let i = 0; i < 40 && !(await view.evaluate((el) => el === document.activeElement)); i += 1) {
+    await page.keyboard.press('Tab');
+  }
+  await expect(view).toBeFocused();
+
+  await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/app\/contracts\/.+/);
 });
 
