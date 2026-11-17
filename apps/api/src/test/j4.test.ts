@@ -1090,3 +1090,41 @@ test('REQUIREMENTS is done exactly when briefCompleteness is empty — and the c
   // The customer's road agrees — the signal is not a staff-only view.
   assert.deepEqual(road(await read(f.customer)), { REQUIREMENTS: 'DONE', SCOPE: 'CURRENT' });
 });
+
+// ---- DX1 (desk UX review 33): withheld is not the same as never written -------------
+
+const WITHHELD = `query($c: ID!){ contract(id: $c) { articles { number bodyEn bodyFa bodyWithheld } draft { articles { number bodyEn bodyWithheld } } } }`;
+type Withheld = {
+  articles: Array<{ number: number; bodyEn: string | null; bodyFa: string | null; bodyWithheld: boolean }>;
+  draft: { articles: Array<{ number: number; bodyWithheld: boolean }> } | null;
+};
+const withheldFor = async (who: User) => ok(await exec(WITHHELD, { as: who, variables: { c: f.contract.id } })).contract as Withheld;
+
+test('an admin reading articles with no English body sees bodyWithheld false — a null body there means never written', async () => {
+  await prisma.article.create({
+    data: { contractId: f.contract.id, number: 4, titleFa: 'ماده', titleEn: 'Plain', bodyFa: 'متن', bodyEn: null, sensitive: false },
+  });
+  await prisma.article.create({
+    data: { contractId: f.contract.id, number: 5, titleFa: 'ماده‌ی پول', titleEn: 'Fees', bodyFa: 'متن', bodyEn: null, sensitive: true },
+  });
+  await publishDraftDirect(f.contract.id, { format: 1 });
+  const { articles, draft } = await withheldFor(f.admin);
+  for (const a of articles) assert.equal(a.bodyWithheld, false, `article ${a.number}: the admin may read everything`);
+  assert.equal(articles.find((a) => a.number === 4)!.bodyEn, null);
+  assert.ok(draft!.articles.every((a) => a.bodyWithheld === false));
+});
+
+test('a sensitive article’s body is bodyWithheld true exactly for a reader without money.read; an ordinary article never is', async () => {
+  await sensitiveArticles();
+  for (const who of [staff.DESIGNER, staff.DEVELOPER]) {
+    const { articles } = await withheldFor(who);
+    assert.deepEqual(
+      articles.filter((a) => a.number >= 4).map((a) => [a.number, a.bodyWithheld]),
+      [[4, true], [5, true], [6, false]],
+      String(who.email),
+    );
+  }
+  for (const who of [staff.SALES, f.customer]) {
+    assert.ok((await withheldFor(who)).articles.every((a) => !a.bodyWithheld), String(who.email));
+  }
+});

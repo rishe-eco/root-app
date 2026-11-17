@@ -504,6 +504,8 @@ export type Article = {
   /** Null for a sensitive article when the viewer may not read the contract's money (PD-14, J4). */
   bodyFa: string | null;
   bodyEn: string | null;
+  /** DX1: true only when the body was withheld from this viewer; a null body with this false was never written. */
+  bodyWithheld?: boolean;
   sensitive?: boolean;
 };
 
@@ -1442,6 +1444,7 @@ export const CONTRACT_FIELDS = gql`
       titleEn
       bodyFa
       bodyEn
+      bodyWithheld
       sensitive
     }
     agreedScopeItems {
@@ -1661,6 +1664,7 @@ export const CONTRACT_WORKSPACE_FIELDS = gql`
         titleEn
         bodyFa
         bodyEn
+        bodyWithheld
         sensitive
       }
     }
@@ -3432,6 +3436,27 @@ export const CONTRACT_FEEDBACK = gql`
       id
       feedbackItems(step: $step, phaseId: $phaseId) {
         ...FeedbackItemFields
+      }
+    }
+  }
+`;
+
+/**
+ * DX1 (desk UX review 16): what stops the draft from being published, from the
+ * API's own gate (`Contract.publishBlockers`). Asked when the Contract tab opens
+ * and again whenever the draft changes — a separate query, so the box can be
+ * fresh without refetching the whole workspace.
+ */
+export type PublishBlocker = { code: string; step: StepKind | null; count: number };
+
+export const CONTRACT_READINESS = gql`
+  query ContractReadiness($id: ID!) {
+    contract(id: $id) {
+      id
+      publishBlockers {
+        code
+        step
+        count
       }
     }
   }

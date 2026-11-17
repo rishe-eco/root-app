@@ -11,7 +11,7 @@ import {
 } from './helpers';
 
 /**
- * CC1 — sales renames a contract from the Steps tab's draft step, and moves
+ * CC1 — sales renames a contract (on the draft step; since DX1 on the Contract tab), and moves
  * it to another customer from the workspace header; once the customer has
  * approved, the move is refused with a sentence saying why.
  */
@@ -45,12 +45,17 @@ async function workspace(page: Page, lang: 'en' | 'fa' = 'en', id = contractId) 
   await expect(page.getByTestId('contract-customer')).toBeVisible();
 }
 
-test('the title is editable on the draft step itself, and the header follows', async ({ page }) => {
+test('the title is editable on the Contract tab — not on the draft step, which only links there — and the header follows', async ({ page }) => {
   await workspace(page);
+  // DX1 (review 15): the draft step no longer carries the title, price or dates.
   await page.locator('.stepper-item[data-step="DRAFT"] button').click();
   const panel = page.getByTestId('draft-panel');
-  await panel.locator('#ct-en').fill('Nahal online shop, renamed');
-  await panel.getByTestId('title-fee-save').click();
+  await expect(panel.locator('#ct-en')).toHaveCount(0);
+  await expect(panel.getByTestId('title-fee-save')).toHaveCount(0);
+  await panel.getByTestId('draft-edit-articles').click();
+  await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
+  await page.locator('#ct-en').fill('Nahal online shop, renamed');
+  await page.getByTestId('title-fee-save').click();
   await expect(page.locator('.workspace-head h2')).toHaveText('Nahal online shop, renamed');
 });
 

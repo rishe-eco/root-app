@@ -19,6 +19,7 @@ import {
   type User,
 } from '@/lib/queries';
 import { formatCount, formatAmount, initialOf, relativeTime, clockTime, pick } from '@/lib/format';
+import MoneyReadout from '@/components/MoneyReadout';
 
 /**
  * The support desk (build plan L4; spec §5) — every ticket, the channel-move
@@ -172,14 +173,17 @@ function TicketRow({ ticket, me }: { ticket: Ticket; me: User }) {
               </p>
             ) : (
               <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                <input
-                  className="input"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder={t('desk.tickets.billAmountPlaceholder')}
-                  value={billAmount}
-                  onChange={(e) => setBillAmount(e.target.value)}
-                />
+                <div className="money-field">
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder={t('desk.tickets.billAmountPlaceholder')}
+                    value={billAmount}
+                    onChange={(e) => setBillAmount(e.target.value)}
+                  />
+                  <MoneyReadout value={billAmount} />
+                </div>
                 <button type="button" className="btn btn-secondary btn-sm" disabled={billing || !billAmount.trim()} onClick={onBill}>
                   {t('desk.tickets.billAction')}
                 </button>

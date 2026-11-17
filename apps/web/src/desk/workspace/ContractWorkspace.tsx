@@ -19,6 +19,7 @@ import StatusBadge from '@/components/StatusBadge';
 import { errorCode } from '@/components/FeedbackPanel';
 import StatusArea from '@/components/StatusArea';
 import StepList from '@/components/StepList';
+import NextUp from '@/components/NextUp';
 
 /**
  * `refetch` is the one deliberate exception to "no tab calls refetch" (see
@@ -297,6 +298,8 @@ export default function ContractWorkspace() {
         </div>
       </div>
 
+      {/* DX1: whose turn, what to do, and the step to open — a new-road contract's first question. */}
+      {contract.sequence === 'AGREEMENT_FIRST' ? <NextUp contract={contract} /> : null}
       <StatusArea contract={contract} audience="staff" />
       {/* A legacy contract's steps are the tabs below, so the road is shown as a
           strip above them; a new-road contract's road is the Steps tab itself. */}

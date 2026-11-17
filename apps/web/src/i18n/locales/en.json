@@ -950,7 +950,12 @@
       "PROJECT_HAS_REQUEST": "This contract began as a customer's request, and that conversation is theirs. Its customer can't change.",
       "CUSTOMER_INACTIVE": "That customer account is disabled.",
       "NOT_FOUND": "That is not a customer account."
-    }
+    },
+    "publishTop": "Publish draft",
+    "foldAll": "Fold all",
+    "openAll": "Open all",
+    "foldArticle": "Fold or open article {{n}}",
+    "datesHeading": "Contract settings"
   },
   "upload": {
     "errAuth": "You do not have access to upload this.",
@@ -1604,7 +1609,16 @@
     },
     "caption": "{{step}} · waiting on {{who}}",
     "allDone": "Every step is done",
-    "legacyNote": "This contract follows the design-first road. The sections below are its steps."
+    "legacyNote": "This contract follows the design-first road. The sections below are its steps.",
+    "pill": {
+      "DONE": "Done ✓",
+      "WAITING_CUSTOMER": "Waiting on the customer",
+      "YOUR_TURN": "Your turn",
+      "CURRENT": "Current",
+      "UPCOMING": "Upcoming",
+      "missing_one": "{{n}} missing",
+      "missing_other": "{{n}} missing"
+    }
   },
   "statusArea": {
     "title": "Where this stands",
@@ -1859,7 +1873,8 @@
       "DATES_OUT_OF_ORDER": "The end cannot be before the start.",
       "STEP_NOT_ON_ROAD": "This contract has no such step.",
       "FORBIDDEN": "You do not have access to that."
-    }
+    },
+    "bodyNotWritten": "No English text yet."
   },
   "attention": {
     "DRAFT_TO_REVIEW": {
@@ -2425,7 +2440,8 @@
       "mockupIterations": "Rounds of mockup changes",
       "demoIterations": "Rounds of demo changes per phase",
       "saved": "Saved.",
-      "savedSeparately": "Each part above is saved on its own."
+      "savedSeparately": "Each part above is saved on its own.",
+      "supportOther": "Other"
     },
     "extras": {
       "title": "Extras",
@@ -2506,6 +2522,11 @@
       "STEP_NOT_ON_ROAD": "This contract has no requirements step.",
       "FORBIDDEN": "You do not have access to that.",
       "NOT_FOUND": "Not found."
+    },
+    "accordion": {
+      "missing_one": "{{n}} missing",
+      "missing_other": "{{n}} missing",
+      "complete": "Complete"
     }
   },
   "design": {
@@ -2736,5 +2757,61 @@
         "DEMO_NOT_READY": "The staging site has not reported in yet — see step 1."
       }
     }
+  },
+  "dayInput": {
+    "placeholder": "YYYY-MM-DD or 1405/08/26",
+    "open": "Calendar",
+    "calendar": "calendar",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "invalid": "That is not a real date. Use 2026-11-17 or 1405/08/26."
+  },
+  "countStepper": {
+    "less": "Decrease {{label}}",
+    "more": "Increase {{label}}"
+  },
+  "pillChoice": {
+    "clear": "Press again to clear"
+  },
+  "nextUp": {
+    "title": {
+      "ROOT": "Your turn",
+      "CUSTOMER": "Waiting on the customer",
+      "NONE": "Next"
+    },
+    "line": {
+      "ROOT": "Work on {{step}}.",
+      "CUSTOMER": "The customer has {{step}} to do.",
+      "NONE": "The current step is {{step}}."
+    },
+    "open": "Open {{step}}"
+  },
+  "draftSummary": {
+    "title": "What this draft is built on",
+    "open": "Open",
+    "missing_one": "Requirements still lack {{n}} item.",
+    "missing_other": "Requirements still lack {{n}} items.",
+    "complete": "Requirements are complete.",
+    "noScope": "Nothing in the scope yet.",
+    "sep": ", "
+  },
+  "readiness": {
+    "title": "Ready to publish?",
+    "clear": "Nothing blocks publishing.",
+    "blocker": {
+      "SCOPE_EMPTY": "Pages and features: nothing is confirmed yet",
+      "SCOPE_PROPOSALS_one": "Pages and features: {{n}} proposal is waiting for a decision",
+      "SCOPE_PROPOSALS_other": "Pages and features: {{n}} proposals are waiting for a decision",
+      "BRIEF_INCOMPLETE_one": "Requirements: {{n}} item is missing",
+      "BRIEF_INCOMPLETE_other": "Requirements: {{n}} items are missing",
+      "STEP_LOCKED": "The customer has approved the agreement, so the draft is locked",
+      "CONTRACT_SIGNED": "The contract is signed — changes now go in as amendments"
+    },
+    "lastPublished": "Last published",
+    "version": "v{{version}} · {{date}}",
+    "never": "Never",
+    "unpublished": "Unpublished changes",
+    "yes": "Yes",
+    "no": "No"
   }
 }

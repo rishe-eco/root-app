@@ -1,27 +1,26 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApolloClient, useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { lp, useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
-import { calendarDate, formatCount, pick } from '@/lib/format';
+import { formatCount, pick } from '@/lib/format';
 import { hasNoteOnCurrent, notesByArticle } from '@/lib/scopeStep';
 import {
   APPLY_CONTRACT_TEMPLATE,
   CONTRACT_DRAFT_NOTES,
   PUBLISH_CONTRACT_REVISION,
-  SET_PLANNED_DATES,
   type Article,
   type Contract,
   type DraftNote,
   type FeedbackItem,
 } from '@/lib/queries';
-import DayInput from '@/components/DayInput';
 import FeedbackPanel, { errorCode, type FeedbackTarget } from '@/components/FeedbackPanel';
 import { PaymentSchedule } from '@/components/AgreementDocument';
 import { isPaymentScheduleArticle } from '@/lib/agreement';
 import type { StepPanelProps } from '@/components/StepPanels';
-import TitleFeeCard from '@/components/TitleFeeCard';
+import PlannedDates from '@/components/PlannedDates';
+import DraftSummary from '@/components/DraftSummary';
 
 /**
  * Step 2b — the draft and its notes (journeys build plan J6), one panel for
@@ -40,14 +39,22 @@ import TitleFeeCard from '@/components/TitleFeeCard';
  * the end saying so rather than a guess (`notesByArticle`; the API decided
  * which — `Contract.draftNotes`).
  *
- * **Staff see the same page and answer in place**, and above it: the
- * publish button with the API's refusals worded (the scope, then the brief),
- * "apply the contract template" while the draft has no articles, and the
- * planned dates. Editing the articles themselves stays in the Contract tab.
+ * **Staff see the same page and answer in place**, and above it, since DX1
+ * (desk UX review 13): a read-only summary of Requirements and Pages and
+ * features, then the publish button with the API's refusals worded (the scope,
+ * then the brief) and "apply the contract template" while the draft has no
+ * articles — and the publish button again at the foot, after the articles.
+ * **The title, price and planned dates are not here any more**: they are the
+ * contract's own settings and live in the desk's Contract tab (items 15, 17).
+ * Editing the articles themselves stays in the Contract tab.
  *
  * **Money** (PD-14): a sensitive article's body is null for staff without
  * `money.read`; the title stays and the body is drawn as one line saying why —
  * a null must not be a crash, nor an empty article that looks like a mistake.
+ * **A null body is not always money** (DX1, review 33): an article nobody wrote
+ * in this language is null too, and used to be drawn as withheld on every
+ * article of an English reading. The API now says which (`bodyWithheld`); a body
+ * that was never written reads "No English text yet".
  */
 
 type T = (key: string, opts?: Record<string, unknown>) => string;
@@ -70,8 +77,11 @@ function Body({ article, contract }: { article: Article; contract: Contract }) {
     return <PaymentSchedule revision={contract.revision} />;
   }
   const body = locale === 'fa' ? article.bodyFa : article.bodyEn;
-  if (body === null) {
+  if (article.bodyWithheld) {
     return <span className="draft-body draft-body-hidden" data-testid="draft-body-hidden">{t('draft.bodyHidden')}</span>;
+  }
+  if (body === null) {
+    return <span className="draft-body draft-body-empty" data-testid="draft-body-unwritten">{t('draft.bodyNotWritten')}</span>;
   }
   if (body.trim() === '') {
     return <span className="draft-body draft-body-empty">{t('draft.bodyEmpty')}</span>;
@@ -83,76 +93,20 @@ function Body({ article, contract }: { article: Article; contract: Contract }) {
   );
 }
 
-const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : '');
-
-/** The planned start and end, proposed with the draft. Staff with `contracts.author` edit them (a replace); everyone reads them. */
-function PlannedDates({ contract, canEdit }: { contract: Contract; canEdit: boolean }) {
+/**
+ * Publishing, as one piece of state two places share: the button at the top of
+ * the step and the one at the foot (DX1, review 13). `from` remembers which one
+ * was pressed so its refusal or "published" line appears beside it and not twice.
+ */
+function usePublish(contract: Contract) {
   const { t } = useTranslation();
-  const locale = useLocale();
-  const [save, { loading }] = useMutation(SET_PLANNED_DATES);
-  const [start, setStart] = useState(day(contract.plannedStartAt));
-  const [end, setEnd] = useState(day(contract.plannedEndAt));
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  if (!canEdit) {
-    if (!contract.plannedStartAt && !contract.plannedEndAt) return null;
-    return (
-      <div className="draft-dates" data-testid="draft-dates">
-        <span className="req-label">{t('draft.dates.title')}</span>
-        <span className="req-value">
-          {contract.plannedStartAt && contract.plannedEndAt
-            ? t('statusArea.plannedRange', {
-                start: calendarDate(contract.plannedStartAt, locale),
-                end: calendarDate(contract.plannedEndAt, locale),
-              })
-            : calendarDate((contract.plannedStartAt ?? contract.plannedEndAt)!, locale)}
-        </span>
-        <span className="t-caption">{t('draft.dates.proposal')}</span>
-      </div>
-    );
-  }
-
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSaved(false);
-    try {
-      await save({ variables: { contractId: contract.id, plannedStartAt: start || null, plannedEndAt: end || null } });
-      setSaved(true);
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
-
-  return (
-    <form className="card editor-card" onSubmit={onSubmit} data-testid="draft-dates-editor">
-      <h4 className="t-h4">{t('draft.dates.title')}</h4>
-      <p className="sec-help">{t('draft.dates.help')}</p>
-      <DayInput value={start} onChange={setStart} label={t('draft.dates.start')} testId="draft-date-start" />
-      <DayInput value={end} onChange={setEnd} label={t('draft.dates.end')} testId="draft-date-end" />
-      {error ? <p className="error" role="alert" data-testid="draft-dates-error">{error}</p> : null}
-      {saved ? <p className="t-small" role="status" data-testid="draft-dates-saved">{t('brief.form.saved')}</p> : null}
-      <div>
-        <button className="btn btn-primary btn-sm" type="submit" disabled={loading} data-testid="draft-dates-save">
-          {t('workspace.save')}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-/** Staff: the draft's own state and the two things that move it — the template, and publishing. */
-function DraftControls({ contract }: { contract: Contract }) {
-  const { t } = useTranslation();
-  const locale = useLocale();
-  const [publish, { loading: publishing }] = useMutation(PUBLISH_CONTRACT_REVISION);
-  const [apply, { loading: applying }] = useMutation(APPLY_CONTRACT_TEMPLATE);
+  const [publish, { loading }] = useMutation(PUBLISH_CONTRACT_REVISION);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const empty = (contract.draft?.articles.length ?? 0) === 0;
+  const [from, setFrom] = useState<'top' | 'bottom'>('top');
 
-  async function onPublish() {
+  async function run(where: 'top' | 'bottom') {
+    setFrom(where);
     setError(null);
     setDone(false);
     try {
@@ -162,15 +116,29 @@ function DraftControls({ contract }: { contract: Contract }) {
       setError(refusalText(t, err));
     }
   }
+  return { run, loading, error, done, from };
+}
+
+type Publishing = ReturnType<typeof usePublish>;
+
+/** Staff: the draft's own state and the things that move it — the template, and publishing. */
+function DraftControls({ contract, publishing }: { contract: Contract; publishing: Publishing }) {
+  const { t } = useTranslation();
+  const locale = useLocale();
+  const [apply, { loading: applying }] = useMutation(APPLY_CONTRACT_TEMPLATE);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const empty = (contract.draft?.articles.length ?? 0) === 0;
+
   async function onApply() {
-    setError(null);
+    setApplyError(null);
     try {
       await apply({ variables: { contractId: contract.id } });
     } catch (err) {
-      setError(refusalText(t, err));
+      setApplyError(refusalText(t, err));
     }
   }
 
+  const error = applyError ?? (publishing.from === 'top' ? publishing.error : null);
   return (
     <div className="card editor-card" data-testid="draft-controls">
       <h4 className="t-h4">{t('draft.controls.title')}</h4>
@@ -186,15 +154,29 @@ function DraftControls({ contract }: { contract: Contract }) {
             {t('draft.controls.applyTemplate')}
           </button>
         ) : null}
-        <button className="btn btn-primary btn-sm" type="button" disabled={publishing} onClick={onPublish} data-testid="draft-publish">
+        <button className="btn btn-primary btn-sm" type="button" disabled={publishing.loading} onClick={() => void publishing.run('top')} data-testid="draft-publish">
           {t('draft.controls.publish')}
         </button>
-        <Link className="btn btn-ghost btn-sm" to={lp(locale, `/desk/contracts/${contract.id}/contract`)}>
+        <Link className="btn btn-ghost btn-sm" to={lp(locale, `/desk/contracts/${contract.id}/contract`)} data-testid="draft-edit-articles">
           {t('draft.controls.edit')}
         </Link>
       </div>
       {error ? <p className="error" role="alert" data-testid="draft-publish-error">{error}</p> : null}
-      {done ? <p className="t-small" role="status" data-testid="draft-published">{t('draft.controls.publishedNow')}</p> : null}
+      {publishing.done && publishing.from === 'top' ? <p className="t-small" role="status" data-testid="draft-published">{t('draft.controls.publishedNow')}</p> : null}
+    </div>
+  );
+}
+
+/** The publish button again at the foot of the step, after the articles it publishes. */
+function DraftFoot({ publishing }: { publishing: Publishing }) {
+  const { t } = useTranslation();
+  return (
+    <div className="workspace-row draft-foot" data-testid="draft-foot">
+      <button className="btn btn-primary btn-sm" type="button" disabled={publishing.loading} onClick={() => void publishing.run('bottom')} data-testid="draft-publish-bottom">
+        {t('draft.controls.publish')}
+      </button>
+      {publishing.error && publishing.from === 'bottom' ? <p className="error" role="alert" data-testid="draft-publish-error-bottom">{publishing.error}</p> : null}
+      {publishing.done && publishing.from === 'bottom' ? <p className="t-small" role="status" data-testid="draft-published-bottom">{t('draft.controls.publishedNow')}</p> : null}
     </div>
   );
 }
@@ -205,6 +187,7 @@ export default function DraftPanel({ contract, step, audience, me, asCustomer = 
   const staff = audience === 'staff';
   const revision = contract.revision;
   const canAuthor = staff && can(me, 'contracts.author') && !step.locked;
+  const publishing = usePublish(contract);
 
   const client = useApolloClient();
   const { data } = useQuery<{ contract: { id: string; draftNotes: DraftNote[]; feedbackItems: FeedbackItem[] } }>(
@@ -284,10 +267,10 @@ export default function DraftPanel({ contract, step, audience, me, asCustomer = 
         </p>
       ) : null}
 
-      {/* CC1: the title (and fee) where sales looks for it — on this step, not only the Contract tab. */}
-      {canAuthor ? <TitleFeeCard key={contract.id} contractId={contract.id} draft={contract.draft} locked={false} /> : null}
-      {canAuthor ? <DraftControls contract={contract} /> : null}
-      <PlannedDates contract={contract} canEdit={canAuthor} />
+      {/* DX1 (review 13): what the draft is written from, read-only, then the controls — the title, price and dates are on the Contract tab. */}
+      {staff ? <DraftSummary contract={contract} /> : null}
+      {canAuthor ? <DraftControls contract={contract} publishing={publishing} /> : null}
+      <PlannedDates contract={contract} canEdit={false} />
 
       {!revision ? (
         <p className="t-small desk-muted" data-testid="draft-empty">
@@ -312,6 +295,7 @@ export default function DraftPanel({ contract, step, audience, me, asCustomer = 
           />
         </>
       )}
+      {canAuthor ? <DraftFoot publishing={publishing} /> : null}
     </div>
   );
 }

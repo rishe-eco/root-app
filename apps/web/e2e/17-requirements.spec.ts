@@ -25,9 +25,13 @@ import {
  * not been handed over is refused (`BRIEF_MISSING`) until it has a brief, then
  * handed over and read.
  *
- * **Dates:** the Jalali day input is driven through its three selects, and its
- * `data-value` is the Gregorian day it means — so this asserts the conversion
- * as well as the rendering (1 Aban 1405 is 2026-10-23).
+ * **Dates:** the day input is one text field (DX1); a Jalali day is typed into it
+ * (the English panel accepts both calendars), and its `data-value` is the
+ * Gregorian day it means — so this asserts the conversion as well as the
+ * rendering (1 Aban 1405 is 2026-10-23).
+ *
+ * **Panels** are accordions (DX1): the first one lacking something is open, and
+ * the others are opened by their header — `openPanel`.
  */
 
 test.describe.configure({ mode: 'serial' });
@@ -37,13 +41,23 @@ test.beforeAll(() => {
   insertDraftNewRoadContract();
 });
 
-/** Picks a Jalali day in a `DayInput` and checks the Gregorian day it stands for. */
+/** Types a Jalali day into a `DayInput` and checks the Gregorian day it stands for. */
 async function pickDay(page: Page, testId: string, [year, month, day]: [number, number, number], gregorian: string) {
   const box = page.getByTestId(testId);
-  await box.locator('select[data-part="jy"]').selectOption(String(year));
-  await box.locator('select[data-part="jm"]').selectOption(String(month));
-  await box.locator('select[data-part="jd"]').selectOption(String(day));
+  await box.locator('input[data-part="text"]').fill(`${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`);
   await expect(box).toHaveAttribute('data-value', gregorian);
+}
+
+/** Opens a requirements accordion panel if it is closed (`brief`, `extras`, `phases`, `plan`, `handOver`). */
+async function openPanel(page: Page, id: string) {
+  const panel = page.getByTestId(`acc-${id}`);
+  if ((await panel.getAttribute('data-open')) !== 'true') await panel.getByRole('button').first().click();
+  await expect(panel).toHaveAttribute('data-open', 'true');
+}
+
+/** Presses + on a count stepper `times` times. */
+async function stepUp(page: Page, testId: string, times: number) {
+  for (let i = 0; i < times; i += 1) await page.getByTestId(testId).getByRole('button', { name: /^Increase/ }).click();
 }
 
 /** A staff member's Steps tab for a contract, by the ref the desk list shows. */
@@ -72,13 +86,13 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await page.locator('#brief-budget').fill('150000000');
   await pickDay(page, 'brief-ideal', [1405, 7, 1], '2026-09-23'); // 1 Mehr 1405
   await pickDay(page, 'brief-hard', [1405, 8, 1], '2026-10-23'); // 1 Aban 1405
-  await page.locator('#brief-support').fill('6');
+  await page.getByTestId('brief-support-pills').getByRole('button', { name: '6 months' }).click();
   await page.locator('#brief-domain-name').fill('nahal.ir');
-  await page.locator('#brief-provider-domain').selectOption('CUSTOMER');
-  await page.locator('#brief-provider-host').selectOption('ROOT');
-  await page.locator('#brief-provider-content').selectOption('CUSTOMER');
-  await page.locator('#brief-premade').fill('2');
-  await page.locator('#brief-demos').fill('2');
+  await page.getByTestId('brief-provider-domain').getByRole('button', { name: 'The customer' }).click();
+  await page.getByTestId('brief-provider-host').getByRole('button', { name: 'Root' }).click();
+  await page.getByTestId('brief-provider-content').getByRole('button', { name: 'The customer' }).click();
+  await stepUp(page, 'brief-premade', 2);
+  await stepUp(page, 'brief-demos', 2);
 
   // Each provider chosen asks for its commitment's date — before the first save.
   await expect(page.getByTestId('brief-commitment')).toHaveCount(3);
@@ -95,6 +109,7 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await expect(missing.locator('[data-code="PAYMENT_PLAN"]')).toBeVisible();
 
   // A phase with its planned end (1 Azar 1405).
+  await openPanel(page, 'phases');
   const newPhase = page.getByTestId('brief-phase-new');
   await newPhase.locator('input').nth(0).fill('فاز اول');
   await newPhase.locator('input').nth(1).fill('First phase');
@@ -105,6 +120,7 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
 
   // The payment plan: the split proposes rows, sales edits them (there is no fee on this
   // contract yet, so the proposal leaves the amounts blank), and they are stored as typed.
+  await openPanel(page, 'plan');
   const plan = page.getByTestId('plan-editor');
   await plan.getByLabel('Split', { exact: true }).selectOption('INSTALLMENTS');
   await plan.getByLabel('Number of rows').fill('2');
@@ -122,6 +138,7 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
 
   // An extra that needs the customer to bring something becomes a commitment that wants a date.
   // (A click and then a wait, not `check()`: the box is controlled, so it only flips once the server has answered.)
+  await openPanel(page, 'extras');
   const payment = page.getByTestId('extras-editor').locator('input[data-key="checklist.payment"]');
   await payment.click();
   await expect(payment).toBeChecked();
@@ -226,6 +243,7 @@ test('a contract that has not been handed over is refused without a brief, then 
   await expect(page.getByTestId('not-handed-over')).toBeVisible();
 
   // No brief: the refusal is a sentence, not a code.
+  await openPanel(page, 'handOver');
   await page.getByTestId('hand-over-button').click();
   await expect(page.getByTestId('hand-over-error')).toContainText('Fill in the requirements');
 

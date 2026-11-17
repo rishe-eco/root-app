@@ -19,6 +19,7 @@ import {
 import { THEME_PREVIEW_ACCEPT, UploadFailure, uploadThemePreview } from '@/lib/upload';
 import { refusalMessage } from './refusal';
 import type { TemplatesContext } from './Templates';
+import MoneyReadout from '@/components/MoneyReadout';
 
 /**
  * The Themes tab — the catalogue of ready-made site themes a designer can
@@ -194,6 +195,7 @@ function ThemeFields({ idPrefix, draft, onChange }: { idPrefix: string; draft: D
             value={draft.licenseCost}
             onChange={(e) => onChange({ licenseCost: e.target.value })}
           />
+          <MoneyReadout value={draft.licenseCost} />
           <p className="t-caption">{t('desk.templates.themes.licenseCostHint')}</p>
         </div>
       </div>

@@ -3,13 +3,15 @@ import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { UPDATE_CONTRACT_DRAFT, type Contract } from '@/lib/queries';
 import { errorCode } from '@/components/FeedbackPanel';
+import MoneyReadout from '@/components/MoneyReadout';
 
 /**
- * The draft's title and fee (V2), shared since CC1 by the desk's Contract tab
- * and the Steps tab's draft step — the founder looked for the title on the
- * step and it was only on the tab. `updateContractDraft` takes both, so the
- * fee travels with every title save: a form with the title alone would send
- * no amount and clear it.
+ * The draft's title and fee (V2). Shared since CC1 by the desk's Contract tab
+ * and the Steps tab's draft step; since DX1 (desk UX review 15) it is on the
+ * Contract tab alone again — the tab holds the contract's own settings, and the
+ * duplication between the two places is gone. `updateContractDraft` takes both,
+ * so the fee travels with every title save: a form with the title alone would
+ * send no amount and clear it. The fee shows a grouped readout under it (review 23).
  */
 
 function errorMessage(err: unknown, t: (key: string) => string): string {
@@ -79,6 +81,7 @@ export default function TitleFeeCard({
               value={amount ?? ''}
               onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
             />
+            <MoneyReadout value={amount} testId="amount-readout" />
           </div>
         </div>
         {error ? <p className="error">{error}</p> : null}

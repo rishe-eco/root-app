@@ -1121,6 +1121,8 @@ export const typeDefs = /* GraphQL */ `
     "Null for a sensitive article when the viewer may not read the contract's money (PD-14)."
     bodyFa: String
     bodyEn: String
+    "True exactly when the body was withheld from this viewer (PD-14). A null body with this false means the text was never written in that language."
+    bodyWithheld: Boolean!
     "Journeys build plan J4, PD-14: this article's prose is about money."
     sensitive: Boolean!
   }
@@ -1506,6 +1508,8 @@ export const typeDefs = /* GraphQL */ `
     brief: ContractBrief
     "What step 1 still lacks, as codes; empty means the step is done. Never carries a value."
     briefCompleteness: [BriefMissing!]!
+    "DX1: what stops the draft from being published, every blocker at once — from the gate's own code. Empty for anyone without contracts.author."
+    publishBlockers: [PublishBlocker!]!
     "Null for staff without money.read who are not the customer (PD-14), and until a plan exists."
     paymentPlan: PaymentPlan
     "This contract's own phases (PD-5). Project.phases is every phase of the project."
@@ -1760,6 +1764,13 @@ export const typeDefs = /* GraphQL */ `
     mockupIterations: Int
     demoIterationsPerPhase: Int
     updatedAt: DateTime!
+  }
+
+  "A reason the draft cannot be published yet. code is the publish refusal's own code; step is where it is fixed; count is how many things (proposals waiting, brief fields missing)."
+  type PublishBlocker {
+    code: String!
+    step: StepKind
+    count: Int!
   }
 
   "One thing step 1 still lacks. key names which commitment (or phase id) where the code is about one."

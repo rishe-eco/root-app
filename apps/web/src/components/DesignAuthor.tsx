@@ -31,6 +31,7 @@ import { errorCode } from '@/components/FeedbackPanel';
 import ImageUploader from '@/components/ImageUploader';
 import { PaletteItemView } from '@/components/PaletteView';
 import { isInScope, ownItems } from '@/lib/scopeStep';
+import MoneyReadout from '@/components/MoneyReadout';
 
 /**
  * The designer's half of step 4 (journeys build plan J8), and sales' "extend the
@@ -589,6 +590,7 @@ export function AllowanceBox({
                 {t('design.allowance.extend.charge')}
               </label>
               <input id="extend-charge" className="input" inputMode="numeric" value={charge} onChange={(e) => setCharge(e.target.value)} dir="ltr" data-testid="extend-charge" />
+              <MoneyReadout value={charge} />
               <p className="t-caption">{t('design.allowance.extend.chargeHelp')}</p>
             </div>
           ) : null}

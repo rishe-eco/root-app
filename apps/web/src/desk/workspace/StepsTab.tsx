@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import type { WizardStep } from '@/lib/queries';
 import { defaultStep, sameStep, stepFromParams } from '@/lib/wizard';
@@ -28,10 +28,24 @@ export default function StepsTab() {
   const [params] = useSearchParams();
   const [picked, setPicked] = useState<WizardStep | null>(() => stepFromParams(wizard, params) ?? defaultStep(wizard));
   const selected = wizard.find((s) => sameStep(s, picked)) ?? defaultStep(wizard);
+  // The "what's next" line (DX1) links to this tab with a step in the address; when the tab is already open the
+  // address changes and the panel must follow it — the initial state above only ever read it once.
+  useEffect(() => {
+    const named = stepFromParams(wizard, params);
+    if (named) setPicked(named);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   return (
     <>
-      <StepList steps={wizard} selected={selected} onSelect={setPicked} />
+      {/* DX1 (desk UX review 21, 22, 31): the pill you are on stands out, and each says where its step stands. */}
+      <StepList
+        steps={wizard}
+        selected={selected}
+        onSelect={setPicked}
+        nextMoveOn={contract.statusSummary?.nextMoveOn ?? null}
+        briefMissing={contract.briefCompleteness?.length ?? 0}
+      />
       {selected ? <StepPanel contract={contract} step={selected} audience="staff" me={me} /> : null}
     </>
   );

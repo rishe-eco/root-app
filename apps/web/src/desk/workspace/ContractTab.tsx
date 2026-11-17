@@ -22,6 +22,8 @@ import { isPaymentScheduleArticle } from '@/lib/agreement';
 import { errorCode } from '@/components/FeedbackPanel';
 import Lock from '@/components/Lock';
 import TitleFeeCard from '@/components/TitleFeeCard';
+import PlannedDates from '@/components/PlannedDates';
+import ReadinessBox from './ReadinessBox';
 import type { WorkspaceContext } from './ContractWorkspace';
 
 function errorMessage(err: unknown, t?: (key: string, opts?: Record<string, unknown>) => string): string {
@@ -38,11 +40,16 @@ function ArticleCard({
   onDone,
   locked,
   newRoad,
+  folded = false,
+  onToggle,
 }: {
   contractId: string;
   article: Article | null;
   nextNumber: number;
   onDone?: () => void;
+  /** DX1 (review 14): shown as its title alone. The form stays mounted, hidden, so a half-typed edit survives a fold. */
+  folded?: boolean;
+  onToggle?: () => void;
   /** The agreement is approved (J7): every write here would be `STEP_LOCKED`. */
   locked: boolean;
   /** An `AGREEMENT_FIRST` contract — the only road with a generated schedule. */
@@ -98,16 +105,37 @@ function ArticleCard({
     }
   }
 
+  const locale = useLocale();
+  const title = (locale === 'fa' ? titleFa || titleEn : titleEn || titleFa) || '—';
+  const bodyId = `article-body-${number}`;
+
   return (
-    <div className="card editor-card">
+    <div className="card editor-card" data-testid="article-card" data-number={number} data-folded={folded ? 'true' : 'false'}>
       <div className="editor-card-head">
-        <span className="t-eyebrow num-latin">{number}</span>
+        {article && onToggle ? (
+          <button
+            type="button"
+            className="article-toggle"
+            aria-expanded={!folded}
+            aria-controls={bodyId}
+            aria-label={t('workspace.foldArticle', { n: number })}
+            onClick={onToggle}
+            data-testid="article-toggle"
+          >
+            <span className="t-eyebrow num-latin">{number}</span>
+            <span className="article-toggle-title" data-testid="article-title">{title}</span>
+            <span className="article-toggle-mark" aria-hidden="true">{folded ? (locale === 'fa' ? '◂' : '▸') : '▾'}</span>
+          </button>
+        ) : (
+          <span className="t-eyebrow num-latin">{number}</span>
+        )}
         {article ? (
           <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete} disabled={deleting || locked}>
             {t('workspace.delete')}
           </button>
         ) : null}
       </div>
+      <div id={bodyId} hidden={folded}>
       <form className="auth-form" onSubmit={onSave}>
         <div className="editor-grid-2">
           <div className="field">
@@ -154,6 +182,7 @@ function ArticleCard({
           </button>
         </div>
       </form>
+      </div>
     </div>
   );
 }
@@ -344,7 +373,11 @@ export default function ContractTab() {
   const [addingArticle, setAddingArticle] = useState(false);
   const [issuingAmendment, setIssuingAmendment] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  // Which of the two publish rows the message belongs under (DX1 added the top one).
+  const [errorAt, setErrorAt] = useState<'top' | 'foot'>('foot');
   const [handoverError, setHandoverError] = useState<string | null>(null);
+  // Which articles are folded to their titles (DX1, review 14). Local and light: it is a view, not data.
+  const [folded, setFolded] = useState<ReadonlySet<number>>(new Set());
 
   const [applyTemplate, { loading: applyingTemplate }] = useMutation(APPLY_CONTRACT_TEMPLATE);
   const [publishRevision, { loading: publishing }] = useMutation(PUBLISH_CONTRACT_REVISION);
@@ -368,6 +401,7 @@ export default function ContractTab() {
   }
 
   async function onApplyTemplate() {
+    setErrorAt('top');
     setPublishError(null);
     try {
       await applyTemplate({ variables: { contractId: contract.id } });
@@ -376,7 +410,8 @@ export default function ContractTab() {
     }
   }
 
-  async function onPublishRevision() {
+  async function onPublishRevision(at: 'top' | 'foot' = 'foot') {
+    setErrorAt(at);
     setPublishError(null);
     try {
       await publishRevision({ variables: { contractId: contract.id } });
@@ -400,6 +435,7 @@ export default function ContractTab() {
 
   async function onIssueAmendment(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setErrorAt('foot');
     const form = new FormData(e.currentTarget);
     try {
       await issueAmendment({
@@ -428,11 +464,26 @@ export default function ContractTab() {
         </p>
       ) : null}
 
+      {/* DX1: whether the draft can be published, before anything else (review 16). */}
+      {newRoad ? <ReadinessBox contract={contract} /> : null}
+
+      {/* DX1 (review 15): the contract's own settings — title, total price, planned dates — are here and only here. */}
       <TitleFeeCard contractId={contract.id} draft={draft} locked={locked} />
+      {newRoad ? <PlannedDates contract={contract} canEdit={!locked} /> : null}
 
       <div className="workspace-row">
         <h3 className="t-h3">{t('workspace.articlesTitle')}</h3>
         <div className="editor-card-actions">
+          {articles.length > 1 ? (
+            <>
+              <button className="btn btn-ghost btn-sm" type="button" data-testid="fold-all" onClick={() => setFolded(new Set(articles.map((a) => a.number)))}>
+                {t('workspace.foldAll')}
+              </button>
+              <button className="btn btn-ghost btn-sm" type="button" data-testid="open-all" onClick={() => setFolded(new Set())}>
+                {t('workspace.openAll')}
+              </button>
+            </>
+          ) : null}
           {articles.length === 0 ? (
             <button className="btn btn-secondary btn-sm" type="button" onClick={onApplyTemplate} disabled={applyingTemplate || locked}>
               {t('workspace.applyTemplate')}
@@ -441,8 +492,19 @@ export default function ContractTab() {
           <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingArticle(true)} disabled={locked}>
             {t('workspace.addArticle')}
           </button>
+          {/* DX1 (review 17): publish where the articles are edited, as well as at the foot. */}
+          <button
+            className="btn btn-primary btn-sm"
+            type="button"
+            onClick={() => void onPublishRevision('top')}
+            disabled={publishing || !draft?.dirty || locked}
+            data-testid="publish-top"
+          >
+            {t('workspace.publishTop')}
+          </button>
         </div>
       </div>
+      {publishError && errorAt === 'top' ? <p className="error" role="alert" data-testid="publish-error-top">{publishError}</p> : null}
 
       <div className="editor-list">
         {addingArticle ? (
@@ -456,7 +518,23 @@ export default function ContractTab() {
           />
         ) : null}
         {articles.map((a) => (
-          <ArticleCard key={a.number} contractId={contract.id} article={a} nextNumber={a.number} locked={locked} newRoad={newRoad} />
+          <ArticleCard
+            key={a.number}
+            contractId={contract.id}
+            article={a}
+            nextNumber={a.number}
+            locked={locked}
+            newRoad={newRoad}
+            folded={folded.has(a.number)}
+            onToggle={() =>
+              setFolded((prev) => {
+                const next = new Set(prev);
+                if (next.has(a.number)) next.delete(a.number);
+                else next.add(a.number);
+                return next;
+              })
+            }
+          />
         ))}
       </div>
 
@@ -468,13 +546,13 @@ export default function ContractTab() {
         <button
           className="btn btn-primary btn-sm"
           type="button"
-          onClick={onPublishRevision}
+          onClick={() => void onPublishRevision('foot')}
           disabled={publishing || !draft?.dirty || locked}
         >
           {t('workspace.publishRevision')}
         </button>
       </div>
-      {publishError ? <p className="error">{publishError}</p> : null}
+      {publishError && errorAt === 'foot' ? <p className="error">{publishError}</p> : null}
 
       {!contract.publishedAt ? (
         <div className="workspace-row">

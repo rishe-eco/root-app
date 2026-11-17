@@ -27,6 +27,7 @@ import {
   type User,
 } from '@/lib/queries';
 import { calendarDate, formatAmount, formatCount, fullDateTime, pick } from '@/lib/format';
+import MoneyReadout from '@/components/MoneyReadout';
 
 /**
  * The desk's own billing surface (build plan L6; spec §8) — the report
@@ -511,6 +512,7 @@ export default function Billing() {
             <div className="field">
               <label className="label">{t('billing.amountLabel')}</label>
               <input className="input num-latin" required inputMode="numeric" value={subAmount} onChange={(e) => setSubAmount(e.target.value)} />
+              <MoneyReadout value={subAmount} />
             </div>
             <div className="field">
               <label className="label">{t('billing.periodLabel')}</label>
@@ -597,6 +599,7 @@ export default function Billing() {
             <div className="field">
               <label className="label">{t('billing.amountLabel')}</label>
               <input className="input num-latin" required inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <MoneyReadout value={amount} />
             </div>
             <div className="field">
               <label className="label">{t('desk.billing.termLabel')}</label>

@@ -41,6 +41,7 @@ import { Theme, themeMutations, themeQueries } from './themes.js';
 import { Request, requestMutations, requestQueries } from './requests.js';
 import { peopleMutations, peopleQueries } from './people.js';
 import { contractWizardFields, wizardMutations } from './wizard.js';
+import { contractPublishFields } from './publishGate.js';
 import { homeQueries } from './home.js';
 import { briefMutations, contractBriefFields } from './brief.js';
 import { scopeMutations, contractScopeFields } from './scope.js';
@@ -84,6 +85,7 @@ export const resolvers = {
   Contract: {
     ...ContractFields,
     ...contractWizardFields,
+    ...contractPublishFields,
     ...contractBriefFields,
     ...contractScopeFields,
     ...contractDraftNoteFields,

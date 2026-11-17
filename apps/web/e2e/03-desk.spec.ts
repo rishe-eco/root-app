@@ -267,7 +267,7 @@ test('sales assigns and then changes the contract designer through the workspace
   // The seed assigns both designer@ and developer@ to this contract.
   await expect(page.getByText('Designer: Designer')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Change' }).click();
+  await page.getByRole('button', { name: 'Change', exact: true }).click();
   const selects = page.locator('form.workspace-row select');
   await selects.first().selectOption({ label: 'Root' });
   await page.locator('form.workspace-row').getByRole('button', { name: 'Save' }).click();
