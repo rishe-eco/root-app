@@ -144,6 +144,10 @@ export const Contract = {
         sensitive,
         bodyFa: readable ? a.bodyFa : null,
         bodyEn: readable ? a.bodyEn : null,
+        // DX1 (desk UX review 33): a null body means two things — withheld, or
+        // never written in that language — and the client drew both as "about
+        // money". This says which, from the one decision that nulled it.
+        bodyWithheld: !readable,
       };
     });
   },
@@ -206,7 +210,7 @@ export const Contract = {
       // fee is written in words.
       articles: c.articles.map((a) => {
         const readable = mayReadArticleBody(user, c, a);
-        return { ...a, bodyFa: readable ? a.bodyFa : null, bodyEn: readable ? a.bodyEn : null };
+        return { ...a, bodyFa: readable ? a.bodyFa : null, bodyEn: readable ? a.bodyEn : null, bodyWithheld: !readable };
       }),
       contentHash: hash,
       dirty,

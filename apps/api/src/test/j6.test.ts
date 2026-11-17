@@ -555,3 +555,39 @@ test('the whole of step 2: seed, propose, decide, publish, note, revise, and see
     [2, false, 'ADDRESSED', true, 3],
   );
 });
+
+// ---- DX1: the readiness box reads the gate's own code ------------------------------
+
+const BLOCKERS = `query($c: ID!){ contract(id: $c) { publishBlockers { code step count } } }`;
+const blockers = async (as: User = staff.SALES) =>
+  (ok(await exec(BLOCKERS, { as, variables: { c: f.contract.id } })).contract as { publishBlockers: Array<{ code: string; step: string | null; count: number }> })
+    .publishBlockers;
+
+test('publishBlockers lists every gate at once, in the publish order, and clears exactly when the publish would succeed', async () => {
+  // Nothing seeded and a bare brief: both gates stand — the mutation names only the first.
+  const both = await blockers();
+  assert.deepEqual(both.map((b) => [b.code, b.step]), [['SCOPE_UNCONFIRMED', 'SCOPE'], ['BRIEF_INCOMPLETE', 'REQUIREMENTS']]);
+  assert.ok(both[1].count > 0, 'the brief blocker carries how many fields are missing');
+  assert.equal((await publish()).code, both[0].code, 'the publish refuses with the first listed blocker');
+
+  await readyToPublish();
+  assert.deepEqual(await blockers(), []);
+  ok(await publish());
+});
+
+test('publishBlockers: signed and locked are listed too; anyone without contracts.author gets an empty list, not an error', async () => {
+  await readyToPublish();
+  assert.deepEqual(await blockers(staff.DESIGNER), []);
+  assert.deepEqual(await blockers(f.customer), []);
+  await lock();
+  assert.deepEqual((await blockers()).map((b) => b.code), ['STEP_LOCKED']);
+  await prisma.signature.create({
+    data: { contractRevisionId: f.contractRevision.id, signerId: f.customer.id, typedName: 'Test Customer', signedHash: f.contractRevision.contentHash! },
+  });
+  assert.deepEqual((await blockers()).map((b) => b.code), ['CONTRACT_SIGNED', 'STEP_LOCKED']);
+});
+
+test('a legacy-road contract has no content gates to list', async () => {
+  await prisma.contract.update({ where: { id: f.contract.id }, data: { sequence: 'DESIGN_FIRST' } });
+  assert.deepEqual(await blockers(), []);
+});

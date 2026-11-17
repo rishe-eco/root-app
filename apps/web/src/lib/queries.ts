@@ -504,6 +504,8 @@ export type Article = {
   /** Null for a sensitive article when the viewer may not read the contract's money (PD-14, J4). */
   bodyFa: string | null;
   bodyEn: string | null;
+  /** DX1: true only when the body was withheld from this viewer; a null body with this false was never written. */
+  bodyWithheld?: boolean;
   sensitive?: boolean;
 };
 
@@ -1442,6 +1444,7 @@ export const CONTRACT_FIELDS = gql`
       titleEn
       bodyFa
       bodyEn
+      bodyWithheld
       sensitive
     }
     agreedScopeItems {
@@ -1661,6 +1664,7 @@ export const CONTRACT_WORKSPACE_FIELDS = gql`
         titleEn
         bodyFa
         bodyEn
+        bodyWithheld
         sensitive
       }
     }

@@ -8,7 +8,7 @@ import { draftStateOn } from '../agreement.js';
 import { SEQUENCE_FOR_NEW_CONTRACTS, stepOnRoad } from '../../../lib/steps.js';
 import { lockContract } from '../../../lib/stepApproval.js';
 import { parseCalendarDay } from '../../../lib/calendarDay.js';
-import { scopeSeeded, scopeStepDone, seedRows } from '../../../lib/scopeProposals.js';
+import { scopeSeeded, seedRows } from '../../../lib/scopeProposals.js';
 import {
   ARTICLES,
   SCOPE,
@@ -19,7 +19,8 @@ import {
   renderArticleBody,
 } from '../../../lib/templates.js';
 import { contractInclude, log, nudgeStatus, reload, type FullContract } from '../contracts.js';
-import { assertStepOpenOn, briefIncompleteOn } from '../wizard.js';
+import { assertStepOpenOn } from '../wizard.js';
+import { publishContentRefusals, refusalError } from '../publishGate.js';
 import { asConcurrentPublish } from './shared.js';
 import { notify } from '../../../lib/notify.js';
 import { env } from '../../../lib/env.js';
@@ -464,30 +465,10 @@ export const contractAdminMutations = {
         // never locked: `assertStepOpen` ignores approvals on it.)
         await assertStepOpenOn(contract.id, 'DRAFT', null, tx);
 
-        if (contract.sequence === 'AGREEMENT_FIRST') {
-          const proposals = await tx.scopeProposal.findMany({
-            where: { contractId: contract.id },
-            select: { decidedAt: true },
-          });
-          if (!scopeStepDone({ items: contract.project.scopeItems, proposals, contractId: contract.id })) {
-            throw new GraphQLError(
-              'The scope is not confirmed: it has nothing in it yet, or a proposal is still waiting for a decision.',
-              {
-                extensions: {
-                  code: 'SCOPE_UNCONFIRMED',
-                  undecided: proposals.filter((p) => p.decidedAt === null).length,
-                  seeded: scopeSeeded(contract.project.scopeItems, contract.id),
-                },
-              },
-            );
-          }
-          const missing = await briefIncompleteOn(contract);
-          if (missing.length > 0) {
-            throw new GraphQLError('Step 1 is not complete yet.', {
-              extensions: { code: 'BRIEF_INCOMPLETE', missing: missing.map((m) => m.code) },
-            });
-          }
-        }
+        // The scope, then the brief (J6) — decided in `publishGate.ts`, which the
+        // desk's readiness box (`Contract.publishBlockers`) reads too.
+        const [refusal] = await publishContentRefusals(tx, contract);
+        if (refusal) throw refusalError(refusal);
 
         // Appendix 1 as a view of the registry (L1) — the agreed-or-beyond set,
         // in registry order — and, on the new road, steps 1 and 2 beside it:
