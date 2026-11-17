@@ -154,8 +154,12 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
     valid: (v) => v.templateTypeId !== '',
     save: async (input) => {
       setPresetNotice(false);
+      // Decided from what is being saved, not from `presetPending`: the kind select commits before its new state has
+      // rendered, so this render's `kind` is still the old one (DX4 review). Missing it also left the form's design
+      // tier stale, and the next blur would have sent it back over the preset's No design.
+      const presetApplies = input.kind === 'FEATURE_FOR_EXISTING' && brief?.kind !== 'FEATURE_FOR_EXISTING';
       await setBrief({ variables: { contractId: contract.id, input } });
-      if (presetPending) {
+      if (presetApplies) {
         // The server set No design (the form still holds what was on screen); its rows follow through the cache.
         setDesignTier('NONE');
         setPresetNotice(true);

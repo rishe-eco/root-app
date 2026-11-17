@@ -58,6 +58,9 @@ export function useAutosave<V>({
   const lastSaved = useRef<V>(baseline);
   const inFlight = useRef(false);
   const again = useRef(false);
+  // DX4 review: the value a commit asked for while a save was in flight. Dropping it lost a pill pressed during a
+  // save — the re-run read the form after the first save had already reset it.
+  const queued = useRef<unknown>(undefined);
   const mounted = useRef(true);
   const [status, setStatus] = useState<AutosaveStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +91,7 @@ export function useAutosave<V>({
     if (cur.disabled) return;
     if (inFlight.current) {
       again.current = true;
+      if (override !== undefined) queued.current = override;
       return;
     }
     const next = (override === undefined ? cur.value : override) as V;
@@ -108,7 +112,9 @@ export function useAutosave<V>({
       inFlight.current = false;
       if (again.current) {
         again.current = false;
-        void run();
+        const next = queued.current;
+        queued.current = undefined;
+        void run(next);
       }
     }
   }, []);

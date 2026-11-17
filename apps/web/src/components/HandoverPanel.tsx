@@ -77,7 +77,10 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
           variables: { dependencyId: d.id, ...handoverPatch(e2.choice), dueAt: instantOf(e2.due), contractId: contract.id },
         });
       }
-      setEdits({});
+      // Only the edits this save carried: one made while it was in flight is still the user's and goes next (DX4 review).
+      setEdits((prev) =>
+        Object.fromEntries(Object.entries(prev).filter(([id, e]) => JSON.stringify(e) !== JSON.stringify(v[id]))),
+      );
     },
     disabled: locked,
     errorText: (err) => refusalText(t, err),
