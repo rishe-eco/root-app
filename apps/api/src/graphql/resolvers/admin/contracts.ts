@@ -24,6 +24,7 @@ import { publishContentRefusals, refusalError } from '../publishGate.js';
 import { asConcurrentPublish } from './shared.js';
 import { notify } from '../../../lib/notify.js';
 import { env } from '../../../lib/env.js';
+import { requireOneTitle } from '../../../lib/titles.js';
 import { REF_PATTERN, lockContractRefs, nextRef } from '../../../lib/contractRef.js';
 import { setItemPhases } from '../../../lib/itemPhases.js';
 
@@ -119,7 +120,10 @@ export const contractAdminMutations = {
     ctx: Context,
   ) => {
     const admin = requireCapability(ctx, 'contracts.author');
-    const { input } = args;
+    const { input: raw } = args;
+    // DX4: a title in one language is enough; the other is stored as ''.
+    const title = requireOneTitle(raw.titleFa, raw.titleEn);
+    const input = { ...raw, titleFa: title.fa, titleEn: title.en };
     // Before anything is written: a refused assignee must not leave a
     // project behind with no contract on it.
     await assertAssignable(input.designerId, 'design.author');
@@ -523,7 +527,9 @@ export const contractAdminMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
-    const { contractId, number, sensitive, ...rest } = args;
+    const { contractId, number, sensitive, ...restArgs } = args;
+    const title = requireOneTitle(restArgs.titleFa, restArgs.titleEn);
+    const rest = { ...restArgs, titleFa: title.fa, titleEn: title.en };
     const contract = await prisma.contract.findUnique({ where: { id: contractId }, select: { id: true, sequence: true } });
     if (!contract) throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
     await prisma.$transaction(async (tx) => {
@@ -565,14 +571,15 @@ export const contractAdminMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
+    const title = requireOneTitle(args.titleFa, args.titleEn);
     await prisma.$transaction(async (tx) => {
       await lockContract(tx, args.contractId);
       await assertStepOpenOn(args.contractId, 'DRAFT', null, tx);
       await tx.contract.update({
         where: { id: args.contractId },
         data: {
-          titleFa: args.titleFa,
-          titleEn: args.titleEn,
+          titleFa: title.fa,
+          titleEn: title.en,
           amount: args.amount ? BigInt(args.amount) : null,
         },
       });

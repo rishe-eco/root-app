@@ -64,7 +64,7 @@ const TEXT_MESSAGES = {
 const DECISION_MESSAGES: Record<DecisionProblem, string> = {
   REASON_REQUIRED: 'Declining a proposal needs a reason — the customer reads it.',
   REASON_TOO_LONG: 'That reason is too long.',
-  LABEL_REQUIRED: 'Confirming an addition needs its label in both languages.',
+  LABEL_REQUIRED: 'Confirming an addition needs its label, in either language.',
   INVALID_KEY: 'A key is Latin letters and digits joined by dots or hyphens.',
   INVALID_KIND: 'An item is a page, a feature or a deliverable.',
 };

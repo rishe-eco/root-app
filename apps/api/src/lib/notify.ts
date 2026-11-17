@@ -37,6 +37,7 @@ import {
   demoApprovedEmail,
   type MailContent,
 } from './mailTemplates.js';
+import { fillPairs } from './titles.js';
 import {
   inviteSms,
   requestSubmittedSms,
@@ -301,7 +302,11 @@ export type NotifyEvent =
 
 /** Every event's email rendering — always defined, since every event this
  *  router carries today has a recipient who might have an email. */
-function renderEmail(locale: string | null | undefined, event: NotifyEvent): MailContent {
+function renderEmail(locale: string | null | undefined, rawEvent: NotifyEvent): MailContent {
+  // DX4: a title may be in one language only; the template for the other reads
+  // the blank one, so every `xFa`/`xEn` pair in the params is filled once, here
+  // (`lib/titles.ts`), instead of in each of the templates.
+  const event = { ...rawEvent, params: fillPairs(rawEvent.params) } as NotifyEvent;
   switch (event.kind) {
     case 'INVITE_CUSTOMER':
       return inviteEmail(locale, event.params);

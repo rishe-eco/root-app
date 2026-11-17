@@ -7,6 +7,7 @@ import { requireBuildAuthorOnPhase, siteDemo } from '../access.js';
 import { assertStepOpenOn } from '../wizard.js';
 import { lockContract } from '../../../lib/stepApproval.js';
 import { parseCalendarDay } from '../../../lib/calendarDay.js';
+import { requireOneTitle } from '../../../lib/titles.js';
 import { checkStagingUrl, type StagingRefusal } from '../../../lib/stagingHost.js';
 import { env } from '../../../lib/env.js';
 import { clearPageMapConfirmation, openDemo } from '../demoStep.js';
@@ -167,6 +168,7 @@ export const phaseMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
+    const title = requireOneTitle(args.titleFa, args.titleEn);
     const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -181,8 +183,8 @@ export const phaseMutations = {
             projectId: contract.projectId,
             contractId: contract.id,
             number: args.number,
-            titleFa: args.titleFa,
-            titleEn: args.titleEn,
+            titleFa: title.fa,
+            titleEn: title.en,
             milestoneLabel: args.milestoneLabel ?? null,
             plannedEndAt: end ?? null,
             hasDemo: args.hasDemo ?? true,
@@ -215,6 +217,7 @@ export const phaseMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
+    const title = requireOneTitle(args.titleFa, args.titleEn);
     const phase = await phaseOnContract(args.phaseId, args.contractId);
     const end = plannedEnd(args.plannedEndAt);
     await prisma.$transaction(async (tx) => {
@@ -223,8 +226,8 @@ export const phaseMutations = {
       await tx.phase.update({
         where: { id: phase.id },
         data: {
-          titleFa: args.titleFa,
-          titleEn: args.titleEn,
+          titleFa: title.fa,
+          titleEn: title.en,
           // Omitted leaves it (the step-1 form edits a phase without knowing its
           // milestone label); null clears it, as the phase board always meant.
           milestoneLabel: args.milestoneLabel === undefined ? undefined : args.milestoneLabel,
@@ -386,6 +389,7 @@ export const phaseMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'builds.author');
+    const label = requireOneTitle(args.labelFa, args.labelEn, 'LABEL_REQUIRED');
     const demo = await loadDemo(args.demoId);
     await requireBuildAuthorOnPhase(ctx, demo.phaseId);
     if (args.pageDesignId) {
@@ -397,8 +401,8 @@ export const phaseMutations = {
         data: {
           demoId: demo.id,
           key: args.key,
-          labelFa: args.labelFa,
-          labelEn: args.labelEn,
+          labelFa: label.fa,
+          labelEn: label.en,
           canonicalPath: args.canonicalPath,
           pageDesignId: args.pageDesignId ?? null,
         },
@@ -421,6 +425,7 @@ export const phaseMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'builds.author');
+    const label = requireOneTitle(args.labelFa, args.labelEn, 'LABEL_REQUIRED');
     const page = await loadDemoPage(args.demoPageId);
     await requireBuildAuthorOnPhase(ctx, page.demo.phaseId);
     if (args.pageDesignId) {
@@ -431,8 +436,8 @@ export const phaseMutations = {
       await tx.demoPage.update({
         where: { id: page.id },
         data: {
-          labelFa: args.labelFa,
-          labelEn: args.labelEn,
+          labelFa: label.fa,
+          labelEn: label.en,
           canonicalPath: args.canonicalPath,
           pageDesignId: args.pageDesignId ?? null,
         },

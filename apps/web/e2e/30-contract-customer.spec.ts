@@ -8,6 +8,7 @@ import {
   gql,
   resetTestDatabase,
   signIn,
+  expectSaved,
 } from './helpers';
 
 /**
@@ -55,7 +56,8 @@ test('the title is editable on the Contract tab — not on the draft step, which
   await panel.getByTestId('draft-edit-articles').click();
   await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
   await page.locator('#ct-en').fill('Nahal online shop, renamed');
-  await page.getByTestId('title-fee-save').click();
+  await page.locator('#ct-en').blur();
+  await expectSaved(page, 'title-fee-autosave');
   await expect(page.locator('.workspace-head h2')).toHaveText('Nahal online shop, renamed');
 });
 

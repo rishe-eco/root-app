@@ -2,6 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
+import { useLocale } from '@/lib/locale';
+import { pick } from '@/lib/format';
 import { can } from '@/lib/access';
 import {
   ADD_SCOPE_ITEM,
@@ -38,13 +44,14 @@ function ScopeItemCard({
   editable: boolean;
 }) {
   const { t } = useTranslation();
+  const locale = useLocale();
   const [labelFa, setLabelFa] = useState(item.labelFa);
   const [labelEn, setLabelEn] = useState(item.labelEn);
   const [reason, setReason] = useState(item.declinedReason ?? '');
   const [decideNote, setDecideNote] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const [update, { loading: saving }] = useWorkspaceMutation(UPDATE_SCOPE_ITEM);
+  const [update] = useWorkspaceMutation(UPDATE_SCOPE_ITEM);
   const [remove, { loading: deleting }] = useWorkspaceMutation(DELETE_SCOPE_ITEM);
   const [setStatus] = useWorkspaceMutation(SET_SCOPE_ITEM_STATUS);
   const [setFlags] = useWorkspaceMutation(SET_SCOPE_ITEM_FLAGS);
@@ -61,10 +68,16 @@ function ScopeItemCard({
     }
   }
 
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    await guarded(() => update({ variables: { scopeItemId: item.id, labelFa, labelEn } }));
-  }
+  // DX4 (review 27): a registry item's label saves when the field is left. The item is live for the
+  // customer the moment it is written (V2.md §5), exactly as it was with the button.
+  const autosave = useAutosave({
+    value: { labelFa, labelEn },
+    baseline: { labelFa: item.labelFa, labelEn: item.labelEn },
+    valid: (v) => hasOneTitle(v.labelFa, v.labelEn),
+    save: (v) => update({ variables: { scopeItemId: item.id, labelFa: v.labelFa, labelEn: v.labelEn } }),
+    disabled: !editable,
+    errorText: errorMessage,
+  });
 
   async function onDelete() {
     if (!confirm(t('workspace.confirmDeleteScopeItem'))) return;
@@ -118,7 +131,7 @@ function ScopeItemCard({
             {item.checked ? t('workspace.scopeChecked') : t('workspace.scopeUnchecked')}
           </span>
         </div>
-        <p className="t-small">{item.labelFa}</p>
+        <p className="t-small">{pick(item, 'label', locale)}</p>
         <div className="workspace-row">
           <span className="badge">{t(`workspace.scopeStatus${item.status}`)}</span>
           {item.temporary ? <span className="badge">{t('workspace.scopeFlagTemporary')}</span> : null}
@@ -168,21 +181,10 @@ function ScopeItemCard({
         </div>
       </div>
 
-      <form className="auth-form" onSubmit={onSave}>
-        <div className="editor-grid-2">
-          <div className="field">
-            <label className="label">{t('workspace.titleFa')}</label>
-            <input className="input" dir="rtl" required value={labelFa} onChange={(e) => setLabelFa(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="label">{t('workspace.titleEn')}</label>
-            <input className="input" dir="ltr" required value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
-          </div>
-        </div>
+      <form className="auth-form" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur}>
+        <TitleField idBase={`scope-${item.key}`} testId="scope-item-title" fa={labelFa} en={labelEn} onChange={(v) => { setLabelFa(v.fa); setLabelEn(v.en); }} />
+        <AutosaveNote autosave={autosave} testId="scope-item-autosave" />
         <div className="editor-card-actions">
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={saving}>
-            {t('workspace.save')}
-          </button>
           <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete} disabled={deleting}>
             {t('workspace.delete')}
           </button>
@@ -262,6 +264,7 @@ function ScopeItemCard({
 
 function ScopeTradeCard({ trade, editable }: { trade: ScopeTrade; editable: boolean }) {
   const { t } = useTranslation();
+  const locale = useLocale();
   const [confirmRoot, { loading }] = useWorkspaceMutation(CONFIRM_SCOPE_TRADE_ROOT);
   const [error, setError] = useState<string | null>(null);
 
@@ -279,11 +282,11 @@ function ScopeTradeCard({ trade, editable }: { trade: ScopeTrade; editable: bool
       <div className="editor-grid-2">
         <div>
           <span className="t-eyebrow">{t('workspace.scopeTradeOut')}</span>
-          <p className="t-small">{trade.outItem.labelFa}</p>
+          <p className="t-small">{pick(trade.outItem, 'label', locale)}</p>
         </div>
         <div>
           <span className="t-eyebrow">{t('workspace.scopeTradeIn')}</span>
-          <p className="t-small">{trade.inItem.labelFa}</p>
+          <p className="t-small">{pick(trade.inItem, 'label', locale)}</p>
         </div>
       </div>
       <div className="workspace-row">
@@ -309,6 +312,7 @@ function ScopeTradeCard({ trade, editable }: { trade: ScopeTrade; editable: bool
 
 export default function ScopeTab() {
   const { t } = useTranslation();
+  const locale = useLocale();
   const { contract, me } = useOutletContext<WorkspaceContext>();
   // Journeys build plan S1: the registry (this whole tab) is contracts.author
   // — design and development read active contracts but never write the
@@ -386,19 +390,10 @@ export default function ScopeTab() {
             <label className="label">{t('workspace.scopeKey')}</label>
             <input className="input num-latin" dir="ltr" required value={key} onChange={(e) => setKey(e.target.value)} />
           </div>
-          <div className="editor-grid-2">
-            <div className="field">
-              <label className="label">{t('workspace.titleFa')}</label>
-              <input className="input" dir="rtl" required value={labelFa} onChange={(e) => setLabelFa(e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label">{t('workspace.titleEn')}</label>
-              <input className="input" dir="ltr" required value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
-            </div>
-          </div>
+          <TitleField idBase="tf-2" fa={labelFa} en={labelEn} onChange={(v) => { setLabelFa(v.fa); setLabelEn(v.en); }} />
           {error ? <p className="error">{error}</p> : null}
           <div>
-            <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
+            <button className="btn btn-primary btn-sm" type="submit" disabled={loading || !hasOneTitle(labelFa, labelEn)}>
               {t('workspace.save')}
             </button>
           </div>
@@ -430,7 +425,7 @@ export default function ScopeTab() {
               </option>
               {tradeableItems.map((i) => (
                 <option key={i.id} value={i.id}>
-                  {i.labelFa} ({i.key})
+                  {pick(i, 'label', locale)} ({i.key})
                 </option>
               ))}
             </select>
@@ -439,19 +434,10 @@ export default function ScopeTab() {
             <label className="label">{t('workspace.scopeTradeInKey')}</label>
             <input className="input num-latin" dir="ltr" required value={inKey} onChange={(e) => setInKey(e.target.value)} />
           </div>
-          <div className="editor-grid-2">
-            <div className="field">
-              <label className="label">{t('workspace.titleFa')}</label>
-              <input className="input" dir="rtl" required value={inLabelFa} onChange={(e) => setInLabelFa(e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label">{t('workspace.titleEn')}</label>
-              <input className="input" dir="ltr" required value={inLabelEn} onChange={(e) => setInLabelEn(e.target.value)} />
-            </div>
-          </div>
+          <TitleField idBase="tf-3" fa={inLabelFa} en={inLabelEn} onChange={(v) => { setInLabelFa(v.fa); setInLabelEn(v.en); }} />
           {tradeError ? <p className="error">{tradeError}</p> : null}
           <div>
-            <button className="btn btn-primary btn-sm" type="submit" disabled={proposeLoading}>
+            <button className="btn btn-primary btn-sm" type="submit" disabled={proposeLoading || !hasOneTitle(inLabelFa, inLabelEn)}>
               {t('workspace.save')}
             </button>
           </div>

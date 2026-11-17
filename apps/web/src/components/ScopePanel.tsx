@@ -1,6 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
+import TitleField from '@/components/TitleField';
+import { hasOneTitle } from '@/lib/titleScript';
 import { useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
 import { formatCount, pick } from '@/lib/format';
@@ -251,7 +253,7 @@ function AddItemForm({ contract }: { contract: Contract }) {
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
   const [add, { loading }] = useMutation(ADD_SCOPE_ITEM);
-  const ready = labelFa.trim() !== '' && labelEn.trim() !== '';
+  const ready = hasOneTitle(labelFa, labelEn);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -292,20 +294,17 @@ function AddItemForm({ contract }: { contract: Contract }) {
         </label>
         <input id="scope-add-key" className="input num-latin" dir="ltr" value={key} onChange={(e) => setKey(e.target.value)} />
       </div>
-      <div className="editor-grid-2">
-        <div className="field">
-          <label className="label" htmlFor="scope-add-fa">
-            {t('scope.decide.labelFa')}
-          </label>
-          <input id="scope-add-fa" className="input" dir="rtl" value={labelFa} onChange={(e) => setLabelFa(e.target.value)} />
-        </div>
-        <div className="field">
-          <label className="label" htmlFor="scope-add-en">
-            {t('scope.decide.labelEn')}
-          </label>
-          <input id="scope-add-en" className="input" dir="ltr" value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
-        </div>
-      </div>
+      <TitleField
+        idBase="scope-add"
+        testId="scope-add-label"
+        label={t('scope.decide.label')}
+        fa={labelFa}
+        en={labelEn}
+        onChange={(v) => {
+          setLabelFa(v.fa);
+          setLabelEn(v.en);
+        }}
+      />
       <div>
         <button className="btn btn-primary btn-sm" type="submit" disabled={loading || !ready} data-testid="scope-add-submit">
           {t('scope.add.submit')}
@@ -481,14 +480,17 @@ function DecideForm({ proposal }: { proposal: ScopeProposal }) {
       {isAdd ? (
         <div className="scope-decide-fields">
           <p className="t-caption">{t('scope.decide.langHint', { lang: t(`scope.lang.${proposal.lang}`) })}</p>
-          <div className="field">
-            <label className="label">{t('scope.decide.labelFa')}</label>
-            <input className="input" dir="rtl" value={labelFa} onChange={(e) => setLabelFa(e.target.value)} data-testid="scope-label-fa" />
-          </div>
-          <div className="field">
-            <label className="label">{t('scope.decide.labelEn')}</label>
-            <input className="input" dir="ltr" value={labelEn} onChange={(e) => setLabelEn(e.target.value)} data-testid="scope-label-en" />
-          </div>
+          <TitleField
+            idBase={`scope-decide-${proposal.id}`}
+            testId="scope-label"
+            label={t('scope.decide.label')}
+            fa={labelFa}
+            en={labelEn}
+            onChange={(v) => {
+              setLabelFa(v.fa);
+              setLabelEn(v.en);
+            }}
+          />
           <div className="field">
             <label className="label">{t('scope.decide.kind')}</label>
             <select className="input" value={kind} onChange={(e) => setKind(e.target.value as ProposableKind)}>
@@ -534,7 +536,7 @@ function DecideForm({ proposal }: { proposal: ScopeProposal }) {
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              disabled={loading || (isAdd && (!labelFa.trim() || !labelEn.trim()))}
+              disabled={loading || (isAdd && !hasOneTitle(labelFa, labelEn))}
               onClick={() => send('ACCEPTED')}
               data-testid="scope-confirm"
             >

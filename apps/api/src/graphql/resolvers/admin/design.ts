@@ -2,6 +2,7 @@ import { GraphQLError } from 'graphql';
 import type { PaletteKind, Prisma } from '@prisma/client';
 import { extname } from 'node:path';
 import { prisma } from '../../../lib/prisma.js';
+import { requireOneTitle } from '../../../lib/titles.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { requireDesignAuthorOn } from '../access.js';
 import {
@@ -50,7 +51,7 @@ const PALETTE_MESSAGES: Record<PaletteProblem, string> = {
   INVALID_FONT: 'A font is a family name — letters, digits, spaces, hyphens and dots.',
   INVALID_LOGO_NOTE: 'A logo note is one short sentence.',
   INVALID_ROLE: 'A role is lowercase Latin letters, digits and hyphens, starting with a letter.',
-  LABEL_REQUIRED: 'Both labels are required.',
+  LABEL_REQUIRED: 'A label in either language is required.',
   LABEL_TOO_LONG: 'A label is at most 80 characters.',
 };
 
@@ -361,6 +362,7 @@ export const designMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'design.author');
+    const label = requireOneTitle(args.labelFa, args.labelEn, 'LABEL_REQUIRED');
     const contractId = await conceptContractId(args.conceptId);
     await requireDesignAuthorOn(ctx, contractId);
     await prisma.$transaction(async (tx) => {
@@ -382,8 +384,8 @@ export const designMutations = {
         data: {
           conceptId: concept.id,
           key: args.key,
-          labelFa: args.labelFa,
-          labelEn: args.labelEn,
+          labelFa: label.fa,
+          labelEn: label.en,
           imageUrl: args.imageUrl ?? null,
           position: count,
         },
@@ -473,6 +475,7 @@ export const designMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'design.author');
+    const label = requireOneTitle(args.labelFa, args.labelEn, 'LABEL_REQUIRED');
     const contractId = await pageContractId(args.pageId);
     await requireDesignAuthorOn(ctx, contractId);
     await prisma.$transaction(async (tx) => {
@@ -480,7 +483,7 @@ export const designMutations = {
       const page = await draftPage(tx, args.pageId);
       await tx.pageDesign.update({
         where: { id: page.id },
-        data: { labelFa: args.labelFa, labelEn: args.labelEn },
+        data: { labelFa: label.fa, labelEn: label.en },
       });
     });
     return reload(contractId);

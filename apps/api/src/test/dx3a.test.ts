@@ -204,7 +204,8 @@ test('an update names what it changes: an omitted argument is left alone, null c
   ok(await update({ d: host.id, nn: true }));
   const row = await byKey('host');
   assert.deepEqual([row.side, row.dueAt !== null, row.notNeeded, row.titleEn], ['ROOT', true, true, COMMITMENTS.host.titleEn]);
-  assert.equal((await update({ d: host.id, en: '   ' })).code, 'TITLE_REQUIRED');
+  // DX4: one language is enough, so blanking one of the two is allowed; blanking both is not.
+  assert.equal((await update({ d: host.id, fa: '', en: '   ' })).code, 'TITLE_REQUIRED');
   assert.equal((await update({ d: host.id, side: 'ROOT' }, staff.DESIGNER)).code, 'FORBIDDEN');
   assert.equal((await update({ d: host.id, side: 'ROOT' }, f.customer)).code, 'FORBIDDEN');
 });

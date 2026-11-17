@@ -4,6 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { pick, formatAmount, formatCount } from '@/lib/format';
 import DayInput from '@/components/DayInput';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
 import MoneyReadout from '@/components/MoneyReadout';
 import { SectionHead, day, refusalText } from '@/components/EditorKit';
 import i18n from '@/i18n';
@@ -28,7 +32,7 @@ import { CREATE_PHASE, DELETE_PHASE, SET_PAYMENT_PLAN, UPDATE_PHASE, type Contra
 export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNullable<Contract['phases']>[number] }) {
   const { t } = useTranslation();
   const locale = useLocale();
-  const [update, { loading }] = useMutation(UPDATE_PHASE);
+  const [update] = useMutation(UPDATE_PHASE);
   const [remove] = useMutation(DELETE_PHASE);
   const [titleFa, setTitleFa] = useState(phase.titleFa);
   const [titleEn, setTitleEn] = useState(phase.titleEn);
@@ -39,17 +43,32 @@ export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNu
   const [hasDemo, setHasDemo] = useState(phase.hasDemo !== false);
   const [error, setError] = useState<string | null>(null);
 
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await update({
-        variables: { phaseId: phase.id, titleFa, titleEn, milestoneLabel: milestone.trim() || null, plannedEndAt: end || null, hasDemo, contractId: contract.id },
-      });
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
+  // DX4 (review 27): a phase row saves when a field in it is left; `updatePhase` takes the title,
+  // the end, the milestone and the switch together, so each save sends the row as it stands.
+  const autosave = useAutosave({
+    value: { titleFa, titleEn, end, milestone: milestone.trim(), hasDemo },
+    baseline: {
+      titleFa: phase.titleFa,
+      titleEn: phase.titleEn,
+      end: day(phase.plannedEndAt),
+      milestone: (phase.milestoneLabel ?? '').trim(),
+      hasDemo: phase.hasDemo !== false,
+    },
+    valid: (v) => hasOneTitle(v.titleFa, v.titleEn),
+    save: (v) =>
+      update({
+        variables: {
+          phaseId: phase.id,
+          titleFa: v.titleFa,
+          titleEn: v.titleEn,
+          milestoneLabel: v.milestone || null,
+          plannedEndAt: v.end || null,
+          hasDemo: v.hasDemo,
+          contractId: contract.id,
+        },
+      }),
+    errorText: (err) => refusalText(t, err),
+  });
 
   async function onDelete() {
     if (!confirm(t('brief.phases.confirmDelete'))) return;
@@ -62,24 +81,33 @@ export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNu
   }
 
   return (
-    <form className="req-phase" onSubmit={save} data-testid="brief-phase" data-number={phase.number}>
+    <form className="req-phase" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur} data-testid="brief-phase" data-number={phase.number}>
       <span className="badge num-latin">{formatCount(phase.number, locale)}</span>
-      <input className="input" dir="rtl" required aria-label={t('workspace.titleFa')} value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-      <input className="input" dir="ltr" required aria-label={t('workspace.titleEn')} value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
+      <TitleField
+        idBase={`phase-${phase.number}`}
+        testId={`phase-title-${phase.number}`}
+        fa={titleFa}
+        en={titleEn}
+        onChange={(v) => {
+          setTitleFa(v.fa);
+          setTitleEn(v.en);
+        }}
+      />
       <DayInput value={end} onChange={setEnd} label={t('brief.phases.plannedEnd', { n: formatCount(phase.number, locale) })} testId={`phase-end-${phase.number}`} />
       <input className="input" aria-label={t('workspace.phaseMilestone')} placeholder={t('workspace.phaseMilestone')} value={milestone} onChange={(e) => setMilestone(e.target.value)} data-testid={`phase-milestone-${phase.number}`} />
       <label className="t-small" title={t('brief.phases.hasDemoHelp')}>
-        <input type="checkbox" checked={hasDemo} onChange={(e) => setHasDemo(e.target.checked)} data-testid={`phase-hasdemo-${phase.number}`} /> {t('brief.phases.hasDemo')}
+        <input type="checkbox" checked={hasDemo} onChange={(e) => {
+          setHasDemo(e.target.checked);
+          autosave.commit({ titleFa, titleEn, end, milestone: milestone.trim(), hasDemo: e.target.checked });
+        }} data-testid={`phase-hasdemo-${phase.number}`} /> {t('brief.phases.hasDemo')}
       </label>
       <span className="workspace-row">
-        <button className="btn btn-secondary btn-sm" type="submit" disabled={loading}>
-          {t('workspace.save')}
-        </button>
         <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete}>
           {t('workspace.delete')}
         </button>
       </span>
       {error ? <p className="error">{error}</p> : null}
+      <AutosaveNote autosave={autosave} testId={`phase-autosave-${phase.number}`} />
     </form>
   );
 }
@@ -113,15 +141,14 @@ export function PhasesEditor({ contract }: { contract: Contract }) {
     <div className="card editor-card" data-testid="phases-editor">
       <SectionHead title={t('brief.phases.title')} help={t('brief.phases.help')} />
       {phases.map((p) => (
-        <PhaseRow key={`${p.id}:${p.plannedEndAt ?? ''}:${p.titleFa}:${p.titleEn}:${p.milestoneLabel ?? ''}:${p.hasDemo}`} contract={contract} phase={p} />
+        <PhaseRow key={p.id} contract={contract} phase={p} />
       ))}
       <form className="req-phase req-phase-new" onSubmit={add} data-testid="brief-phase-new">
         <span className="badge num-latin">+</span>
-        <input className="input" dir="rtl" required aria-label={t('workspace.titleFa')} placeholder={t('workspace.titleFa')} value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-        <input className="input" dir="ltr" required aria-label={t('workspace.titleEn')} placeholder={t('workspace.titleEn')} value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
+        <TitleField idBase="phase-new" testId="phase-title-new" fa={titleFa} en={titleEn} onChange={(v) => { setTitleFa(v.fa); setTitleEn(v.en); }} />
         <DayInput value={end} onChange={setEnd} label={t('brief.phases.newPlannedEnd')} testId="phase-end-new" />
         <span className="workspace-row">
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={loading || !titleFa.trim() || !titleEn.trim()}>
+          <button className="btn btn-secondary btn-sm" type="submit" disabled={loading || !hasOneTitle(titleFa, titleEn)}>
             {t('brief.phases.add')}
           </button>
         </span>
@@ -156,28 +183,56 @@ function labellerFor(lang: 'fa' | 'en'): Labeller {
   };
 }
 
+/** The rows the editor starts from, off the stored plan. */
+function rowsFrom(plan: Contract['paymentPlan'] | null | undefined): PlanRow[] {
+  return (plan?.invoices ?? []).map((i) => ({
+    labelFa: i.labelFa,
+    labelEn: i.labelEn,
+    amount: i.amount,
+    phaseId: i.phaseId ?? '',
+    dueOn: day(i.dueOn),
+    paymentTermDays: String(i.paymentTermDays),
+  }));
+}
+
+/** What `setPaymentPlan` is sent for these rows. */
+function payloadOf(rows: PlanRow[]): PlannedInvoiceInput[] {
+  return rows.map((r) => ({
+    labelFa: r.labelFa,
+    labelEn: r.labelEn,
+    amount: normalizeAmount(r.amount),
+    phaseId: triggerOf(r) === 'PHASE' ? r.phaseId || null : null,
+    dueOn: triggerOf(r) === 'DATE' ? r.dueOn : null,
+    paymentTermDays: Number(r.paymentTermDays),
+  }));
+}
+
+/** Whether every row could be saved: a label in one language, whole Toman above zero, a term of 0-365 days, and a day when it is due on one. */
+function checkRows(rows: PlannedInvoiceInput[]): boolean {
+  return rows.every(
+    (r) =>
+      hasOneTitle(r.labelFa, r.labelEn) &&
+      /^\d+$/.test(r.amount) &&
+      BigInt(r.amount) > 0n &&
+      Number.isInteger(r.paymentTermDays) &&
+      r.paymentTermDays >= 0 &&
+      r.paymentTermDays <= 365 &&
+      r.dueOn !== '',
+  );
+}
+
 export function PlanEditor({ contract }: { contract: Contract }) {
   const { t } = useTranslation();
   const locale = useLocale();
-  const [save, { loading }] = useMutation(SET_PAYMENT_PLAN);
+  const [save] = useMutation(SET_PAYMENT_PLAN);
   const plan = contract.paymentPlan ?? null;
   const phases = [...(contract.phases ?? [])].sort((a, b) => a.number - b.number);
   const fee = contract.amount ? BigInt(contract.amount) : null;
 
   const [split, setSplit] = useState<Split>(plan?.split ?? 'INSTALLMENTS');
   const [count, setCount] = useState('3');
-  const [rows, setRows] = useState<PlanRow[]>(() =>
-    (plan?.invoices ?? []).map((i) => ({
-      labelFa: i.labelFa,
-      labelEn: i.labelEn,
-      amount: i.amount,
-      phaseId: i.phaseId ?? '',
-      dueOn: day(i.dueOn),
-      paymentTermDays: String(i.paymentTermDays),
-    })),
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [rows, setRows] = useState<PlanRow[]>(() => rowsFrom(plan));
+
 
   function propose() {
     const proposed = proposeRows({
@@ -190,9 +245,22 @@ export function PlanEditor({ contract }: { contract: Contract }) {
       fa: labellerFor('fa'),
       en: labellerFor('en'),
     });
-    setRows(proposed.map((p) => ({ ...p, phaseId: p.phaseId ?? '', dueOn: '', paymentTermDays: String(p.paymentTermDays) })));
-    setSaved(false);
+    const next = proposed.map((p) => ({ ...p, phaseId: p.phaseId ?? '', dueOn: '', paymentTermDays: String(p.paymentTermDays) }));
+    setRows(next);
+    // A proposal is an act on the whole plan, so it saves at once (DX4); the rows are the plan.
+    autosave.commit({ split, invoices: payloadOf(next) });
   }
+
+  // DX4 (review 27): the plan saves when a field in it is left. `setPaymentPlan` replaces the whole
+  // plan, so a save sends the split and every row as they stand; what is compared is exactly what
+  // would be sent, so a typed Persian digit and its normalized form are the same plan.
+  const autosave = useAutosave({
+    value: { split, invoices: payloadOf(rows) },
+    baseline: { split: plan?.split ?? 'INSTALLMENTS', invoices: payloadOf(rowsFrom(plan)) },
+    valid: (v) => v.invoices.length > 0 && checkRows(v.invoices),
+    save: (v) => save({ variables: { contractId: contract.id, split: v.split, invoices: v.invoices } }),
+    errorText: (err) => refusalText(t, err),
+  });
 
   const edit = (i: number, patch: Partial<PlanRow>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
@@ -201,31 +269,19 @@ export function PlanEditor({ contract }: { contract: Contract }) {
     return /^\d+$/.test(a) ? sum + BigInt(a) : sum;
   }, 0n);
 
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSaved(false);
-    const invoices: PlannedInvoiceInput[] = rows.map((r) => ({
-      labelFa: r.labelFa,
-      labelEn: r.labelEn,
-      amount: normalizeAmount(r.amount),
-      phaseId: triggerOf(r) === 'PHASE' ? r.phaseId || null : null,
-      dueOn: triggerOf(r) === 'DATE' ? r.dueOn : null,
-      paymentTermDays: Number(r.paymentTermDays),
-    }));
-    try {
-      await save({ variables: { contractId: contract.id, split, invoices } });
-      setSaved(true);
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
-
   return (
-    <form className="card editor-card auth-form" onSubmit={onSave} data-testid="plan-editor">
+    <form className="card editor-card auth-form" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur} data-testid="plan-editor">
       <SectionHead title={t('brief.plan.title')} help={t('brief.plan.help')} />
       <div className="workspace-row">
-        <select className="input" aria-label={t('brief.plan.splitLabel')} value={split} onChange={(e) => setSplit(e.target.value as Split)}>
+        <select
+          className="input"
+          aria-label={t('brief.plan.splitLabel')}
+          value={split}
+          onChange={(e) => {
+            setSplit(e.target.value as Split);
+            autosave.commit({ split: e.target.value, invoices: payloadOf(rows) });
+          }}
+        >
           <option value="LUMP_SUM">{t('brief.plan.splitOption.LUMP_SUM')}</option>
           <option value="INSTALLMENTS">{t('brief.plan.splitOption.INSTALLMENTS')}</option>
           <option value="MONTHLY">{t('brief.plan.splitOption.MONTHLY')}</option>
@@ -250,8 +306,7 @@ export function PlanEditor({ contract }: { contract: Contract }) {
         <div className="plan-table" role="table">
           {rows.map((r, i) => (
             <div className="plan-row" role="row" key={i} data-testid="plan-row">
-              <input className="input" dir="rtl" required aria-label={t('brief.plan.labelFa')} value={r.labelFa} onChange={(e) => edit(i, { labelFa: e.target.value })} />
-              <input className="input" dir="ltr" required aria-label={t('brief.plan.labelEn')} value={r.labelEn} onChange={(e) => edit(i, { labelEn: e.target.value })} />
+              <TitleField idBase={`plan-${i}`} testId={`plan-label-${i}`} label={t('brief.plan.label')} fa={r.labelFa} en={r.labelEn} onChange={(v) => edit(i, { labelFa: v.fa, labelEn: v.en })} />
               <div className="money-field">
                 <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.amount')} value={r.amount} onChange={(e) => edit(i, { amount: e.target.value })} />
                 <MoneyReadout value={normalizeAmount(r.amount)} testId="plan-amount-readout" />
@@ -264,7 +319,9 @@ export function PlanEditor({ contract }: { contract: Contract }) {
                 onChange={(e) => {
                   const next = e.target.value as Trigger;
                   // One trigger at a time: choosing one clears the other's value (the database holds the same rule).
-                  edit(i, { phaseId: next === 'PHASE' ? (r.phaseId || phases[0]?.id || '') : '', dueOn: next === 'DATE' ? r.dueOn || new Date().toISOString().slice(0, 10) : '' });
+                  const patch = { phaseId: next === 'PHASE' ? (r.phaseId || phases[0]?.id || '') : '', dueOn: next === 'DATE' ? r.dueOn || new Date().toISOString().slice(0, 10) : '' };
+                  edit(i, patch);
+                  autosave.commit({ split, invoices: payloadOf(rows.map((x, j) => (j === i ? { ...x, ...patch } : x))) });
                 }}
               >
                 <option value="SIGNING">{t('brief.plan.triggerOption.SIGNING')}</option>
@@ -272,7 +329,15 @@ export function PlanEditor({ contract }: { contract: Contract }) {
                 <option value="DATE">{t('brief.plan.triggerOption.DATE')}</option>
               </select>
               {triggerOf(r) === 'PHASE' ? (
-                <select className="input" aria-label={t('brief.plan.phase')} value={r.phaseId} onChange={(e) => edit(i, { phaseId: e.target.value })}>
+                <select
+                  className="input"
+                  aria-label={t('brief.plan.phase')}
+                  value={r.phaseId}
+                  onChange={(e) => {
+                    edit(i, { phaseId: e.target.value });
+                    autosave.commit({ split, invoices: payloadOf(rows.map((x, j) => (j === i ? { ...x, phaseId: e.target.value } : x))) });
+                  }}
+                >
                   {phases.map((p) => (
                     <option key={p.id} value={p.id}>
                       {t('brief.plan.phaseOption', { n: formatCount(p.number, locale), title: pick(p, 'title', locale) })}
@@ -284,7 +349,16 @@ export function PlanEditor({ contract }: { contract: Contract }) {
                 <DayInput value={r.dueOn} onChange={(v) => edit(i, { dueOn: v })} label={t('brief.plan.dueOn')} testId={`plan-due-${i}`} />
               ) : null}
               <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.term')} value={r.paymentTermDays} onChange={(e) => edit(i, { paymentTermDays: e.target.value })} />
-              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                onClick={() => {
+                  const next = rows.filter((_, j) => j !== i);
+                  setRows(next);
+                  // Deleting a row is an act, saved at once; the last row cannot be deleted into an empty plan the API would refuse.
+                  autosave.commit({ split, invoices: payloadOf(next) });
+                }}
+              >
                 {t('workspace.delete')}
               </button>
             </div>
@@ -309,21 +383,7 @@ export function PlanEditor({ contract }: { contract: Contract }) {
                 fee: formatAmount(fee.toString(), locale),
               })}
       </p>
-      {error ? (
-        <p className="error" role="alert" data-testid="plan-error">
-          {error}
-        </p>
-      ) : null}
-      {saved ? (
-        <p className="t-small" role="status" data-testid="plan-saved">
-          {t('brief.form.saved')}
-        </p>
-      ) : null}
-      <div>
-        <button className="btn btn-primary btn-sm" type="submit" disabled={loading || rows.length === 0} data-testid="plan-save">
-          {t('workspace.save')}
-        </button>
-      </div>
+      <AutosaveNote autosave={autosave} testId="plan-autosave" />
     </form>
   );
 }

@@ -10,6 +10,7 @@ import {
   insertDraftNewRoadContract,
   resetTestDatabase,
   signIn,
+  expectSaved,
 } from './helpers';
 
 /**
@@ -91,11 +92,12 @@ test('a phase with "Has a demo" off has no Demo step, and a payment row can be d
 
   // The switch is edited on the phase row: turning it on gives phase 2 a Demo step, off again takes it away.
   const row = page.locator('[data-testid="brief-phase"][data-number="2"]');
+  // DX4 (review 27): a switch saves as it is flipped — there is no Save button on the row.
+  await expect(row.getByRole('button', { name: 'Save' })).toHaveCount(0);
   await page.getByTestId('phase-hasdemo-2').check();
-  await row.getByRole('button', { name: 'Save' }).click();
+  await expectSaved(row, 'phase-autosave-2');
   await expect(page.locator('.stepper-item[data-step="DEMO"]')).toHaveCount(2);
   await page.getByTestId('phase-hasdemo-2').uncheck();
-  await row.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.stepper-item[data-step="DEMO"]')).toHaveCount(1);
 
   // The plan's trigger: the second row moves from "when a phase is done" to "on a date".
@@ -104,8 +106,7 @@ test('a phase with "Has a demo" off has no Demo step, and a payment row can be d
   await expect(second.getByTestId('plan-trigger')).toHaveValue('PHASE');
   await second.getByTestId('plan-trigger').selectOption('DATE');
   await expect(second.getByTestId('plan-due-1')).toBeVisible();
-  await page.getByTestId('plan-save').click();
-  await expect(page.getByTestId('plan-saved')).toBeVisible();
+  await expectSaved(page, 'plan-autosave');
   await expect(page.getByTestId('plan-readout')).toContainText('Due on');
 
   for (const width of WIDTHS) {

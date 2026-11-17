@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { SALES, resetTestDatabase, signIn } from './helpers';
+import { SALES, expectSaved, fillTitle, resetTestDatabase, signIn } from './helpers';
 
 /**
  * DX3b — the new-contract form (desk UX review 1 and 2): the reference comes
@@ -62,8 +62,7 @@ for (const { lang, width, phone } of CASES) {
     // Typed before the customer exists: all of it must survive the dialog.
     const titleFa = `قرارداد ${lang}${width}`;
     const titleEn = `Contract ${lang}${width}`;
-    await page.locator('#nc-fa').fill(titleFa);
-    await page.locator('#nc-en').fill(titleEn);
+    await fillTitle(page, 'nc', 'nc-title', titleFa, titleEn);
     await expectFits(page, '.desk-section > section.card');
 
     await page.getByTestId('new-customer').click();
@@ -112,10 +111,12 @@ test('the reference can be changed on the Contract tab until the contract is sig
   await page.getByRole('link', { name: 'Contract', exact: true }).click();
   const input = page.locator('#ct-ref');
   await expect(input).toBeEditable();
+  // DX4: the reference saves when the field is left, with the "Saved" mark and no button.
+  await expect(page.getByTestId('ref-save')).toHaveCount(0);
   await input.fill('RC-2026-777');
-  await page.getByTestId('ref-save').click();
-  await expect(page.getByTestId('ref-saved')).toBeVisible();
+  await input.blur();
+  await expectSaved(page, 'ref-autosave');
   await input.fill('has space');
-  await page.getByTestId('ref-save').click();
-  await expect(page.getByTestId('ref-error')).toContainText('Latin letters');
+  await input.blur();
+  await expect(page.getByTestId('ref-autosave-error')).toContainText('Latin letters');
 });

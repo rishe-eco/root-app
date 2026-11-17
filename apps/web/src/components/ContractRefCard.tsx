@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { UPDATE_CONTRACT_REF } from '@/lib/queries';
 import { errorCode } from '@/components/FeedbackPanel';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
 
 /**
  * The contract's reference on the Contract tab (desk UX review item 1, DX3b):
@@ -22,28 +24,28 @@ export default function ContractRefCard({
 }) {
   const { t } = useTranslation();
   const [ref, setRef] = useState(value);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [update, { loading }] = useMutation(UPDATE_CONTRACT_REF);
+  const [update] = useMutation(UPDATE_CONTRACT_REF);
 
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSaved(false);
-    try {
-      await update({ variables: { contractId, ref: ref.trim() } });
-      setRef(ref.trim());
-      setSaved(true);
-    } catch (err) {
+  // DX4 (review 27): saved when the field is left; the API still decides what "signed" means.
+  const autosave = useAutosave({
+    value: ref.trim(),
+    baseline: value,
+    valid: (v) => v !== '',
+    save: async (v) => {
+      await update({ variables: { contractId, ref: v } });
+      setRef(v);
+    },
+    disabled: signed,
+    errorText: (err) => {
       const code = errorCode(err);
       const key = `workspace.refError.${code}`;
-      setError(code && t(key) !== key ? t(key) : t('workspace.refError.UNKNOWN'));
-    }
-  }
+      return code && t(key) !== key ? t(key) : t('workspace.refError.UNKNOWN');
+    },
+  });
 
   return (
     <section className="card editor-card">
-      <form className="auth-form" onSubmit={onSave}>
+      <form className="auth-form" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur}>
         <div className="editor-grid-2">
           <div className="field">
             <label className="label" htmlFor="ct-ref">
@@ -57,34 +59,12 @@ export default function ContractRefCard({
               maxLength={40}
               disabled={signed}
               value={ref}
-              onChange={(e) => {
-                setRef(e.target.value);
-                setSaved(false);
-              }}
+              onChange={(e) => setRef(e.target.value)}
             />
             <p className="t-caption desk-muted">{signed ? t('workspace.refSigned') : t('workspace.refHelp')}</p>
           </div>
         </div>
-        {error ? (
-          <p className="error" role="alert" data-testid="ref-error">
-            {error}
-          </p>
-        ) : null}
-        {saved ? (
-          <p className="t-caption" role="status" data-testid="ref-saved">
-            {t('workspace.refSaved')}
-          </p>
-        ) : null}
-        <div>
-          <button
-            className="btn btn-primary btn-sm"
-            type="submit"
-            disabled={loading || signed || ref.trim() === value}
-            data-testid="ref-save"
-          >
-            {t('workspace.save')}
-          </button>
-        </div>
+        <AutosaveNote autosave={autosave} testId="ref-autosave" />
       </form>
     </section>
   );

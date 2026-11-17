@@ -11,6 +11,7 @@
  */
 
 import { parseCalendarDay } from './calendarDay.js';
+import { hasOneTitle } from './titles.js';
 
 export type PlannedRow = {
   labelFa: string;
@@ -73,7 +74,8 @@ export function checkPlanRows(
   if (rows.length === 0) return 'PLAN_ROWS_REQUIRED';
   if (rows.length > MAX_PLAN_ROWS) return 'TOO_MANY_ROWS';
   for (const row of rows) {
-    if (!row.labelFa.trim() || !row.labelEn.trim()) return 'LABEL_REQUIRED';
+    // DX4: a label in one language is enough; LABEL_REQUIRED now means both are blank.
+    if (!hasOneTitle(row.labelFa, row.labelEn)) return 'LABEL_REQUIRED';
     if (!AMOUNT.test(row.amount)) return 'INVALID_AMOUNT';
     if (!Number.isInteger(row.paymentTermDays) || row.paymentTermDays < 0 || row.paymentTermDays > MAX_TERM_DAYS) {
       return 'INVALID_TERM';

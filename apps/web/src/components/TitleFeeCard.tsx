@@ -1,9 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { UPDATE_CONTRACT_DRAFT, type Contract } from '@/lib/queries';
 import { errorCode } from '@/components/FeedbackPanel';
 import MoneyReadout from '@/components/MoneyReadout';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
 
 /**
  * The draft's title and fee (V2). Shared since CC1 by the desk's Contract tab
@@ -16,7 +20,7 @@ import MoneyReadout from '@/components/MoneyReadout';
 
 function errorMessage(err: unknown, t: (key: string) => string): string {
   const code = errorCode(err);
-  if (code && ['STEP_LOCKED', 'SCHEDULE_IS_GENERATED'].includes(code)) return t(`workspace.error.${code}`);
+  if (code && ['STEP_LOCKED', 'SCHEDULE_IS_GENERATED', 'TITLE_REQUIRED'].includes(code)) return t(`workspace.error.${code}`);
   return (err as { message?: string })?.message ?? String(err);
 }
 
@@ -36,38 +40,33 @@ export default function TitleFeeCard({
   const [titleFa, setTitleFa] = useState(draft?.titleFa ?? '');
   const [titleEn, setTitleEn] = useState(draft?.titleEn ?? '');
   const [amount, setAmount] = useState(draft?.amount ?? '');
-  const [error, setError] = useState<string | null>(null);
-  const [update, { loading }] = useMutation(UPDATE_CONTRACT_DRAFT);
+  const [update] = useMutation(UPDATE_CONTRACT_DRAFT);
 
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await update({
-        variables: { contractId, titleFa, titleEn, amount: amount || null },
-      });
-    } catch (err) {
-      setError(errorMessage(err, t));
-    }
-  }
+  // DX4 (review 27): the card saves when a field is left. `updateContractDraft` takes the title
+  // and the fee together, so each save sends both as they stand.
+  const autosave = useAutosave({
+    value: { titleFa, titleEn, amount: amount || '' },
+    baseline: { titleFa: draft?.titleFa ?? '', titleEn: draft?.titleEn ?? '', amount: draft?.amount ?? '' },
+    valid: (v) => hasOneTitle(v.titleFa, v.titleEn),
+    save: (v) => update({ variables: { contractId, titleFa: v.titleFa, titleEn: v.titleEn, amount: v.amount || null } }),
+    disabled: locked,
+    errorText: (err) => errorMessage(err, t),
+  });
 
   return (
     <section className="card editor-card">
-      <form className="auth-form" onSubmit={onSave}>
-        <div className="editor-grid-2">
-          <div className="field">
-            <label className="label" htmlFor="ct-fa">
-              {t('workspace.titleFa')}
-            </label>
-            <input id="ct-fa" className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="label" htmlFor="ct-en">
-              {t('workspace.titleEn')}
-            </label>
-            <input id="ct-en" className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-          </div>
-        </div>
+      <form className="auth-form" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur}>
+        <TitleField
+          idBase="ct"
+          testId="contract-title"
+          fa={titleFa}
+          en={titleEn}
+          disabled={locked}
+          onChange={(v) => {
+            setTitleFa(v.fa);
+            setTitleEn(v.en);
+          }}
+        />
         <div className="editor-grid-2">
           <div className="field">
             <label className="label" htmlFor="ct-amount">
@@ -79,17 +78,13 @@ export default function TitleFeeCard({
               dir="ltr"
               inputMode="numeric"
               value={amount ?? ''}
+              readOnly={locked}
               onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
             />
             <MoneyReadout value={amount} testId="amount-readout" />
           </div>
         </div>
-        {error ? <p className="error">{error}</p> : null}
-        <div>
-          <button className="btn btn-primary btn-sm" type="submit" disabled={loading || locked} data-testid="title-fee-save">
-            {t('workspace.save')}
-          </button>
-        </div>
+        <AutosaveNote autosave={autosave} testId="title-fee-autosave" />
       </form>
     </section>
   );

@@ -24,14 +24,27 @@ export const ALL_STATUSES: ContractStatus[] = [
 
 const intlTag = (locale: Locale) => (locale === 'fa' ? 'fa-IR' : 'en-US');
 
-/** Picks the right side of a bilingual pair without a second query. */
+/**
+ * Picks the right side of a bilingual pair without a second query.
+ *
+ * DX4: a title may be typed in one language only (the other column is `''`),
+ * so when the reader's side is blank this falls back to the other one, plainly
+ * and with no mark (founder, 2026-11-17). The API has the same rule in
+ * `lib/titles.ts` (`inLocale`) for what it picks itself (a mail); a test on
+ * each side pins them to the same answers. Bodies and notes go through here
+ * too and fall back the same way, which is what a reader wants of a text that
+ * exists in one language.
+ */
 export function pick<T extends Record<string, unknown>>(
   row: T,
   base: string,
   locale: Locale,
 ): string {
-  const key = `${base}${locale === 'fa' ? 'Fa' : 'En'}`;
-  return String(row[key] ?? '');
+  const mine = row[`${base}${locale === 'fa' ? 'Fa' : 'En'}`];
+  if (typeof mine === 'string' && mine.trim() !== '') return mine;
+  const other = row[`${base}${locale === 'fa' ? 'En' : 'Fa'}`];
+  if (typeof other === 'string' && other.trim() !== '') return other;
+  return String(mine ?? '');
 }
 
 export function formatAmount(amount: string | null, locale: Locale): string | null {

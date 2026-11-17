@@ -4,6 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { pick } from '@/lib/format';
 import { SectionHead, day, refusalText } from '@/components/EditorKit';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
 import DayInput from '@/components/DayInput';
 import PillChoice from '@/components/PillChoice';
 import { choiceOf, handoverPatch, instantOf, type HandoverChoice } from '@/lib/brief';
@@ -29,7 +33,9 @@ import { CREATE_DEPENDENCY, DELETE_DEPENDENCY, UPDATE_DEPENDENCY, type Contract,
  * complete state: nobody has to name a provider, and a date is only asked of a
  * row someone provides (`briefCompleteness`).
  *
- * Saved on its own, like the brief above it, and — as the brief is — not drawn
+ * **DX4 (review 27): saved when a field is left**, like the brief above it, with
+ * no Save button; a row added here is created at once, since adding is an act.
+ * And — as the brief is — not drawn
  * at all once the agreement is approved: a locked list (`STEP_LOCKED`) is a
  * control that can only fail. The caller (`RequirementsEditor`) is only drawn
  * for an open step; this panel still says so if it is handed a locked one.
@@ -39,9 +45,6 @@ type Choice = HandoverChoice;
 
 type RowState = { choice: Choice | null; due: string };
 
-/** A new row typed here and not yet saved. */
-type Draft = { tmp: string; titleFa: string; titleEn: string } & RowState;
-
 const stateOf = (d: Dependency): RowState => ({ choice: choiceOf(d), due: day(d.dueAt) });
 
 export default function HandoverPanel({ contract, locked = false }: { contract: Contract; locked?: boolean }) {
@@ -49,69 +52,49 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
   const locale = useLocale();
   const rows = contract.handover ?? [];
   const [edits, setEdits] = useState<Record<string, RowState>>({});
-  const [drafts, setDrafts] = useState<Draft[]>([]);
   const [adding, setAdding] = useState(false);
-  const [newFa, setNewFa] = useState('');
-  const [newEn, setNewEn] = useState('');
+  const [newTitle, setNewTitle] = useState({ fa: '', en: '' });
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [update, { loading: updating }] = useMutation(UPDATE_DEPENDENCY);
+  const [update] = useMutation(UPDATE_DEPENDENCY);
   const [create, { loading: creating }] = useMutation(CREATE_DEPENDENCY);
   const [remove] = useMutation(DELETE_DEPENDENCY);
 
   // What a row shows: the edit in progress if there is one, the record otherwise.
   const current = (d: Dependency): RowState => edits[d.id] ?? stateOf(d);
-  const dirtyRows = rows.filter((d) => {
-    const e = edits[d.id];
-    const s = stateOf(d);
-    return e && (e.choice !== s.choice || e.due !== s.due);
+  const valueMap = Object.fromEntries(rows.map((d) => [d.id, current(d)]));
+  const baselineMap = Object.fromEntries(rows.map((d) => [d.id, stateOf(d)]));
+
+  // Each row goes through the board's own `updateDependency`; only the rows that differ are sent.
+  const autosave = useAutosave({
+    value: valueMap,
+    baseline: baselineMap,
+    save: async (v) => {
+      for (const d of rows) {
+        const e2 = v[d.id];
+        const s0 = stateOf(d);
+        if (!e2 || (e2.choice === s0.choice && e2.due === s0.due)) continue;
+        await update({
+          variables: { dependencyId: d.id, ...handoverPatch(e2.choice), dueAt: instantOf(e2.due), contractId: contract.id },
+        });
+      }
+      // Only the edits this save carried: one made while it was in flight is still the user's and goes next (DX4 review).
+      setEdits((prev) =>
+        Object.fromEntries(Object.entries(prev).filter(([id, e]) => JSON.stringify(e) !== JSON.stringify(v[id]))),
+      );
+    },
+    disabled: locked,
+    errorText: (err) => refusalText(t, err),
   });
-  const dirty = dirtyRows.length > 0 || drafts.length > 0;
 
   const setRow = (id: string, base: RowState, patch: Partial<RowState>) => {
-    setSaved(false);
     setEdits((prev) => ({ ...prev, [id]: { ...(prev[id] ?? base), ...patch } }));
   };
-  const setDraft = (tmp: string, patch: Partial<RowState>) => {
-    setSaved(false);
-    setDrafts((prev) => prev.map((d) => (d.tmp === tmp ? { ...d, ...patch } : d)));
+  // A pill is a choice, not typing: it saves with the row as it will stand.
+  const choose = (d: Dependency, choice: Choice | null) => {
+    const patch: Partial<RowState> = choice === 'NOT_NEEDED' ? { choice, due: '' } : { choice };
+    setRow(d.id, stateOf(d), patch);
+    autosave.commit({ ...valueMap, [d.id]: { ...current(d), ...patch } });
   };
-
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSaved(false);
-    try {
-      for (const d of dirtyRows) {
-        const e2 = edits[d.id];
-        await update({
-          variables: {
-            dependencyId: d.id,
-            ...handoverPatch(e2.choice),
-            dueAt: instantOf(e2.due),
-            contractId: contract.id,
-          },
-        });
-      }
-      for (const d of drafts) {
-        await create({
-          variables: {
-            projectId: contract.project.id,
-            titleFa: d.titleFa,
-            titleEn: d.titleEn,
-            ...handoverPatch(d.choice),
-            dueAt: instantOf(d.due),
-            contractId: contract.id,
-          },
-        });
-      }
-      setEdits({});
-      setDrafts([]);
-      setSaved(true);
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
 
   async function onRemove(d: Dependency) {
     setError(null);
@@ -123,14 +106,19 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
     }
   }
 
-  function onAddDraft(e: FormEvent) {
+  async function onAdd(e: FormEvent) {
     e.preventDefault();
-    if (!newFa.trim() || !newEn.trim()) return;
-    setSaved(false);
-    setDrafts((prev) => [...prev, { tmp: `new-${prev.length}-${Date.now()}`, titleFa: newFa.trim(), titleEn: newEn.trim(), choice: null, due: '' }]);
-    setNewFa('');
-    setNewEn('');
-    setAdding(false);
+    if (!hasOneTitle(newTitle.fa, newTitle.en)) return;
+    setError(null);
+    try {
+      await create({
+        variables: { projectId: contract.project.id, titleFa: newTitle.fa.trim(), titleEn: newTitle.en.trim(), contractId: contract.id },
+      });
+      setNewTitle({ fa: '', en: '' });
+      setAdding(false);
+    } catch (err) {
+      setError(refusalText(t, err));
+    }
   }
 
   const pills = (what: string, id: string, value: Choice | null, onChange: (next: Choice | null) => void) => (
@@ -150,11 +138,18 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
   );
 
   return (
-    <form className="card editor-card auth-form" onSubmit={onSave} data-testid="handover-form">
+    <form
+      className="card editor-card auth-form"
+      onSubmit={(e) => e.preventDefault()}
+      onBlur={(e) => {
+        if (e.currentTarget.checkValidity()) autosave.onBlur();
+      }}
+      data-testid="handover-form"
+    >
       <SectionHead title={t('brief.handover.title')} help={t('brief.handover.help')} />
       {locked ? <p className="t-small">{t('brief.handover.locked')}</p> : null}
 
-      {rows.length === 0 && drafts.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="t-small desk-muted" data-testid="handover-empty">
           {t('brief.handover.empty')}
         </p>
@@ -168,7 +163,7 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
           return (
             <div className="handover-row" key={d.id} data-testid="handover-row" data-key={id}>
               <p className="handover-item">{what}</p>
-              {pills(what, id, s.choice, (choice) => setRow(d.id, stateOf(d), choice === 'NOT_NEEDED' ? { choice, due: '' } : { choice }))}
+              {pills(what, id, s.choice, (choice) => choose(d, choice))}
               <div className="handover-due">
                 <span className="label">{t('brief.handover.due', { what })}</span>
                 <DayInput
@@ -193,55 +188,14 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
             </div>
           );
         })}
-
-        {drafts.map((d) => {
-          const what = locale === 'fa' ? d.titleFa : d.titleEn;
-          return (
-            <div className="handover-row" key={d.tmp} data-testid="handover-row" data-key={d.tmp} data-draft="true">
-              <p className="handover-item">{what}</p>
-              {pills(what, d.tmp, d.choice, (choice) => setDraft(d.tmp, choice === 'NOT_NEEDED' ? { choice, due: '' } : { choice }))}
-              <div className="handover-due">
-                <span className="label">{t('brief.handover.due', { what })}</span>
-                <DayInput
-                  value={d.choice === 'NOT_NEEDED' ? '' : d.due}
-                  onChange={(due) => setDraft(d.tmp, { due })}
-                  label={t('brief.handover.due', { what })}
-                  disabled={d.choice === 'NOT_NEEDED'}
-                  testId={`handover-due-${d.tmp}`}
-                />
-              </div>
-              <button
-                className="btn btn-ghost btn-sm handover-remove"
-                type="button"
-                aria-label={t('brief.handover.removeWhat', { what })}
-                onClick={() => setDrafts((prev) => prev.filter((x) => x.tmp !== d.tmp))}
-              >
-                {t('brief.handover.remove')}
-              </button>
-            </div>
-          );
-        })}
       </div>
 
       {locked ? null : adding ? (
         <div className="handover-add" data-testid="handover-add-form">
           <p className="t-eyebrow">{t('brief.handover.addTitle')}</p>
-          <div className="editor-grid-2">
-            <div className="field">
-              <label className="label" htmlFor="handover-new-fa">
-                {t('brief.handover.titleFa')}
-              </label>
-              <input id="handover-new-fa" className="input" dir="rtl" value={newFa} onChange={(e) => setNewFa(e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label" htmlFor="handover-new-en">
-                {t('brief.handover.titleEn')}
-              </label>
-              <input id="handover-new-en" className="input" dir="ltr" value={newEn} onChange={(e) => setNewEn(e.target.value)} />
-            </div>
-          </div>
+          <TitleField idBase="handover-new" testId="handover-new-title" fa={newTitle.fa} en={newTitle.en} onChange={setNewTitle} />
           <div className="editor-card-actions">
-            <button className="btn btn-secondary btn-sm" type="button" disabled={!newFa.trim() || !newEn.trim()} onClick={onAddDraft} data-testid="handover-add-confirm">
+            <button className="btn btn-secondary btn-sm" type="button" disabled={creating || !hasOneTitle(newTitle.fa, newTitle.en)} onClick={onAdd} data-testid="handover-add-confirm">
               {t('brief.handover.addConfirm')}
             </button>
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding(false)}>
@@ -262,18 +216,7 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
           {error}
         </p>
       ) : null}
-      {saved ? (
-        <p className="t-small" role="status" data-testid="handover-saved">
-          {t('brief.handover.saved')}
-        </p>
-      ) : null}
-      {locked ? null : (
-        <div>
-          <button className="btn btn-primary btn-sm" type="submit" disabled={updating || creating || !dirty} data-testid="handover-save">
-            {t('brief.handover.save')}
-          </button>
-        </div>
-      )}
+      {locked ? null : <AutosaveNote autosave={autosave} testId="handover-autosave" />}
     </form>
   );
 }

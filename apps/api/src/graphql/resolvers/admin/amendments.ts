@@ -2,6 +2,7 @@ import { GraphQLError } from 'graphql';
 import { requireCapability, type Context } from '../../../context.js';
 import { buildAmendmentSnapshot, contentHash, readContractSnapshot } from '../../../lib/revision.js';
 import { prisma } from '../../../lib/prisma.js';
+import { requireOneTitle } from '../../../lib/titles.js';
 import { loadContract, log, nudgeStatus, reload } from '../contracts.js';
 
 /**
@@ -55,6 +56,7 @@ export const amendmentMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
+    const title = requireOneTitle(args.titleFa, args.titleEn);
     const contract = await loadContract(args.contractId);
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
@@ -73,8 +75,8 @@ export const amendmentMutations = {
     const ordinal = (latest?.ordinal ?? 0) + 1;
     const snapshot = buildAmendmentSnapshot({
       ordinal,
-      titleFa: args.titleFa,
-      titleEn: args.titleEn,
+      titleFa: title.fa,
+      titleEn: title.en,
       bodyFa: args.bodyFa,
       bodyEn: args.bodyEn,
     });
@@ -83,8 +85,8 @@ export const amendmentMutations = {
       data: {
         contractRevisionId: current.id,
         ordinal,
-        titleFa: args.titleFa,
-        titleEn: args.titleEn,
+        titleFa: title.fa,
+        titleEn: title.en,
         bodyFa: args.bodyFa,
         bodyEn: args.bodyEn,
         relatesToArticle: args.relatesToArticle ?? null,
@@ -115,6 +117,7 @@ export const amendmentMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
+    const title = requireOneTitle(args.titleFa, args.titleEn);
     const amendment = await prisma.amendment.findUnique({
       where: { id: args.amendmentId },
       include: { contractRevision: { select: { contractId: true, snapshot: true } } },
@@ -130,16 +133,16 @@ export const amendmentMutations = {
 
     const snapshot = buildAmendmentSnapshot({
       ordinal: amendment.ordinal,
-      titleFa: args.titleFa,
-      titleEn: args.titleEn,
+      titleFa: title.fa,
+      titleEn: title.en,
       bodyFa: args.bodyFa,
       bodyEn: args.bodyEn,
     });
     await prisma.amendment.update({
       where: { id: amendment.id },
       data: {
-        titleFa: args.titleFa,
-        titleEn: args.titleEn,
+        titleFa: title.fa,
+        titleEn: title.en,
         bodyFa: args.bodyFa,
         bodyEn: args.bodyEn,
         relatesToArticle: args.relatesToArticle ?? null,

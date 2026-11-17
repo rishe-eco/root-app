@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
@@ -9,6 +9,8 @@ import DayInput from '@/components/DayInput';
 import CountStepper from '@/components/CountStepper';
 import MoneyReadout from '@/components/MoneyReadout';
 import PillChoice from '@/components/PillChoice';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
 import { normalizeAmount } from '@/lib/brief';
 import HandoverPanel from '@/components/HandoverPanel';
 import {
@@ -72,7 +74,7 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   const canMoney = can(me, 'money.read');
   const { data: typesData } = useQuery<{ templateTypes: TemplateType[] }>(TEMPLATE_TYPES);
   const types = (typesData?.templateTypes ?? []).filter((x) => x.active || x.id === brief?.templateType.id);
-  const [setBrief, { loading }] = useMutation(SET_BRIEF);
+  const [setBrief] = useMutation(SET_BRIEF);
 
   const [kind, setKind] = useState<BriefKind>(brief?.kind ?? 'NEW_SITE');
   const [existingSiteUrl, setExistingSiteUrl] = useState(brief?.existingSiteUrl ?? '');
@@ -90,48 +92,92 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   const [mockupIterations, setMockupIterations] = useState(str(brief?.mockupIterations));
   const [demoIterations, setDemoIterations] = useState(str(brief?.demoIterationsPerPhase));
 
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   // The "feature for an existing site" preset (DX3a, review 29) runs on the save that changes the kind to it; this is
   // the sentence that says so, until the next edit.
   const [presetNotice, setPresetNotice] = useState(false);
   const presetPending = kind === 'FEATURE_FOR_EXISTING' && brief?.kind !== 'FEATURE_FOR_EXISTING';
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSaved(false);
-    setPresetNotice(false);
-    const input: BriefInput = {
-      kind,
-      existingSiteUrl: kind === 'FEATURE_FOR_EXISTING' ? existingSiteUrl.trim() || null : null,
-      templateTypeId,
-      designTier,
-      budgetCap: canMoney ? normalizeAmount(budgetCap) || null : null,
-      idealDeadline: idealDeadline || null,
-      hardDeadline: hardDeadline || null,
-      domainName: domainName.trim() || null,
-      supportMonths: numberOrNull(supportMonths),
-      premadeRounds: numberOrNull(premadeRounds),
-      wireframeIterations: numberOrNull(wireframeIterations),
-      mockupIterations: numberOrNull(mockupIterations),
-      demoIterationsPerPhase: numberOrNull(demoIterations),
+  /** What `setBrief` is sent for the form as it stands, with `over` standing in for the fields a control has just changed (its state has not rendered yet). */
+  type Fields = {
+    kind: BriefKind;
+    existingSiteUrl: string;
+    templateTypeId: string;
+    designTier: DesignTier;
+    budgetCap: string;
+    idealDeadline: string;
+    hardDeadline: string;
+    domainName: string;
+    supportMonths: string;
+    premadeRounds: string;
+    wireframeIterations: string;
+    mockupIterations: string;
+    demoIterations: string;
+  };
+  const inputOf = (over: Partial<Fields> = {}): BriefInput => {
+    const f: Fields = { kind, existingSiteUrl, templateTypeId, designTier, budgetCap, idealDeadline, hardDeadline, domainName, supportMonths, premadeRounds, wireframeIterations, mockupIterations, demoIterations, ...over };
+    return {
+      kind: f.kind,
+      existingSiteUrl: f.kind === 'FEATURE_FOR_EXISTING' ? f.existingSiteUrl.trim() || null : null,
+      templateTypeId: f.templateTypeId,
+      designTier: f.designTier,
+      budgetCap: canMoney ? normalizeAmount(f.budgetCap) || null : null,
+      idealDeadline: f.idealDeadline || null,
+      hardDeadline: f.hardDeadline || null,
+      domainName: f.domainName.trim() || null,
+      supportMonths: numberOrNull(f.supportMonths),
+      premadeRounds: numberOrNull(f.premadeRounds),
+      wireframeIterations: numberOrNull(f.wireframeIterations),
+      mockupIterations: numberOrNull(f.mockupIterations),
+      demoIterationsPerPhase: numberOrNull(f.demoIterations),
     };
-    try {
+  };
+
+  // DX4 (review 27): the brief saves when a field is left. `setBrief` takes the whole form, so every save sends it
+  // as it stands. Until a type is picked there is nothing to save (the API would refuse it).
+  const autosave = useAutosave({
+    value: inputOf(),
+    baseline: {
+      kind: brief?.kind ?? 'NEW_SITE',
+      existingSiteUrl: brief?.kind === 'FEATURE_FOR_EXISTING' ? brief?.existingSiteUrl?.trim() || null : null,
+      templateTypeId: brief?.templateType.id ?? '',
+      designTier: brief?.designTier ?? 'THEME_PICK',
+      budgetCap: canMoney ? normalizeAmount(brief?.budgetCap ?? '') || null : null,
+      idealDeadline: day(brief?.idealDeadline) || null,
+      hardDeadline: day(brief?.hardDeadline) || null,
+      domainName: brief?.domainName?.trim() || null,
+      supportMonths: brief?.supportMonths ?? null,
+      premadeRounds: brief?.premadeRounds ?? null,
+      wireframeIterations: brief?.wireframeIterations ?? 2,
+      mockupIterations: brief?.mockupIterations ?? null,
+      demoIterationsPerPhase: brief?.demoIterationsPerPhase ?? null,
+    } satisfies BriefInput,
+    valid: (v) => v.templateTypeId !== '',
+    save: async (input) => {
+      setPresetNotice(false);
+      // Decided from what is being saved, not from `presetPending`: the kind select commits before its new state has
+      // rendered, so this render's `kind` is still the old one (DX4 review). Missing it also left the form's design
+      // tier stale, and the next blur would have sent it back over the preset's No design.
+      const presetApplies = input.kind === 'FEATURE_FOR_EXISTING' && brief?.kind !== 'FEATURE_FOR_EXISTING';
       await setBrief({ variables: { contractId: contract.id, input } });
-      if (presetPending) {
+      if (presetApplies) {
         // The server set No design (the form still holds what was on screen); its rows follow through the cache.
         setDesignTier('NONE');
         setPresetNotice(true);
       }
-      setSaved(true);
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
+    },
+    errorText: (err) => refusalText(t, err),
+  });
 
   return (
-    <form className="card editor-card auth-form" onSubmit={onSubmit} data-testid="brief-form">
+    <form
+      className="card editor-card auth-form"
+      onSubmit={(e) => e.preventDefault()}
+      onBlur={(e) => {
+        // A half-typed date marks the form invalid; that is not a value to save.
+        if (e.currentTarget.checkValidity()) autosave.onBlur();
+      }}
+      data-testid="brief-form"
+    >
       <SectionHead title={t('brief.form.title')} help={t('brief.form.help')} />
 
       <div className="editor-grid-2">
@@ -139,7 +185,11 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
           <label className="label" htmlFor="brief-kind">
             {t('brief.form.kind')}
           </label>
-          <select id="brief-kind" className="input" value={kind} onChange={(e) => setKind(e.target.value as BriefKind)}>
+          <select id="brief-kind" className="input" value={kind} onChange={(e) => {
+              setKind(e.target.value as BriefKind);
+              autosave.commit(inputOf({ kind: e.target.value as BriefKind }));
+            }}
+          >
             <option value="NEW_SITE">{t('brief.kind.NEW_SITE')}</option>
             <option value="FEATURE_FOR_EXISTING">{t('brief.kind.FEATURE_FOR_EXISTING')}</option>
           </select>
@@ -158,7 +208,10 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
             className="input"
             required
             value={templateTypeId}
-            onChange={(e) => setTemplateTypeId(e.target.value)}
+            onChange={(e) => {
+              setTemplateTypeId(e.target.value);
+              autosave.commit(inputOf({ templateTypeId: e.target.value }));
+            }}
           >
             <option value="">{t('brief.form.templateTypePick')}</option>
             {types.map((type) => (
@@ -191,7 +244,11 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
         <label className="label" htmlFor="brief-tier">
           {t('brief.form.designTier')}
         </label>
-        <select id="brief-tier" className="input" value={designTier} onChange={(e) => setDesignTier(e.target.value as DesignTier)}>
+        <select id="brief-tier" className="input" value={designTier} onChange={(e) => {
+            setDesignTier(e.target.value as DesignTier);
+            autosave.commit(inputOf({ designTier: e.target.value as DesignTier }));
+          }}
+        >
           <option value="THEME_PICK">{t('brief.tier.THEME_PICK')}</option>
           <option value="CLAUDE_ASSISTED">{t('brief.tier.CLAUDE_ASSISTED')}</option>
           <option value="SENIOR_DESIGNER">{t('brief.tier.SENIOR_DESIGNER')}</option>
@@ -243,6 +300,7 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
             } else if (v) {
               setSupportOther(false);
               setSupportMonths(v);
+              autosave.commit(inputOf({ supportMonths: v }));
             }
           }}
           options={[
@@ -282,46 +340,44 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
         {designTier === 'NONE' ? null : designTier === 'THEME_PICK' ? (
           <div className="field">
             <span className="label">{t('brief.form.premadeRounds')}</span>
-            <CountStepper label={t('brief.form.premadeRounds')} value={premadeRounds} onChange={setPremadeRounds} max={20} testId="brief-premade" />
+            <CountStepper label={t('brief.form.premadeRounds')} value={premadeRounds} onChange={(v) => {
+                setPremadeRounds(v);
+                autosave.commit(inputOf({ premadeRounds: v }));
+              }} max={20} testId="brief-premade" />
           </div>
         ) : (
           <>
             <div className="field">
               <span className="label">{t('brief.form.wireframeIterations')}</span>
-              <CountStepper label={t('brief.form.wireframeIterations')} value={wireframeIterations} onChange={setWireframeIterations} max={20} testId="brief-wireframes" />
+              <CountStepper label={t('brief.form.wireframeIterations')} value={wireframeIterations} onChange={(v) => {
+                setWireframeIterations(v);
+                autosave.commit(inputOf({ wireframeIterations: v }));
+              }} max={20} testId="brief-wireframes" />
             </div>
             <div className="field">
               <span className="label">{t('brief.form.mockupIterations')}</span>
-              <CountStepper label={t('brief.form.mockupIterations')} value={mockupIterations} onChange={setMockupIterations} max={20} testId="brief-mockups" />
+              <CountStepper label={t('brief.form.mockupIterations')} value={mockupIterations} onChange={(v) => {
+                setMockupIterations(v);
+                autosave.commit(inputOf({ mockupIterations: v }));
+              }} max={20} testId="brief-mockups" />
             </div>
           </>
         )}
         <div className="field">
           <span className="label">{t('brief.form.demoIterations')}</span>
-          <CountStepper label={t('brief.form.demoIterations')} value={demoIterations} onChange={setDemoIterations} max={20} testId="brief-demos" />
+          <CountStepper label={t('brief.form.demoIterations')} value={demoIterations} onChange={(v) => {
+                setDemoIterations(v);
+                autosave.commit(inputOf({ demoIterations: v }));
+              }} max={20} testId="brief-demos" />
         </div>
       </div>
 
-      {error ? (
-        <p className="error" role="alert" data-testid="brief-error">
-          {error}
-        </p>
-      ) : null}
-      {saved ? (
-        <p className="t-small" role="status" data-testid="brief-saved">
-          {t('brief.form.saved')}
-        </p>
-      ) : null}
       {presetNotice ? (
         <p className="t-small" role="status" data-testid="brief-preset-applied">
           {t('brief.form.presetApplied')}
         </p>
       ) : null}
-      <div>
-        <button className="btn btn-primary btn-sm" type="submit" disabled={loading || !templateTypeId} data-testid="brief-save">
-          {t('workspace.save')}
-        </button>
-      </div>
+      <AutosaveNote autosave={autosave} testId="brief-autosave" />
     </form>
   );
 }

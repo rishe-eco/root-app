@@ -11,6 +11,8 @@ import {
   makeContractLegacy,
   resetTestDatabase,
   signIn,
+  expectSaved,
+  fillTitle,
 } from './helpers';
 
 /**
@@ -129,16 +131,19 @@ test('Phases and payment: "X of Y allocated", a warning while the plan is short 
   const row = page.getByTestId('brief-phase').first();
   await row.locator('input').nth(1).fill('Kick-off');
   await page.getByTestId('phase-milestone-1').fill('Deposit');
-  await row.getByRole('button', { name: 'Save' }).click();
+  // DX4 (review 27): the row saves when a field in it is left, and has no Save button.
+  await expect(row.getByRole('button', { name: 'Save' })).toHaveCount(0);
+  await page.getByTestId('phase-milestone-1').blur();
+  await expectSaved(row, 'phase-autosave-1');
   await expect(page.getByTestId('phases-readout')).toContainText('Kick-off');
-  // The milestone label (the old Phases tab edited it) round-trips: the row remounts with what the server now holds.
+  // The milestone label (the old Phases tab edited it) round-trips: what the server now holds is what the row shows.
   await expect(page.getByTestId('phase-milestone-1')).toHaveValue('Deposit');
 
   // The plan is fixed: the one row takes the whole price, and the step is done.
   await page.getByTestId('acc-plan').getByRole('button').first().click();
   await page.getByTestId('plan-row').first().getByLabel('Amount (Toman)').fill('180000000');
-  await page.getByTestId('plan-save').click();
-  await expect(page.getByTestId('plan-saved')).toBeVisible();
+  await page.getByTestId('plan-row').first().getByLabel('Amount (Toman)').blur();
+  await expectSaved(page, 'plan-autosave');
   await expect(allocated).toHaveAttribute('data-balanced', 'true');
   await expect(allocated).toContainText('180,000,000 of 180,000,000');
   await expect(item(page, 'PHASES')).toHaveAttribute('data-status', 'DONE');
@@ -172,8 +177,7 @@ test('Pages and features holds the extras and the registry the Scope tab had: an
   // An item typed with its key (the old tab asked for one).
   const add = page.getByTestId('scope-add');
   await add.getByLabel('Key (optional)').fill('sample.page');
-  await add.getByLabel('Label (Persian)').fill('صفحه‌ی نمونه');
-  await add.getByLabel('Label (English)').fill('Sample page');
+  await fillTitle(add, 'scope-add', 'scope-add-label', 'صفحه‌ی نمونه', 'Sample page');
   await page.getByTestId('scope-add-submit').click();
   await expect(page.getByTestId('scope-add-done')).toBeVisible();
 
@@ -237,11 +241,9 @@ test('a phase’s Demo step sets the demo up: the live demo link, the readiness 
   // The declared pages.
   await page.getByRole('button', { name: 'Declare a page' }).click();
   const form = page.locator('form.auth-form').filter({ hasText: 'Path (as it appears in the browser)' });
-  const inputs = form.locator('input'); // key, title (Persian), title (English), path — in that order
-  await inputs.nth(0).fill('home');
-  await inputs.nth(1).fill('خانه');
-  await inputs.nth(2).fill('Home page');
-  await inputs.nth(3).fill('/');
+  await form.locator('input').first().fill('home');
+  await fillTitle(form, 'demo-page-new', 'demo-page-new-title', 'خانه', 'Home page');
+  await form.locator('input').last().fill('/'); // key, title (Persian), title (English), path — the path is last
   await form.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.demo-page-row').first()).toContainText('Home page');
 

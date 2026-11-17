@@ -1,14 +1,15 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
-  CUSTOMER,
-  SALES,
-  WIZARD_CONTRACT_REF,
-  WIZARD_CONTRACT_TITLE,
   apiSignIn,
   completeStepOneViaApi,
+  CUSTOMER,
+  expectSaved,
   gql,
   resetTestDatabase,
+  SALES,
   signIn,
+  WIZARD_CONTRACT_REF,
+  WIZARD_CONTRACT_TITLE,
 } from './helpers';
 
 /**
@@ -100,8 +101,11 @@ test('sales confirms it with a bilingual label — the customer’s words are th
   const queue = page.getByTestId('scope-queue');
   await expect(queue).toContainText('1 request waiting for a decision');
   // The customer wrote Persian, so that label starts as their words and sales writes the English one.
+  // DX4: one language is enough, so the customer's words confirm as they are; the English label is added here.
+  await expect(page.getByTestId('scope-label-one')).toHaveValue('یک صفحه‌ی وبلاگ');
+  await expect(page.getByTestId('scope-confirm')).toBeEnabled();
+  await page.getByTestId('scope-label-add-other').click();
   await expect(page.getByTestId('scope-label-fa')).toHaveValue('یک صفحه‌ی وبلاگ');
-  await expect(page.getByTestId('scope-confirm')).toBeDisabled();
   await page.getByTestId('scope-label-en').fill('Blog page');
   await page.getByTestId('scope-confirm').click();
 
@@ -165,8 +169,8 @@ test('sales fills the articles and publishes the draft — the customer sees the
   const end = page.getByTestId('draft-date-end');
   await end.locator('input[data-part="text"]').fill('1405/11/01');
   await expect(end).toHaveAttribute('data-value', '2027-01-21');
-  await page.getByTestId('draft-dates-save').click();
-  await expect(page.getByTestId('draft-dates-saved')).toBeVisible();
+  await end.locator('input[data-part="text"]').blur();
+  await expectSaved(page, 'draft-dates-autosave');
 
   // Back on the step, publish — the button is at the top of the step and again at its foot.
   await page.locator('.workspace-tab', { hasText: 'Steps' }).click();

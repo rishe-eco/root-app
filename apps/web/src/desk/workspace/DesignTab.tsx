@@ -2,6 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
 import { useLocale } from '@/lib/locale';
 import { canAuthorDesign } from '@/lib/access';
 import {
@@ -41,9 +45,19 @@ function PageRow({
   const [labelFa, setLabelFa] = useState(page.labelFa);
   const [labelEn, setLabelEn] = useState(page.labelEn);
   const [error, setError] = useState<string | null>(null);
-  const [update, { loading: saving }] = useMutation(UPDATE_PAGE_DESIGN);
+  const [update] = useMutation(UPDATE_PAGE_DESIGN);
   const [remove, { loading: deleting }] = useMutation(DELETE_PAGE_DESIGN);
   const [setImage] = useMutation(SET_PAGE_IMAGE);
+
+  // DX4 (review 27): a page's label saves when the field is left.
+  const autosave = useAutosave({
+    value: { labelFa, labelEn },
+    baseline: { labelFa: page.labelFa, labelEn: page.labelEn },
+    valid: (v) => hasOneTitle(v.labelFa, v.labelEn),
+    save: (v) => update({ variables: { pageId: page.id, labelFa: v.labelFa, labelEn: v.labelEn } }),
+    disabled: !editable,
+    errorText: errorMessage,
+  });
 
   if (!editable) {
     return (
@@ -57,16 +71,6 @@ function PageRow({
     );
   }
 
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await update({ variables: { pageId: page.id, labelFa, labelEn } });
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-  }
-
   async function onDelete() {
     if (!confirm(t('workspace.confirmDeletePage'))) return;
     try {
@@ -78,22 +82,11 @@ function PageRow({
 
   return (
     <div className="card editor-card">
-      <form className="auth-form" onSubmit={onSave}>
-        <div className="editor-grid-2">
-          <div className="field">
-            <label className="label">{t('workspace.titleFa')}</label>
-            <input className="input" dir="rtl" required value={labelFa} onChange={(e) => setLabelFa(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="label">{t('workspace.titleEn')}</label>
-            <input className="input" dir="ltr" required value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
-          </div>
-        </div>
+      <form className="auth-form" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur}>
+        <TitleField idBase={`page-${page.id}`} testId="page-title" fa={labelFa} en={labelEn} onChange={(v) => { setLabelFa(v.fa); setLabelEn(v.en); }} />
         {error ? <p className="error">{error}</p> : null}
+        <AutosaveNote autosave={autosave} testId="page-autosave" />
         <div className="editor-card-actions">
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={saving}>
-            {t('workspace.save')}
-          </button>
           <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete} disabled={deleting}>
             {t('workspace.delete')}
           </button>

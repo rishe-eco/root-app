@@ -1,4 +1,5 @@
 import type { ScopeStatusLike } from './scope.js';
+import { hasOneTitle } from './titles.js';
 import { scopeKindForKey, TEMPLATE_KINDS } from './templates.js';
 
 /**
@@ -222,7 +223,8 @@ export function checkDecision(kind: ProposalKind, input: DecisionInput): Decisio
     return reason.length > MAX_DECLINE_REASON ? 'REASON_TOO_LONG' : null;
   }
   if (kind !== 'ADD') return null;
-  if (!input.labelFa?.trim() || !input.labelEn?.trim()) return 'LABEL_REQUIRED';
+  // DX4: one language is enough; LABEL_REQUIRED now means both are blank.
+  if (!hasOneTitle(input.labelFa, input.labelEn)) return 'LABEL_REQUIRED';
   if (input.key != null && input.key !== '' && checkScopeKey(input.key) !== null) return 'INVALID_KEY';
   if (input.kind != null && !isProposableKind(input.kind)) return 'INVALID_KIND';
   return null;
@@ -265,8 +267,8 @@ export function applyDecision(
         action: 'create',
         key: typed ? typed : nextCustomKey(takenKeys),
         kind,
-        labelFa: input.labelFa!.trim(),
-        labelEn: input.labelEn!.trim(),
+        labelFa: (input.labelFa ?? '').trim(),
+        labelEn: (input.labelEn ?? '').trim(),
         originNote: proposal.text.trim(),
       },
     };
