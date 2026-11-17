@@ -35,6 +35,8 @@ export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNu
   const [end, setEnd] = useState(day(phase.plannedEndAt));
   // The milestone label the invoices and the agreement print beside the phase (the old Phases tab edited it; DX2a keeps it here).
   const [milestone, setMilestone] = useState(phase.milestoneLabel ?? '');
+  // DX2b: "Has a demo". Off for a phase the customer has nothing to review in (a kick-off): no Demo step, staff mark it done.
+  const [hasDemo, setHasDemo] = useState(phase.hasDemo !== false);
   const [error, setError] = useState<string | null>(null);
 
   async function save(e: FormEvent) {
@@ -42,7 +44,7 @@ export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNu
     setError(null);
     try {
       await update({
-        variables: { phaseId: phase.id, titleFa, titleEn, milestoneLabel: milestone.trim() || null, plannedEndAt: end || null, contractId: contract.id },
+        variables: { phaseId: phase.id, titleFa, titleEn, milestoneLabel: milestone.trim() || null, plannedEndAt: end || null, hasDemo, contractId: contract.id },
       });
     } catch (err) {
       setError(refusalText(t, err));
@@ -66,6 +68,9 @@ export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNu
       <input className="input" dir="ltr" required aria-label={t('workspace.titleEn')} value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
       <DayInput value={end} onChange={setEnd} label={t('brief.phases.plannedEnd', { n: formatCount(phase.number, locale) })} testId={`phase-end-${phase.number}`} />
       <input className="input" aria-label={t('workspace.phaseMilestone')} placeholder={t('workspace.phaseMilestone')} value={milestone} onChange={(e) => setMilestone(e.target.value)} data-testid={`phase-milestone-${phase.number}`} />
+      <label className="t-small" title={t('brief.phases.hasDemoHelp')}>
+        <input type="checkbox" checked={hasDemo} onChange={(e) => setHasDemo(e.target.checked)} data-testid={`phase-hasdemo-${phase.number}`} /> {t('brief.phases.hasDemo')}
+      </label>
       <span className="workspace-row">
         <button className="btn btn-secondary btn-sm" type="submit" disabled={loading}>
           {t('workspace.save')}
@@ -108,7 +113,7 @@ export function PhasesEditor({ contract }: { contract: Contract }) {
     <div className="card editor-card" data-testid="phases-editor">
       <SectionHead title={t('brief.phases.title')} help={t('brief.phases.help')} />
       {phases.map((p) => (
-        <PhaseRow key={`${p.id}:${p.plannedEndAt ?? ''}:${p.titleFa}:${p.titleEn}:${p.milestoneLabel ?? ''}`} contract={contract} phase={p} />
+        <PhaseRow key={`${p.id}:${p.plannedEndAt ?? ''}:${p.titleFa}:${p.titleEn}:${p.milestoneLabel ?? ''}:${p.hasDemo}`} contract={contract} phase={p} />
       ))}
       <form className="req-phase req-phase-new" onSubmit={add} data-testid="brief-phase-new">
         <span className="badge num-latin">+</span>
@@ -130,7 +135,10 @@ export function PhasesEditor({ contract }: { contract: Contract }) {
 // The payment plan
 // ---------------------------------------------------------------------------
 
-type PlanRow = { labelFa: string; labelEn: string; amount: string; phaseId: string; paymentTermDays: string };
+type PlanRow = { labelFa: string; labelEn: string; amount: string; phaseId: string; dueOn: string; paymentTermDays: string };
+/** DX2b: how a row falls due — on signing, when a phase is done, or on a date. The row stores at most one of a phase and a date. */
+type Trigger = 'SIGNING' | 'PHASE' | 'DATE';
+const triggerOf = (r: Pick<PlanRow, 'phaseId' | 'dueOn'>): Trigger => (r.dueOn ? 'DATE' : r.phaseId ? 'PHASE' : 'SIGNING');
 
 /** A row's label in each language, whichever the desk is read in — a stored label is bilingual. */
 function labellerFor(lang: 'fa' | 'en'): Labeller {
@@ -164,6 +172,7 @@ export function PlanEditor({ contract }: { contract: Contract }) {
       labelEn: i.labelEn,
       amount: i.amount,
       phaseId: i.phaseId ?? '',
+      dueOn: day(i.dueOn),
       paymentTermDays: String(i.paymentTermDays),
     })),
   );
@@ -181,7 +190,7 @@ export function PlanEditor({ contract }: { contract: Contract }) {
       fa: labellerFor('fa'),
       en: labellerFor('en'),
     });
-    setRows(proposed.map((p) => ({ ...p, phaseId: p.phaseId ?? '', paymentTermDays: String(p.paymentTermDays) })));
+    setRows(proposed.map((p) => ({ ...p, phaseId: p.phaseId ?? '', dueOn: '', paymentTermDays: String(p.paymentTermDays) })));
     setSaved(false);
   }
 
@@ -200,7 +209,8 @@ export function PlanEditor({ contract }: { contract: Contract }) {
       labelFa: r.labelFa,
       labelEn: r.labelEn,
       amount: normalizeAmount(r.amount),
-      phaseId: r.phaseId || null,
+      phaseId: triggerOf(r) === 'PHASE' ? r.phaseId || null : null,
+      dueOn: triggerOf(r) === 'DATE' ? r.dueOn : null,
       paymentTermDays: Number(r.paymentTermDays),
     }));
     try {
@@ -246,14 +256,33 @@ export function PlanEditor({ contract }: { contract: Contract }) {
                 <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.amount')} value={r.amount} onChange={(e) => edit(i, { amount: e.target.value })} />
                 <MoneyReadout value={normalizeAmount(r.amount)} testId="plan-amount-readout" />
               </div>
-              <select className="input" aria-label={t('brief.plan.phase')} value={r.phaseId} onChange={(e) => edit(i, { phaseId: e.target.value })}>
-                <option value="">{t('brief.plan.noPhase')}</option>
-                {phases.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {t('brief.plan.phaseOption', { n: formatCount(p.number, locale), title: pick(p, 'title', locale) })}
-                  </option>
-                ))}
+              <select
+                className="input"
+                aria-label={t('brief.plan.trigger')}
+                value={triggerOf(r)}
+                data-testid="plan-trigger"
+                onChange={(e) => {
+                  const next = e.target.value as Trigger;
+                  // One trigger at a time: choosing one clears the other's value (the database holds the same rule).
+                  edit(i, { phaseId: next === 'PHASE' ? (r.phaseId || phases[0]?.id || '') : '', dueOn: next === 'DATE' ? r.dueOn || new Date().toISOString().slice(0, 10) : '' });
+                }}
+              >
+                <option value="SIGNING">{t('brief.plan.triggerOption.SIGNING')}</option>
+                <option value="PHASE" disabled={phases.length === 0}>{t('brief.plan.triggerOption.PHASE')}</option>
+                <option value="DATE">{t('brief.plan.triggerOption.DATE')}</option>
               </select>
+              {triggerOf(r) === 'PHASE' ? (
+                <select className="input" aria-label={t('brief.plan.phase')} value={r.phaseId} onChange={(e) => edit(i, { phaseId: e.target.value })}>
+                  {phases.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {t('brief.plan.phaseOption', { n: formatCount(p.number, locale), title: pick(p, 'title', locale) })}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {triggerOf(r) === 'DATE' ? (
+                <DayInput value={r.dueOn} onChange={(v) => edit(i, { dueOn: v })} label={t('brief.plan.dueOn')} testId={`plan-due-${i}`} />
+              ) : null}
               <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.term')} value={r.paymentTermDays} onChange={(e) => edit(i, { paymentTermDays: e.target.value })} />
               <button className="btn btn-ghost btn-sm" type="button" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
                 {t('workspace.delete')}
@@ -265,7 +294,7 @@ export function PlanEditor({ contract }: { contract: Contract }) {
       <button
         className="btn btn-ghost btn-sm"
         type="button"
-        onClick={() => setRows([...rows, { labelFa: '', labelEn: '', amount: '', phaseId: '', paymentTermDays: '7' }])}
+        onClick={() => setRows([...rows, { labelFa: '', labelEn: '', amount: '', phaseId: '', dueOn: '', paymentTermDays: '7' }])}
       >
         {t('brief.plan.addRow')}
       </button>

@@ -51,3 +51,15 @@ test('checkPlanRows: each refusal, in the order the form’s columns run', () =>
   // A label problem is reported before an amount problem on the same row.
   assert.equal(checkPlanRows([row({ labelEn: '', amount: '0' })]), 'LABEL_REQUIRED');
 });
+
+test('checkPlanRows (DX2b): a row is due on a phase or on a date, never both, and a date must be a real day', () => {
+  const row = { labelFa: 'الف', labelEn: 'A', amount: '100', paymentTermDays: 0 };
+  assert.equal(checkPlanRows([{ ...row, dueOn: '2027-01-05' }]), null);
+  assert.equal(checkPlanRows([{ ...row, phaseId: 'ph1' }]), null);
+  assert.equal(checkPlanRows([{ ...row, phaseId: 'ph1', dueOn: '2027-01-05' }]), 'PHASE_AND_DATE');
+  assert.equal(checkPlanRows([{ ...row, dueOn: '2027-02-30' }]), 'INVALID_DATE');
+  assert.equal(checkPlanRows([{ ...row, dueOn: 'soon' }]), 'INVALID_DATE');
+  // null and the empty string are "no date", as the wire sends them.
+  assert.equal(checkPlanRows([{ ...row, phaseId: 'ph1', dueOn: null }]), null);
+  assert.equal(checkPlanRows([{ ...row, phaseId: 'ph1', dueOn: '' }]), null);
+});

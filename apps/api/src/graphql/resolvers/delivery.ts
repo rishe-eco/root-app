@@ -5,6 +5,7 @@ import { requireCapability, requireUser, viewerOf, type Context } from '../../co
 import { can } from '../../lib/capabilities.js';
 import { lockContract } from '../../lib/stepApproval.js';
 import { agreementSignedAt } from '../../lib/steps.js';
+import { phaseFinishedAt } from '../../lib/phase.js';
 import { isAgreedOrBeyond } from '../../lib/scope.js';
 import { isAgreementSnapshot, readContractSnapshot } from '../../lib/revision.js';
 import { parseCalendarDay } from '../../lib/calendarDay.js';
@@ -78,7 +79,7 @@ export async function closeBlockersOn(db: Db, contractId: string): Promise<Close
     db.contract.findUniqueOrThrow({ where: { id: contractId }, select: { sequence: true } }),
     db.phase.findMany({
       where: { contractId },
-      select: { id: true, number: true, scopeItems: { select: { status: true } } },
+      select: { id: true, number: true, hasDemo: true, doneAt: true, scopeItems: { select: { status: true } } },
     }),
     db.stepApproval.findMany({ where: { contractId, step: 'DEMO' }, select: { step: true, phaseId: true } }),
     db.scopeItem.findMany({
@@ -366,7 +367,6 @@ export const contractDeliveryFields = {
 
     const phaseNumbers = new Map(phases.map((p) => [p.id, p.number]));
     const executedTrades = trades.map((t) => ({ outItemId: t.outItemId, inItemId: t.inItemId, executedAt: t.executedAt! }));
-    const acceptedAt = new Map(approvals.flatMap((a) => (a.phaseId ? [[a.phaseId, a.approvedAt] as const] : [])));
     const supportMonths = (isAgreementSnapshot(snapshot) ? snapshot.brief?.supportMonths : null) ?? brief?.supportMonths ?? null;
     const support = supportPeriod(c.deliveredAt, supportMonths);
     const day = (v: string | null) => (v === null ? null : parseCalendarDay(v));
@@ -410,7 +410,7 @@ export const contractDeliveryFields = {
           titleFa: p.titleFa,
           titleEn: p.titleEn,
           plannedEndAt: p.plannedEndAt,
-          acceptedAt: acceptedAt.get(p.id) ?? null,
+          acceptedAt: phaseFinishedAt(p, approvals),
         })),
       },
       invoices: entries ? invoiceTotals(entries) : null,

@@ -1,4 +1,5 @@
 import type { Prisma, StepKind } from '@prisma/client';
+import { phaseFinished, type PhaseFinishFacts } from './phase.js';
 
 /**
  * Invoices' own rules (journeys build plan J13) — one file for what an issued
@@ -19,11 +20,12 @@ import type { Prisma, StepKind } from '@prisma/client';
  * A planned invoice may be issued when: the contract is **signed**
  * (`NOT_SIGNED`); the invoice before it in the plan has been **issued and
  * paid** (`PREVIOUS_UNPAID` — the first has no previous, so it needs only the
- * signature); and, if the row is tied to a phase, **that phase's demo has been
- * approved** (`PHASE_NOT_ACCEPTED`). The third reads a `StepApproval` of step
- * `DEMO` for that `phaseId` — the row J10 will write — so J10 has only to
- * produce it; before J10 nothing can, and a phase-tied invoice is unissuable,
- * which is right: no contract can have reached a demo yet.
+ * signature); and, if the row is tied to a phase, **that phase is finished**
+ * (`PHASE_NOT_ACCEPTED`): its demo approved, or — DX2b — a phase with no demo
+ * marked done (`phaseFinished`, lib/phase.ts, the one rule). **DX2b also adds the
+ * third trigger**: a row due on a date is not issuable before that calendar day
+ * (`DATE_NOT_REACHED`); a row has at most one of a phase and a date. Staff issue
+ * it — nothing here is a scheduler.
  */
 
 export const INVOICE_NUMBER_PREFIX = 'INV-';
@@ -100,9 +102,15 @@ export function isOverdue(entry: InvoiceLike, now: Date): boolean {
 
 // --- the plan rule -----------------------------------------------------------
 
-export type IssueBlock = 'NOT_SIGNED' | 'PREVIOUS_UNPAID' | 'PHASE_NOT_ACCEPTED';
+export type IssueBlock = 'NOT_SIGNED' | 'PREVIOUS_UNPAID' | 'PHASE_NOT_ACCEPTED' | 'DATE_NOT_REACHED';
 
-export type PlannedInvoiceRow = { id: string; ordinal: number; phaseId: string | null };
+export type PlannedInvoiceRow = {
+  id: string;
+  ordinal: number;
+  phaseId: string | null;
+  /** DX2b: the calendar day (midnight UTC) the row falls due on; null for the other two triggers. */
+  dueOn?: Date | null;
+};
 /** The entry a planned invoice was issued as — only what the rule reads. */
 export type PlanEntry = { plannedInvoiceId: string | null; issuedAt: Date | null; paidAt: Date | null };
 export type ApprovalRow = { step: StepKind; phaseId: string | null };
@@ -118,7 +126,11 @@ export type IssueVerdict = { ok: true } | { ok: false; reason: IssueBlock | 'ALR
  * `plan` is the contract's planned invoices in ordinal order, `entries` the
  * billing entries that carry a `plannedInvoiceId` of that plan, `approvals`
  * the contract's step approvals, and `signed` whether the agreement is signed
- * (`agreementSignedAt`, lib/steps.ts).
+ * (`agreementSignedAt`, lib/steps.ts). **`phases`** (DX2b) are the facts
+ * `phaseFinished` reads — `hasDemo` and `doneAt`; a row naming a phase that is
+ * not listed is judged on the approval alone, as before. **`today`** is the
+ * calendar day `DATE_NOT_REACHED` compares with (`utcDayStart`, PD-19); callers
+ * with a clock pass `new Date()`.
  */
 export function canIssuePlanned(
   plan: readonly PlannedInvoiceRow[],
@@ -126,6 +138,8 @@ export function canIssuePlanned(
   entries: readonly PlanEntry[],
   approvals: readonly ApprovalRow[],
   signed: boolean,
+  phases: readonly PhaseFinishFacts[] = [],
+  today: Date = new Date(),
 ): IssueVerdict {
   const row = plan[index];
   const entryOf = (id: string) => entries.find((e) => e.plannedInvoiceId === id && e.issuedAt !== null);
@@ -136,8 +150,12 @@ export function canIssuePlanned(
     const previous = entryOf(plan[index - 1].id);
     if (!previous || previous.paidAt === null) return { ok: false, reason: 'PREVIOUS_UNPAID' };
   }
-  if (row.phaseId !== null && !approvals.some((a) => a.step === 'DEMO' && a.phaseId === row.phaseId)) {
-    return { ok: false, reason: 'PHASE_NOT_ACCEPTED' };
+  if (row.phaseId !== null) {
+    const phase = phases.find((p) => p.id === row.phaseId) ?? { id: row.phaseId, hasDemo: true, doneAt: null };
+    if (!phaseFinished(phase, approvals)) return { ok: false, reason: 'PHASE_NOT_ACCEPTED' };
+  }
+  if (row.dueOn != null && utcDayStart(today).getTime() < utcDayStart(row.dueOn).getTime()) {
+    return { ok: false, reason: 'DATE_NOT_REACHED' };
   }
   return { ok: true };
 }
@@ -156,8 +174,9 @@ export function plannedInvoiceState(
   approvals: readonly ApprovalRow[],
   signed: boolean,
   now: Date,
+  phases: readonly PhaseFinishFacts[] = [],
 ): { state: PlannedInvoiceState; blockedBy: IssueBlock | null } {
-  const verdict = canIssuePlanned(plan, index, entries, approvals, signed);
+  const verdict = canIssuePlanned(plan, index, entries, approvals, signed, phases, now);
   if (verdict.ok) return { state: 'ISSUABLE', blockedBy: null };
   if (verdict.reason !== 'ALREADY_ISSUED') return { state: 'NOT_YET_ISSUABLE', blockedBy: verdict.reason };
   const entry = entries.find((e) => e.plannedInvoiceId === plan[index].id && e.issuedAt !== null)!;

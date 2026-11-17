@@ -61,6 +61,8 @@ const PLAN_MESSAGES: Record<PlanProblem, string> = {
   LABEL_REQUIRED: 'Every row needs a label in both languages.',
   INVALID_AMOUNT: 'Every amount must be a whole number of Toman above zero.',
   INVALID_TERM: 'A payment term is a whole number of days from 0 to 365.',
+  INVALID_DATE: 'That is not a date.',
+  PHASE_AND_DATE: 'A payment is due on a phase or on a date, not both.',
 };
 
 /** A day off the wire: omitted or null is unset, a real day is a `Date`, and
@@ -180,7 +182,15 @@ type BriefInputArg = {
   commitments?: CommitmentArg[] | null;
 };
 
-type PlanRowArg = { labelFa: string; labelEn: string; amount: string; phaseId?: string | null; paymentTermDays: number };
+type PlanRowArg = {
+  labelFa: string;
+  labelEn: string;
+  amount: string;
+  phaseId?: string | null;
+  /** DX2b: `YYYY-MM-DD`; at most one of this and `phaseId`. */
+  dueOn?: string | null;
+  paymentTermDays: number;
+};
 
 /** The contract, checked to be on the new road — step 1 does not exist on the
  *  legacy one, and a brief written onto a `DESIGN_FIRST` contract is a row no
@@ -382,6 +392,7 @@ export const briefMutations = {
           labelEn: row.labelEn.trim(),
           amount: BigInt(row.amount),
           phaseId: row.phaseId ?? null,
+          dueOn: row.dueOn ? parseCalendarDay(row.dueOn) : null,
           paymentTermDays: row.paymentTermDays,
         })),
       });

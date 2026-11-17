@@ -14,6 +14,7 @@ import {
   invoiceVisibleTo,
 } from '../../lib/visibility.js';
 import { computeGate } from '../../lib/gate.js';
+import { itemPhaseIds } from '../../lib/phase.js';
 import { diffSnapshots, isAgreementSnapshot, readContractSnapshot, type SnapshotDiff } from '../../lib/revision.js';
 import { carryForward, diffDesign, readThemeSnapshot, type ConceptShape, type PageChange } from '../../lib/design.js';
 import { canReadThemes } from '../../lib/themes.js';
@@ -558,6 +559,11 @@ export const PageDesign = {
 
 export const ScopeItem = {
   checked: (s: { checkedAt: Date | null }) => s.checkedAt !== null,
+  /** DX2b: every phase the item is in (`itemPhaseIds`: its join rows, and its `phaseId`, which is the last of them). */
+  phaseIds: async (s: { id: string; phaseId: string | null; phaseLinks?: Array<{ phaseId: string }> }) => {
+    const links = s.phaseLinks ?? (await prisma.scopeItemPhase.findMany({ where: { scopeItemId: s.id }, select: { phaseId: true } }));
+    return itemPhaseIds({ phaseId: s.phaseId, phaseLinks: links });
+  },
   /** J11: who handed a deliverable over. The name goes to whoever reads the item;
    *  their contacts go through `mayReadContactOf` on the `User` fields, as for
    *  every other edge that returns one. */
@@ -681,7 +687,8 @@ export function phasesWhere(where: Prisma.PhaseWhereInput, ctx: Context) {
     where,
     orderBy: [{ number: 'asc' }, { createdAt: 'asc' }],
     include: {
-      scopeItems: { orderBy: { position: 'asc' } },
+      // DX2b: not `scopeItems` — that relation is the items this phase *accepts* (their last
+      // phase); `Phase.scopeItems` on the wire is every item that is *in* the phase (phaseDemoFields).
       demos: {
         where: staff ? {} : { publishedAt: { not: null } },
         orderBy: { createdAt: 'desc' },

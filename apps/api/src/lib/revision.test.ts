@@ -5,9 +5,11 @@ import {
   buildContractSnapshot,
   buildDocumentSnapshot,
   AGREEMENT_FORMAT,
+  FORMAT_3,
   SNAPSHOT_FORMAT,
   buildAgreementSnapshot,
   isAgreementSnapshot,
+  type AgreementSnapshot,
   readContractSnapshot,
   type AgreementParts,
   canonicalize,
@@ -350,10 +352,10 @@ const parts = (over: Partial<AgreementParts> = {}): AgreementParts => ({
 });
 const appendix = [{ key: 'home', labelFa: 'خانه', labelEn: 'Home', kind: 'PAGE' as const }];
 
-test('format 2 keeps every format-1 key and adds steps 1 and 2, with money as strings and days as YYYY-MM-DD', () => {
+test('format 3 keeps every format-1 key and adds steps 1 and 2, with money as strings and days as YYYY-MM-DD', () => {
   const s = buildContractSnapshot(contract, [article(1)], appendix, parts());
   assert.ok(isAgreementSnapshot(s));
-  assert.equal(s.format, AGREEMENT_FORMAT);
+  assert.equal(s.format, FORMAT_3);
   assert.deepEqual([s.ref, s.titleEn, s.amount], ['RC-7', 't', '180']);
   assert.deepEqual(s.brief?.budgetCap, '150000000');
   assert.deepEqual([s.brief?.hardDeadline, s.brief?.idealDeadline], ['2026-10-23', null]);
@@ -361,11 +363,47 @@ test('format 2 keeps every format-1 key and adds steps 1 and 2, with money as st
   assert.deepEqual(s.allowances, { premadeRounds: 2, wireframeIterations: 2, mockupIterations: null, demoIterationsPerPhase: 2 });
   assert.ok(!('premadeRounds' in (s.brief as object)), 'one copy of each allowance');
   assert.deepEqual([s.plannedStartAt, s.plannedEndAt], ['2026-10-12', '2026-12-20']);
-  assert.deepEqual(s.scopeItems, appendix);
+  // Format 3's three additions (DX2b), each an explicit value rather than an absent key.
+  assert.deepEqual(s.scopeItems, appendix.map((a) => ({ ...a, phases: [] })));
+  assert.deepEqual(s.phases.map((p) => p.hasDemo), [true, true]);
+  assert.deepEqual(s.paymentPlan?.invoices.map((i) => i.dueOn), [null, null]);
   assert.equal(s.articles[0].sensitive, false);
 });
 
-test('format 2 puts every array in a total order and every absent value at null — the same state hashes the same however it was handed over', () => {
+test('format 3 freezes an item’s phases as numbers, a phase’s demo switch and a row’s due day', () => {
+  const p = parts();
+  p.phases[0].hasDemo = false; // phase 2
+  p.plan!.invoices[0].dueOn = new Date('2027-01-05T00:00:00Z'); // ordinal 2, due on a date
+  const s = buildContractSnapshot(contract, [article(1)], [{ ...appendix[0], phaseIds: ['p2', 'p1', 'gone'] }], p) as never as AgreementSnapshot;
+  // Numbers, ascending, and only this contract's phases (an id that is not one is not this agreement's to name).
+  assert.deepEqual(s.scopeItems[0].phases, [1, 2]);
+  assert.ok(!('phaseIds' in s.scopeItems[0]), 'ids never reach the bytes');
+  assert.deepEqual(s.phases.map((x) => [x.number, x.hasDemo]), [[1, true], [2, false]]);
+  assert.deepEqual(s.paymentPlan?.invoices.map((i) => [i.ordinal, i.dueOn]), [[1, null], [2, '2027-01-05']]);
+  // A format-1 build never carries a phase, whatever the caller handed it.
+  const one = buildContractSnapshot(contract, [article(1)], [{ key: 'home', labelFa: 'خانه', labelEn: 'Home', phaseIds: ['p1'] }]);
+  assert.deepEqual(one.scopeItems, [{ key: 'home', labelFa: 'خانه', labelEn: 'Home' }]);
+});
+
+// A format-2 snapshot as J7 wrote it, frozen: the bytes and the hash of a stored one must never move (DX2b).
+const FORMAT_2_STORED =
+  '{"allowances":{"demoIterationsPerPhase":2,"mockupIterations":null,"premadeRounds":2,"wireframeIterations":2},"amount":"180","articles":[{"bodyEn":null,"bodyFa":null,"number":1,"sensitive":false,"titleEn":"Article 1","titleFa":"ماده 1"}],"brief":{"budgetCap":"150000000","contentProvidedBy":"CUSTOMER","designTier":"THEME_PICK","domainName":"nahal.ir","domainProvidedBy":"CUSTOMER","existingSiteUrl":null,"hardDeadline":"2026-10-23","hostProvidedBy":"ROOT","idealDeadline":null,"kind":"NEW_SITE","supportMonths":6,"templateType":{"labelEn":"Store","labelFa":"فروشگاهی","slug":"store"}},"format":2,"paymentPlan":{"invoices":[{"amount":"100","labelEn":"A","labelFa":"الف","ordinal":1,"paymentTermDays":0,"phaseNumber":1},{"amount":"80","labelEn":"B","labelFa":"ب","ordinal":2,"paymentTermDays":7,"phaseNumber":null}],"split":"INSTALLMENTS"},"phases":[{"milestoneLabel":"M1","number":1,"plannedEndAt":"2026-11-10","titleEn":"One","titleFa":"یک"},{"milestoneLabel":null,"number":2,"plannedEndAt":null,"titleEn":"Two","titleFa":"دو"}],"plannedEndAt":"2026-12-20","plannedStartAt":"2026-10-12","ref":"RC-7","scopeItems":[{"key":"home","kind":"PAGE","labelEn":"Home","labelFa":"خانه"}],"titleEn":"t","titleFa":"ت"}';
+const FORMAT_2_HASH = '5e171bf6204b95ebf8896cecb5b39817edb58f80cf504f1ffbb9c9967cc19c0c';
+
+test('a stored format-2 snapshot reads back with its bytes and its hash unchanged, and is still an agreement snapshot', () => {
+  const stored = JSON.parse(FORMAT_2_STORED);
+  const read = readContractSnapshot(stored);
+  assert.ok(read !== null && isAgreementSnapshot(read));
+  assert.equal(read.format, AGREEMENT_FORMAT);
+  assert.equal(canonicalize(read as never), FORMAT_2_STORED, 'reading adds nothing and drops nothing');
+  assert.equal(contentHash(read), FORMAT_2_HASH, 'the hash a signature attests to has not moved');
+  // …and what a publish writes now is a different document, so a format-2 revision is dirty against a fresh draft.
+  const draft = draftState(contract, [article(1)], { contentHash: FORMAT_2_HASH }, appendix, parts());
+  assert.equal(draft.dirty, true);
+  assert.equal(draft.snapshot.format, FORMAT_3);
+});
+
+test('format 3 puts every array in a total order and every absent value at null — the same state hashes the same however it was handed over', () => {
   const a = buildContractSnapshot(contract, [article(2), article(1)], appendix, parts());
   const reversed = parts();
   reversed.phases = [...reversed.phases].reverse();
@@ -382,7 +420,7 @@ test('format 2 puts every array in a total order and every absent value at null 
   assert.deepEqual([(bare as never as Record<string, unknown>).brief, (bare as never as Record<string, unknown>).paymentPlan, (bare as never as Record<string, unknown>).allowances], [null, null, null]);
 });
 
-test('format 2 changes its hash for each thing it added, and only for what it added', () => {
+test('format 3 changes its hash for each thing it added, and only for what it added', () => {
   const base = contentHash(buildContractSnapshot(contract, [article(1)], appendix, parts()));
   const changed = (over: Partial<AgreementParts>) => contentHash(buildContractSnapshot(contract, [article(1)], appendix, parts(over)));
   assert.notEqual(changed({ plannedEndAt: new Date('2026-12-21T00:00:00Z') }), base);
@@ -400,24 +438,25 @@ test('format 2 changes its hash for each thing it added, and only for what it ad
   assert.throws(() => buildContractSnapshot(contract, [], [{ key: 'x', labelFa: 'ا', labelEn: 'x' }], parts()), /needs one/);
 });
 
-test('draftState with an agreement is a format-2 draft: dirty when steps 1–2 move, clean against its own published hash', () => {
+test('draftState with an agreement is a format-3 draft: dirty when steps 1–2 move, clean against its own published hash', () => {
   const published = draftState(contract, [article(1)], null, appendix, parts());
-  assert.equal(published.snapshot.format, AGREEMENT_FORMAT);
+  assert.equal(published.snapshot.format, FORMAT_3);
   assert.equal(draftState(contract, [article(1)], { contentHash: published.hash }, appendix, parts()).dirty, false);
   assert.equal(draftState(contract, [article(1)], { contentHash: published.hash }, appendix, parts({ plannedStartAt: null })).dirty, true);
   // A format-1 draft against a format-2 hash (or the reverse) is dirty: publishing would change the bytes.
   assert.equal(draftState(contract, [article(1)], { contentHash: published.hash }, appendix.map(({ key, labelFa, labelEn }) => ({ key, labelFa, labelEn }))).dirty, true);
 });
 
-test('readContractSnapshot reads formats 1 and 2 and nothing else', () => {
+test('readContractSnapshot reads formats 1, 2 and 3 and nothing else', () => {
   const one = buildContractSnapshot(contract, [article(1)]);
   const two = buildContractSnapshot(contract, [article(1)], appendix, parts());
   assert.equal(readContractSnapshot(JSON.parse(JSON.stringify(one)))?.format, 1);
-  assert.equal(readContractSnapshot(JSON.parse(JSON.stringify(two)))?.format, 2);
-  assert.equal(readContractSnapshot({ ...one, format: 3 }), null);
+  assert.equal(readContractSnapshot(JSON.parse(JSON.stringify(two)))?.format, 3);
+  assert.equal(readContractSnapshot({ ...one, format: 2 })?.format, 2);
+  assert.equal(readContractSnapshot({ ...one, format: 4 }), null);
   assert.equal(readContractSnapshot(null), null);
   assert.equal(readContractSnapshot([one]), null);
   // …and the stored JSON round-trips to the same hash — the property a signature relies on.
   assert.equal(contentHash(readContractSnapshot(JSON.parse(JSON.stringify(two)))!), contentHash(two));
-  assert.equal(buildAgreementSnapshot(contract, [article(1)], appendix, parts()).format, 2);
+  assert.equal(buildAgreementSnapshot(contract, [article(1)], appendix, parts()).format, 3);
 });

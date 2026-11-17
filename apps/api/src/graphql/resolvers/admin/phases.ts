@@ -10,6 +10,7 @@ import { parseCalendarDay } from '../../../lib/calendarDay.js';
 import { checkStagingUrl, type StagingRefusal } from '../../../lib/stagingHost.js';
 import { env } from '../../../lib/env.js';
 import { clearPageMapConfirmation, openDemo } from '../demoStep.js';
+import { resyncItemPhase, setItemPhases } from '../../../lib/itemPhases.js';
 
 /**
  * Phases and the live demo surface (build plan L2; spec §4 stage 6, §6).
@@ -160,6 +161,8 @@ export const phaseMutations = {
       titleEn: string;
       milestoneLabel?: string | null;
       plannedEndAt?: string | null;
+      /** DX2b: omitted means a phase with a demo, as every phase was. */
+      hasDemo?: boolean | null;
     },
     ctx: Context,
   ) => {
@@ -182,6 +185,7 @@ export const phaseMutations = {
             titleEn: args.titleEn,
             milestoneLabel: args.milestoneLabel ?? null,
             plannedEndAt: end ?? null,
+            hasDemo: args.hasDemo ?? true,
           },
         });
       });
@@ -204,6 +208,8 @@ export const phaseMutations = {
       titleEn: string;
       milestoneLabel?: string | null;
       plannedEndAt?: string | null;
+      /** DX2b: omitted leaves the switch alone. Behind the PHASES lock like every other field here. */
+      hasDemo?: boolean | null;
       contractId?: string | null;
     },
     ctx: Context,
@@ -223,15 +229,17 @@ export const phaseMutations = {
           // milestone label); null clears it, as the phase board always meant.
           milestoneLabel: args.milestoneLabel === undefined ? undefined : args.milestoneLabel,
           plannedEndAt: end,
+          hasDemo: args.hasDemo ?? undefined,
         },
       });
     });
     return reload(phase.contractId);
   },
 
-  /** Scope items on this phase are not deleted — `phaseId` just goes back to
-   *  null on them (schema.prisma: onDelete: SetNull), and so does a planned
-   *  invoice's link to it. Demos cascade. */
+  /** Scope items on this phase are not deleted — their link to it goes, and their
+   *  `phaseId` is re-derived from the phases they are still in (DX2b: the column's
+   *  own `SetNull` is only right for an item that was in no other), and so does a planned
+   *  invoice's link to it go null. Demos cascade. */
   deletePhase: async (_p: unknown, args: { phaseId: string; contractId?: string | null }, ctx: Context) => {
     requireCapability(ctx, 'contracts.author');
     const phase = await phaseOnContract(args.phaseId, args.contractId);
@@ -241,7 +249,12 @@ export const phaseMutations = {
       // An approved phase cannot be deleted out from under its own lock
       // (`StepApproval.phaseId` restricts; this is the code before Postgres's).
       await assertStepOpenOn(phase.contractId, 'DEMO', phase.id, tx);
+      const inPhase = await tx.scopeItem.findMany({
+        where: { OR: [{ phaseId: phase.id }, { phaseLinks: { some: { phaseId: phase.id } } }] },
+        select: { id: true },
+      });
       await tx.phase.delete({ where: { id: phase.id } });
+      for (const item of inPhase) await resyncItemPhase(tx, item.id);
     });
     return reload(phase.contractId);
   },
@@ -256,15 +269,31 @@ export const phaseMutations = {
     if (!item) {
       throw new GraphQLError('No such scope item.', { extensions: { code: 'NOT_FOUND' } });
     }
-    if (args.phaseId) {
-      const phase = await loadPhase(args.phaseId);
-      if (phase.projectId !== item.projectId) {
-        throw new GraphQLError('That phase belongs to a different project.', {
-          extensions: { code: 'PHASE_WRONG_PROJECT' },
-        });
-      }
+    // The single-phase form of `setScopeItemPhases`: the item ends up in exactly this phase (or none).
+    await prisma.$transaction((tx) => setItemPhases(tx, item.id, args.phaseId ? [args.phaseId] : []));
+    return reloadOnProject(item.projectId, args.contractId);
+  },
+
+  /**
+   * **Puts a scope item in these phases** (DX2b; desk UX review item 10) — all of
+   * them, replacing what it was in; an empty list takes it out of every phase. An item
+   * "shown in one phase and fixed in the next" is in both, and is accepted by the last
+   * (`setItemPhases`, which also keeps `ScopeItem.phaseId` equal to it). `contracts.author`;
+   * `PHASE_WRONG_PROJECT` for a phase of another project. Not behind the PHASES lock,
+   * as `assignScopeItemToPhase` never was: a developer's phases are still being filled
+   * as the demos are made.
+   */
+  setScopeItemPhases: async (
+    _p: unknown,
+    args: { scopeItemId: string; phaseIds: string[]; contractId?: string | null },
+    ctx: Context,
+  ) => {
+    requireCapability(ctx, 'contracts.author');
+    const item = await prisma.scopeItem.findUnique({ where: { id: args.scopeItemId } });
+    if (!item) {
+      throw new GraphQLError('No such scope item.', { extensions: { code: 'NOT_FOUND' } });
     }
-    await prisma.scopeItem.update({ where: { id: item.id }, data: { phaseId: args.phaseId ?? null } });
+    await prisma.$transaction((tx) => setItemPhases(tx, item.id, args.phaseIds));
     return reloadOnProject(item.projectId, args.contractId);
   },
 

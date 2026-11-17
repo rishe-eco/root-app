@@ -24,7 +24,7 @@ import type { FullContract } from './contracts.js';
 type Db = typeof prisma | Prisma.TransactionClient;
 
 /**
- * A format-2 snapshot as the API returns it (`ContractRevision.agreement`) —
+ * A format-2 or format-3 snapshot as the API returns it (`ContractRevision.agreement`) —
  * what the customer approves and signs, and what the print route renders.
  *
  * **Money is the one thing that varies by viewer, and only for other staff**
@@ -49,6 +49,8 @@ export function agreementView(s: AgreementSnapshot, mayReadMoney: boolean) {
       mayReadMoney && s.paymentPlan
         ? {
             ...s.paymentPlan,
+            // DX2b (format 3): a row's due day as a Date, like every other day on the wire; format 2 has none.
+            invoices: s.paymentPlan.invoices.map((i) => ({ ...i, dueOn: day(i.dueOn ?? null) })),
             total: s.paymentPlan.invoices.reduce((sum, i) => sum + BigInt(i.amount), 0n).toString(),
           }
         : null,

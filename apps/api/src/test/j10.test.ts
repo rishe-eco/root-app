@@ -876,6 +876,9 @@ test('every demo mutation in the SDL has a row in the lock table — the table c
   // Every Mutation field of the demo's own resolver files is one of them.
   const resolvers = readFileSync(fileURLToPath(new URL('../graphql/resolvers/demoStep.ts', import.meta.url)), 'utf8');
   for (const [, name] of resolvers.matchAll(/^  (\w+): async \(_p: unknown, args/gm)) {
+    // DX2b: markPhaseDone finishes a phase *with no demo*, so it is deliberately not behind the demo step's lock
+    // (dx2b.test.ts holds its own refusals).
+    if (name === 'markPhaseDone') continue;
     assert.ok(rows.includes(name), `demoStep.ts's ${name} has a row`);
   }
 });

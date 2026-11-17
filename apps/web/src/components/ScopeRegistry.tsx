@@ -4,12 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { formatCount, pick } from '@/lib/format';
 import {
-  ASSIGN_SCOPE_ITEM_TO_PHASE,
   CONFIRM_SCOPE_TRADE_ROOT,
   DECIDE_SCOPE_ITEM,
   DELETE_SCOPE_ITEM,
   PROPOSE_SCOPE_TRADE,
   REORDER_SCOPE_ITEM,
+  SET_SCOPE_ITEM_PHASES,
   SET_SCOPE_ITEM_FLAGS,
   SET_SCOPE_ITEM_STATUS,
   UNDECIDE_SCOPE_ITEM,
@@ -76,7 +76,7 @@ function ScopeItemCard({
   const [decide] = useMutation(DECIDE_SCOPE_ITEM, bound);
   const [undecide] = useMutation(UNDECIDE_SCOPE_ITEM, bound);
   const [reorder] = useMutation(REORDER_SCOPE_ITEM, bound);
-  const [assign] = useMutation(ASSIGN_SCOPE_ITEM_TO_PHASE, bound);
+  const [setPhases] = useMutation(SET_SCOPE_ITEM_PHASES, bound);
 
   async function guarded(fn: () => Promise<unknown>) {
     setError(null);
@@ -87,7 +87,9 @@ function ScopeItemCard({
     }
   }
 
-  const phaseOf = phases.find((p) => p.id === item.phaseId) ?? null;
+  // DX2b: an item may be in several phases (shown in one, fixed in the next); `phaseId` is the last of them.
+  const inPhases = item.phaseIds ?? (item.phaseId ? [item.phaseId] : []);
+  const phaseList = phases.filter((p) => inPhases.includes(p.id)).map((p) => formatCount(p.number, locale)).join(locale === 'fa' ? '، ' : ', ');
 
   if (!editable) {
     return (
@@ -104,9 +106,7 @@ function ScopeItemCard({
           {item.temporary ? <span className="badge">{t('workspace.scopeFlagTemporary')}</span> : null}
           {item.outOfScope ? <span className="badge">{t('workspace.scopeFlagOutOfScope')}</span> : null}
           {item.adminWork ? <span className="badge">{t('workspace.scopeFlagAdminWork')}</span> : null}
-          {phaseOf ? (
-            <span className="badge">{t('brief.plan.phaseOption', { n: formatCount(phaseOf.number, locale), title: pick(phaseOf, 'title', locale) })}</span>
-          ) : null}
+          {phaseList ? <span className="badge" data-testid="registry-phases-badge">{t('scope.registry.phasesBadge', { list: phaseList })}</span> : null}
         </div>
         {item.decidedAt ? (
           <div className="workspace-row">
@@ -216,22 +216,30 @@ function ScopeItemCard({
             />
           </div>
         ) : null}
-        <div className="field">
-          <label className="label">{t('scope.registry.phase')}</label>
-          <select
-            className="input"
-            data-testid="registry-phase"
-            value={item.phaseId ?? ''}
-            onChange={(e) => guarded(() => assign({ variables: { scopeItemId: item.id, phaseId: e.target.value || null } }))}
-          >
-            <option value="">{t('brief.plan.noPhase')}</option>
-            {phases.map((p) => (
-              <option key={p.id} value={p.id}>
-                {t('brief.plan.phaseOption', { n: formatCount(p.number, locale), title: pick(p, 'title', locale) })}
-              </option>
-            ))}
-          </select>
-        </div>
+        <fieldset className="field" data-testid="registry-phase" title={t('scope.registry.phaseHelp')}>
+          <legend className="label">{t('scope.registry.phase')}</legend>
+          {phases.length === 0 ? <span className="t-small desk-muted">{t('brief.plan.noPhase')}</span> : null}
+          {phases.map((p) => (
+            <label className="t-small" key={p.id}>
+              <input
+                type="checkbox"
+                checked={inPhases.includes(p.id)}
+                data-testid={`registry-phase-${p.number}`}
+                onChange={(e) =>
+                  guarded(() =>
+                    setPhases({
+                      variables: {
+                        scopeItemId: item.id,
+                        phaseIds: e.target.checked ? [...inPhases, p.id] : inPhases.filter((id) => id !== p.id),
+                      },
+                    }),
+                  )
+                }
+              />{' '}
+              {t('brief.plan.phaseOption', { n: formatCount(p.number, locale), title: pick(p, 'title', locale) })}
+            </label>
+          ))}
+        </fieldset>
       </div>
 
       <div className="workspace-row">

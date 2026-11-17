@@ -737,13 +737,15 @@
       "blocked": {
         "NOT_SIGNED": "Waiting for the agreement to be signed.",
         "PREVIOUS_UNPAID": "Waiting for the previous invoice to be paid.",
-        "PHASE_NOT_ACCEPTED": "Waiting for the phase’s demo to be accepted."
+        "PHASE_NOT_ACCEPTED": "Waiting for the phase to be finished.",
+        "DATE_NOT_REACHED": "Waiting for its due date."
       },
       "error": {
         "ALREADY_ISSUED": "That invoice has already been issued.",
         "NOT_SIGNED": "The agreement has not been signed yet.",
         "PREVIOUS_UNPAID": "The previous invoice has not been paid yet.",
-        "PHASE_NOT_ACCEPTED": "The phase’s demo has not been accepted yet.",
+        "PHASE_NOT_ACCEPTED": "The phase has not been finished yet.",
+        "DATE_NOT_REACHED": "Its due date has not come yet.",
         "NOT_A_DRAFT": "An issued invoice cannot be edited or deleted.",
         "NOT_ISSUED": "A draft has not been issued, so there is nothing to mark paid.",
         "SUCCESSOR_ISSUED": "The next invoice of this plan has already been issued, so this one stays paid.",
@@ -1839,7 +1841,9 @@
     "registry": {
       "title": "Status, flags, trades and phase",
       "help": "Everything about each item beyond its name: where it stands, its flags, the phase it is built in, its order, and swapping one item for another. Changes here are live for the customer the moment they are saved.",
-      "phase": "Built in phase"
+      "phase": "Built in phases",
+      "phaseHelp": "Tick every phase the item is in: shown in one, fixed in the next. It is accepted in the last.",
+      "phasesBadge": "Phases {{list}}"
     },
     "staffRemove": {
       "action": "Remove",
@@ -2488,7 +2492,13 @@
       "newPlannedEnd": "Planned end of the new phase",
       "add": "Add phase",
       "endsOn": "ends {{date}}",
-      "noEnd": "end date to be set"
+      "noEnd": "end date to be set",
+      "hasDemo": "Has a demo",
+      "hasDemoHelp": "Off for a phase the customer has nothing to review in, such as a kick-off. It then has no Demo step; staff mark it done.",
+      "markDone": "Mark phase done",
+      "doneOn": "Done {{date}}",
+      "noDemoBadge": "No demo",
+      "confirmDone": "Mark this phase done? The customer is told, and what is tied to it falls due."
     },
     "plan": {
       "title": "Payment plan",
@@ -2508,6 +2518,13 @@
       "phase": "Phase",
       "noPhase": "No phase",
       "phaseOption": "Phase {{n}} — {{title}}",
+      "trigger": "Due",
+      "triggerOption": {
+        "SIGNING": "On signing",
+        "PHASE": "When a phase is done",
+        "DATE": "On a date"
+      },
+      "dueOn": "Due on",
       "term": "Payment term (days)",
       "addRow": "Add row",
       "totalNoFee": "Total {{total}} Toman. No fee is set on the contract yet, so there is nothing to compare it with.",
@@ -2548,6 +2565,12 @@
       "PHASE_WRONG_CONTRACT": "A payment row names a phase this contract does not have.",
       "PLAN_HAS_ISSUED_INVOICES": "Part of this payment plan has already been issued as invoices, so the plan can no longer be replaced.",
       "PHASE_NUMBER_TAKEN": "This contract already has a phase with that number.",
+      "PHASE_AND_DATE": "A payment is due when a phase is done or on a date, not both.",
+      "INVALID_DATE": "That is not a date.",
+      "PHASE_HAS_DEMO": "This phase has a demo: it is finished when the customer approves it.",
+      "PHASE_DONE": "This phase is already marked done.",
+      "NOT_SIGNED": "A phase is not done before the agreement is signed.",
+      "PHASE_WRONG_PROJECT": "That phase belongs to a different project.",
       "NOT_AN_EXTRA": "Only an extra can be switched on or off here.",
       "EXTRA_IN_PROGRESS": "Work has started on that, so it cannot be switched off here.",
       "STEP_NOT_ON_ROAD": "This contract has no requirements step.",

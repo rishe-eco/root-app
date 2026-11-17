@@ -190,3 +190,12 @@ test('supportPeriod: months counted from the day of delivery (UTC), a calendar d
   assert.equal(supportPeriod(new Date('2026-10-01T00:00:00Z'), 0), null);
   assert.equal(supportPeriod(null, 0), null);
 });
+
+test('closeBlockers (DX2b): a phase with no demo is accepted once marked done — not before, and a done mark never finishes a phase that has a demo', () => {
+  const noDemo = { ...phase('k', 1), hasDemo: false, doneAt: null as Date | null };
+  const withDemo = { ...phase('p2', 2), hasDemo: true, doneAt: null as Date | null };
+  const approvals = [{ step: 'DEMO' as const, phaseId: 'p2' }];
+  assert.deepEqual(closeBlockers({ ...base, phases: [noDemo, withDemo], approvals }).phasesNotAccepted, [1]);
+  assert.deepEqual(closeBlockers({ ...base, phases: [{ ...noDemo, doneAt: new Date() }, withDemo], approvals }).phasesNotAccepted, []);
+  assert.deepEqual(closeBlockers({ ...base, phases: [noDemo, { ...withDemo, doneAt: new Date() }], approvals: [] }).phasesNotAccepted, [1, 2]);
+});

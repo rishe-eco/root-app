@@ -12,6 +12,7 @@ import {
   demoPublishedEmail,
   feedbackSubmittedEmail,
   buildPublishedEmail,
+  phaseDoneEmail,
   answerPendingEmail,
   answerPublishedEmail,
   answerDeclinedEmail,
@@ -277,6 +278,12 @@ export type NotifyEvent =
         deskUrl: string;
       };
     }
+  // DX2b — staff marked a phase *with no demo* done (a kick-off phase, say), so there is no
+  // approval for the customer to give and nothing else tells them. To the customer, email only.
+  | {
+      kind: 'PHASE_DONE';
+      params: { customerName: string; projectTitleFa: string; projectTitleEn: string; phaseNumber: number; portalUrl: string };
+    }
   // Journeys build plan J11 — step 7: sales closed the contract. To the customer.
   // `supportUntil` is a calendar day (`YYYY-MM-DD`, PD-19), null when the brief
   // promised no support.
@@ -312,6 +319,8 @@ function renderEmail(locale: string | null | undefined, event: NotifyEvent): Mai
       return feedbackSubmittedEmail(locale, event.params);
     case 'BUILD_PUBLISHED':
       return buildPublishedEmail(locale, event.params);
+    case 'PHASE_DONE':
+      return phaseDoneEmail(locale, event.params);
     case 'ANSWER_PENDING':
       return answerPendingEmail(locale, event.params);
     case 'ANSWER_PUBLISHED':

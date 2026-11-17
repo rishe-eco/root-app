@@ -163,3 +163,40 @@ test('firstInvoicePaidAt: the first planned invoice’s payment, and nothing for
   const shuffled = [plan[2], plan[0], plan[1]];
   assert.deepEqual(firstInvoicePaidAt(shuffled, [entry('p1', true)]), at('2026-10-05'));
 });
+
+// ---- DX2b: a phase with no demo, and "on a date" -----------------------------------------
+
+test('a row tied to a phase with no demo is issuable once staff marked the phase done — and not before', () => {
+  const paid = [entry('p1', true)];
+  const open = [{ id: 'ph1', hasDemo: false, doneAt: null }];
+  const done = [{ id: 'ph1', hasDemo: false, doneAt: at('2026-10-09') }];
+  assert.deepEqual(canIssuePlanned(plan, 1, paid, [], true, open, NOW), { ok: false, reason: 'PHASE_NOT_ACCEPTED' });
+  assert.deepEqual(canIssuePlanned(plan, 1, paid, [], true, done, NOW), { ok: true });
+  // …a phase *with* a demo is not finished by a done mark, only by its approval.
+  assert.deepEqual(canIssuePlanned(plan, 1, paid, [], true, [{ id: 'ph1', hasDemo: true, doneAt: at('2026-10-09') }], NOW), {
+    ok: false,
+    reason: 'PHASE_NOT_ACCEPTED',
+  });
+});
+
+test('a row due on a date is not issuable before that calendar day (DATE_NOT_REACHED) and is on it', () => {
+  const dated: PlannedInvoiceRow[] = [{ id: 'd1', ordinal: 1, phaseId: null, dueOn: at('2026-10-20') }];
+  assert.deepEqual(canIssuePlanned(dated, 0, [], [], true, [], at('2026-10-19')), { ok: false, reason: 'DATE_NOT_REACHED' });
+  // The day itself counts, at any hour of it (calendar days, PD-19: the clock's time of day is ignored).
+  assert.deepEqual(canIssuePlanned(dated, 0, [], [], true, [], new Date('2026-10-20T00:00:00Z')), { ok: true });
+  assert.deepEqual(canIssuePlanned(dated, 0, [], [], true, [], new Date('2026-10-20T23:59:59Z')), { ok: true });
+  assert.deepEqual(canIssuePlanned(dated, 0, [], [], true, [], at('2026-10-21')), { ok: true });
+  // Signature first, then the date: the order the customer would meet them.
+  assert.deepEqual(canIssuePlanned(dated, 0, [], [], false, [], at('2026-10-19')), { ok: false, reason: 'NOT_SIGNED' });
+});
+
+test('a dated row still waits for the one before it, and the plan state says what it waits on', () => {
+  const dated: PlannedInvoiceRow[] = [
+    { id: 'd1', ordinal: 1, phaseId: null },
+    { id: 'd2', ordinal: 2, phaseId: null, dueOn: at('2026-10-05') },
+  ];
+  assert.deepEqual(canIssuePlanned(dated, 1, [], [], true, [], NOW), { ok: false, reason: 'PREVIOUS_UNPAID' });
+  assert.deepEqual(plannedInvoiceState(dated, 1, [entry('d1', true)], [], true, NOW), { state: 'ISSUABLE', blockedBy: null });
+  const later = [{ ...dated[0] }, { ...dated[1], dueOn: at('2026-10-30') }];
+  assert.deepEqual(plannedInvoiceState(later, 1, [entry('d1', true)], [], true, NOW), { state: 'NOT_YET_ISSUABLE', blockedBy: 'DATE_NOT_REACHED' });
+});

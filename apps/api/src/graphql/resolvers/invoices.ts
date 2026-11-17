@@ -43,7 +43,7 @@ export async function loadPlanFacts(db: Db, planId: string) {
     where: { id: planId },
     include: { invoices: { orderBy: { ordinal: 'asc' } } },
   });
-  const [entries, approvals, contract] = await Promise.all([
+  const [entries, approvals, contract, phases] = await Promise.all([
     db.billingEntry.findMany({
       where: { plannedInvoiceId: { in: plan.invoices.map((i) => i.id) } },
       include: billingEntryInclude,
@@ -56,11 +56,13 @@ export async function loadPlanFacts(db: Db, planId: string) {
       where: { id: plan.contractId },
       select: { currentContractRevision: { select: { signature: { select: { signedAt: true } } } } },
     }),
+    // DX2b: `phaseFinished` reads the switch and the done mark, not the approval alone.
+    db.phase.findMany({ where: { contractId: plan.contractId }, select: { id: true, hasDemo: true, doneAt: true } }),
   ]);
   const signedAt = agreementSignedAt({
     signatureSignedAt: contract.currentContractRevision?.signature?.signedAt ?? null,
   });
-  return { plan, entries, approvals, signedAt };
+  return { plan, entries, approvals, signedAt, phases };
 }
 
 export type PlanFacts = Awaited<ReturnType<typeof loadPlanFacts>>;
@@ -78,13 +80,13 @@ function planFactsFor(ctx: Context, planId: string): Promise<PlanFacts> {
   return facts;
 }
 
-const rowsOf = (facts: PlanFacts) => facts.plan.invoices.map((i) => ({ id: i.id, ordinal: i.ordinal, phaseId: i.phaseId }));
+const rowsOf = (facts: PlanFacts) => facts.plan.invoices.map((i) => ({ id: i.id, ordinal: i.ordinal, phaseId: i.phaseId, dueOn: i.dueOn }));
 
 async function standing(ctx: Context, row: { id: string; planId: string }) {
   const facts = await planFactsFor(ctx, row.planId);
   const plan = rowsOf(facts);
   const index = plan.findIndex((r) => r.id === row.id);
-  return { facts, ...plannedInvoiceState(plan, index, facts.entries, facts.approvals, facts.signedAt !== null, new Date()) };
+  return { facts, ...plannedInvoiceState(plan, index, facts.entries, facts.approvals, facts.signedAt !== null, new Date(), facts.phases) };
 }
 
 /** `PlannedInvoice`'s J13 fields. The row itself (label, amount, term) is

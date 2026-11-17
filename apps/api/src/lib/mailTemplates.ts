@@ -1206,6 +1206,42 @@ export function contractClosedEmail(
 }
 
 /**
+ * DX2b — to the customer, when staff mark a phase that has **no demo** done (a kick-off
+ * phase, say). A phase with a demo is finished by the customer's own approval, so they
+ * need no mail; one without has nothing for them to approve, and without this line the
+ * phase would end in silence — and any payment tied to it would become due without a word.
+ */
+export function phaseDoneEmail(
+  locale: string | null | undefined,
+  params: { customerName: string; projectTitleFa: string; projectTitleEn: string; phaseNumber: number; portalUrl: string },
+): MailContent {
+  const name = escapeHtml(params.customerName);
+  if (resolveLocale(locale) === 'en') {
+    const title = escapeHtml(params.projectTitleEn);
+    return {
+      subject: `Phase ${params.phaseNumber} is done — ${params.projectTitleEn}`,
+      html: wrap('en', `
+        <p>Hi ${name},</p>
+        <p>Phase <strong>${params.phaseNumber}</strong> of <strong>${title}</strong> is done. It has no demo to review, so there is nothing for you to approve.</p>
+        <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+      `),
+      text: `Hi ${params.customerName},\n\nPhase ${params.phaseNumber} of "${params.projectTitleEn}" is done. It has no demo to review, so there is nothing for you to approve.\n\n${params.portalUrl}`,
+    };
+  }
+  const title = escapeHtml(params.projectTitleFa);
+  const phase = countText(params.phaseNumber, 'fa');
+  return {
+    subject: `فازِ ${phase} انجام شد — ${params.projectTitleFa}`,
+    html: wrap('fa', `
+      <p>${name} عزیز،</p>
+      <p>فازِ <strong>${phase}</strong> از «${title}» انجام شد. این فاز دمویی برای بازبینی ندارد، پس چیزی برای تأیید کردن در کار نیست.</p>
+      <p><a href="${params.portalUrl}">${params.portalUrl}</a></p>
+    `),
+    text: `${params.customerName} عزیز،\n\nفازِ ${phase} از «${params.projectTitleFa}» انجام شد. این فاز دمویی برای بازبینی ندارد، پس چیزی برای تأیید کردن در کار نیست.\n\n${params.portalUrl}`,
+  };
+}
+
+/**
  * Journeys build plan J10 — a phase's demo was approved: to the contract's
  * developer and to sales, the moment the phase locks and its invoice becomes
  * issuable (J13). One template for both recipients, because both need the same

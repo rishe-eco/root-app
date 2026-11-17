@@ -143,6 +143,9 @@ async function fetchRows(contractIds: string[], projectIds: string[]) {
         contractId: true,
         number: true,
         plannedEndAt: true,
+        // DX2b: the "Has a demo" switch and the manual done mark (`phaseFinished`, `stepsFor`).
+        hasDemo: true,
+        doneAt: true,
         scopeItems: { select: { status: true } },
         demos: { select: { id: true, publishedAt: true, readyAt: true, stagingUrl: true, updatedAt: true } },
       },
@@ -206,7 +209,7 @@ async function fetchRows(contractIds: string[], projectIds: string[]) {
         contractId: true,
         invoices: {
           orderBy: { ordinal: 'asc' },
-          select: { id: true, ordinal: true, phaseId: true, amount: true, billingEntry: { select: { issuedAt: true, paidAt: true } } },
+          select: { id: true, ordinal: true, phaseId: true, dueOn: true, amount: true, billingEntry: { select: { issuedAt: true, paidAt: true } } },
         },
       },
     }),
@@ -448,7 +451,7 @@ export function stateOf(c: WizardContract, facts: Facts): WizardState {
   return {
     sequence: c.sequence,
     designPath: newRoad && facts.brief ? designPathOf(facts.brief.designTier) : null,
-    phases: facts.phases.map((p) => ({ id: p.id, number: p.number })),
+    phases: facts.phases.map((p) => ({ id: p.id, number: p.number, hasDemo: p.hasDemo })),
     approvals: facts.approvals,
     finished,
     iterations: newRoad
@@ -605,15 +608,17 @@ function stepFacts(c: WizardContract, facts: Facts, wizard: WizardStep[], feedba
  */
 function issuableFacts(c: WizardContract, facts: Facts): Array<{ ordinal: number; since: Date }> {
   if (!facts.plan || facts.plan.invoices.length === 0) return [];
-  const rows = facts.plan.invoices.map((i) => ({ id: i.id, ordinal: i.ordinal, phaseId: i.phaseId }));
+  const rows = facts.plan.invoices.map((i) => ({ id: i.id, ordinal: i.ordinal, phaseId: i.phaseId, dueOn: i.dueOn }));
   const entries = facts.plan.invoices.flatMap((r) => (r.billingEntry ? [{ plannedInvoiceId: r.id, ...r.billingEntry }] : []));
   const signedAt = agreementSignedAt({ signatureSignedAt: c.currentContractRevision?.signature?.signedAt ?? null });
   const out: Array<{ ordinal: number; since: Date }> = [];
   rows.forEach((row, index) => {
-    if (!canIssuePlanned(rows, index, entries, facts.approvals, signedAt !== null).ok) return;
+    if (!canIssuePlanned(rows, index, entries, facts.approvals, signedAt !== null, facts.phases, new Date()).ok) return;
     const previous = index > 0 ? entries.find((e) => e.plannedInvoiceId === rows[index - 1].id) : undefined;
     const phaseApproval = row.phaseId ? facts.approvals.find((a) => a.step === 'DEMO' && a.phaseId === row.phaseId) : undefined;
-    out.push({ ordinal: row.ordinal, since: latest(signedAt, previous?.paidAt, phaseApproval?.approvedAt)! });
+    // DX2b: a no-demo phase became finished when staff marked it done, a dated row on its day.
+    const phaseDoneAt = row.phaseId ? facts.phases.find((p) => p.id === row.phaseId)?.doneAt : undefined;
+    out.push({ ordinal: row.ordinal, since: latest(signedAt, previous?.paidAt, phaseApproval?.approvedAt, phaseDoneAt, row.dueOn)! });
   });
   return out;
 }
@@ -938,7 +943,7 @@ export async function wizardStateOn(
   if (!contract) {
     throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
   }
-  const phases = await db.phase.findMany({ where: { contractId }, select: { id: true, number: true } });
+  const phases = await db.phase.findMany({ where: { contractId }, select: { id: true, number: true, hasDemo: true } });
   // The road depends on the design path (MOCKUP is on it for the custom one), so
   // the lock check reads the brief's tier through the same `designPathOf` the
   // wizard uses (J8). The legacy road has no path.

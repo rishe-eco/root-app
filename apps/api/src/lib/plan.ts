@@ -10,6 +10,8 @@
  * `setPaymentPlan` stores exactly the rows it is given.
  */
 
+import { parseCalendarDay } from './calendarDay.js';
+
 export type PlannedRow = {
   labelFa: string;
   labelEn: string;
@@ -43,7 +45,9 @@ export type PlanProblem =
   | 'TOO_MANY_ROWS'
   | 'LABEL_REQUIRED'
   | 'INVALID_AMOUNT'
-  | 'INVALID_TERM';
+  | 'INVALID_TERM'
+  | 'INVALID_DATE'
+  | 'PHASE_AND_DATE';
 
 /** A positive whole number of Toman as a decimal string — same test as the
  *  brief's budget, restated over `PlannedRow`'s own input shape. */
@@ -56,7 +60,15 @@ const AMOUNT = /^[1-9]\d{0,14}$/;
  * throws and `BigInt('')` is zero, and neither is an answer.
  */
 export function checkPlanRows(
-  rows: ReadonlyArray<{ labelFa: string; labelEn: string; amount: string; paymentTermDays: number }>,
+  rows: ReadonlyArray<{
+    labelFa: string;
+    labelEn: string;
+    amount: string;
+    paymentTermDays: number;
+    phaseId?: string | null;
+    /** DX2b: the day a row falls due, `YYYY-MM-DD` off the wire. */
+    dueOn?: string | null;
+  }>,
 ): PlanProblem | null {
   if (rows.length === 0) return 'PLAN_ROWS_REQUIRED';
   if (rows.length > MAX_PLAN_ROWS) return 'TOO_MANY_ROWS';
@@ -65,6 +77,11 @@ export function checkPlanRows(
     if (!AMOUNT.test(row.amount)) return 'INVALID_AMOUNT';
     if (!Number.isInteger(row.paymentTermDays) || row.paymentTermDays < 0 || row.paymentTermDays > MAX_TERM_DAYS) {
       return 'INVALID_TERM';
+    }
+    // DX2b: a row is due on signing, on a phase being done, or on a date — at most one of the last two.
+    if (row.dueOn) {
+      if (parseCalendarDay(row.dueOn) === null) return 'INVALID_DATE';
+      if (row.phaseId) return 'PHASE_AND_DATE';
     }
   }
   return null;

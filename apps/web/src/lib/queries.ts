@@ -134,8 +134,10 @@ export type ScopeItem = {
   declinedReason: string | null;
   originNote: string | null;
   originRound: string | null;
-  /** Which phase (L2) is building this item, if any. */
+  /** Which phase (L2) accepts this item, if any: the last (highest-numbered) of `phaseIds`. */
   phaseId: string | null;
+  /** DX2b: every phase this item is in. */
+  phaseIds?: string[];
 };
 
 /**
@@ -452,6 +454,11 @@ export type Phase = {
   /** A calendar day (PD-19) as an ISO instant at midnight UTC — render with `calendarDate`. */
   plannedEndAt: string | null;
   milestoneLabel: string | null;
+  /** DX2b: whether the phase ends in a demo; off for a kick-off phase. */
+  hasDemo?: boolean;
+  doneAt?: string | null;
+  /** DX2b: `phaseFinished` — its demo approved, or a no-demo phase marked done. */
+  finished?: boolean;
   scopeItems: PhaseScopeItemRef[];
   demos: Demo[];
   /** J10: this phase's site builds, oldest first — staff read drafts too, anyone else only published. */
@@ -872,7 +879,7 @@ export type Contract = {
   /** Money (PD-14): null for staff without `money.read` who are not the customer. */
   paymentPlan?: PaymentPlan | null;
   /** This contract's own phases (`project.phases` is every phase of the project). */
-  phases?: Array<Pick<Phase, 'id' | 'number' | 'titleFa' | 'titleEn' | 'contractId' | 'plannedEndAt' | 'milestoneLabel'>>;
+  phases?: Array<Pick<Phase, 'id' | 'number' | 'titleFa' | 'titleEn' | 'contractId' | 'plannedEndAt' | 'milestoneLabel' | 'hasDemo' | 'doneAt' | 'finished'>>;
   /** Journeys build plan J5 — step 2a: the customer's proposals, oldest first. */
   scopeProposals?: ScopeProposal[];
   /** SC1 — the site type's list has been applied to this contract (hand-added items do not count). */
@@ -922,6 +929,8 @@ export type PlannedInvoice = {
   /** Toman as a decimal string. */
   amount: string;
   phaseId: string | null;
+  /** DX2b: the calendar day (midnight UTC instant) the row falls due on; null for the other two triggers. */
+  dueOn?: string | null;
   paymentTermDays: number;
 };
 
@@ -930,7 +939,7 @@ export type PaymentPlan = { id: string; split: PaymentSplit; total: string; invo
 /** J13 — where a payment plan's row stands (lib/invoice.ts). */
 export type PlannedInvoiceState = 'NOT_YET_ISSUABLE' | 'ISSUABLE' | 'ISSUED' | 'PAID' | 'OVERDUE';
 /** What keeps an unissued row from being issued. */
-export type IssueBlock = 'NOT_SIGNED' | 'PREVIOUS_UNPAID' | 'PHASE_NOT_ACCEPTED';
+export type IssueBlock = 'NOT_SIGNED' | 'PREVIOUS_UNPAID' | 'PHASE_NOT_ACCEPTED' | 'DATE_NOT_REACHED';
 
 const USER_FIELDS = gql`
   fragment UserFields on User {
@@ -1237,6 +1246,7 @@ export const WIZARD_FIELDS = gql`
         labelEn
         amount
         phaseId
+        dueOn
         paymentTermDays
       }
     }
@@ -1248,6 +1258,9 @@ export const WIZARD_FIELDS = gql`
       contractId
       plannedEndAt
       milestoneLabel
+      hasDemo
+      doneAt
+      finished
     }
   }
 `;
@@ -1310,6 +1323,7 @@ export const CONTRACT_FIELDS = gql`
       originNote
       originRound
       phaseId
+      phaseIds
       kind
       contractId
     }
@@ -2765,6 +2779,8 @@ export type PlannedInvoiceInput = {
   labelEn: string;
   amount: string;
   phaseId?: string | null;
+  /** DX2b: `YYYY-MM-DD`; at most one of this and `phaseId`. */
+  dueOn?: string | null;
   paymentTermDays: number;
 };
 
@@ -3149,8 +3165,8 @@ export const CONFIRM_SCOPE_TRADE_ROOT = gql`
 
 export const CREATE_PHASE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation CreatePhase($contractId: ID!, $number: Int!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String, $plannedEndAt: String) {
-    createPhase(contractId: $contractId, number: $number, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel, plannedEndAt: $plannedEndAt) {
+  mutation CreatePhase($contractId: ID!, $number: Int!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String, $plannedEndAt: String, $hasDemo: Boolean) {
+    createPhase(contractId: $contractId, number: $number, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel, plannedEndAt: $plannedEndAt, hasDemo: $hasDemo) {
       ...ContractWorkspaceFields
     }
   }
@@ -3158,8 +3174,8 @@ export const CREATE_PHASE = gql`
 
 export const UPDATE_PHASE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
-  mutation UpdatePhase($phaseId: ID!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String, $plannedEndAt: String, $contractId: ID) {
-    updatePhase(phaseId: $phaseId, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel, plannedEndAt: $plannedEndAt, contractId: $contractId) {
+  mutation UpdatePhase($phaseId: ID!, $titleFa: String!, $titleEn: String!, $milestoneLabel: String, $plannedEndAt: String, $hasDemo: Boolean, $contractId: ID) {
+    updatePhase(phaseId: $phaseId, titleFa: $titleFa, titleEn: $titleEn, milestoneLabel: $milestoneLabel, plannedEndAt: $plannedEndAt, hasDemo: $hasDemo, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }
@@ -3178,6 +3194,25 @@ export const ASSIGN_SCOPE_ITEM_TO_PHASE = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
   mutation AssignScopeItemToPhase($scopeItemId: ID!, $phaseId: ID, $contractId: ID) {
     assignScopeItemToPhase(scopeItemId: $scopeItemId, phaseId: $phaseId, contractId: $contractId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+export const SET_SCOPE_ITEM_PHASES = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation SetScopeItemPhases($scopeItemId: ID!, $phaseIds: [ID!]!, $contractId: ID) {
+    setScopeItemPhases(scopeItemId: $scopeItemId, phaseIds: $phaseIds, contractId: $contractId) {
+      ...ContractWorkspaceFields
+    }
+  }
+`;
+
+/** DX2b: staff mark a phase with no demo done (usable after signing). */
+export const MARK_PHASE_DONE = gql`
+  ${CONTRACT_WORKSPACE_FIELDS}
+  mutation MarkPhaseDone($phaseId: ID!, $contractId: ID) {
+    markPhaseDone(phaseId: $phaseId, contractId: $contractId) {
       ...ContractWorkspaceFields
     }
   }

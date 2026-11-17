@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeProjectProgress, isPhaseAccepted, type PhaseLike, type ScopeStatusLike } from './phase.js';
+import {
+  computeProjectProgress,
+  isPhaseAccepted,
+  itemPhaseIds,
+  lastPhaseOf,
+  phaseFinished,
+  phaseFinishedAt,
+  type PhaseLike,
+  type ScopeStatusLike,
+} from './phase.js';
 
 const item = (status: ScopeStatusLike) => ({ status });
 
@@ -91,4 +100,46 @@ test('titles come from the current phase, not the first or last', () => {
   ]);
   assert.equal(progress.currentPhaseTitleEn, 'Launch');
   assert.equal(progress.currentPhaseTitleFa, 'راه‌اندازی');
+});
+
+// ---- DX2b: a phase without a demo, and an item in several phases --------------------
+
+const DONE = new Date('2026-11-20T00:00:00Z');
+const approved = (phaseId: string) => [{ step: 'DEMO', phaseId }];
+
+test('phaseFinished: a demo approved, or a no-demo phase marked done — nothing else', () => {
+  // A phase with a demo: only its own DEMO approval finishes it.
+  assert.equal(phaseFinished({ id: 'p1', hasDemo: true, doneAt: null }, []), false);
+  assert.equal(phaseFinished({ id: 'p1', hasDemo: true, doneAt: null }, approved('p1')), true);
+  assert.equal(phaseFinished({ id: 'p1', hasDemo: true, doneAt: null }, approved('p2')), false, 'another phase’s approval');
+  assert.equal(phaseFinished({ id: 'p1', hasDemo: true, doneAt: null }, [{ step: 'DESIGN', phaseId: 'p1' }]), false, 'another step’s');
+  // A stale done mark never stands in for an approval once the switch is back on.
+  assert.equal(phaseFinished({ id: 'p1', hasDemo: true, doneAt: DONE }, []), false);
+  // A phase with no demo: the done mark.
+  assert.equal(phaseFinished({ id: 'p1', hasDemo: false, doneAt: null }, []), false);
+  assert.equal(phaseFinished({ id: 'p1', hasDemo: false, doneAt: DONE }, []), true);
+});
+
+test('phaseFinishedAt: the approval’s moment, or a no-demo phase’s done mark', () => {
+  const at = new Date('2026-11-21T00:00:00Z');
+  assert.equal(phaseFinishedAt({ id: 'p1', hasDemo: true, doneAt: null }, [{ phaseId: 'p1', approvedAt: at }]), at);
+  assert.equal(phaseFinishedAt({ id: 'p1', hasDemo: false, doneAt: DONE }, []), DONE);
+  assert.equal(phaseFinishedAt({ id: 'p1', hasDemo: true, doneAt: DONE }, []), null);
+});
+
+test('lastPhaseOf: the highest-numbered phase of the set, whatever order it arrives in; null for none', () => {
+  const phases = [
+    { id: 'b', number: 2 },
+    { id: 'c', number: 10 },
+    { id: 'a', number: 1 },
+  ];
+  assert.equal(lastPhaseOf(phases), 'c', 'numeric, not alphabetical: 10 is after 2');
+  assert.equal(lastPhaseOf([phases[0]]), 'b');
+  assert.equal(lastPhaseOf([]), null);
+});
+
+test('itemPhaseIds: the join rows and the phaseId, once each — a row with only a phaseId is still in that phase', () => {
+  assert.deepEqual(itemPhaseIds({ phaseId: null, phaseLinks: [] }), []);
+  assert.deepEqual(itemPhaseIds({ phaseId: 'p2', phaseLinks: [{ phaseId: 'p1' }, { phaseId: 'p2' }] }).sort(), ['p1', 'p2']);
+  assert.deepEqual(itemPhaseIds({ phaseId: 'p1' }), ['p1']);
 });

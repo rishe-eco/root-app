@@ -1,13 +1,13 @@
 import { useState, type ReactNode } from 'react';
-import { useQuery } from '@apollo/client';
+import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
 import { pick, calendarDate, formatAmount, formatCount } from '@/lib/format';
 import { MONEY_FIELDS, missingParams } from '@/lib/brief';
-import { CONTRACT_FEEDBACK, type FeedbackItem } from '@/lib/queries';
+import { CONTRACT_FEEDBACK, MARK_PHASE_DONE, type Contract, type FeedbackItem } from '@/lib/queries';
 import FeedbackPanel, { type FeedbackTarget } from '@/components/FeedbackPanel';
-import { Accordion } from '@/components/EditorKit';
+import { Accordion, refusalText } from '@/components/EditorKit';
 import { PhasesEditor, PlanEditor } from '@/components/PhasesEditor';
 import type { StepPanelProps } from '@/components/StepPanels';
 
@@ -34,6 +34,52 @@ import type { StepPanelProps } from '@/components/StepPanels';
  * Money follows PD-14 as it always did: the plan arrives `null` for staff
  * without `money.read`, and its card and editor are not drawn for them.
  */
+
+/**
+ * **Mark phase done** (DX2b; desk UX review 10, 12): for a phase with no demo, the staff act that finishes it.
+ * Drawn whether or not the step is locked — it is meant for after signing — and only once the agreement is
+ * approved (before that the API refuses `NOT_SIGNED`). The customer is told by the server.
+ */
+function PhaseDoneControls({ contract, phases }: { contract: Contract; phases: NonNullable<Contract['phases']> }) {
+  const { t } = useTranslation();
+  const locale = useLocale();
+  const [mark, { loading }] = useMutation(MARK_PHASE_DONE);
+  const [error, setError] = useState<string | null>(null);
+  const open = phases.filter((p) => p.hasDemo === false);
+  if (open.length === 0) return null;
+  return (
+    <div className="req-editor" data-testid="phase-done-controls">
+      {open.map((p) => (
+        <p className="workspace-row" key={p.id} data-testid="phase-done-row" data-number={p.number} data-done={p.doneAt ? 'true' : 'false'}>
+          <span className="badge">{formatCount(p.number, locale)}</span>
+          <span>{pick(p, 'title', locale)}</span>
+          {p.doneAt ? (
+            <span className="t-caption">{t('brief.phases.doneOn', { date: calendarDate(p.doneAt, locale) })}</span>
+          ) : (
+            <button
+              className="btn btn-secondary btn-sm"
+              type="button"
+              disabled={loading}
+              data-testid={`phase-done-${p.number}`}
+              onClick={async () => {
+                if (!confirm(t('brief.phases.confirmDone'))) return;
+                setError(null);
+                try {
+                  await mark({ variables: { phaseId: p.id, contractId: contract.id } });
+                } catch (err) {
+                  setError(refusalText(t, err));
+                }
+              }}
+            >
+              {t('brief.phases.markDone')}
+            </button>
+          )}
+        </p>
+      ))}
+      {error ? <p className="error" role="alert">{error}</p> : null}
+    </div>
+  );
+}
 
 const phaseNumberIn = (phases: ReadonlyArray<{ id: string; number: number }>, id: string) => phases.find((p) => p.id === id)?.number ?? null;
 
@@ -92,6 +138,7 @@ export default function PhasesPanel({ contract, step, audience, me, asCustomer =
           <span className="req-line" key={p.id} data-number={p.number}>
             <span className="badge">{formatCount(p.number, locale)}</span>
             <span>{pick(p, 'title', locale)}</span>
+            {p.hasDemo === false ? <span className="badge badge-neutral" data-testid="no-demo-badge">{t('brief.phases.noDemoBadge')}</span> : null}
             <span className="t-caption">
               {p.plannedEndAt ? t('brief.phases.endsOn', { date: calendarDate(p.plannedEndAt, locale) }) : t('brief.phases.noEnd')}
             </span>
@@ -118,6 +165,7 @@ export default function PhasesPanel({ contract, step, audience, me, asCustomer =
                   ? t('brief.plan.termNow')
                   : t('brief.plan.termDays', { count: i.paymentTermDays, n: formatCount(i.paymentTermDays, locale) })}
                 {phase !== null ? ` · ${t('brief.plan.afterPhase', { n: formatCount(phase, locale) })}` : ''}
+                {i.dueOn ? ` · ${t('brief.plan.dueOn')} ${calendarDate(i.dueOn, locale)}` : ''}
               </span>
             </span>
           );
@@ -192,6 +240,10 @@ export default function PhasesPanel({ contract, step, audience, me, asCustomer =
           ) : null}
           <p className="t-caption desk-muted">{t('brief.form.savedSeparately')}</p>
         </div>
+      ) : null}
+
+      {staff && step.locked && (can(me, 'contracts.author') || can(me, 'builds.author')) ? (
+        <PhaseDoneControls contract={contract} phases={phases} />
       ) : null}
 
       {missing.length > 0 ? (
