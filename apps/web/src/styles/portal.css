@@ -243,6 +243,13 @@
   .content, .detail { padding: var(--space-6); }
   .col-amount { display: none; }
 }
+@media (max-width: 480px) {
+  /* DX2 milestone: a longer status ("Waiting on Customer") pushed the contracts table past a phone's width.
+     Tighter cells, and the status and the time may wrap rather than widen the page. */
+  .ctable th, .ctable td { padding-inline: var(--space-2); }
+  .ctable .st-badge { white-space: normal; }
+  .ctable td { overflow-wrap: anywhere; }
+}
 @media (max-width: 640px) {
   /* Title, language switch, name, avatar and Sign out were one row that could
      not unwrap in ~314px. Wrap it; and the name — the avatar already carries
