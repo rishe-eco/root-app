@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Prisma, Role, User } from '@prisma/client';
-import { prisma, publishDraftDirect, resetDatabase, seedFixture, type Fixture } from './db.js';
+import { prisma, publishDraftDirect, resetDatabase, seedFixture, seedHandoverTypes, type Fixture } from './db.js';
 import { onDay } from './calendar.js';
 import { exec, ok, stop } from './graphql.js';
 import { __setMailTransportForTests, __resetMailTransportForTests, type MailMessage } from '../lib/mail.js';
@@ -53,6 +53,8 @@ beforeEach(async () => {
     data: { designerId: staff.DESIGNER.id, developerId: staff.DEVELOPER.id },
   });
   type = await prisma.templateType.create({ data: { slug: 'store', labelFa: 'فروشگاهی', labelEn: 'Store' } });
+  // The desk's default list (the migration seeds it; the truncate above emptied it): a new brief makes a row for each.
+  await seedHandoverTypes();
   mail = [];
   sms = [];
   __resetNamedRateLimitsForTests();
@@ -76,7 +78,7 @@ const CONTRACT = `
   id
   brief {
     id kind existingSiteUrl designTier budgetCap idealDeadline hardDeadline domainName
-    domainProvidedBy hostProvidedBy contentProvidedBy supportMonths
+    supportMonths
     premadeRounds wireframeIterations mockupIterations demoIterationsPerPhase
     templateType { id slug }
   }
@@ -84,7 +86,7 @@ const CONTRACT = `
   planCompleteness { code key }
   paymentPlan { id split total invoices { id ordinal labelFa labelEn amount phaseId paymentTermDays } }
   phases { id number contractId plannedEndAt }
-  project { dependencies { id side briefKey technical dueAt verifiedAt titleEn } phases { id contractId } }
+  project { dependencies { id side briefKey technical dueAt verifiedAt titleEn inBrief notNeeded } phases { id contractId } }
   wizard { step status locked }
 `;
 const SET_BRIEF = `mutation($c: ID!, $i: BriefInput!){ setBrief(contractId: $c, input: $i) { ${CONTRACT} } }`;
@@ -101,7 +103,7 @@ type Contract = {
   paymentPlan: { id: string; split: string; total: string; invoices: Array<Record<string, unknown>> } | null;
   phases: Array<{ id: string; number: number; contractId: string; plannedEndAt: string | null }>;
   project: {
-    dependencies: Array<{ id: string; side: string; briefKey: string | null; technical: boolean; dueAt: string; verifiedAt: string | null }>;
+    dependencies: Array<{ id: string; side: string | null; briefKey: string | null; technical: boolean; dueAt: string | null; verifiedAt: string | null; inBrief: boolean; notNeeded: boolean }>;
     phases: Array<{ id: string; contractId: string }>;
   };
   wizard: Array<{ step: string; status: string; locked: boolean }>;
@@ -115,17 +117,9 @@ const briefInput = (over: Record<string, unknown> = {}) => ({
   idealDeadline: onDay('2026-10-01'),
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
-  domainProvidedBy: 'CUSTOMER',
-  hostProvidedBy: 'ROOT',
-  contentProvidedBy: 'CUSTOMER',
   supportMonths: 6,
   premadeRounds: 2,
   demoIterationsPerPhase: 2,
-  commitments: [
-    { key: 'domain', dueAt: onDay('2026-10-05') },
-    { key: 'host', dueAt: onDay('2026-10-06') },
-    { key: 'content', dueAt: onDay('2026-10-07') },
-  ],
   ...over,
 });
 
@@ -405,15 +399,21 @@ test('setBrief writes the brief; dates come back as the day they were sent; the 
   assert.equal(((await read(staff.SALES)).brief as { budgetCap: string }).budgetCap, '150000000');
 });
 
-test('setBrief syncs the dependencies in the same write, and setting it twice leaves one row per key', async () => {
+/** The wire's DateTime is a full ISO instant; a calendar day goes as its UTC midnight. */
+const iso = (day: string) => `${day}T00:00:00.000Z`;
+const UPDATE_DEP = `mutation($d: ID!, $side: DependencySide, $due: DateTime, $nn: Boolean, $c: ID){
+  updateDependency(dependencyId: $d, side: $side, dueAt: $due, notNeeded: $nn, contractId: $c) { id project { dependencies { id side dueAt notNeeded } } }
+}`;
+
+test('a new brief seeds one undecided, undated row per active default item — and setting it again leaves one row per key', async () => {
   const first = await setBriefOk();
   const rowsAfterFirst = await boardRows();
   assert.deepEqual(
-    rowsAfterFirst.map((r) => [r.briefKey, r.side, r.technical]),
+    rowsAfterFirst.map((r) => [r.briefKey, r.side, r.dueAt, r.technical, r.inBrief, r.notNeeded]),
     [
-      ['content', 'CUSTOMER', false],
-      ['domain', 'CUSTOMER', true],
-      ['host', 'ROOT', true],
+      ['content', null, null, false, true, false],
+      ['domain', null, null, true, true, false],
+      ['host', null, null, true, true, false],
     ],
   );
   assert.equal(first.project.dependencies.length, 3);
@@ -422,68 +422,83 @@ test('setBrief syncs the dependencies in the same write, and setting it twice le
   await setBriefOk({ budgetCap: '160000000' });
   const rowsAfter = await boardRows();
   assert.equal(rowsAfter.length, 3, 'one row per key, however often the brief is set');
-  assert.deepEqual(rowsAfter.map((r) => r.id).sort(), rowsAfterFirst.map((r) => r.id).sort(), 'the same rows — updated, never recreated');
+  assert.deepEqual(rowsAfter.map((r) => r.id).sort(), rowsAfterFirst.map((r) => r.id).sort(), 'the same rows — never recreated');
   assert.equal(await prisma.contractBrief.count(), 1);
-  // The commitment dates are calendar days the caller named.
-  const domain = rowsAfter.find((r) => r.briefKey === 'domain')!;
-  assert.equal(domain.dueAt.toISOString(), `${onDay('2026-10-05')}T00:00:00.000Z`);
 });
 
-test('switching a provider to Root flips the row’s side — and only its side — and a new date moves its date', async () => {
+test('an item deactivated on the desk list is not seeded for a new brief; one added is', async () => {
+  await prisma.handoverItemType.update({ where: { key: 'content' }, data: { active: false } });
+  await prisma.handoverItemType.create({ data: { key: 'sms', titleFa: 'خط پیامک', titleEn: 'SMS line', technical: false, position: 5 } });
   await setBriefOk();
-  const before = (await boardRows()).find((r) => r.briefKey === 'domain')!;
-  assert.equal(before.side, 'CUSTOMER');
-
-  await setBriefOk({ domainProvidedBy: 'ROOT' });
-  const flipped = (await boardRows()).find((r) => r.briefKey === 'domain')!;
-  assert.equal(flipped.id, before.id);
-  assert.equal(flipped.side, 'ROOT');
-  assert.equal(flipped.dueAt.toISOString(), before.dueAt.toISOString(), 'the date is kept when none is sent — the form re-sends it, this one did too');
-
-  await setBriefOk({ domainProvidedBy: 'ROOT', commitments: [{ key: 'domain', dueAt: onDay('2026-11-02') }] });
-  assert.equal((await boardRows()).find((r) => r.briefKey === 'domain')!.dueAt.toISOString(), `${onDay('2026-11-02')}T00:00:00.000Z`);
+  assert.deepEqual((await boardRows()).map((r) => r.briefKey), ['domain', 'host', 'sms']);
 });
 
-test('a commitment with no date is not created — the brief says so instead (COMMITMENT_UNDATED); the row appears once it has one', async () => {
-  const c = await setBriefOk({ commitments: [{ key: 'domain', dueAt: onDay('2026-10-05') }] });
-  assert.deepEqual((await boardRows()).map((r) => r.briefKey), ['domain']);
-  const undated = c.briefCompleteness.filter((m) => m.code === 'COMMITMENT_UNDATED').map((m) => m.key).sort();
-  assert.deepEqual(undated, ['content', 'host']);
-
-  const done = await setBriefOk();
-  assert.equal((await boardRows()).length, 3);
-  assert.equal(done.briefCompleteness.some((m) => m.code === 'COMMITMENT_UNDATED'), false);
-});
-
-test('a key no brief implies any more is removed — unless someone verified it, then it stays as an ordinary row', async () => {
+test('who provides what is edited on the row — flipping a side or a date changes that row and nothing else, and a brief save leaves it alone', async () => {
   await setBriefOk();
-  const host = (await boardRows()).find((r) => r.briefKey === 'host')!;
   const domain = (await boardRows()).find((r) => r.briefKey === 'domain')!;
-  await prisma.dependency.update({ where: { id: domain.id }, data: { verifiedAt: new Date(), verifiedById: f.admin.id, verifiedNote: 'deployed a test file' } });
+  const day = onDay('2026-11-02');
 
-  await setBriefOk({ domainProvidedBy: null, hostProvidedBy: null, commitments: [] });
+  const after = ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: domain.id, side: 'ROOT', due: iso(day) } })).updateDependency as { project: { dependencies: Array<{ id: string; side: string; dueAt: string }> } };
+  assert.deepEqual(
+    after.project.dependencies.filter((d) => d.id === domain.id).map((d) => [d.side, d.dueAt.slice(0, 10)]),
+    [['ROOT', day]],
+  );
+  // A second save of the brief neither re-seeds nor resets what was edited.
+  await setBriefOk({ budgetCap: '170000000' });
+  const row = (await boardRows()).find((r) => r.briefKey === 'domain')!;
+  assert.equal(row.id, domain.id);
+  assert.equal(row.side, 'ROOT');
+  assert.equal(row.dueAt!.toISOString(), `${day}T00:00:00.000Z`);
+  // null clears: back to undecided and undated.
+  ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: domain.id, side: null, due: null } }));
+  const cleared = (await boardRows()).find((r) => r.briefKey === 'domain')!;
+  assert.deepEqual([cleared.side, cleared.dueAt], [null, null]);
+});
+
+test('an item someone provides without a date is COMMITMENT_UNDATED; undecided or not needed owes none (DX3a — nobody must name a provider)', async () => {
+  const c = await setBriefOk();
+  assert.equal(c.briefCompleteness.length, 0, 'a brief with three undecided items is complete — each provider is optional');
+
+  const [content, domain, host] = await boardRows();
+  ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: domain.id, side: 'CUSTOMER' } }));
+  ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: host.id, side: 'ROOT', nn: true } }));
+  const undated = (await read(staff.SALES)).briefCompleteness;
+  assert.deepEqual(undated, [{ code: 'COMMITMENT_UNDATED', key: 'domain' }], 'a not-needed item owes no date; an undecided one owes none');
+
+  ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: domain.id, due: iso(onDay('2026-10-05')) } }));
+  assert.deepEqual((await read(staff.SALES)).briefCompleteness, []);
+  assert.ok(content);
+});
+
+test('an extra’s commitment that is switched off is removed — unless someone verified it, then it stays as an ordinary row', async () => {
+  const gateway = await extra('checklist.payment', 'AGREED');
+  const sms = await extra('checklist.notifications', 'AGREED');
+  await setBriefOk({ commitments: [{ key: 'gateway', dueAt: onDay('2026-10-05') }, { key: 'smsLine', dueAt: onDay('2026-10-06') }] });
+  const verified = (await boardRows()).find((r) => r.briefKey === 'smsLine')!;
+  await prisma.dependency.update({ where: { id: verified.id }, data: { verifiedAt: new Date(), verifiedById: f.admin.id, verifiedNote: 'checked' } });
+
+  ok(await exec(SET_EXTRA, { as: staff.SALES, variables: { s: gateway.id, in: false } }));
+  ok(await exec(SET_EXTRA, { as: staff.SALES, variables: { s: sms.id, in: false } }));
   const left = await boardRows();
-  assert.equal(left.find((r) => r.id === host.id), undefined, 'the unverified one is gone');
-  const kept = left.find((r) => r.id === domain.id)!;
+  assert.equal(left.some((r) => r.briefKey === 'gateway'), false, 'the unverified one is gone');
+  const kept = left.find((r) => r.id === verified.id)!;
   assert.equal(kept.briefKey, null, 'the verified one is kept, and freed from the brief');
   assert.equal(kept.verifiedAt !== null, true);
+  // The default list's rows were never the sync's to touch.
+  assert.deepEqual(left.filter((r) => ['domain', 'host', 'content'].includes(r.briefKey ?? '')).length, 3);
 });
 
-test('the board is the project’s: a sibling contract’s brief keeps a commitment alive, and adopts the same row', async () => {
+test('the board is the project’s: a second contract’s brief finds the first one’s rows and adds none', async () => {
   const second = await secondContract();
-  await setBriefOk({ commitments: [{ key: 'domain', dueAt: onDay('2026-10-05') }] });
-  const [row] = await boardRows();
-  await setBriefOk({ commitments: [{ key: 'domain', dueAt: onDay('2026-10-05') }] }, staff.SALES, second.id);
-  assert.equal((await boardRows()).length >= 1, true);
-  assert.equal((await boardRows()).filter((r) => r.briefKey === 'domain').length, 1, 'one domain row for the project, not one per contract');
-  assert.equal((await boardRows()).find((r) => r.briefKey === 'domain')!.id, row.id);
-
-  // The second brief stops implying it — the first still does, so the row stays…
-  await setBriefOk({ domainProvidedBy: null, commitments: [] }, staff.SALES, second.id);
-  assert.equal((await boardRows()).some((r) => r.briefKey === 'domain'), true);
-  // …and when the first stops too, it goes.
-  await setBriefOk({ domainProvidedBy: null, commitments: [] });
-  assert.equal((await boardRows()).some((r) => r.briefKey === 'domain'), false);
+  await setBriefOk();
+  const first = await boardRows();
+  await setBriefOk({}, staff.SALES, second.id);
+  const both = await boardRows();
+  assert.equal(both.length, 3, 'one row per key for the project, not one per contract');
+  assert.deepEqual(both.map((r) => r.id).sort(), first.map((r) => r.id).sort());
+  // …and the second contract lists the same handover items (they are the project's).
+  const handover = (ok(await exec(`query($c: ID!){ contract(id: $c) { handover { id briefKey } } }`, { as: staff.SALES, variables: { c: second.id } })).contract as { handover: Array<{ id: string }> }).handover;
+  assert.deepEqual(handover.map((h) => h.id).sort(), first.map((r) => r.id).sort());
 });
 
 test('setBrief is a replace: what the form left out is cleared, and the wireframe allowance returns to two', async () => {
@@ -507,7 +522,7 @@ test('setBrief refuses, each with its own code, and writes nothing', async () =>
     ['an existing site that is not a url', { kind: 'FEATURE_FOR_EXISTING', existingSiteUrl: 'nahal' }, 'INVALID_SITE_URL'],
     ['negative support', { supportMonths: -1 }, 'INVALID_SUPPORT_MONTHS'],
     ['a zero allowance', { premadeRounds: 0 }, 'INVALID_ALLOWANCE'],
-    ['a commitment date that is not a day', { commitments: [{ key: 'domain', dueAt: '5 Aban' }] }, 'INVALID_DATE'],
+    ['a commitment date that is not a day', { commitments: [{ key: 'gateway', dueAt: '5 Aban' }] }, 'INVALID_DATE'],
     ['a type that does not exist', { templateTypeId: 'nope' }, 'NOT_FOUND'],
   ];
   for (const [label, over, code] of cases) {
@@ -577,12 +592,13 @@ test('an extra that is in scope implies a commitment; switching it off removes t
   ok(await exec(SET_EXTRA, { as: staff.SALES, variables: { s: payment.id, in: false } }));
   assert.equal((await boardRows()).some((r) => r.briefKey === 'gateway'), false);
 
-  // Switched back on with no date: nothing can be created (a row needs a date) — the brief says so.
+  // Switched back on with no date: the row is made undated (DX3a), and the brief says so.
   const back = ok(await exec(SET_EXTRA, { as: staff.SALES, variables: { s: payment.id, in: true } })).setExtra as Contract;
-  assert.equal((await boardRows()).some((r) => r.briefKey === 'gateway'), false);
+  const again = (await boardRows()).find((r) => r.briefKey === 'gateway')!;
+  assert.deepEqual([again.dueAt, again.inBrief, again.side], [null, true, 'CUSTOMER']);
   assert.ok(back.briefCompleteness.some((m) => m.code === 'COMMITMENT_UNDATED' && m.key === 'gateway'));
   await setBriefOk({ commitments: [{ key: 'gateway', dueAt: onDay('2026-10-09') }] });
-  assert.equal((await boardRows()).some((r) => r.briefKey === 'gateway'), true);
+  assert.equal((await boardRows()).find((r) => r.briefKey === 'gateway')!.dueAt!.toISOString(), `${onDay('2026-10-09')}T00:00:00.000Z`);
 
   // The registry's own status setter is a second door to the same fact.
   ok(
@@ -999,9 +1015,11 @@ test('the customer cannot read a contract that has not been handed over, and can
   const seen = await read(f.customer, false, draft.id);
   assert.equal(seen.brief!.designTier, 'CLAUDE_ASSISTED');
   const missing = seen.briefCompleteness.map((m) => m.code);
-  for (const code of ['BUDGET_CAP', 'HARD_DEADLINE', 'DOMAIN_PROVIDER', 'MOCKUP_ITERATIONS']) {
+  for (const code of ['BUDGET_CAP', 'HARD_DEADLINE', 'MOCKUP_ITERATIONS']) {
     assert.ok(missing.includes(code), `${code} is named`);
   }
+  // DX3a: the three providers are optional now — none of their codes exist any more.
+  assert.ok(!missing.some((c) => /_PROVIDER$/.test(c)));
   // DX2a: the phases and the plan are the PHASES step's list now, not the brief's.
   assert.ok(!missing.includes('PHASES') && !missing.includes('PAYMENT_PLAN'), 'the brief no longer names the plan');
   const planMissing = seen.planCompleteness.map((m) => m.code);
@@ -1021,7 +1039,7 @@ test('a legacy (DESIGN_FIRST) contract publishes exactly as it always did — no
 // the board
 // =================================================================================
 
-test('a commitment the brief owns cannot be deleted from the board (BRIEF_OWNED); an ordinary row can', async () => {
+test('a row with a key (the default list’s, an extra’s) cannot be deleted from the board (BRIEF_OWNED); an ordinary row can', async () => {
   await setBriefOk();
   const owned = (await boardRows()).find((r) => r.briefKey === 'host')!;
   const ordinary = await prisma.dependency.create({
@@ -1033,9 +1051,9 @@ test('a commitment the brief owns cannot be deleted from the board (BRIEF_OWNED)
   assert.equal(await prisma.dependency.count({ where: { id: owned.id } }), 1);
   ok(await exec(DELETE, { as: staff.SALES, variables: { d: ordinary.id } }));
   assert.equal(await prisma.dependency.count({ where: { id: ordinary.id } }), 0);
-  // Changing the brief is the way out.
-  await setBriefOk({ hostProvidedBy: null });
-  assert.equal(await prisma.dependency.count({ where: { id: owned.id } }), 0);
+  // Marking it not needed is the way out.
+  ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: owned.id, nn: true } }));
+  assert.equal((await prisma.dependency.findUniqueOrThrow({ where: { id: owned.id } })).notNeeded, true);
 });
 
 test('verification is routed by the flag: a technical row is the developer’s, a general row sales’ — and neither may take the other’s', async () => {
