@@ -317,7 +317,7 @@ test('a contract typed in one language per row publishes, is approved and signed
 
   // The shape is unchanged — strings, the other key ''. The stored snapshot still hashes to what was signed.
   const rev = await prisma.contractRevision.findUniqueOrThrow({ where: { id: (await prisma.contract.findUniqueOrThrow({ where: { id: f.contract.id } })).currentContractRevisionId! } });
-  const snapshot = readContractSnapshot(rev.snapshot);
+  const snapshot = readContractSnapshot(rev.snapshot)!;
   assert.equal(snapshot.titleFa, 'سایت فروشگاهی نهال');
   assert.equal(snapshot.titleEn, '');
   assert.equal(snapshot.articles.find((a) => a.number === 3)?.titleEn, '');

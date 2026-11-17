@@ -126,11 +126,13 @@ test('a typed key: Latin words joined by dots or hyphens, never inside checklist
   }
 });
 
-test('checkDecision: a decline needs its reason; an accepted ADD needs both labels; a remove/restore needs neither', () => {
+test('checkDecision: a decline needs its reason; an accepted ADD needs a label in one language; a remove/restore needs neither', () => {
   const add = { decision: 'ACCEPTED' as const, labelFa: 'وبلاگ', labelEn: 'Blog' };
   assert.equal(checkDecision('ADD', add), null);
-  assert.equal(checkDecision('ADD', { ...add, labelEn: '  ' }), 'LABEL_REQUIRED');
-  assert.equal(checkDecision('ADD', { ...add, labelFa: null }), 'LABEL_REQUIRED');
+  // DX4: one language is enough; LABEL_REQUIRED now means both are blank.
+  assert.equal(checkDecision('ADD', { ...add, labelEn: '  ' }), null);
+  assert.equal(checkDecision('ADD', { ...add, labelFa: null }), null);
+  assert.equal(checkDecision('ADD', { ...add, labelFa: null, labelEn: '  ' }), 'LABEL_REQUIRED');
   assert.equal(checkDecision('ADD', { ...add, key: 'Bad Key' }), 'INVALID_KEY');
   assert.equal(checkDecision('ADD', { ...add, key: '' }), null, 'an empty key is "generate one"');
   assert.equal(checkDecision('ADD', { ...add, kind: 'EXTRA' }), 'INVALID_KIND');

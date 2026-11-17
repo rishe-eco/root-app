@@ -40,8 +40,10 @@ test('checkPlanRows: each refusal, in the order the form’s columns run', () =>
   assert.equal(checkPlanRows([]), 'PLAN_ROWS_REQUIRED');
   assert.equal(checkPlanRows(Array.from({ length: MAX_PLAN_ROWS + 1 }, () => row())), 'TOO_MANY_ROWS');
   assert.equal(checkPlanRows(Array.from({ length: MAX_PLAN_ROWS }, () => row())), null);
-  assert.equal(checkPlanRows([row({ labelFa: '  ' })]), 'LABEL_REQUIRED');
-  assert.equal(checkPlanRows([row({ labelEn: '' })]), 'LABEL_REQUIRED');
+  // DX4: a label in one language is enough; LABEL_REQUIRED means both are blank.
+  assert.equal(checkPlanRows([row({ labelFa: '  ', labelEn: '' })]), 'LABEL_REQUIRED');
+  assert.equal(checkPlanRows([row({ labelFa: '  ' })]), null);
+  assert.equal(checkPlanRows([row({ labelEn: '' })]), null);
   for (const amount of ['0', '-1', '1.5', '', '1e3', 'abc', '01']) {
     assert.equal(checkPlanRows([row({ amount })]), 'INVALID_AMOUNT', amount);
   }
@@ -49,7 +51,7 @@ test('checkPlanRows: each refusal, in the order the form’s columns run', () =>
   assert.equal(checkPlanRows([row({ paymentTermDays: 366 })]), 'INVALID_TERM');
   assert.equal(checkPlanRows([row({ paymentTermDays: 2.5 })]), 'INVALID_TERM');
   // A label problem is reported before an amount problem on the same row.
-  assert.equal(checkPlanRows([row({ labelEn: '', amount: '0' })]), 'LABEL_REQUIRED');
+  assert.equal(checkPlanRows([row({ labelFa: '', labelEn: '', amount: '0' })]), 'LABEL_REQUIRED');
 });
 
 test('checkPlanRows (DX2b): a row is due on a phase or on a date, never both, and a date must be a real day', () => {
