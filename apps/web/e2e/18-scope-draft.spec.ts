@@ -154,20 +154,24 @@ test('sales fills the articles and publishes the draft — the customer sees the
   await page.getByTestId('draft-apply-template').click();
   await expect(page.getByTestId('draft-apply-template')).toHaveCount(0);
 
-  // The planned dates (Q12), proposed with the draft — 1 Azar to 1 Bahman 1405, through the Jalali day input.
+  // The planned dates (Q12), proposed with the draft — 1 Azar to 1 Bahman 1405. Since DX1 they are typed on the
+  // Contract tab (the contract's own settings), not on the draft step.
+  await expect(page.getByTestId('draft-dates-editor')).toHaveCount(0);
+  await page.getByTestId('draft-edit-articles').click();
+  await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/contract$/);
   const start = page.getByTestId('draft-date-start');
-  await start.locator('select[data-part="jy"]').selectOption('1405');
-  await start.locator('select[data-part="jm"]').selectOption('9');
-  await start.locator('select[data-part="jd"]').selectOption('1');
+  await start.locator('input[data-part="text"]').fill('1405/09/01');
   await expect(start).toHaveAttribute('data-value', '2026-11-22');
   const end = page.getByTestId('draft-date-end');
-  await end.locator('select[data-part="jy"]').selectOption('1405');
-  await end.locator('select[data-part="jm"]').selectOption('11');
-  await end.locator('select[data-part="jd"]').selectOption('1');
+  await end.locator('input[data-part="text"]').fill('1405/11/01');
   await expect(end).toHaveAttribute('data-value', '2027-01-21');
   await page.getByTestId('draft-dates-save').click();
   await expect(page.getByTestId('draft-dates-saved')).toBeVisible();
 
+  // Back on the step, publish — the button is at the top of the step and again at its foot.
+  await page.locator('.workspace-tab', { hasText: 'Steps' }).click();
+  await page.locator('.stepper-item[data-step="DRAFT"] button').click();
+  await expect(page.getByTestId('draft-publish-bottom')).toBeVisible();
   await page.getByTestId('draft-publish').click();
   await expect(page.getByTestId('draft-published')).toBeVisible();
   await expect(page.getByTestId('draft-version')).toContainText('Version v1');

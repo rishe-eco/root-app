@@ -230,7 +230,8 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
   gap: var(--space-2);
 }
 .dayinput-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.dayinput-month { font-size: var(--text-small); font-weight: var(--weight-semibold); text-align: center; }
+.dayinput-month { flex: 1 1 0; min-inline-size: 0; overflow-wrap: anywhere; font-size: var(--text-small); font-weight: var(--weight-semibold); text-align: center; }
+.dayinput-nav .btn { flex: none; padding-inline: var(--space-3); }
 .dayinput-grid { display: flex; flex-direction: column; gap: var(--space-1); }
 .dayinput-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1); }
 .dayinput-wd { text-align: center; font-size: var(--text-caption); color: var(--color-text-subtle); }
@@ -486,8 +487,9 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 .req-acc-missing { color: var(--color-error); font-weight: var(--weight-medium); }
 .req-acc-mark { flex: none; color: var(--color-text-muted); }
 
-/* The draft step's summary, the readiness box, a folding article. */
-.draft-summary-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-3); margin: 0; }
+/* The draft step's summary, the readiness box, a folding article. The Contract tab's action row now holds four buttons, so it wraps. */
+.editor-card-actions, .editor-card-head { flex-wrap: wrap; }
+.draft-summary-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); gap: var(--space-3); margin: 0; }
 .draft-summary-facts dt { font-size: var(--text-caption); color: var(--color-text-subtle); }
 .draft-summary-facts dd { margin: 0; font-size: var(--text-small); overflow-wrap: anywhere; }
 .draft-summary-block { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -512,3 +514,28 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 .article-toggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .article-toggle-title { font-size: var(--text-body); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
 .article-toggle-mark { color: var(--color-text-muted); }
+
+/* On a very narrow screen the desk's nested paddings (content, step panel, card)
+   used to add up to more than the screen, and a field was left with no width at
+   all. Tighter, and fields allowed to shrink — a control stays inside its column
+   at 180 px as at 360 (DX1). */
+@media (max-width: 400px) {
+  .desk-content { padding-inline: var(--space-2); }
+  .step-panel { padding: var(--space-2); }
+  .card.editor-card, .editor-card { padding: var(--space-2); }
+  .req-acc-head { padding: var(--space-2); gap: var(--space-2); flex-wrap: wrap; }
+  .nextup { padding: var(--space-3); }
+  .nextup .btn, .workspace-panel .btn { white-space: normal; max-inline-size: 100%; }
+  .input, .select, .textarea { min-inline-size: 0; max-inline-size: 100%; }
+  .dayinput-text { flex-basis: 6rem; }
+  .dayinput-pop { min-inline-size: 0; inline-size: 100%; padding: var(--space-2); }
+  .pillchoice-pill { padding-inline: var(--space-3); }
+  .editor-grid-2 > *, .field { min-inline-size: 0; }
+  .step-panel-head h2 { font-size: var(--text-body-lg); overflow-wrap: anywhere; }
+  .workspace-panel :is(h3, h4, p, li, label, .badge, .t-eyebrow, .stepper-label, .stepper-state) { overflow-wrap: anywhere; }
+  /* The payment schedule's table is wider than a phone; it scrolls inside its article instead of widening the step. */
+  .draft-step .feedback-panel, .draft-step .feedback-target-group { min-inline-size: 0; overflow-x: auto; }
+  .stepper-count { gap: var(--space-2); }
+  .stepper-count-btn { min-inline-size: 2rem; }
+  .stepper-count-value { min-inline-size: 1.5rem; }
+}
