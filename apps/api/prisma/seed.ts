@@ -11,6 +11,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { buildContractSnapshot, contentHash } from '../src/lib/revision.js';
 import { agreedScopeSnapshot } from '../src/lib/scope.js';
+import { COMMITMENTS } from '../src/lib/brief.js';
 import {
   ARTICLES,
   SCOPE,
@@ -339,6 +340,17 @@ async function main() {
         create: { typeId: type.id, key, kind, labelFa: itemFa, labelEn: itemEn, position: j },
       });
     }
+  }
+
+  // DX3a: the desk's default list of handover items — what a new brief gets a row for. The migration seeds
+  // the same three in production; `update: {}` so a re-seed never puts back what the desk has edited.
+  for (const [position, key] of (['domain', 'host', 'content'] as const).entries()) {
+    const spec = COMMITMENTS[key];
+    await prisma.handoverItemType.upsert({
+      where: { key },
+      update: {},
+      create: { key, titleFa: spec.titleFa, titleEn: spec.titleEn, technical: spec.technical, position },
+    });
   }
 
   for (const [number, titleFa, titleEn, bodyFa, bodyEn] of ARTICLES) {

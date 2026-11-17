@@ -6,6 +6,10 @@ import {
   COMMITMENTS,
   COMMITMENT_KEYS,
   EXTRA_COMMITMENT,
+  EXTRA_COMMITMENT_KEYS,
+  EXISTING_SITE_PRESET,
+  handoverUndated,
+  presetApplies,
   briefCompleteness,
   planCompleteness,
   briefDependencies,
@@ -18,6 +22,7 @@ import {
   planDependencySync,
   type BriefForCompleteness,
   type ExistingBriefRow,
+  type HandoverFacts,
   type ImpliedCommitment,
 } from './brief.js';
 import { MONEY_BRIEF_FIELDS } from './feedbackRules.js';
@@ -32,67 +37,37 @@ import { CHECKLIST } from './templates.js';
 
 const d = (day: number) => new Date(Date.UTC(2026, 9, day)); // 2026-10-<day>
 
-const provided = (
-  domain: DependencySide | null = null,
-  host: DependencySide | null = null,
-  content: DependencySide | null = null,
-) => ({ domainProvidedBy: domain, hostProvidedBy: host, contentProvidedBy: content });
-
 // --- briefDependencies -------------------------------------------------------------
 
-test('briefDependencies: a provider left unset implies nothing — no row is a guess about whose side it is', () => {
-  assert.deepEqual(briefDependencies(provided(), []), []);
-  assert.deepEqual(briefDependencies(null, []), []);
-  assert.deepEqual(
-    briefDependencies(provided('CUSTOMER'), []).map((i) => [i.key, i.side]),
-    [['domain', 'CUSTOMER']],
-  );
+test('briefDependencies (DX3a): only the included extras imply a commitment — the default list is rows, not brief fields', () => {
+  assert.deepEqual(briefDependencies([]), []);
+  assert.deepEqual(briefDependencies(['checklist.analytics', 'checklist.hosting']), [], 'an extra that implies nothing adds nothing');
 });
 
-test('briefDependencies: domain, host, content take their sides from the brief, in a stable order', () => {
-  const implied = briefDependencies(provided('ROOT', 'CUSTOMER', 'CUSTOMER'), []);
+test('briefDependencies: gateway, smsLine and enamad are customer-side unless the caller says otherwise, in a stable order', () => {
+  const implied = briefDependencies(['checklist.legal', 'checklist.payment', 'checklist.notifications']);
   assert.deepEqual(
-    implied.map((i) => [i.key, i.side, i.sideFromBrief]),
-    [
-      ['domain', 'ROOT', true],
-      ['host', 'CUSTOMER', true],
-      ['content', 'CUSTOMER', true],
-    ],
-  );
-});
-
-test('briefDependencies: domain and host are technical (the developer verifies); everything else is general', () => {
-  const all = briefDependencies(provided('CUSTOMER', 'CUSTOMER', 'CUSTOMER'), Object.keys(EXTRA_COMMITMENT));
-  assert.deepEqual(
-    Object.fromEntries(all.map((i) => [i.key, i.technical])),
-    { domain: true, host: true, content: false, gateway: false, smsLine: false, enamad: false },
-  );
-  // …and the table the API writes rows from says the same.
-  for (const key of COMMITMENT_KEYS) {
-    assert.equal(COMMITMENTS[key].technical, key === 'domain' || key === 'host', key);
-  }
-});
-
-test('briefDependencies: the extras imply gateway, smsLine and enamad — customer-side unless the caller says otherwise', () => {
-  const implied = briefDependencies(provided(), ['checklist.payment', 'checklist.notifications', 'checklist.legal']);
-  assert.deepEqual(
-    implied.map((i) => [i.key, i.side, i.sideFromBrief]),
+    implied.map((i) => [i.key, i.side, i.technical]),
     [
       ['gateway', 'CUSTOMER', false],
       ['smsLine', 'CUSTOMER', false],
       ['enamad', 'CUSTOMER', false],
     ],
   );
-  const overridden = briefDependencies(provided(), ['checklist.payment'], { gateway: 'ROOT' });
-  assert.equal(overridden[0].side, 'ROOT');
-  // An override never beats the brief's own field for the three it records.
-  const domain = briefDependencies(provided('CUSTOMER'), [], { domain: 'ROOT' });
-  assert.equal(domain[0].side, 'CUSTOMER');
+  assert.equal(briefDependencies(['checklist.payment'], { gateway: 'ROOT' })[0].side, 'ROOT');
 });
 
-test('briefDependencies: an extra that implies nothing (or is not in scope) adds nothing', () => {
-  assert.deepEqual(briefDependencies(provided(), ['checklist.analytics', 'checklist.hosting']), []);
-  assert.deepEqual(briefDependencies(provided(), []), []);
+test('briefDependencies: a side cleared to undecided stays undecided — null is an answer, not "use the default"', () => {
+  assert.equal(briefDependencies(['checklist.payment'], { gateway: null })[0].side, null);
+  assert.equal(briefDependencies(['checklist.payment'], {})[0].side, 'CUSTOMER');
+});
+
+test('the commitments table still marks domain and host technical (the developer verifies); the default list is seeded from it', () => {
+  for (const key of COMMITMENT_KEYS) {
+    assert.equal(COMMITMENTS[key].technical, key === 'domain' || key === 'host', key);
+  }
+  // The extras own gateway, smsLine and enamad; a default-list item may not take their keys.
+  assert.deepEqual([...EXTRA_COMMITMENT_KEYS].sort(), ['enamad', 'gateway', 'smsLine']);
 });
 
 test('every extra that implies a commitment is a real checklist area, and every commitment key is a real key', () => {
@@ -124,37 +99,38 @@ const row = (key: ExistingBriefRow['briefKey'], over: Partial<ExistingBriefRow> 
 });
 
 const implied = (...items: Array<[ImpliedCommitment['key'], DependencySide]>): ImpliedCommitment[] =>
-  items.map(([key, side]) => ({ key, side, technical: COMMITMENTS[key].technical, sideFromBrief: true }));
+  items.map(([key, side]) => ({ key, side, technical: COMMITMENTS[key].technical }));
 
 const plan = (over: Partial<Parameters<typeof planDependencySync>[0]>) =>
   planDependencySync({ implied: [], existing: [], dueDates: {}, stillImpliedElsewhere: new Set(), ...over });
 
-test('planDependencySync: creates a row only for an implied key that has a date to give it', () => {
-  const p = plan({ implied: implied(['domain', 'CUSTOMER'], ['host', 'CUSTOMER']), dueDates: { domain: d(15) } });
+test('planDependencySync (DX3a): creates a row for every implied key, dated when the caller gave a date and undated when not', () => {
+  const p = plan({ implied: implied(['gateway', 'CUSTOMER'], ['enamad', 'CUSTOMER']), dueDates: { gateway: d(15) } });
   assert.deepEqual(
-    p.create.map((c) => [c.key, c.side, c.dueAt.getTime(), c.technical]),
-    [['domain', 'CUSTOMER', d(15).getTime(), true]],
+    p.create.map((c) => [c.key, c.side, c.dueAt?.getTime() ?? null, c.technical]),
+    [
+      ['gateway', 'CUSTOMER', d(15).getTime(), false],
+      ['enamad', 'CUSTOMER', null, false],
+    ],
   );
-  // host has no date and no row: not created — `briefCompleteness` reports it.
-  assert.equal(p.create.some((c) => c.key === 'host'), false);
 });
 
 test('planDependencySync: a provider switched to Root flips the row’s side and nothing else', () => {
-  const p = plan({ implied: implied(['host', 'ROOT']), existing: [row('host')] });
+  const p = plan({ implied: implied(['gateway', 'ROOT']), existing: [row('gateway')] });
   assert.equal(p.create.length, 0);
-  assert.deepEqual(p.update.map((u) => [u.id, u.side, u.dueAt.getTime()]), [['row-host', 'ROOT', d(20).getTime()]]);
+  assert.deepEqual(p.update.map((u) => [u.id, u.side, u.dueAt?.getTime()]), [['row-gateway', 'ROOT', d(20).getTime()]]);
 });
 
 test('planDependencySync: a row keeps its own date when none is given, and takes a new one when it is', () => {
-  const kept = plan({ implied: implied(['domain', 'CUSTOMER']), existing: [row('domain')] });
+  const kept = plan({ implied: implied(['gateway', 'CUSTOMER']), existing: [row('gateway')] });
   assert.deepEqual(kept.update, [], 'nothing differs — nothing is written');
-  const moved = plan({ implied: implied(['domain', 'CUSTOMER']), existing: [row('domain')], dueDates: { domain: d(25) } });
-  assert.deepEqual(moved.update.map((u) => u.dueAt.getTime()), [d(25).getTime()]);
+  const moved = plan({ implied: implied(['gateway', 'CUSTOMER']), existing: [row('gateway')], dueDates: { gateway: d(25) } });
+  assert.deepEqual(moved.update.map((u) => u.dueAt?.getTime()), [d(25).getTime()]);
 });
 
 test('planDependencySync is idempotent: applied, then planned again, it is empty — one row per key however often the brief is set', () => {
-  const want = implied(['domain', 'ROOT'], ['host', 'CUSTOMER'], ['content', 'CUSTOMER']);
-  const dates = { domain: d(10), host: d(11), content: d(12) };
+  const want = implied(['gateway', 'ROOT'], ['smsLine', 'CUSTOMER'], ['enamad', 'CUSTOMER']);
+  const dates = { gateway: d(10), smsLine: d(11), enamad: d(12) };
   const first = plan({ implied: want, dueDates: dates });
   assert.equal(first.create.length, 3);
 
@@ -177,8 +153,8 @@ test('planDependencySync is idempotent: applied, then planned again, it is empty
 
 test('planDependencySync: a key no brief implies any more is removed — unless verified, then it is kept and freed', () => {
   const p = plan({
-    implied: implied(['domain', 'CUSTOMER']),
-    existing: [row('domain'), row('gateway'), row('smsLine', { verifiedAt: d(1) })],
+    implied: implied(['enamad', 'CUSTOMER']),
+    existing: [row('enamad'), row('gateway'), row('smsLine', { verifiedAt: d(1) })],
   });
   assert.deepEqual(p.remove, ['row-gateway']);
   assert.deepEqual(p.detach, ['row-smsLine']);
@@ -187,20 +163,20 @@ test('planDependencySync: a key no brief implies any more is removed — unless 
 test('planDependencySync: a key a sibling contract’s brief still implies stays — the board’s rows are the project’s', () => {
   const p = plan({
     implied: [],
-    existing: [row('domain'), row('host')],
-    stillImpliedElsewhere: new Set(['domain'] as const),
+    existing: [row('gateway'), row('enamad')],
+    stillImpliedElsewhere: new Set(['gateway'] as const),
   });
-  assert.deepEqual(p.remove, ['row-host']);
+  assert.deepEqual(p.remove, ['row-enamad']);
 });
 
 test('planDependencySync: a row whose title or flag drifted from the table is put back', () => {
   const p = plan({
-    implied: implied(['host', 'CUSTOMER']),
-    existing: [row('host', { technical: false, titleEn: 'old' })],
+    implied: implied(['gateway', 'CUSTOMER']),
+    existing: [row('gateway', { technical: true, titleEn: 'old' })],
   });
   assert.equal(p.update.length, 1);
-  assert.equal(p.update[0].technical, true);
-  assert.equal(p.update[0].titleEn, COMMITMENTS.host.titleEn);
+  assert.equal(p.update[0].technical, false);
+  assert.equal(p.update[0].titleEn, COMMITMENTS.gateway.titleEn);
 });
 
 // --- briefCompleteness ---------------------------------------------------------------
@@ -215,14 +191,21 @@ const complete = (over: Partial<BriefForCompleteness> = {}): BriefForCompletenes
   premadeRounds: 2,
   mockupIterations: null,
   demoIterationsPerPhase: 2,
-  ...provided('CUSTOMER', 'CUSTOMER', 'ROOT'),
+  ...over,
+});
+
+const item = (key: string, side: DependencySide | null, dueAt: Date | null, over: Partial<HandoverFacts> = {}): HandoverFacts => ({
+  key,
+  inBrief: true,
+  side,
+  dueAt,
+  notNeeded: false,
   ...over,
 });
 
 const inputFor = (over: Partial<Parameters<typeof briefCompleteness>[0]> = {}): Parameters<typeof briefCompleteness>[0] => ({
   brief: complete(),
-  commitmentDates: { domain: d(10), host: d(10), content: d(10) },
-  includedExtraKeys: [],
+  handover: [item('domain', 'CUSTOMER', d(10)), item('host', 'ROOT', d(10)), item('content', 'CUSTOMER', d(10))],
   ...over,
 });
 
@@ -241,15 +224,12 @@ test('briefCompleteness: each field the later steps read is named when it is mis
   const lacking: Array<[Partial<BriefForCompleteness>, string]> = [
     [{ budgetCap: null }, 'BUDGET_CAP'],
     [{ hardDeadline: null }, 'HARD_DEADLINE'],
-    [{ domainProvidedBy: null }, 'DOMAIN_PROVIDER'],
-    [{ hostProvidedBy: null }, 'HOST_PROVIDER'],
-    [{ contentProvidedBy: null }, 'CONTENT_PROVIDER'],
     [{ supportMonths: null }, 'SUPPORT_MONTHS'],
     [{ demoIterationsPerPhase: null }, 'DEMO_ITERATIONS'],
     [{ kind: 'FEATURE_FOR_EXISTING' }, 'EXISTING_SITE_URL'],
   ];
   for (const [over, code] of lacking) {
-    const got = codes({ brief: complete(over), commitmentDates: { domain: d(1), host: d(1), content: d(1) } });
+    const got = codes({ brief: complete(over) });
     assert.ok(got.includes(code), `${code} in ${JSON.stringify(got)}`);
   }
 });
@@ -263,14 +243,33 @@ test('briefCompleteness: the allowance a design path counts against is the one r
   assert.deepEqual(codes({ brief: complete({ designTier: 'NONE', premadeRounds: null, mockupIterations: null }) }), []);
 });
 
-test('briefCompleteness: every implied commitment needs a date (COMMITMENT_UNDATED) — extras included; a wish is never required', () => {
-  assert.deepEqual(codes({ commitmentDates: { domain: d(10), host: d(10) } }), ['COMMITMENT_UNDATED:content']);
-  assert.deepEqual(
-    codes({ includedExtraKeys: ['checklist.payment'], commitmentDates: { domain: d(1), host: d(1), content: d(1) } }),
-    ['COMMITMENT_UNDATED:gateway'],
-  );
-  // The ideal deadline and the domain name are not in the brief type at all:
-  // nothing about them can make a step incomplete.
+test('briefCompleteness (DX3a): nobody has to say who provides the domain, the host or the content — each is optional', () => {
+  const undecided = [item('domain', null, null), item('host', null, null), item('content', null, null)];
+  assert.deepEqual(codes({ handover: undecided }), []);
+  assert.deepEqual(codes({ handover: [] }), []);
+});
+
+test('briefCompleteness: an item someone provides needs a date (COMMITMENT_UNDATED) — not one marked not needed, not an undecided one', () => {
+  assert.deepEqual(codes({ handover: [item('domain', 'CUSTOMER', d(10)), item('host', 'ROOT', null)] }), ['COMMITMENT_UNDATED:host']);
+  assert.deepEqual(codes({ handover: [item('host', 'ROOT', null, { notNeeded: true })] }), []);
+  assert.deepEqual(codes({ handover: [item('host', null, null)] }), []);
+  // A one-off is named by its id, and an extra by its key.
+  assert.deepEqual(codes({ handover: [item('dep-123', 'CUSTOMER', null), item('gateway', 'CUSTOMER', null)] }), [
+    'COMMITMENT_UNDATED:dep-123',
+    'COMMITMENT_UNDATED:gateway',
+  ]);
+  // A board-only row (not in the brief) is the board's business, not the step's.
+  assert.deepEqual(codes({ handover: [item('x', 'CUSTOMER', null, { inBrief: false })] }), []);
+  assert.equal(handoverUndated(item('x', 'ROOT', null)), true);
+});
+
+test('the "feature for an existing site" preset applies on the change to that kind, once (DX3a)', () => {
+  assert.equal(presetApplies(null, 'FEATURE_FOR_EXISTING'), true, 'a brand-new brief of that kind');
+  assert.equal(presetApplies('NEW_SITE', 'FEATURE_FOR_EXISTING'), true);
+  assert.equal(presetApplies('FEATURE_FOR_EXISTING', 'FEATURE_FOR_EXISTING'), false, 'saved as typed the second time');
+  assert.equal(presetApplies('FEATURE_FOR_EXISTING', 'NEW_SITE'), false, 'switching back changes nothing');
+  assert.equal(presetApplies(null, 'NEW_SITE'), false);
+  assert.deepEqual([EXISTING_SITE_PRESET.designTier, [...EXISTING_SITE_PRESET.notNeededKeys]], ['NONE', ['domain', 'host']]);
 });
 
 const planCodes = (over: Partial<Parameters<typeof planCompleteness>[0]> = {}) =>

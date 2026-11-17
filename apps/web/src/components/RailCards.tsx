@@ -33,7 +33,9 @@ export function CommitmentsCard({ contract }: { contract: Contract }) {
                   ? t('detail.commitmentVerified')
                   : d.overdue
                     ? t('detail.commitmentOverdue')
-                    : relativeTime(d.dueAt, locale)}
+                    : d.dueAt
+                      ? relativeTime(d.dueAt, locale)
+                      : t('brief.handover.undated')}
               </span>
             </div>
           ))}

@@ -95,17 +95,9 @@ const briefInput = (tier: string) => ({
   budgetCap: '150000000',
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
-  domainProvidedBy: 'CUSTOMER',
-  hostProvidedBy: 'ROOT',
-  contentProvidedBy: 'CUSTOMER',
   supportMonths: 6,
   ...(tier === 'THEME_PICK' ? { premadeRounds: 2 } : tier === 'NONE' ? {} : { mockupIterations: 2 }),
   demoIterationsPerPhase: 2,
-  commitments: [
-    { key: 'domain', dueAt: onDay('2026-10-05') },
-    { key: 'host', dueAt: onDay('2026-10-06') },
-    { key: 'content', dueAt: onDay('2026-10-07') },
-  ],
 });
 
 const setBrief = (tier = 'THEME_PICK') => exec(SET_BRIEF, { as: staff.SALES, variables: { c: f.contract.id, i: briefInput(tier) } });

@@ -791,12 +791,20 @@ export const Project = {
    * and a customer seeing Root's own commitments alongside their own is the
    * symmetry the stage is built on, not a leak to plug. `Dependency.overdue`
    * is derived per row (`lib/dependency.ts`), never a stored flag.
+   *
+   * **DX3a:** undated rows sort last, and the *customer's* board (anyone who is
+   * not a contract reader, view-as-customer included) hides the rows marked not
+   * needed and the ones with no side yet — Requirements still lists both
+   * (`Contract.handover`). Staff see every row.
    */
-  dependencies: (p: { id: string }) =>
+  dependencies: (p: { id: string }, _a: unknown, ctx: Context) =>
     prisma.dependency.findMany({
-      where: { projectId: p.id },
+      where: {
+        projectId: p.id,
+        ...(isContractReader(viewerOf(ctx)) ? {} : { notNeeded: false, side: { not: null } }),
+      },
       include: { project: true, createdBy: true, verifiedBy: true },
-      orderBy: { dueAt: 'asc' },
+      orderBy: [{ dueAt: { sort: 'asc', nulls: 'last' } }, { titleEn: 'asc' }],
     }),
 
   /** Build plan L7 — the product-import panel's run history, newest first.
@@ -825,7 +833,7 @@ export const Project = {
  * due date passes, with nothing for anyone to remember to flip.
  */
 export const Dependency = {
-  overdue: (d: { dueAt: Date; verifiedAt: Date | null }) => isOverdue(d),
+  overdue: (d: { dueAt: Date | null; verifiedAt: Date | null; notNeeded?: boolean }) => isOverdue(d),
 };
 
 /**

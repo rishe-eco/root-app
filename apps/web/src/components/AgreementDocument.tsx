@@ -55,6 +55,46 @@ function termText(t: T, days: number, locale: 'fa' | 'en') {
   return days === 0 ? t('brief.plan.termNow') : t('brief.plan.termDays', { count: days, n: formatCount(days, locale) });
 }
 
+/**
+ * Who provides what, by when (format 3, DX3a): the handover items as frozen — the
+ * agreement's own order, which is the desk's default list and then the titles.
+ * A format-2 snapshot has none (its three providers are printed with the brief's
+ * facts above), so nothing is drawn for it.
+ */
+function HandoverList({ revision }: { revision: ContractRevision }) {
+  const { t } = useTranslation();
+  const locale = useLocale();
+  const items = revision.agreement?.handover ?? [];
+  if (items.length === 0) return null;
+  return (
+    <>
+      <h3 className="doc-art-h">{t('agreement.handover')}</h3>
+      <table className="doc-table" data-testid="agreement-handover">
+        <thead>
+          <tr>
+            <th>{t('agreement.handoverItem')}</th>
+            <th>{t('agreement.handoverWho')}</th>
+            <th>{t('agreement.handoverBy')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((h) => {
+            const who = h.notNeeded ? t('brief.handover.side.NOT_NEEDED') : h.side ? t(`brief.handover.side.${h.side}`) : t('brief.handover.undecided');
+            const provided = !h.notNeeded && h.side !== null;
+            return (
+              <tr key={`${h.key ?? ''}:${h.titleEn}`}>
+                <td>{pick(h, 'title', locale)}</td>
+                <td>{who}</td>
+                <td>{provided ? (h.dueOn ? calendarDate(h.dueOn, locale) : t('brief.handover.undated')) : ''}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
 function BriefSection({ revision }: { revision: ContractRevision }) {
   const { t } = useTranslation();
   const locale = useLocale();
@@ -90,6 +130,7 @@ function BriefSection({ revision }: { revision: ContractRevision }) {
           </Fact>
         ) : null}
       </dl>
+      <HandoverList revision={revision} />
       {allowances ? (
         <>
           <h3 className="doc-art-h">{t('brief.group.allowances')}</h3>

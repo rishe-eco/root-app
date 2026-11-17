@@ -264,7 +264,15 @@ async function resolveTarget(
   if (!anchorMatchesStep(step, anchor)) throw invalidTarget();
   // A REQUIREMENTS note is about a field some card renders (J4) — a name the
   // brief does not have is a note nobody could find again.
-  if (step === 'REQUIREMENTS' && briefField !== null && !isBriefField(briefField)) throw invalidTarget();
+  // DX3a: a handover item is a card too, named by its key (the default list's, or an extra's) or, for a
+  // one-off, by its id — and the list is the desk's to extend, so it is looked up rather than listed.
+  if (step === 'REQUIREMENTS' && briefField !== null && !isBriefField(briefField)) {
+    const item = await prisma.dependency.findFirst({
+      where: { projectId: contract.projectId, inBrief: true, OR: [{ briefKey: briefField }, { id: briefField }] },
+      select: { id: true },
+    });
+    if (!item) throw invalidTarget();
+  }
 
   let scopeItem: ResolvedTarget['scopeItem'] = null;
   let phaseId: string | null = null;

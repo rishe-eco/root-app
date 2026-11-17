@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma.js';
 import { draftState, type AgreementParts, type AgreementSnapshot, type DraftState } from '../../lib/revision.js';
 import { parseCalendarDay } from '../../lib/calendarDay.js';
 import { agreedScopeSnapshot, agreedScopeSnapshotFor } from '../../lib/scope.js';
+import { orderHandover } from '../../lib/dependency.js';
 import type { FullContract } from './contracts.js';
 
 /**
@@ -45,6 +46,8 @@ export function agreementView(s: AgreementSnapshot, mayReadMoney: boolean) {
       hardDeadline: day(s.brief.hardDeadline),
     },
     allowances: s.allowances,
+    // DX3a (format 3): who provides what, by when; format 2 has none — its brief carries the providers.
+    handover: (s.handover ?? []).map((h) => ({ ...h, dueOn: day(h.dueOn) })),
     paymentPlan:
       mayReadMoney && s.paymentPlan
         ? {
@@ -63,9 +66,9 @@ export function agreementView(s: AgreementSnapshot, mayReadMoney: boolean) {
 /** Steps 1 and 2 as rows — what format 2 freezes beside the articles. */
 export async function loadAgreementParts(
   db: Db,
-  contract: Pick<FullContract, 'id' | 'plannedStartAt' | 'plannedEndAt'>,
+  contract: Pick<FullContract, 'id' | 'projectId' | 'plannedStartAt' | 'plannedEndAt'>,
 ): Promise<AgreementParts> {
-  const [brief, plan, phases] = await Promise.all([
+  const [brief, plan, phases, handoverRows, handoverTypes] = await Promise.all([
     db.contractBrief.findUnique({
       where: { contractId: contract.id },
       include: { templateType: { select: { slug: true, labelFa: true, labelEn: true } } },
@@ -75,6 +78,13 @@ export async function loadAgreementParts(
       include: { invoices: { orderBy: { ordinal: 'asc' } } },
     }),
     db.phase.findMany({ where: { contractId: contract.id }, orderBy: { number: 'asc' } }),
+    // DX3a: the handover items are the project's `inBrief` board rows; the snapshot
+    // freezes what each says now, and verification — a fact that moves later — is left out.
+    db.dependency.findMany({
+      where: { projectId: contract.projectId, inBrief: true },
+      select: { briefKey: true, titleFa: true, titleEn: true, side: true, dueAt: true, notNeeded: true },
+    }),
+    db.handoverItemType.findMany({ select: { key: true, position: true } }),
   ]);
   return {
     brief,
@@ -82,6 +92,7 @@ export async function loadAgreementParts(
     phases,
     plannedStartAt: contract.plannedStartAt,
     plannedEndAt: contract.plannedEndAt,
+    handover: orderHandover(handoverRows, new Map(handoverTypes.map((t) => [t.key, t.position]))),
   };
 }
 

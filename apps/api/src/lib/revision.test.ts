@@ -326,9 +326,6 @@ const parts = (over: Partial<AgreementParts> = {}): AgreementParts => ({
     idealDeadline: null,
     hardDeadline: new Date('2026-10-23T00:00:00Z'),
     domainName: 'nahal.ir',
-    domainProvidedBy: 'CUSTOMER',
-    hostProvidedBy: 'ROOT',
-    contentProvidedBy: 'CUSTOMER',
     supportMonths: 6,
     premadeRounds: 2,
     wireframeIterations: 2,
@@ -348,6 +345,11 @@ const parts = (over: Partial<AgreementParts> = {}): AgreementParts => ({
   ],
   plannedStartAt: new Date('2026-10-12T00:00:00Z'),
   plannedEndAt: new Date('2026-12-20T00:00:00Z'),
+  handover: [
+    { briefKey: 'domain', titleFa: 'دامنه', titleEn: 'Domain', side: 'CUSTOMER', dueAt: new Date('2026-10-20T00:00:00Z'), notNeeded: false },
+    { briefKey: null, titleFa: 'لوگو', titleEn: 'Logo', side: null, dueAt: null, notNeeded: false },
+    { briefKey: 'host', titleFa: 'میزبانی', titleEn: 'Hosting', side: 'ROOT', dueAt: null, notNeeded: true },
+  ],
   ...over,
 });
 const appendix = [{ key: 'home', labelFa: 'خانه', labelEn: 'Home', kind: 'PAGE' as const }];
@@ -415,9 +417,25 @@ test('format 3 puts every array in a total order and every absent value at null 
   // Twice from the same inputs.
   assert.equal(contentHash(buildContractSnapshot(contract, [article(1)], appendix, parts())), contentHash(buildContractSnapshot(contract, [article(1)], appendix, parts())));
   // No undefined leaks into the bytes (canonicalize would drop or throw on one).
-  const bare = buildContractSnapshot(contract, [article(1)], [], { brief: null, plan: null, phases: [], plannedStartAt: null, plannedEndAt: null });
+  const bare = buildContractSnapshot(contract, [article(1)], [], { brief: null, plan: null, phases: [], plannedStartAt: null, plannedEndAt: null, handover: [] });
   assert.doesNotThrow(() => canonicalize(bare as never));
   assert.deepEqual([(bare as never as Record<string, unknown>).brief, (bare as never as Record<string, unknown>).paymentPlan, (bare as never as Record<string, unknown>).allowances], [null, null, null]);
+});
+
+test('format 3 freezes the handover items (DX3a): key, titles, side, day and the not-needed flag — in the order given, with no ids and nothing about verification', () => {
+  const s = buildContractSnapshot(contract, [article(1)], appendix, parts()) as never as AgreementSnapshot;
+  assert.deepEqual(s.handover, [
+    { key: 'domain', titleFa: 'دامنه', titleEn: 'Domain', side: 'CUSTOMER', dueOn: '2026-10-20', notNeeded: false },
+    { key: null, titleFa: 'لوگو', titleEn: 'Logo', side: null, dueOn: null, notNeeded: false },
+    { key: 'host', titleFa: 'میزبانی', titleEn: 'Hosting', side: 'ROOT', dueOn: null, notNeeded: true },
+  ]);
+  // The three providers left format 3's brief; the allowances were never in it.
+  const brief = s.brief as unknown as Record<string, unknown>;
+  for (const k of ['domainProvidedBy', 'hostProvidedBy', 'contentProvidedBy']) assert.ok(!(k in brief), k);
+  assert.ok(!JSON.stringify(s.handover).includes('verif'));
+  // An empty list is an explicit [], never an absent key.
+  const bare = buildContractSnapshot(contract, [article(1)], [], { ...parts(), handover: [] }) as never as AgreementSnapshot;
+  assert.deepEqual(bare.handover, []);
 });
 
 test('format 3 changes its hash for each thing it added, and only for what it added', () => {
@@ -431,6 +449,11 @@ test('format 3 changes its hash for each thing it added, and only for what it ad
   assert.notEqual(changed({ brief: { ...parts().brief!, wireframeIterations: 3 } }), base, 'an allowance');
   const plan = parts().plan!;
   assert.notEqual(changed({ plan: { ...plan, invoices: plan.invoices.map((i) => ({ ...i, paymentTermDays: i.paymentTermDays + 1 })) } }), base);
+  const handover = parts().handover;
+  assert.notEqual(changed({ handover: handover.slice(1) }), base, 'a handover item');
+  assert.notEqual(changed({ handover: handover.map((h) => ({ ...h, side: h.briefKey === 'domain' ? 'ROOT' as const : h.side })) }), base, 'a side');
+  assert.notEqual(changed({ handover: handover.map((h) => ({ ...h, notNeeded: !h.notNeeded })) }), base, 'not needed');
+  assert.notEqual(changed({ handover: [...handover].reverse() }), base, 'the order is part of the bytes');
   assert.equal(changed({}), base);
   // The plan is the approved *rows*: nothing in the input can carry issuance state, so it cannot enter the bytes.
   assert.ok(!JSON.stringify(buildContractSnapshot(contract, [article(1)], appendix, parts())).includes('issued'));

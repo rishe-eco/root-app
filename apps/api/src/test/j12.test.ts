@@ -142,19 +142,11 @@ const BRIEF_INPUT = {
   budgetCap: '150000000',
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
-  domainProvidedBy: 'CUSTOMER',
-  hostProvidedBy: 'ROOT',
-  contentProvidedBy: 'CUSTOMER',
   supportMonths: 6,
   premadeRounds: 2,
   wireframeIterations: null,
   mockupIterations: null,
   demoIterationsPerPhase: 2,
-  commitments: [
-    { key: 'domain', dueAt: onDay('2026-10-05') },
-    { key: 'host', dueAt: onDay('2026-10-06') },
-    { key: 'content', dueAt: onDay('2026-10-07') },
-  ],
 };
 const CUSTOM_BRIEF = { designTier: 'SENIOR_DESIGNER', premadeRounds: null, wireframeIterations: 2, mockupIterations: 2 };
 

@@ -117,19 +117,11 @@ const BRIEF_INPUT = {
   budgetCap: '150000000',
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
-  domainProvidedBy: 'CUSTOMER',
-  hostProvidedBy: 'ROOT',
-  contentProvidedBy: 'CUSTOMER',
   supportMonths: 6,
   premadeRounds: null,
   wireframeIterations: 2,
   mockupIterations: 2,
   demoIterationsPerPhase: 2,
-  commitments: [
-    { key: 'domain', dueAt: onDay('2026-10-05') },
-    { key: 'host', dueAt: onDay('2026-10-06') },
-    { key: 'content', dueAt: onDay('2026-10-07') },
-  ],
 };
 
 const asDesigner = (query: string, variables: Record<string, unknown> = {}, as: User = staff.DESIGNER) =>

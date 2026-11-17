@@ -130,6 +130,7 @@ DX2a  the Phases and payment step, No design; Scope/Phases/Design tabs off the n
 DX3b  the new-contract form: generated R-1405-001 reference; New customer beside the picker   ✔ built 2026-11-17 [DX3b.md]
 DX2b  what a phase is: items in several phases, Has a demo / Mark phase done, invoices due on a date, snapshot format 3 (one migration)   ✔ built 2026-11-17 [DX2b.md]
      milestone DX2 (DX1, DX2a, DX2b, DX3b) 2026-11-17 · typecheck clean · unit 1084 API + 356 web · integration 1298/1299 (j9a's streaming-memory test, failing on main on this machine too) · e2e 155 passed, then 26-design-review fixed and green 15/15 · Chrome, slot A
+DX3a  handover items: one list from Requirements and the Dependencies tab; the existing-site preset (one migration)   ✔ built 2026-11-17 [DX3a.md]
 ```
 
 **R3 and the Persian pass each have their own build-ready file; L8 and the
@@ -435,6 +436,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`DX2a.md`](DX2a.md) | Change: desk UX review stage 2a — the PHASES step, No design, three tabs off the new road | ✔ built |
 | [`DX3b.md`](DX3b.md) | Change: desk UX review stage 3b — generated contract reference, New customer from the form | ✔ built |
 | [`DX2b.md`](DX2b.md) | Change: desk UX review stage 2b — what a phase is; snapshot format 3 | ✔ built |
+| [`DX3a.md`](DX3a.md) | Change: desk UX review stage 3a — handover items, the default list, the preset | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |

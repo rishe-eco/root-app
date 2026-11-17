@@ -23,13 +23,18 @@ import { DESK_SECTIONS, canSeeSection } from '../sections';
  * themes — written with `templates.types`, read with either capability (or
  * `contracts.author`) — and lets the designer say which types offer which.
  *
- * The tab is the route (`/desk/templates/types`, `…/scope`, `…/themes`), so it survives a
+ * A fourth, **Handover items** (DX3a), is the default list of things a project needs
+ * handed over (domain, hosting, content, whatever sales adds). It is sales' — the
+ * capability that writes the dependency board, `contracts.author` — so it is drawn for
+ * that and not for a designer.
+ *
+ * The tab is the route (`/desk/templates/types`, `…/scope`, `…/themes`, `…/handover`), so it survives a
  * reload and a language switch and can be linked to.
  */
 
 export type TemplatesContext = { me: User };
 
-const TABS = ['types', 'scope', 'themes'] as const;
+const TABS = ['types', 'scope', 'themes', 'handover'] as const;
 
 export default function Templates() {
   const { t } = useTranslation();
@@ -51,7 +56,7 @@ export default function Templates() {
       </div>
 
       <nav className="workspace-tabs">
-        {TABS.map((tab) => (
+        {TABS.filter((tab) => tab !== 'handover' || can(me, 'contracts.author')).map((tab) => (
           <NavLink
             key={tab}
             end

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
 import { pick, calendarDate, formatAmount, formatCount } from '@/lib/format';
-import { designPath, missingParams, MONEY_FIELDS } from '@/lib/brief';
+import { choiceOf, designPath, missingParams, MONEY_FIELDS } from '@/lib/brief';
 import { CONTRACT_FEEDBACK, type Contract, type Dependency, type FeedbackItem } from '@/lib/queries';
 import FeedbackPanel, { type FeedbackTarget } from '@/components/FeedbackPanel';
 import RequirementsEditor from '@/components/RequirementsEditor';
@@ -53,10 +53,23 @@ function commitmentTitle(dep: Dependency, brief: Contract['brief'], locale: 'fa'
   return dep.briefKey === 'domain' && brief?.domainName ? `${base} — ${brief.domainName}` : base;
 }
 
+/**
+ * A handover item's card value (DX3a): who provides it — Root, the customer, or
+ * "not needed" — and by when. An item nobody has decided says so rather than
+ * vanishing: the customer's board hides it, but this is where they read the
+ * whole list. A date is only asked of an item someone provides.
+ */
 function CommitmentValue({ dep, locale, t }: { dep: Dependency; locale: 'fa' | 'en'; t: T }) {
+  const choice = choiceOf(dep);
+  const provided = choice === 'ROOT' || choice === 'CUSTOMER';
   return (
     <Value>
-      <span data-testid="commitment-due">{t('brief.dueOn', { date: calendarDate(dep.dueAt, locale) })}</span>
+      <span data-testid="handover-who">{choice ? t(`brief.handover.side.${choice}`) : t('brief.handover.undecided')}</span>
+      {provided ? (
+        <span data-testid="commitment-due">
+          {dep.dueAt ? t('brief.dueOn', { date: calendarDate(dep.dueAt, locale) }) : t('brief.handover.undated')}
+        </span>
+      ) : null}
       {dep.verifiedAt ? <span className="badge">{t('detail.commitmentVerified')}</span> : null}
       {dep.overdue ? <span className="badge dependency-overdue-badge">{t('detail.commitmentOverdue')}</span> : null}
     </Value>
@@ -81,9 +94,8 @@ export default function RequirementsPanel({ contract, step, audience, me, asCust
   const items = data?.contract.feedbackItems ?? [];
   const itemFor = (field: string) => items.find((i) => i.briefField === field) ?? null;
 
-  const board = contract.project.dependencies.filter((d) => d.briefKey);
-  const customerRows = board.filter((d) => d.side === 'CUSTOMER');
-  const rootRows = board.filter((d) => d.side === 'ROOT');
+  // DX3a: the handover items (`Contract.handover`) — the same rows as the Dependencies tab, every one of them.
+  const handover = contract.handover ?? [];
 
   const targets: FeedbackTarget[] = [];
   const add = (
@@ -164,15 +176,9 @@ export default function RequirementsPanel({ contract, step, audience, me, asCust
     );
   }
 
-  const provided = (rows: Dependency[], group: string) => {
-    for (const dep of rows) {
-      add(dep.briefKey!, group, commitmentTitle(dep, brief, locale), <CommitmentValue dep={dep} locale={locale} t={t} />);
-    }
-  };
-  // The customer's own group is titled exactly as the portal's rail card is
-  // (`detail.commitmentsCap`) — the same words for the same list.
-  provided(customerRows, staff ? t('brief.group.customerProvidesStaff') : t('detail.commitmentsCap'));
-  provided(rootRows, t('brief.group.rootProvides'));
+  for (const dep of handover) {
+    add(dep.briefKey ?? dep.id, t('brief.handover.group'), commitmentTitle(dep, brief, locale), <CommitmentValue dep={dep} locale={locale} t={t} />);
+  }
 
   const missingSentence = (m: { code: string; key: string | null }) =>
     t(
@@ -180,7 +186,11 @@ export default function RequirementsPanel({ contract, step, audience, me, asCust
       missingParams(
         m,
         () => null,
-        (key) => t(`brief.commitment.${key}`),
+        (key) => {
+          // A handover item names itself (the default list is the desk's to extend, and a one-off has only its id).
+          const item = handover.find((d) => (d.briefKey ?? d.id) === key);
+          return item ? pick(item, 'title', locale) : t(`brief.commitment.${key}`, { defaultValue: key });
+        },
         (n) => formatCount(n, locale),
       ),
     );

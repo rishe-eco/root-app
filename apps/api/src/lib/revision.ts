@@ -97,10 +97,24 @@ export type BriefSnapshot = {
   idealDeadline: string | null;
   hardDeadline: string | null;
   domainName: string | null;
-  domainProvidedBy: 'CUSTOMER' | 'ROOT' | null;
-  hostProvidedBy: 'CUSTOMER' | 'ROOT' | null;
-  contentProvidedBy: 'CUSTOMER' | 'ROOT' | null;
+  /** **Format 2 only.** Format 3 (DX3a) moved who provides what into `handover`; a stored format-2
+   *  snapshot still carries these three, and prints them. */
+  domainProvidedBy?: 'CUSTOMER' | 'ROOT' | null;
+  hostProvidedBy?: 'CUSTOMER' | 'ROOT' | null;
+  contentProvidedBy?: 'CUSTOMER' | 'ROOT' | null;
   supportMonths: number | null;
+};
+
+/** One handover item as frozen at publish (format 3, DX3a): the `inBrief` rows of the board.
+ *  A calendar day is `YYYY-MM-DD` (PD-19). `key` is the default list's key (or an extra's) and
+ *  null for a one-off. Nothing about verification: that is a fact that changes after the signature. */
+export type HandoverItemSnapshot = {
+  key: string | null;
+  titleFa: string;
+  titleEn: string;
+  side: 'CUSTOMER' | 'ROOT' | null;
+  dueOn: string | null;
+  notNeeded: boolean;
 };
 
 export type AllowancesSnapshot = {
@@ -185,6 +199,9 @@ export type AgreementSnapshot = ContractSnapshot & {
   phases: PhaseSnapshot[];
   plannedStartAt: string | null;
   plannedEndAt: string | null;
+  /** Format 3 (DX3a): who provides what, by when. Absent in format 2, whose brief carries
+   *  the three providers instead. */
+  handover?: HandoverItemSnapshot[];
 };
 
 /** `snapshot` is a new-road agreement snapshot — format 2 or 3 — the one place that says so. */
@@ -288,9 +305,6 @@ export type AgreementParts = {
     idealDeadline: Date | null;
     hardDeadline: Date | null;
     domainName: string | null;
-    domainProvidedBy: BriefSnapshot['domainProvidedBy'];
-    hostProvidedBy: BriefSnapshot['hostProvidedBy'];
-    contentProvidedBy: BriefSnapshot['contentProvidedBy'];
     supportMonths: number | null;
     premadeRounds: number | null;
     wireframeIterations: number;
@@ -322,6 +336,16 @@ export type AgreementParts = {
   }>;
   plannedStartAt: Date | null;
   plannedEndAt: Date | null;
+  /** DX3a: the project's `inBrief` rows, **already in order** (the default list's position, then
+   *  title — `orderHandover`, lib/dependency.ts; this file only freezes them). */
+  handover: Array<{
+    briefKey: string | null;
+    titleFa: string;
+    titleEn: string;
+    side: HandoverItemSnapshot['side'];
+    dueAt: Date | null;
+    notNeeded: boolean;
+  }>;
 };
 
 const day = (d: Date | null): string | null => (d === null ? null : calendarDayString(d));
@@ -432,9 +456,6 @@ export function buildAgreementSnapshot(
           idealDeadline: day(brief.idealDeadline),
           hardDeadline: day(brief.hardDeadline),
           domainName: brief.domainName,
-          domainProvidedBy: brief.domainProvidedBy,
-          hostProvidedBy: brief.hostProvidedBy,
-          contentProvidedBy: brief.contentProvidedBy,
           supportMonths: brief.supportMonths,
         }
       : null,
@@ -472,6 +493,15 @@ export function buildAgreementSnapshot(
     })),
     plannedStartAt: day(parts.plannedStartAt),
     plannedEndAt: day(parts.plannedEndAt),
+    // DX3a. The order is the caller's (`orderHandover`); every key is explicit, a null being a value.
+    handover: parts.handover.map((h) => ({
+      key: h.briefKey,
+      titleFa: h.titleFa,
+      titleEn: h.titleEn,
+      side: h.side,
+      dueOn: day(h.dueAt),
+      notNeeded: h.notNeeded,
+    })),
   };
 }
 

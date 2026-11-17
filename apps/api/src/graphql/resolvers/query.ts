@@ -275,7 +275,7 @@ export const Query = {
   overdueDependencies: async (_p: unknown, _a: unknown, ctx: Context) => {
     requireCapability(ctx, 'contracts.readAll');
     return prisma.dependency.findMany({
-      where: { verifiedAt: null, dueAt: { lt: new Date() } },
+      where: { verifiedAt: null, notNeeded: false, side: { not: null }, dueAt: { lt: new Date() } },
       include: { project: true, createdBy: true, verifiedBy: true },
       orderBy: { dueAt: 'asc' },
     });
@@ -291,7 +291,7 @@ export const Query = {
   myOverdueDependencies: async (_p: unknown, _a: unknown, ctx: Context) => {
     const user = requireUser(ctx);
     return prisma.dependency.findMany({
-      where: { side: 'CUSTOMER', verifiedAt: null, dueAt: { lt: new Date() }, project: { customerId: user.id } },
+      where: { side: 'CUSTOMER', verifiedAt: null, notNeeded: false, dueAt: { lt: new Date() }, project: { customerId: user.id } },
       include: { project: true, createdBy: true, verifiedBy: true },
       orderBy: { dueAt: 'asc' },
     });

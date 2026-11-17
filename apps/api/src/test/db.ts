@@ -3,6 +3,7 @@ import { buildContractSnapshot, contentHash, draftState } from '../lib/revision.
 import { agreedScopeSnapshot } from '../lib/scope.js';
 import { draftStateOn } from '../graphql/resolvers/agreement.js';
 import { loadContract } from '../graphql/resolvers/contracts.js';
+import { COMMITMENTS } from '../lib/brief.js';
 // The same singleton the resolvers use, deliberately — a second client would
 // be a second connection pool and a second chance to be looking at a different
 // database than the code under test.
@@ -254,4 +255,22 @@ export async function publishDraftDirect(contractId: string, opts: { format?: 1 
   }
   await prisma.contract.update({ where: { id: contractId }, data: { currentContractRevisionId: revision.id } });
   return revision;
+}
+
+/**
+ * The desk's default list of handover items as the DX3a migration seeds it —
+ * domain, host and content, in that order. `resetDatabase` truncates the table
+ * like every other, so a test whose subject is "a new brief makes a row for each
+ * item on the list" (or that wants those rows to be there) seeds it here.
+ */
+export async function seedHandoverTypes() {
+  await prisma.handoverItemType.createMany({
+    data: (['domain', 'host', 'content'] as const).map((key, position) => ({
+      key,
+      position,
+      titleFa: COMMITMENTS[key].titleFa,
+      titleEn: COMMITMENTS[key].titleEn,
+      technical: COMMITMENTS[key].technical,
+    })),
+  });
 }

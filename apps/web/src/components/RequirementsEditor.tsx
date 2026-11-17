@@ -9,14 +9,8 @@ import DayInput from '@/components/DayInput';
 import CountStepper from '@/components/CountStepper';
 import MoneyReadout from '@/components/MoneyReadout';
 import PillChoice from '@/components/PillChoice';
-import {
-  COMMITMENT_KEYS,
-  PROVIDER_KEYS,
-  impliedRows,
-  isIncludedExtra,
-  normalizeAmount,
-  type ProviderKey,
-} from '@/lib/brief';
+import { normalizeAmount } from '@/lib/brief';
+import HandoverPanel from '@/components/HandoverPanel';
 import {
   PUBLISH_CONTRACT,
   SET_BRIEF,
@@ -24,7 +18,6 @@ import {
   type BriefInput,
   type BriefKind,
   type Contract,
-  type DependencySide,
   type DesignTier,
   type TemplateType,
   type User,
@@ -81,9 +74,6 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   const types = (typesData?.templateTypes ?? []).filter((x) => x.active || x.id === brief?.templateType.id);
   const [setBrief, { loading }] = useMutation(SET_BRIEF);
 
-  const board = contract.project.dependencies.filter((d) => d.briefKey);
-  const boardBy = (key: string) => board.find((d) => d.briefKey === key);
-
   const [kind, setKind] = useState<BriefKind>(brief?.kind ?? 'NEW_SITE');
   const [existingSiteUrl, setExistingSiteUrl] = useState(brief?.existingSiteUrl ?? '');
   const [templateTypeId, setTemplateTypeId] = useState(brief?.templateType.id ?? '');
@@ -92,11 +82,6 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   const [idealDeadline, setIdealDeadline] = useState(day(brief?.idealDeadline));
   const [hardDeadline, setHardDeadline] = useState(day(brief?.hardDeadline));
   const [domainName, setDomainName] = useState(brief?.domainName ?? '');
-  const [providers, setProviders] = useState<Record<ProviderKey, DependencySide | ''>>({
-    domain: brief?.domainProvidedBy ?? '',
-    host: brief?.hostProvidedBy ?? '',
-    content: brief?.contentProvidedBy ?? '',
-  });
   const [supportMonths, setSupportMonths] = useState(str(brief?.supportMonths));
   // "Other" is chosen when asked for, or when the stored number is not one of the pills.
   const [supportOther, setSupportOther] = useState(() => brief?.supportMonths != null && !SUPPORT_PILLS.includes(String(brief.supportMonths)));
@@ -105,24 +90,18 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   const [mockupIterations, setMockupIterations] = useState(str(brief?.mockupIterations));
   const [demoIterations, setDemoIterations] = useState(str(brief?.demoIterationsPerPhase));
 
-  // The commitments the form implies as it stands — dates from the board, sides
-  // for the extras' (the three provider keys take theirs from the providers).
-  const includedExtraKeys = contract.scopeItems.filter((s) => s.kind === 'EXTRA' && isIncludedExtra(s.status)).map((s) => s.key);
-  const rows = impliedRows(providers, includedExtraKeys);
-  const [dates, setDates] = useState<Record<string, string>>(() =>
-    Object.fromEntries(COMMITMENT_KEYS.map((k) => [k, day(boardBy(k)?.dueAt)])),
-  );
-  const [sides, setSides] = useState<Record<string, DependencySide>>(() =>
-    Object.fromEntries(COMMITMENT_KEYS.map((k) => [k, boardBy(k)?.side ?? 'CUSTOMER'])),
-  );
-
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // The "feature for an existing site" preset (DX3a, review 29) runs on the save that changes the kind to it; this is
+  // the sentence that says so, until the next edit.
+  const [presetNotice, setPresetNotice] = useState(false);
+  const presetPending = kind === 'FEATURE_FOR_EXISTING' && brief?.kind !== 'FEATURE_FOR_EXISTING';
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSaved(false);
+    setPresetNotice(false);
     const input: BriefInput = {
       kind,
       existingSiteUrl: kind === 'FEATURE_FOR_EXISTING' ? existingSiteUrl.trim() || null : null,
@@ -132,43 +111,24 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
       idealDeadline: idealDeadline || null,
       hardDeadline: hardDeadline || null,
       domainName: domainName.trim() || null,
-      domainProvidedBy: providers.domain || null,
-      hostProvidedBy: providers.host || null,
-      contentProvidedBy: providers.content || null,
       supportMonths: numberOrNull(supportMonths),
       premadeRounds: numberOrNull(premadeRounds),
       wireframeIterations: numberOrNull(wireframeIterations),
       mockupIterations: numberOrNull(mockupIterations),
       demoIterationsPerPhase: numberOrNull(demoIterations),
-      commitments: rows.map((r) => ({ key: r.key, side: sides[r.key], dueAt: dates[r.key] || null })),
     };
     try {
       await setBrief({ variables: { contractId: contract.id, input } });
+      if (presetPending) {
+        // The server set No design (the form still holds what was on screen); its rows follow through the cache.
+        setDesignTier('NONE');
+        setPresetNotice(true);
+      }
       setSaved(true);
     } catch (err) {
       setError(refusalText(t, err));
     }
   }
-
-  // Who provides it, as pills (DX1, review 6). Optional: a press on the chosen pill clears it. Same stored values as the select had.
-  const providerPills = (key: ProviderKey) => (
-    <div className="field" key={key}>
-      <span className="label" id={`brief-provider-${key}-label`}>
-        {t(`brief.form.provider.${key}`)}
-      </span>
-      <PillChoice
-        label={t(`brief.form.provider.${key}`)}
-        clearable
-        value={providers[key] || null}
-        onChange={(v) => setProviders({ ...providers, [key]: v ?? '' })}
-        options={[
-          { value: 'ROOT', label: t('brief.side.ROOT') },
-          { value: 'CUSTOMER', label: t('brief.side.CUSTOMER') },
-        ]}
-        testId={`brief-provider-${key}`}
-      />
-    </div>
-  );
 
   return (
     <form className="card editor-card auth-form" onSubmit={onSubmit} data-testid="brief-form">
@@ -183,6 +143,11 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
             <option value="NEW_SITE">{t('brief.kind.NEW_SITE')}</option>
             <option value="FEATURE_FOR_EXISTING">{t('brief.kind.FEATURE_FOR_EXISTING')}</option>
           </select>
+          {presetPending ? (
+            <p className="t-caption" data-testid="brief-preset-hint">
+              {t('brief.form.presetHint')}
+            </p>
+          ) : null}
         </div>
         <div className="field">
           <label className="label" htmlFor="brief-type">
@@ -299,58 +264,18 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
         ) : null}
       </div>
 
-      <p className="t-eyebrow">{t('brief.form.providersTitle')}</p>
-      <div className="editor-grid-2">
-        {PROVIDER_KEYS.map(providerPills)}
-        <div className="field">
-          <label className="label" htmlFor="brief-domain-name">
-            {t('brief.form.domainName')}
-          </label>
-          <input
-            id="brief-domain-name"
-            className="input num-latin"
-            dir="ltr"
-            value={domainName}
-            onChange={(e) => setDomainName(e.target.value)}
-          />
-        </div>
+      <div className="field">
+        <label className="label" htmlFor="brief-domain-name">
+          {t('brief.form.domainName')}
+        </label>
+        <input
+          id="brief-domain-name"
+          className="input num-latin"
+          dir="ltr"
+          value={domainName}
+          onChange={(e) => setDomainName(e.target.value)}
+        />
       </div>
-
-      {rows.length > 0 ? (
-        <>
-          <p className="t-eyebrow">{t('brief.form.commitmentsTitle')}</p>
-          <p className="sec-help">{t('brief.form.commitmentsHelp')}</p>
-          {rows.map((r) => (
-            <div className="editor-grid-2" key={r.key} data-testid="brief-commitment" data-key={r.key}>
-              <div className="field">
-                <span className="label">{t('brief.form.commitmentDue', { what: t(`brief.commitment.${r.key}`) })}</span>
-                <DayInput
-                  value={dates[r.key] ?? ''}
-                  onChange={(v) => setDates({ ...dates, [r.key]: v })}
-                  label={t('brief.form.commitmentDue', { what: t(`brief.commitment.${r.key}`) })}
-                  testId={`brief-due-${r.key}`}
-                />
-              </div>
-              {r.fromBrief ? null : (
-                <div className="field">
-                  <label className="label" htmlFor={`brief-side-${r.key}`}>
-                    {t('brief.form.commitmentSide')}
-                  </label>
-                  <select
-                    id={`brief-side-${r.key}`}
-                    className="input"
-                    value={sides[r.key]}
-                    onChange={(e) => setSides({ ...sides, [r.key]: e.target.value as DependencySide })}
-                  >
-                    <option value="CUSTOMER">{t('brief.side.CUSTOMER')}</option>
-                    <option value="ROOT">{t('brief.side.ROOT')}</option>
-                  </select>
-                </div>
-              )}
-            </div>
-          ))}
-        </>
-      ) : null}
 
       <p className="t-eyebrow">{t('brief.form.allowancesTitle')}</p>
       <div className="editor-grid-2">
@@ -385,6 +310,11 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
       {saved ? (
         <p className="t-small" role="status" data-testid="brief-saved">
           {t('brief.form.saved')}
+        </p>
+      ) : null}
+      {presetNotice ? (
+        <p className="t-small" role="status" data-testid="brief-preset-applied">
+          {t('brief.form.presetApplied')}
         </p>
       ) : null}
       <div>
@@ -434,16 +364,19 @@ function HandOver({ contract }: { contract: Contract }) {
 
 // ---------------------------------------------------------------------------
 
-type PanelId = 'brief' | 'handOver';
+type PanelId = 'brief' | 'handover' | 'handOver';
 
 export default function RequirementsEditor({ contract, me }: { contract: Contract; me: User }) {
   const { t } = useTranslation();
   // DX2a: this list is the brief's alone now — the phases and the plan are the Phases and payment step's own.
-  const briefLacks = (contract.briefCompleteness ?? []).length;
+  // DX3a: a handover item someone provides and nobody has dated belongs to the handover panel's count, not the brief's.
+  const lacks = contract.briefCompleteness ?? [];
+  const handoverLacks = lacks.filter((m) => m.code === 'COMMITMENT_UNDATED').length;
+  const briefLacks = lacks.length - handoverLacks;
 
   // Opened once, on arrival, and never refolded under the person typing in it. The brief is the only panel that can lack
   // something; the hand-over is the other, and a finished step's edits are in the brief.
-  const [open, setOpen] = useState<ReadonlySet<PanelId>>(() => new Set<PanelId>(['brief']));
+  const [open, setOpen] = useState<ReadonlySet<PanelId>>(() => new Set<PanelId>([briefLacks === 0 && handoverLacks > 0 ? 'handover' : 'brief']));
   const toggle = (id: PanelId) =>
     setOpen((prev) => {
       const next = new Set(prev);
@@ -464,6 +397,7 @@ export default function RequirementsEditor({ contract, me }: { contract: Contrac
           reading. (A change made elsewhere — a due date edited on the dependency
           board — shows on the next visit, not live.) */}
       {acc('brief', t('brief.form.title'), briefLacks, <BriefForm contract={contract} me={me} />)}
+      {acc('handover', t('brief.handover.title'), handoverLacks, <HandoverPanel contract={contract} />)}
       {contract.publishedAt ? null : acc('handOver', t('brief.handOver.title'), null, <HandOver contract={contract} />)}
       <p className="t-caption desk-muted">{t('brief.form.savedSeparately')}</p>
     </div>

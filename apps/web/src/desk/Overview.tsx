@@ -171,13 +171,14 @@ export default function Overview() {
                 <div key={dep.id} className="queue-row">
                   <div className="queue-row-main">
                     <span className="t-small">
-                      <span className="badge">{t(`workspace.dependencySide.${dep.side}`)}</span> {pick(dep, 'title', locale)}
+                      {dep.side ? <span className="badge">{t(`workspace.dependencySide.${dep.side}`)}</span> : null} {pick(dep, 'title', locale)}
                     </span>
                     <span className="t-caption desk-muted">
                       {dep.project.customer.clientName ?? dep.project.customer.name} · {pick(dep.project, 'title', locale)}
                     </span>
                   </div>
-                  <span className="t-caption desk-muted">{relativeTime(dep.dueAt, locale)}</span>
+                  {/* The query returns dated, decided rows only (an undated item is never overdue), but the type is honest. */}
+                  <span className="t-caption desk-muted">{dep.dueAt ? relativeTime(dep.dueAt, locale) : ''}</span>
                 </div>
               ))}
             </div>
