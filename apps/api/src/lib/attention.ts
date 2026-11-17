@@ -205,11 +205,15 @@ export type AttentionInput = {
   /** The project's commitments, both sides. */
   dependencies: Array<{
     id: string;
-    side: WaitingOn;
+    /** Null while undecided (DX3a) — nobody owes it yet, so it is never late. */
+    side: WaitingOn | null;
     titleFa: string;
     titleEn: string;
-    dueAt: Date;
+    /** Null while undated: never overdue. */
+    dueAt: Date | null;
     verifiedAt: Date | null;
+    /** DX3a: nobody needs to provide it. Optional so fixtures that predate it need not name it. */
+    notNeeded?: boolean;
     /** J4's flag: hosting, DNS, credentials. Optional so fixtures that predate J12
      *  need not name it. A technical commitment is the developer's to follow up,
      *  whichever side owes it. */
@@ -341,7 +345,7 @@ function allItems(input: AttentionInput): AttentionItem[] {
   }
 
   for (const d of input.dependencies) {
-    if (!isOverdue(d, input.now)) continue;
+    if (d.side === null || d.dueAt === null || !isOverdue(d, input.now)) continue;
     const root = d.side === 'ROOT';
     items.push({
       ...base,

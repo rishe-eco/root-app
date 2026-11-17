@@ -8,13 +8,17 @@ import { parseCalendarDay } from '../../lib/calendarDay.js';
 import {
   briefDependencies,
   checkBriefInput,
+  EXISTING_SITE_PRESET,
+  EXTRA_COMMITMENT_KEYS,
   isCommitmentKey,
   isIncludedExtra,
   planDependencySync,
+  presetApplies,
   type BriefInputProblem,
   type CommitmentKey,
   type ExistingBriefRow,
 } from '../../lib/brief.js';
+import { missingHandoverTypes, orderHandover } from '../../lib/dependency.js';
 import { checkPlanRows, planTotal, type PlanProblem } from '../../lib/plan.js';
 import { mayReadMoney } from '../../lib/visibility.js';
 import { reload, type FullContract } from './contracts.js';
@@ -77,16 +81,18 @@ function dayOrUnset(value: string | null | undefined): Date | 'invalid' | null {
 export type CommitmentArg = { key: string; side?: DependencySide | null; dueAt?: string | null };
 
 /**
- * Makes the board say what the brief says (`planDependencySync`, lib/brief.ts) —
- * inside the caller's transaction, so a brief and its commitments are one
- * write. Called by `setBrief` with the dates the form carried, and — without
- * dates — by `setExtra` and the registry's generic status setter when an extra
- * changes: those can flip a side or remove a commitment that is no longer
- * implied, and cannot create one (a row needs a due date; the missing date is
- * `COMMITMENT_UNDATED` in `briefCompleteness`).
+ * Makes the board say what the included extras say (`planDependencySync`,
+ * lib/brief.ts) — inside the caller's transaction, so a brief and its
+ * commitments are one write. Called by `setBrief` with the dates the form
+ * carried, and — without dates — by `setExtra` and the registry's generic
+ * status setter when an extra changes: those can flip a side or remove a
+ * commitment that is no longer implied, and create one undated (DX3a: an
+ * `inBrief` row may be, `briefCompleteness` reports it as `COMMITMENT_UNDATED`).
  *
- * The board is the *project's* (one row per key per project), so what a sibling
- * contract's brief still implies is kept even when this one's does not.
+ * **Only the extras' rows are synced** (gateway, SMS line, Enamad). The domain,
+ * the host, the content and every other default-list item are rows that
+ * Requirements and the Dependencies tab edit directly (`seedHandoverRows` makes
+ * them; nothing here touches them), and a one-off is no brief key at all.
  */
 export async function syncBriefDependencies(
   tx: Prisma.TransactionClient,
@@ -95,20 +101,16 @@ export async function syncBriefDependencies(
   commitments: readonly CommitmentArg[] = [],
 ): Promise<void> {
   const contract = await tx.contract.findUniqueOrThrow({ where: { id: contractId }, select: { projectId: true } });
-  const [brief, extras, siblings, rows] = await Promise.all([
-    tx.contractBrief.findUnique({ where: { contractId } }),
+  const [extras, rows] = await Promise.all([
     tx.scopeItem.findMany({ where: { projectId: contract.projectId, kind: 'EXTRA' }, select: { key: true, status: true } }),
-    tx.contractBrief.findMany({
-      where: { contractId: { not: contractId }, contract: { projectId: contract.projectId, status: { not: 'DISCARDED' } } },
-    }),
-    tx.dependency.findMany({ where: { projectId: contract.projectId, briefKey: { not: null } } }),
+    tx.dependency.findMany({ where: { projectId: contract.projectId, briefKey: { in: [...EXTRA_COMMITMENT_KEYS] } } }),
   ]);
   const includedKeys = extras.filter((e) => isIncludedExtra(e.status)).map((e) => e.key);
 
   const dueDates: Partial<Record<CommitmentKey, Date>> = {};
-  const sides: Partial<Record<CommitmentKey, DependencySide>> = {};
+  const sides: Partial<Record<CommitmentKey, DependencySide | null>> = {};
   for (const c of commitments) {
-    if (!isCommitmentKey(c.key)) continue; // not something the brief can imply — ignored, not refused
+    if (!isCommitmentKey(c.key) || !EXTRA_COMMITMENT_KEYS.has(c.key)) continue; // not an extra's — ignored, not refused
     if (c.dueAt) {
       const day = parseCalendarDay(c.dueAt);
       if (!day) throw refuse('INVALID_DATE', 'That is not a date.');
@@ -118,21 +120,18 @@ export async function syncBriefDependencies(
   }
 
   // An extra's side is the caller's to choose; when this call does not say (a
-  // `setExtra`), the row keeps the side it already has rather than snapping back
-  // to the default.
+  // `setExtra`), the row keeps the side it already has — including none —
+  // rather than snapping back to the default.
   const existing: ExistingBriefRow[] = rows.flatMap((r) =>
     r.briefKey && isCommitmentKey(r.briefKey) ? [{ ...r, briefKey: r.briefKey }] : [],
   );
   for (const row of existing) {
-    if (sides[row.briefKey] === undefined) sides[row.briefKey] = row.side;
+    if (!(row.briefKey in sides)) sides[row.briefKey] = row.side;
   }
 
-  const implied = briefDependencies(brief, includedKeys, sides);
-  const elsewhere = new Set<CommitmentKey>();
-  for (const sibling of siblings) {
-    for (const imp of briefDependencies(sibling, includedKeys)) elsewhere.add(imp.key);
-  }
-  const plan = planDependencySync({ implied, existing, dueDates, stillImpliedElsewhere: elsewhere });
+  const implied = briefDependencies(includedKeys, sides);
+  // The extras are the project's, not a contract's, so no sibling brief can imply one this does not.
+  const plan = planDependencySync({ implied, existing, dueDates, stillImpliedElsewhere: new Set() });
 
   for (const c of plan.create) {
     await tx.dependency.create({
@@ -144,6 +143,7 @@ export async function syncBriefDependencies(
         dueAt: c.dueAt,
         technical: c.technical,
         briefKey: c.key,
+        inBrief: true,
         createdById: actorId,
       },
     });
@@ -160,6 +160,39 @@ export async function syncBriefDependencies(
   }
 }
 
+/**
+ * A new brief gets an `inBrief` row for every active item on the desk's default
+ * list that its project does not hold yet (DX3a; `HandoverItemType`). The rows
+ * start undecided and undated — nobody has said whose they are — which is a
+ * complete state: no provider is required. Called inside `setBrief`'s
+ * transaction, only when that call creates the brief.
+ *
+ * The board is the project's, so a second contract on the same project finds
+ * the first one's rows already there and adds only what is new on the list.
+ */
+async function seedHandoverRows(tx: Prisma.TransactionClient, projectId: string, actorId: string): Promise<void> {
+  const [types, held] = await Promise.all([
+    tx.handoverItemType.findMany({ where: { active: true }, orderBy: [{ position: 'asc' }, { key: 'asc' }] }),
+    tx.dependency.findMany({ where: { projectId, briefKey: { not: null } }, select: { briefKey: true } }),
+  ]);
+  const heldKeys = new Set(held.flatMap((r) => (r.briefKey ? [r.briefKey] : [])));
+  for (const t of missingHandoverTypes(types, heldKeys)) {
+    await tx.dependency.create({
+      data: {
+        projectId,
+        side: null,
+        dueAt: null,
+        titleFa: t.titleFa,
+        titleEn: t.titleEn,
+        technical: t.technical,
+        briefKey: t.key,
+        inBrief: true,
+        createdById: actorId,
+      },
+    });
+  }
+}
+
 // --- the mutations ------------------------------------------------------------
 
 type BriefInputArg = {
@@ -171,9 +204,6 @@ type BriefInputArg = {
   idealDeadline?: string | null;
   hardDeadline?: string | null;
   domainName?: string | null;
-  domainProvidedBy?: DependencySide | null;
-  hostProvidedBy?: DependencySide | null;
-  contentProvidedBy?: DependencySide | null;
   supportMonths?: number | null;
   premadeRounds?: number | null;
   wireframeIterations?: number | null;
@@ -245,7 +275,7 @@ export const briefMutations = {
     const type = await prisma.templateType.findUnique({ where: { id: input.templateTypeId } });
     if (!type) throw refuse('NOT_FOUND', 'No such template type.');
 
-    const data = {
+    const baseData = {
       kind: input.kind,
       existingSiteUrl: trimmedOrNull(input.existingSiteUrl),
       templateTypeId: type.id,
@@ -254,9 +284,6 @@ export const briefMutations = {
       idealDeadline,
       hardDeadline,
       domainName: trimmedOrNull(input.domainName),
-      domainProvidedBy: input.domainProvidedBy ?? null,
-      hostProvidedBy: input.hostProvidedBy ?? null,
-      contentProvidedBy: input.contentProvidedBy ?? null,
       supportMonths: input.supportMonths ?? null,
       premadeRounds: input.premadeRounds ?? null,
       wireframeIterations,
@@ -270,16 +297,34 @@ export const briefMutations = {
 
       // Read inside the lock: "already chose it" must be the row that the
       // upsert below is about to replace, not a stale one.
-      const current = await tx.contractBrief.findUnique({ where: { contractId: contract.id }, select: { templateTypeId: true } });
+      const current = await tx.contractBrief.findUnique({ where: { contractId: contract.id }, select: { templateTypeId: true, kind: true } });
       if (!type.active && current?.templateTypeId !== type.id) {
         throw refuse('TEMPLATE_TYPE_INACTIVE', 'That template type is no longer offered.');
       }
+
+      // The "feature for an existing site" preset (DX3a, review item 29): on the
+      // change *to* that kind, in this same transaction, no design, every extra
+      // out of scope, and the domain and the host not needed. Everything stays
+      // editable afterwards; saving again as that kind changes none of it back.
+      const preset = presetApplies(current?.kind ?? null, input.kind);
+      const data = preset ? { ...baseData, designTier: EXISTING_SITE_PRESET.designTier } : baseData;
 
       await tx.contractBrief.upsert({
         where: { contractId: contract.id },
         create: { contractId: contract.id, ...data },
         update: data,
       });
+      if (!current) await seedHandoverRows(tx, contract.projectId, user.id);
+      if (preset) {
+        await tx.scopeItem.updateMany({
+          where: { projectId: contract.projectId, kind: 'EXTRA', status: 'AGREED' },
+          data: { status: 'DECLINED' },
+        });
+        await tx.dependency.updateMany({
+          where: { projectId: contract.projectId, inBrief: true, briefKey: { in: [...EXISTING_SITE_PRESET.notNeededKeys] } },
+          data: { notNeeded: true },
+        });
+      }
       await syncBriefDependencies(tx, contract.id, user.id, input.commitments ?? []);
     });
     return reload(contract.id);
@@ -434,6 +479,24 @@ export const contractBriefFields = {
       total: planTotal(plan).toString(),
       invoices: plan.invoices.map((i) => ({ ...i, amount: i.amount.toString() })),
     };
+  },
+
+  /**
+   * The handover items (DX3a): the project's `inBrief` board rows, in the order
+   * the agreement freezes them (the default list's position, then title). All
+   * of them — the ones marked not needed and the undecided ones too: the
+   * customer reads the whole list in Requirements, though their board hides
+   * those. The same records as `Project.dependencies`, not a copy.
+   */
+  handover: async (c: FullContract) => {
+    const [rows, types] = await Promise.all([
+      prisma.dependency.findMany({
+        where: { projectId: c.projectId, inBrief: true },
+        include: { project: true, createdBy: true, verifiedBy: true },
+      }),
+      prisma.handoverItemType.findMany({ select: { key: true, position: true } }),
+    ]);
+    return orderHandover(rows, new Map(types.map((t) => [t.key, t.position])));
   },
 
   /** This contract's own phases (PD-5) — `Project.phases` is every phase of the project. */

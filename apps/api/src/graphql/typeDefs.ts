@@ -480,10 +480,12 @@ export const typeDefs = /* GraphQL */ `
   """
   type Dependency {
     id: ID!
-    side: DependencySide!
+    "Null while a requirements row is undecided (DX3a) — nobody owes it yet. A row that is only on the board always has one."
+    side: DependencySide
     titleFa: String!
     titleEn: String!
-    dueAt: DateTime!
+    "Null while undated (DX3a): never overdue, last on the board."
+    dueAt: DateTime
     "Derived fresh on every read (lib/dependency.ts) — never a stored flag."
     overdue: Boolean!
     createdBy: User!
@@ -502,6 +504,31 @@ export const typeDefs = /* GraphQL */ `
     briefKey: String
     "Who verifies it: the developer (technical) or sales. Set by the brief's key."
     technical: Boolean!
+    """
+    DX3a: this row is a handover item — part of the requirements the customer agrees
+    to (Requirements' "Who provides what, by when" panel). The same record as the
+    board row, edited from either place. Once the agreement is approved its side,
+    date, not-needed flag and title are locked (STEP_LOCKED).
+    """
+    inBrief: Boolean!
+    "DX3a: nobody needs to provide this. Never overdue; the customer's board hides it, Requirements still lists it."
+    notNeeded: Boolean!
+  }
+
+  """
+  DX3a: one item on the desk's default list of handover items — what a new brief
+  starts with (Templates > Handover items). Never deleted, only deactivated.
+  """
+  type HandoverItemType {
+    id: ID!
+    "Latin, lowercase, hyphenated. The key of the board row it seeds."
+    key: String!
+    titleFa: String!
+    titleEn: String!
+    "The developer verifies it rather than sales."
+    technical: Boolean!
+    position: Int!
+    active: Boolean!
   }
 
   # ---------------------------------------------------------------------
@@ -1236,6 +1263,8 @@ export const typeDefs = /* GraphQL */ `
   type AgreementSnapshot {
     brief: SnapshotBrief
     allowances: SnapshotAllowances
+    "DX3a (format 3): who provides what, by when, in the order the agreement lists them. Empty for format 2, whose brief carries the providers."
+    handover: [SnapshotHandoverItem!]!
     paymentPlan: SnapshotPaymentPlan
     phases: [SnapshotPhase!]!
     "Calendar days (PD-19) — render in UTC."
@@ -1260,10 +1289,23 @@ export const typeDefs = /* GraphQL */ `
     idealDeadline: DateTime
     hardDeadline: DateTime
     domainName: String
+    "Format 2 only: format 3 moved who provides what into AgreementSnapshot.handover."
     domainProvidedBy: DependencySide
     hostProvidedBy: DependencySide
     contentProvidedBy: DependencySide
     supportMonths: Int
+  }
+
+  "DX3a (format 3): one handover item as frozen at publish."
+  type SnapshotHandoverItem {
+    "The default list's key (or an extra's); null for a one-off."
+    key: String
+    titleFa: String!
+    titleEn: String!
+    side: DependencySide
+    "Calendar day (PD-19) — render in UTC."
+    dueOn: DateTime
+    notNeeded: Boolean!
   }
 
   type SnapshotAllowances {
@@ -1527,6 +1569,14 @@ export const typeDefs = /* GraphQL */ `
     one); its budget cap is null to staff without money.read.
     """
     brief: ContractBrief
+    """
+    DX3a: the handover items — the project's inBrief board rows (domain, hosting,
+    content, whatever the desk's default list holds, and one-offs), in the order
+    the agreement lists them. Every one, the not-needed and the undecided too:
+    the customer reads the whole list here though their board hides those. The
+    same records as Project.dependencies.
+    """
+    handover: [Dependency!]!
     "What step 1 still lacks, as codes; empty means the step is done. Never carries a value."
     briefCompleteness: [BriefMissing!]!
     "DX2a: what the Phases and payment step still lacks (PHASES, PHASE_END_DATE, PAYMENT_PLAN, PAYMENT_PLAN_TOTAL), as codes; empty means the step is done."
@@ -1780,9 +1830,6 @@ export const typeDefs = /* GraphQL */ `
     idealDeadline: DateTime
     hardDeadline: DateTime
     domainName: String
-    domainProvidedBy: DependencySide
-    hostProvidedBy: DependencySide
-    contentProvidedBy: DependencySide
     supportMonths: Int
     premadeRounds: Int
     wireframeIterations: Int!
@@ -1852,11 +1899,10 @@ export const typeDefs = /* GraphQL */ `
   }
 
   input CommitmentInput {
-    "domain, host, content, gateway, smsLine or enamad. Anything else is ignored."
+    "gateway, smsLine or enamad — the extras' commitments. Anything else is ignored (DX3a: the handover items are edited as rows, updateDependency)."
     key: String!
-    "Used for gateway, smsLine and enamad; the brief's own provider decides domain, host and content."
     side: DependencySide
-    "YYYY-MM-DD. A commitment without a date is not created (COMMITMENT_UNDATED)."
+    "YYYY-MM-DD. A commitment without a date is created undated (COMMITMENT_UNDATED)."
     dueAt: String
   }
 
@@ -1874,9 +1920,6 @@ export const typeDefs = /* GraphQL */ `
     idealDeadline: String
     hardDeadline: String
     domainName: String
-    domainProvidedBy: DependencySide
-    hostProvidedBy: DependencySide
-    contentProvidedBy: DependencySide
     supportMonths: Int
     premadeRounds: Int
     wireframeIterations: Int
@@ -2793,6 +2836,8 @@ export const typeDefs = /* GraphQL */ `
     activeOnly: true is the picker's view; the desk's Types tab wants both.
     """
     templateTypes(activeOnly: Boolean = false): [TemplateType!]!
+    "DX3a. Staff (contracts.author). The desk's default list of handover items; activeOnly: true is what a new brief seeds."
+    handoverItemTypes(activeOnly: Boolean = false): [HandoverItemType!]!
     """
     Staff holding templates.types, templates.scope or contracts.author (T2).
     Name order. activeOnly: true is the picker's view; the desk's Themes tab
@@ -3289,6 +3334,17 @@ export const typeDefs = /* GraphQL */ `
     "templates.types. ids must name every type exactly once. Refused: REORDER_MISMATCH."
     reorderTemplateTypes(ids: [ID!]!): [TemplateType!]!
     """
+    DX3a. contracts.author (the capability that writes the board). Adds an item to
+    the default list, last. key is a Latin slug; the extras' keys (gateway, smsLine,
+    enamad) are taken. Refused: INVALID_SLUG, HANDOVER_KEY_TAKEN, TITLE_REQUIRED.
+    A new brief gets a row for each active item; existing briefs are untouched.
+    """
+    createHandoverItemType(key: String!, titleFa: String!, titleEn: String!, technical: Boolean): HandoverItemType!
+    "DX3a. contracts.author. Omitted fields are left alone; the key never changes. Rows already made keep the title they have. active: false retires an item. Refused: NOT_FOUND, TITLE_REQUIRED."
+    updateHandoverItemType(id: ID!, titleFa: String, titleEn: String, technical: Boolean, active: Boolean): HandoverItemType!
+    "DX3a. contracts.author. ids must name every item exactly once. Refused: REORDER_MISMATCH."
+    reorderHandoverItemTypes(ids: [ID!]!): [HandoverItemType!]!
+    """
     templates.scope. Replaces the type's whole list, in one transaction, in the
     order given. Refused: NOT_FOUND (typeId), INVALID_KEY, DUPLICATE_TEMPLATE_KEY,
     INVALID_TEMPLATE_KIND, LABEL_REQUIRED — and a refused input leaves the old
@@ -3587,9 +3643,9 @@ export const typeDefs = /* GraphQL */ `
     same board, the same rule. Returns the whole contract (T9), reached via
     project.dependencies.
     """
-    createDependency(projectId: ID!, side: DependencySide!, titleFa: String!, titleEn: String!, dueAt: DateTime!, contractId: ID): Contract!
+    createDependency(projectId: ID!, side: DependencySide, titleFa: String!, titleEn: String!, dueAt: DateTime, contractId: ID): Contract!
     "Staff (contracts.author)."
-    updateDependency(dependencyId: ID!, titleFa: String!, titleEn: String!, dueAt: DateTime!, contractId: ID): Contract!
+    updateDependency(dependencyId: ID!, titleFa: String, titleEn: String, dueAt: DateTime, side: DependencySide, notNeeded: Boolean, contractId: ID): Contract!
     """
     Staff (dependencies.verifyGeneral). note is required (VERIFICATION_NOTE_REQUIRED
     otherwise) — "we deployed a test file to the host," never only a

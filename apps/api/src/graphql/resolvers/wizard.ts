@@ -17,15 +17,7 @@ import {
   type WizardStep,
 } from '../../lib/steps.js';
 import { allowanceFor } from '../../lib/allowance.js';
-import {
-  briefCompleteness,
-  isCommitmentKey,
-  isIncludedExtra,
-  planCompleteness,
-  type BriefMissing,
-  type CommitmentKey,
-  type PlanMissing,
-} from '../../lib/brief.js';
+import { briefCompleteness, planCompleteness, type BriefMissing, type PlanMissing } from '../../lib/brief.js';
 import {
   attentionFor,
   type AttentionInput,
@@ -152,7 +144,7 @@ async function fetchRows(contractIds: string[], projectIds: string[]) {
     }),
     prisma.dependency.findMany({
       where: { projectId: { in: projectIds } },
-      select: { id: true, projectId: true, side: true, titleFa: true, titleEn: true, dueAt: true, verifiedAt: true, briefKey: true, technical: true },
+      select: { id: true, projectId: true, side: true, titleFa: true, titleEn: true, dueAt: true, verifiedAt: true, briefKey: true, technical: true, inBrief: true, notNeeded: true },
     }),
     prisma.build.findMany({
       where: { phase: { contractId: inContracts }, publishedAt: { not: null } },
@@ -319,23 +311,13 @@ async function loadFacts(c: { id: string; projectId: string }): Promise<Facts> {
   return (await loadFactsMany([c])).get(c.id)!;
 }
 
-/** The steps' own checklist extras that are in scope — `AGREED` or beyond
- *  (`INCLUDED_EXTRA_STATUSES`). Off `c.project.scopeItems`, already loaded. */
-const includedExtraKeys = (c: WizardContract): string[] =>
-  c.project.scopeItems.filter((s) => s.kind === 'EXTRA' && isIncludedExtra(s.status)).map((s) => s.key);
-
 /** Step 1's missing list (`lib/brief.ts`), from the loaded facts — one
  *  computation for the wizard's REQUIREMENTS signal and the `briefCompleteness`
  *  field, so the step cannot be "done" on one screen and incomplete on the other. */
-function briefMissing(c: WizardContract, facts: Facts): BriefMissing[] {
-  const commitmentDates: Partial<Record<CommitmentKey, Date>> = {};
-  for (const d of facts.dependencies) {
-    if (d.briefKey && isCommitmentKey(d.briefKey)) commitmentDates[d.briefKey] = d.dueAt;
-  }
+function briefMissing(facts: Facts): BriefMissing[] {
   return briefCompleteness({
     brief: facts.brief,
-    commitmentDates,
-    includedExtraKeys: includedExtraKeys(c),
+    handover: facts.dependencies.map((d) => ({ key: d.briefKey ?? d.id, inBrief: d.inBrief, side: d.side, dueAt: d.dueAt, notNeeded: d.notNeeded })),
   });
 }
 
@@ -363,7 +345,7 @@ export async function planIncompleteOn(c: FullContract): Promise<PlanMissing[]> 
  * gate refuses exactly when the step says it is not done.
  */
 export async function briefIncompleteOn(c: FullContract): Promise<BriefMissing[]> {
-  return briefMissing(c, await loadFacts(c));
+  return briefMissing(await loadFacts(c));
 }
 
 /** One load per contract per request: the four views share it. Keyed on the
@@ -402,7 +384,7 @@ export function stateOf(c: WizardContract, facts: Facts): WizardState {
           acceptedPhaseIds: facts.phases.filter((p) => isPhaseAccepted(p)).map((p) => p.id),
         })
       : [];
-  if (c.sequence === 'AGREEMENT_FIRST' && facts.brief && briefMissing(c, facts).length === 0) {
+  if (c.sequence === 'AGREEMENT_FIRST' && facts.brief && briefMissing(facts).length === 0) {
     finished.push({ step: 'REQUIREMENTS', phaseId: null, at: facts.brief.updatedAt });
   }
   // PHASES (DX2a): the phases and the payment plan are complete and add up to the
@@ -732,7 +714,7 @@ export const contractWizardFields = {
    * A code names *that* something is missing, never what it should be: nothing
    * here carries a money value (PD-14).
    */
-  briefCompleteness: async (c: FullContract, _a: unknown, ctx: Context) => briefMissing(c, await factsFor(ctx, c)),
+  briefCompleteness: async (c: FullContract, _a: unknown, ctx: Context) => briefMissing(await factsFor(ctx, c)),
   /** DX2a: what the PHASES step lacks — the phases and the plan, once REQUIREMENTS' list. */
   planCompleteness: async (c: FullContract, _a: unknown, ctx: Context) => planMissing(c, await factsFor(ctx, c)),
 

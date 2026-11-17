@@ -11,8 +11,11 @@ import { planMatchesFee } from './plan.js';
  *
  * Three questions, each answered once:
  *
- * 1. **`briefDependencies`** — which commitments does this brief imply, on
- *    whose side, and who verifies each?
+ * 1. **`briefDependencies`** — which commitments do the included extras imply,
+ *    on whose side, and who verifies each? (DX3a: the domain, the host and the
+ *    content are no longer implied by a brief field — they are the desk's
+ *    default list of handover items, `HandoverItemType`, seeded as rows when a
+ *    brief is created and edited as rows from then on.)
  * 2. **`planDependencySync`** — given what the board holds, what must change so
  *    it says exactly that (create, update, remove, detach) — *idempotently*:
  *    running it twice writes nothing the second time.
@@ -59,13 +62,6 @@ export const COMMITMENT_KEYS = Object.keys(COMMITMENTS) as CommitmentKey[];
 
 export const isCommitmentKey = (key: string): key is CommitmentKey => key in COMMITMENTS;
 
-/** The three whose side the brief itself records (`*ProvidedBy`). */
-const PROVIDED_BY: Partial<Record<CommitmentKey, 'domainProvidedBy' | 'hostProvidedBy' | 'contentProvidedBy'>> = {
-  domain: 'domainProvidedBy',
-  host: 'hostProvidedBy',
-  content: 'contentProvidedBy',
-};
-
 /**
  * The completeness checklist's areas (`CHECKLIST` in `lib/templates.ts`) that
  * mean the customer must obtain something once they are in scope — the
@@ -89,62 +85,49 @@ export const isIncludedExtra = (status: string): boolean => INCLUDED_EXTRA_STATU
  *  the customer's to obtain. `setBrief`'s `commitments` may say otherwise. */
 export const EXTRA_DEFAULT_SIDE: DependencySide = 'CUSTOMER';
 
-export type BriefCommitmentSource = {
-  domainProvidedBy: DependencySide | null;
-  hostProvidedBy: DependencySide | null;
-  contentProvidedBy: DependencySide | null;
-};
-
 export type ImpliedCommitment = {
   key: CommitmentKey;
-  side: DependencySide;
+  /** Null once someone cleared it in Requirements: undecided is a state. */
+  side: DependencySide | null;
   technical: boolean;
-  /** True when the brief's own field decides the side (`domain`, `host`,
-   *  `content`), false for an extra's, whose side the caller may choose. */
-  sideFromBrief: boolean;
 };
 
 /**
- * The commitments this brief implies (plan J4): `domain`, `host`, `content`
- * for each provider the brief names, and — from the extras that are included —
- * `gateway`, `smsLine`, `enamad`. A provider left unset implies nothing yet: a
- * row nobody has agreed whose side it is would be a guess on the board.
- *
- * `includedExtraKeys` are the checklist keys of the extras currently in scope.
- * `sideOverrides` are the sides the caller chose for the extras' commitments.
+ * The commitments the included extras imply (plan J4, narrowed by DX3a):
+ * `gateway`, `smsLine` and `enamad`. `includedExtraKeys` are the checklist keys
+ * of the extras currently in scope. `sideOverrides` are the sides the caller
+ * chose — **a key present with `null` means "undecided", not "use the
+ * default"**, so clearing a side in Requirements is not undone by the next sync.
  * Stable order: `COMMITMENT_KEYS`.
  */
 export function briefDependencies(
-  brief: BriefCommitmentSource | null,
   includedExtraKeys: readonly string[],
-  sideOverrides: Partial<Record<CommitmentKey, DependencySide>> = {},
+  sideOverrides: Partial<Record<CommitmentKey, DependencySide | null>> = {},
 ): ImpliedCommitment[] {
   const out: ImpliedCommitment[] = [];
   const fromExtras = new Set(includedExtraKeys.map((k) => EXTRA_COMMITMENT[k]).filter((k): k is CommitmentKey => !!k));
   for (const key of COMMITMENT_KEYS) {
-    const field = PROVIDED_BY[key];
-    if (field) {
-      const side = brief?.[field];
-      if (side) out.push({ key, side, technical: COMMITMENTS[key].technical, sideFromBrief: true });
-    } else if (fromExtras.has(key)) {
-      out.push({
-        key,
-        side: sideOverrides[key] ?? EXTRA_DEFAULT_SIDE,
-        technical: COMMITMENTS[key].technical,
-        sideFromBrief: false,
-      });
-    }
+    if (!fromExtras.has(key)) continue;
+    out.push({
+      key,
+      side: key in sideOverrides ? (sideOverrides[key] ?? null) : EXTRA_DEFAULT_SIDE,
+      technical: COMMITMENTS[key].technical,
+    });
   }
   return out;
 }
+
+/** The keys the extras own (`EXTRA_COMMITMENT`'s values). A default-list item may not take one:
+ *  the sync would claim its row. */
+export const EXTRA_COMMITMENT_KEYS: ReadonlySet<string> = new Set(Object.values(EXTRA_COMMITMENT));
 
 // --- syncing them onto the board ---------------------------------------------
 
 export type ExistingBriefRow = {
   id: string;
   briefKey: CommitmentKey;
-  side: DependencySide;
-  dueAt: Date;
+  side: DependencySide | null;
+  dueAt: Date | null;
   technical: boolean;
   titleFa: string;
   titleEn: string;
@@ -152,10 +135,10 @@ export type ExistingBriefRow = {
 };
 
 export type SyncPlan = {
-  /** New rows — only for an implied key that has a due date to give it. */
-  create: Array<{ key: CommitmentKey; side: DependencySide; dueAt: Date; technical: boolean; titleFa: string; titleEn: string }>;
-  /** Rows whose side, date, flag or title differ from what the brief says. */
-  update: Array<{ id: string; side: DependencySide; dueAt: Date; technical: boolean; titleFa: string; titleEn: string }>;
+  /** New rows, for every implied key that has none — dated if the caller gave a date, undated if not (DX3a). */
+  create: Array<{ key: CommitmentKey; side: DependencySide | null; dueAt: Date | null; technical: boolean; titleFa: string; titleEn: string }>;
+  /** Rows whose side, date, flag or title differ from what the extras say. */
+  update: Array<{ id: string; side: DependencySide | null; dueAt: Date | null; technical: boolean; titleFa: string; titleEn: string }>;
   /** Rows no live brief implies any more and nobody verified — deleted. */
   remove: string[];
   /** Rows no brief implies any more that *were* verified: the record of work
@@ -163,7 +146,7 @@ export type SyncPlan = {
   detach: string[];
 };
 
-const sameInstant = (a: Date, b: Date) => a.getTime() === b.getTime();
+const sameInstant = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
 
 /**
  * What must change on the board so it matches the brief (plan J4: "create or
@@ -173,9 +156,9 @@ const sameInstant = (a: Date, b: Date) => a.getTime() === b.getTime();
  * per key" a property of the logic and not only of the unique index behind it.
  *
  * - `dueDates` are the dates the caller supplied; an existing row keeps its own
- *   date when none is given, and an implied key with neither a row nor a date
- *   is *not* created (`Dependency.dueAt` is required) — `briefCompleteness`
- *   reports it as `COMMITMENT_UNDATED` instead.
+ *   date when none is given. An implied key with neither a row nor a date is
+ *   created undated (DX3a: an `inBrief` row may be) — `briefCompleteness`
+ *   reports it as `COMMITMENT_UNDATED`.
  * - `stillImpliedElsewhere` are keys another live contract's brief on the same
  *   project implies. The board's rows are the *project's* (one row per key per
  *   project), so a key this brief no longer implies is only removed when no
@@ -197,9 +180,7 @@ export function planDependencySync(input: {
     const row = byKey.get(imp.key);
     const given = input.dueDates[imp.key];
     if (!row) {
-      if (given) {
-        plan.create.push({ key: imp.key, side: imp.side, dueAt: given, technical: spec.technical, titleFa: spec.titleFa, titleEn: spec.titleEn });
-      }
+      plan.create.push({ key: imp.key, side: imp.side, dueAt: given ?? null, technical: spec.technical, titleFa: spec.titleFa, titleEn: spec.titleEn });
       continue;
     }
     const dueAt = given ?? row.dueAt;
@@ -233,9 +214,6 @@ export type BriefMissingCode =
   | 'EXISTING_SITE_URL'
   | 'BUDGET_CAP'
   | 'HARD_DEADLINE'
-  | 'DOMAIN_PROVIDER'
-  | 'HOST_PROVIDER'
-  | 'CONTENT_PROVIDER'
   | 'SUPPORT_MONTHS'
   | 'PREMADE_ROUNDS'
   | 'MOCKUP_ITERATIONS'
@@ -248,7 +226,7 @@ export type PlanMissing = { code: PlanMissingCode; key: string | null };
 
 export type PlanMissingCode = 'PHASES' | 'PHASE_END_DATE' | 'PAYMENT_PLAN' | 'PAYMENT_PLAN_TOTAL';
 
-export type BriefForCompleteness = BriefCommitmentSource & {
+export type BriefForCompleteness = {
   kind: 'NEW_SITE' | 'FEATURE_FOR_EXISTING';
   existingSiteUrl: string | null;
   designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' | 'NONE';
@@ -260,6 +238,13 @@ export type BriefForCompleteness = BriefCommitmentSource & {
   demoIterationsPerPhase: number | null;
 };
 
+/** A handover item as completeness reads it. */
+export type HandoverFacts = { key: string; inBrief: boolean; side: DependencySide | null; dueAt: Date | null; notNeeded: boolean };
+
+/** Someone provides it, and nobody has said by when. */
+export const handoverUndated = (item: HandoverFacts): boolean =>
+  item.inBrief && item.side !== null && !item.notNeeded && item.dueAt === null;
+
 /**
  * What step 1 still lacks, in the order the desk form shows it. **Empty means
  * done**, and that is the wizard's signal for REQUIREMENTS (J3's
@@ -267,9 +252,11 @@ export type BriefForCompleteness = BriefCommitmentSource & {
  *
  * What counts as required is a choice the plan did not make, made here: the
  * brief's own fields that the later steps read (a budget to design against, a
- * hard deadline to plan to, a provider for each of the three commitments, the
- * support term, the allowance each design path counts against) and every
- * implied commitment *dated*. `idealDeadline` is a wish and is never required;
+ * hard deadline to plan to, the support term, the allowance each design path
+ * counts against) and every handover item that someone provides *dated*.
+ * **DX3a:** nobody has to say who provides the domain, the host or the content
+ * (founder: each one is optional), so those three codes are gone; an item with
+ * no side, or marked not needed, owes no date either. `idealDeadline` is a wish and is never required;
  * `domainName` is what the provider decides, and the customer may not have one
  * yet.
  *
@@ -279,9 +266,8 @@ export type BriefForCompleteness = BriefCommitmentSource & {
  */
 export function briefCompleteness(input: {
   brief: BriefForCompleteness | null;
-  /** The dates of the board's brief-owned rows, by key. */
-  commitmentDates: Partial<Record<CommitmentKey, Date | null>>;
-  includedExtraKeys: readonly string[];
+  /** The `inBrief` rows of the project's board (DX3a); `key` is the row's `briefKey`, or its id for a one-off. */
+  handover: ReadonlyArray<HandoverFacts>;
 }): BriefMissing[] {
   const missing: BriefMissing[] = [];
   const add = (code: BriefMissingCode, key: string | null = null) => missing.push({ code, key });
@@ -293,9 +279,6 @@ export function briefCompleteness(input: {
     if (brief.kind === 'FEATURE_FOR_EXISTING' && !brief.existingSiteUrl) add('EXISTING_SITE_URL');
     if (brief.budgetCap === null) add('BUDGET_CAP');
     if (brief.hardDeadline === null) add('HARD_DEADLINE');
-    if (!brief.domainProvidedBy) add('DOMAIN_PROVIDER');
-    if (!brief.hostProvidedBy) add('HOST_PROVIDER');
-    if (!brief.contentProvidedBy) add('CONTENT_PROVIDER');
     if (brief.supportMonths === null) add('SUPPORT_MONTHS');
     // DX2a: the no-design path has no design allowance to set.
     const path = designPathOf(brief.designTier);
@@ -306,8 +289,8 @@ export function briefCompleteness(input: {
     }
     if (brief.demoIterationsPerPhase === null) add('DEMO_ITERATIONS');
 
-    for (const imp of briefDependencies(brief, input.includedExtraKeys)) {
-      if (!input.commitmentDates[imp.key]) add('COMMITMENT_UNDATED', imp.key);
+    for (const item of input.handover) {
+      if (handoverUndated(item)) add('COMMITMENT_UNDATED', item.key);
     }
   }
   return missing;
@@ -346,6 +329,23 @@ export function planCompleteness(input: {
   }
   return missing;
 }
+
+// --- the "feature for an existing site" preset (DX3a) ---------------------------
+
+/**
+ * Choosing that kind is the founder's most common case, and it fills in what it
+ * implies: no design, every extra out of scope, and the domain and the host not
+ * needed (the site already has both). **It runs on the change *to* that kind**,
+ * once — a brief already of the kind is saved as typed, so the person's edits
+ * to the preset stick, and switching back to a new site changes nothing.
+ */
+export const EXISTING_SITE_PRESET = {
+  designTier: 'NONE' as const,
+  notNeededKeys: ['domain', 'host'] as const,
+};
+
+export const presetApplies = (previousKind: 'NEW_SITE' | 'FEATURE_FOR_EXISTING' | null, kind: 'NEW_SITE' | 'FEATURE_FOR_EXISTING'): boolean =>
+  kind === 'FEATURE_FOR_EXISTING' && previousKind !== 'FEATURE_FOR_EXISTING';
 
 // --- feedback anchors ---------------------------------------------------------
 
