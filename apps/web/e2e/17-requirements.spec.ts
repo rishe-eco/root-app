@@ -117,6 +117,8 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await pickDay(page, 'handover-due-content', [1405, 8, 10], '2026-11-01');
   await page.getByTestId('handover-due-content').locator('input[data-part="text"]').blur();
   await expectSaved(page, 'handover-autosave');
+  // "Saved" may still be the previous save's mark: wait for this one to have landed.
+  await expect(page.locator('[data-field="content"]').getByTestId('commitment-due')).toBeVisible();
 
   // The brief is a brief now, and Requirements is done on the brief alone (DX2a): the phases and the plan
   // are the next step's to name, and it counts them on its pill.

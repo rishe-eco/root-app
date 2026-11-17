@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { CUSTOMER, SALES, WIZARD_CONTRACT_REF, WIZARD_CONTRACT_TITLE, completeStepOneViaApi, resetTestDatabase, signIn } from './helpers';
+import { CUSTOMER, SALES, WIZARD_CONTRACT_REF, WIZARD_CONTRACT_TITLE, completeStepOneViaApi, fillTitle, resetTestDatabase, signIn } from './helpers';
 
 /**
  * SC1 — Root adds pages, features and deliverables straight into step 2a, in

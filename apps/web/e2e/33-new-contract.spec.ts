@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { SALES, resetTestDatabase, signIn } from './helpers';
+import { SALES, expectSaved, fillTitle, resetTestDatabase, signIn } from './helpers';
 
 /**
  * DX3b — the new-contract form (desk UX review 1 and 2): the reference comes

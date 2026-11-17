@@ -155,8 +155,8 @@ test('a one-off item added on Requirements is the same row on the Dependencies t
   // Edit the domain from here: Root provides it.
   const domain = page.locator('[data-testid="dependency-row"][data-key="domain"]');
   await domain.getByRole('button', { name: 'Edit' }).click();
-  await domain.locator('select').selectOption('ROOT');
-  await domain.getByRole('button', { name: 'Save' }).click();
+  await domain.locator('select').selectOption('ROOT'); // DX4: a select saves as it changes
+  await expectSaved(domain, 'dependency-autosave');
   await expect(domain.locator('.badge').first()).toHaveText('Root');
 
   // …and it is Root on Requirements.
