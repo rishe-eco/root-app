@@ -564,9 +564,10 @@ const blockers = async (as: User = staff.SALES) =>
     .publishBlockers;
 
 test('publishBlockers lists every gate at once, in the publish order, and clears exactly when the publish would succeed', async () => {
-  // Nothing seeded and a bare brief: both gates stand — the mutation names only the first.
+  // Nothing seeded and a bare brief: the gates stand — the mutation names only the first. DX2a: the third is the
+  // plan (no phase, no payment plan), pointing at the PHASES step.
   const both = await blockers();
-  assert.deepEqual(both.map((b) => [b.code, b.step]), [['SCOPE_UNCONFIRMED', 'SCOPE'], ['BRIEF_INCOMPLETE', 'REQUIREMENTS']]);
+  assert.deepEqual(both.map((b) => [b.code, b.step]), [['SCOPE_UNCONFIRMED', 'SCOPE'], ['BRIEF_INCOMPLETE', 'REQUIREMENTS'], ['PLAN_INCOMPLETE', 'PHASES']]);
   assert.ok(both[1].count > 0, 'the brief blocker carries how many fields are missing');
   assert.equal((await publish()).code, both[0].code, 'the publish refuses with the first listed blocker');
 

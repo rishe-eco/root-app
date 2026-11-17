@@ -81,7 +81,15 @@ export function baseAllowance(step: StepKind, brief: BriefAllowances | null): nu
   if (!brief) return null;
   switch (step) {
     case 'DESIGN':
-      return designPathOf(brief.designTier) === 'PREMADE' ? brief.premadeRounds : brief.wireframeIterations;
+      // DX2a: the no-design path has no design step, so nothing to count.
+      switch (designPathOf(brief.designTier)) {
+        case 'PREMADE':
+          return brief.premadeRounds;
+        case 'CUSTOM':
+          return brief.wireframeIterations;
+        default:
+          return null;
+      }
     case 'MOCKUP':
       return designPathOf(brief.designTier) === 'CUSTOM' ? brief.mockupIterations : null;
     case 'DEMO':

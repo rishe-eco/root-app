@@ -47,27 +47,34 @@ const shape = (s: WizardState) => computeWizard(s).map((w) => `${w.step}${w.phas
 // ---- stepsFor ------------------------------------------------------------------
 
 test('stepsFor: the road for each sequence, design path and phase count', () => {
-  const table: Array<{ name: string; sequence: ContractSequence; path: 'PREMADE' | 'CUSTOM' | null; phases: typeof P1[]; want: string[] }> = [
+  const table: Array<{ name: string; sequence: ContractSequence; path: 'PREMADE' | 'CUSTOM' | 'NONE' | null; phases: typeof P1[]; want: string[] }> = [
     {
       name: 'new road, no phases yet: one placeholder demo, no mockup',
       sequence: 'AGREEMENT_FIRST',
       path: null,
       phases: [],
-      want: ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT', 'DESIGN', 'DEMO', 'SUMMARY'],
+      want: ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT', 'AGREEMENT', 'DESIGN', 'DEMO', 'SUMMARY'],
+    },
+    {
+      name: 'DX2a: no design — neither DESIGN nor MOCKUP, so the demo follows the agreement',
+      sequence: 'AGREEMENT_FIRST',
+      path: 'NONE',
+      phases: [P1],
+      want: ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT', 'AGREEMENT', 'DEMO:p1', 'SUMMARY'],
     },
     {
       name: 'new road, pre-made design: no mockup',
       sequence: 'AGREEMENT_FIRST',
       path: 'PREMADE',
       phases: [P1],
-      want: ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT', 'DESIGN', 'DEMO:p1', 'SUMMARY'],
+      want: ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT', 'AGREEMENT', 'DESIGN', 'DEMO:p1', 'SUMMARY'],
     },
     {
       name: 'new road, custom design: mockup joins after design',
       sequence: 'AGREEMENT_FIRST',
       path: 'CUSTOM',
       phases: [P1, P2],
-      want: ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT', 'DESIGN', 'MOCKUP', 'DEMO:p1', 'DEMO:p2', 'SUMMARY'],
+      want: ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT', 'AGREEMENT', 'DESIGN', 'MOCKUP', 'DEMO:p1', 'DEMO:p2', 'SUMMARY'],
     },
     {
       name: 'legacy road: design, agreement, a demo per phase — no summary, no placeholder',
@@ -113,6 +120,7 @@ test('a new-road contract with no data: the first step is current, everything af
   assert.deepEqual(shape(state()), [
     'REQUIREMENTS=CURRENT',
     'SCOPE=UPCOMING',
+    'PHASES=UPCOMING',
     'DRAFT=UPCOMING',
     'AGREEMENT=UPCOMING',
     'DESIGN=UPCOMING',
@@ -129,16 +137,17 @@ test('the agreement approved but not signed (J7): the steps that lock with it ar
   assert.deepEqual(w.map((s) => `${s.step}=${s.status}/${s.locked}`), [
     'REQUIREMENTS=DONE/true',
     'SCOPE=DONE/true',
+    'PHASES=DONE/true',
     'DRAFT=DONE/true',
     'AGREEMENT=CURRENT/true',
     'DESIGN=UPCOMING/false',
     'DEMO=UPCOMING/false',
     'SUMMARY=UPCOMING/false',
   ]);
-  // Locked with the agreement's own moment, for all four.
-  for (const s of w.slice(0, 4)) assert.deepEqual(s.lockedAt, T(5), s.step);
+  // Locked with the agreement's own moment, for all five.
+  for (const s of w.slice(0, 5)) assert.deepEqual(s.lockedAt, T(5), s.step);
   // Not done, so no finished time — the approval is a lock, not a completion.
-  assert.equal(w[3].finishedAt, null);
+  assert.equal(w[4].finishedAt, null);
 });
 
 test('the agreement approved and signed (J7): AGREEMENT is done — done means signed — and design is current', () => {
@@ -146,13 +155,14 @@ test('the agreement approved and signed (J7): AGREEMENT is done — done means s
   assert.deepEqual(w.map((s) => `${s.step}=${s.status}/${s.locked}`), [
     'REQUIREMENTS=DONE/true',
     'SCOPE=DONE/true',
+    'PHASES=DONE/true',
     'DRAFT=DONE/true',
     'AGREEMENT=DONE/true',
     'DESIGN=CURRENT/false',
     'DEMO=UPCOMING/false',
     'SUMMARY=UPCOMING/false',
   ]);
-  assert.deepEqual(w[3].finishedAt, T(6));
+  assert.deepEqual(w[4].finishedAt, T(6));
 });
 
 test('a signature without an approval (a direct insert, J13’s tests) makes AGREEMENT done but locks nothing', () => {
@@ -167,8 +177,8 @@ test('the legacy road’s AGREEMENT is done when signed, as it always was — J7
   assert.equal(w.find((s) => s.step === 'AGREEMENT')!.status, 'DONE');
 });
 
-test('LOCKS_WITH_AGREEMENT is exactly the brief, the scope and the draft', () => {
-  assert.deepEqual([...LOCKS_WITH_AGREEMENT].sort(), ['DRAFT', 'REQUIREMENTS', 'SCOPE']);
+test('LOCKS_WITH_AGREEMENT is exactly the brief, the scope, the phases and payment, and the draft (DX2a added PHASES)', () => {
+  assert.deepEqual([...LOCKS_WITH_AGREEMENT].sort(), ['DRAFT', 'PHASES', 'REQUIREMENTS', 'SCOPE']);
 });
 
 test('a step with its own approval locks with that approval alone', () => {
@@ -285,17 +295,26 @@ test('J8: designPathOf is the one place a tier becomes a path — the pre-made t
   assert.equal(designPathOf('THEME_PICK'), 'PREMADE');
   assert.equal(designPathOf('CLAUDE_ASSISTED'), 'CUSTOM');
   assert.equal(designPathOf('SENIOR_DESIGNER'), 'CUSTOM');
+  // DX2a (desk UX review 4): the fourth tier is its own path, with no design step and no mockup.
+  assert.equal(designPathOf('NONE'), 'NONE');
 });
 
 test('J8: the custom path puts MOCKUP on the road and the pre-made path does not — from the tier, through the same function', () => {
-  const road = (tier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER') =>
+  const road = (tier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' | 'NONE') =>
     stepsFor('AGREEMENT_FIRST', designPathOf(tier), []).map((s) => s.step);
   assert.equal(road('THEME_PICK').includes('MOCKUP'), false);
   assert.equal(road('CLAUDE_ASSISTED').includes('MOCKUP'), true);
   assert.equal(road('SENIOR_DESIGNER').includes('MOCKUP'), true);
+  assert.equal(road('NONE').includes('MOCKUP'), false);
+  assert.equal(road('NONE').includes('DESIGN'), false);
+  assert.equal(road('THEME_PICK').includes('DESIGN'), true);
 });
 
 // ---- designMissing: the new road's design completeness (J8) ---------------------------
+
+test('DX2a designMissing: a contract with no design has nothing missing — there is no design step to complete', () => {
+  assert.deepEqual(designMissing({ path: 'NONE', hasRound: false, concepts: [], paletteCount: 0 }), []);
+});
 
 test('J8 designMissing: pre-made needs a chosen concept; custom needs every page approved, one page at least, and a palette', () => {
   const concept = (chosen: boolean, ...pages: boolean[]) => ({
@@ -403,7 +422,7 @@ test('assertStepOpen: an open step passes, and a demo’s phase is its own lock'
   assert.throws(() => assertStepOpen(s, 'DEMO', 'p1'), refusal('STEP_LOCKED'));
   // The whole road is open before anything is approved.
   const fresh = state({ phases: [P1] });
-  for (const step of ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT', 'DESIGN'] as const) assertStepOpen(fresh, step);
+  for (const step of ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT', 'AGREEMENT', 'DESIGN'] as const) assertStepOpen(fresh, step);
 });
 
 test('assertStepOpen: SUMMARY never takes input, approved or not', () => {

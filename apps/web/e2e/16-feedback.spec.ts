@@ -44,12 +44,12 @@ async function customerDemoStep(page: Page, lang = 'en') {
   await expect(page.getByTestId('feedback-panel')).toBeVisible();
 }
 
-/** A staff member's Phases tab on the same contract — where the demo is answered. */
+/** A staff member's Demo step on the same contract — where the demo is answered (DX2a: it was the Phases tab). */
 async function staffPhases(page: Page, who: typeof DEVELOPER) {
   await signIn(page, who);
   await page.goto('/en/desk/contracts');
   await page.locator('tr.crow', { hasText: WIZARD_CONTRACT_REF }).locator('td').first().click();
-  await page.locator('.workspace-tab', { hasText: 'Phases' }).click();
+  await page.locator('.stepper-item[data-step="DEMO"] button').click();
   await expect(page.getByTestId('feedback-panel')).toBeVisible();
 }
 

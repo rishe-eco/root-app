@@ -43,6 +43,8 @@ export default function ReadinessBox({ contract }: { contract: Contract }) {
         return b.count > 0 ? t('readiness.blocker.SCOPE_PROPOSALS', { count: b.count, n }) : t('readiness.blocker.SCOPE_EMPTY');
       case 'BRIEF_INCOMPLETE':
         return t('readiness.blocker.BRIEF_INCOMPLETE', { count: b.count, n });
+      case 'PLAN_INCOMPLETE':
+        return t('readiness.blocker.PLAN_INCOMPLETE', { count: b.count, n });
       default:
         return t(`readiness.blocker.${b.code}`, { defaultValue: b.code });
     }

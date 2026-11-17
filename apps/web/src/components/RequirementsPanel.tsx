@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
 import { pick, calendarDate, formatAmount, formatCount } from '@/lib/format';
-import { designPath, isIncludedExtra, missingParams, MONEY_FIELDS } from '@/lib/brief';
+import { designPath, missingParams, MONEY_FIELDS } from '@/lib/brief';
 import { CONTRACT_FEEDBACK, type Contract, type Dependency, type FeedbackItem } from '@/lib/queries';
 import FeedbackPanel, { type FeedbackTarget } from '@/components/FeedbackPanel';
 import RequirementsEditor from '@/components/RequirementsEditor';
@@ -19,6 +19,13 @@ import type { StepPanelProps } from '@/components/StepPanels';
  * the payment plan — so a note on "the hard deadline" is one thread that Root
  * answers and the customer can reopen, exactly as on every other step. Nothing
  * here is a second feedback mechanism.
+ *
+ * **DX2a moved three cards out**: the extras went to Pages and features and the
+ * phases and the payment plan to their own step (`PhasesPanel`), so this panel
+ * is facts about the job only. (A note a customer already raised on one of
+ * those cards is still a REQUIREMENTS note anchored to `extras`, `phases` or
+ * `paymentPlan`; the phases and the plan are still its anchors, drawn by
+ * `PhasesPanel`, and an old `extras` note stays in the queue and the changelog.)
  *
  * **An unfinished brief is shown, not hidden.** What `briefCompleteness` still
  * names appears as "Root is completing this" for the customer and "still
@@ -74,9 +81,6 @@ export default function RequirementsPanel({ contract, step, audience, me, asCust
   const items = data?.contract.feedbackItems ?? [];
   const itemFor = (field: string) => items.find((i) => i.briefField === field) ?? null;
 
-  const phases = [...(contract.phases ?? [])].sort((a, b) => a.number - b.number);
-  const phaseNumber = (id: string) => phases.find((p) => p.id === id)?.number ?? null;
-  const extras = contract.scopeItems.filter((s) => s.kind === 'EXTRA').sort((a, b) => a.position - b.position);
   const board = contract.project.dependencies.filter((d) => d.briefKey);
   const customerRows = board.filter((d) => d.side === 'CUSTOMER');
   const rootRows = board.filter((d) => d.side === 'ROOT');
@@ -139,11 +143,14 @@ export default function RequirementsPanel({ contract, step, audience, me, asCust
       </Value>,
     );
 
+    const path = designPath(brief.designTier);
     const allowances = [
-      brief.designTier === 'THEME_PICK'
-        ? brief.premadeRounds !== null && t('brief.allowance.premadeRounds', { count: brief.premadeRounds, n: formatCount(brief.premadeRounds, locale) })
-        : t('brief.allowance.wireframes', { count: brief.wireframeIterations, n: formatCount(brief.wireframeIterations, locale) }),
-      brief.designTier !== 'THEME_PICK' &&
+      path === 'NONE'
+        ? false
+        : path === 'PREMADE'
+          ? brief.premadeRounds !== null && t('brief.allowance.premadeRounds', { count: brief.premadeRounds, n: formatCount(brief.premadeRounds, locale) })
+          : t('brief.allowance.wireframes', { count: brief.wireframeIterations, n: formatCount(brief.wireframeIterations, locale) }),
+      path === 'CUSTOM' &&
         brief.mockupIterations !== null &&
         t('brief.allowance.mockups', { count: brief.mockupIterations, n: formatCount(brief.mockupIterations, locale) }),
       brief.demoIterationsPerPhase !== null &&
@@ -157,23 +164,6 @@ export default function RequirementsPanel({ contract, step, audience, me, asCust
     );
   }
 
-  if (extras.length > 0) {
-    add(
-      'extras',
-      t('brief.group.extras'),
-      t('brief.label.extras'),
-      <span className="req-checklist" data-testid="extras-readout">
-        {extras.map((s) => (
-          <span className="req-check" key={s.id} data-included={isIncludedExtra(s.status)}>
-            <span aria-hidden="true">{isIncludedExtra(s.status) ? '☑' : '☐'}</span>
-            <span>{pick(s, 'label', locale)}</span>
-            <span className="visually-hidden">{isIncludedExtra(s.status) ? t('brief.extras.included') : t('brief.extras.notIncluded')}</span>
-          </span>
-        ))}
-      </span>,
-    );
-  }
-
   const provided = (rows: Dependency[], group: string) => {
     for (const dep of rows) {
       add(dep.briefKey!, group, commitmentTitle(dep, brief, locale), <CommitmentValue dep={dep} locale={locale} t={t} />);
@@ -184,66 +174,12 @@ export default function RequirementsPanel({ contract, step, audience, me, asCust
   provided(customerRows, staff ? t('brief.group.customerProvidesStaff') : t('detail.commitmentsCap'));
   provided(rootRows, t('brief.group.rootProvides'));
 
-  if (brief) {
-    add(
-      'phases',
-      t('brief.group.phases'),
-      t('brief.label.phases'),
-      phases.length === 0 ? (
-        <Value>{t('brief.notSet')}</Value>
-      ) : (
-        <span className="req-list" data-testid="phases-readout">
-          {phases.map((p) => (
-            <span className="req-line" key={p.id} data-number={p.number}>
-              <span className="badge">{formatCount(p.number, locale)}</span>
-              <span>{pick(p, 'title', locale)}</span>
-              <span className="t-caption">
-                {p.plannedEndAt ? t('brief.phases.endsOn', { date: calendarDate(p.plannedEndAt, locale) }) : t('brief.phases.noEnd')}
-              </span>
-            </span>
-          ))}
-        </span>
-      ),
-    );
-
-    const plan = contract.paymentPlan;
-    if (plan && plan.invoices.length > 0) {
-      add(
-        'paymentPlan',
-        t('brief.group.plan'),
-        t('brief.label.paymentPlan', { split: t(`brief.plan.splitOption.${plan.split}`) }),
-        <span className="req-list" data-testid="plan-readout">
-          {plan.invoices.map((i) => {
-            const phase = i.phaseId ? phaseNumber(i.phaseId) : null;
-            return (
-              <span className="req-line" key={i.id} data-ordinal={i.ordinal}>
-                <span className="badge">{formatCount(i.ordinal, locale)}</span>
-                <span>{pick(i, 'label', locale)}</span>
-                <span>{t('brief.amount', { amount: formatAmount(i.amount, locale) })}</span>
-                <span className="t-caption">
-                  {i.paymentTermDays === 0
-                    ? t('brief.plan.termNow')
-                    : t('brief.plan.termDays', { count: i.paymentTermDays, n: formatCount(i.paymentTermDays, locale) })}
-                  {phase !== null ? ` · ${t('brief.plan.afterPhase', { n: formatCount(phase, locale) })}` : ''}
-                </span>
-              </span>
-            );
-          })}
-          <span className="req-line req-total">
-            <span>{t('brief.plan.total')}</span>
-            <span>{t('brief.amount', { amount: formatAmount(plan.total, locale) })}</span>
-          </span>
-        </span>,
-      );
-    }
-  }
-
   const missingSentence = (m: { code: string; key: string | null }) =>
     t(
       `brief.missing.${m.code}`,
       missingParams(
         m,
-        phaseNumber,
+        () => null,
         (key) => t(`brief.commitment.${key}`),
         (n) => formatCount(n, locale),
       ),

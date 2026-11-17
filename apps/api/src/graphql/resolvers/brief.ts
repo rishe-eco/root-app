@@ -164,7 +164,7 @@ type BriefInputArg = {
   kind: 'NEW_SITE' | 'FEATURE_FOR_EXISTING';
   existingSiteUrl?: string | null;
   templateTypeId: string;
-  designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+  designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' | 'NONE';
   budgetCap?: string | null;
   idealDeadline?: string | null;
   hardDeadline?: string | null;
@@ -300,7 +300,7 @@ export const briefMutations = {
 
     await prisma.$transaction(async (tx) => {
       await lockContract(tx, contract.id);
-      await assertStepOpenOn(contract.id, 'REQUIREMENTS', null, tx);
+      await assertStepOpenOn(contract.id, 'SCOPE', null, tx);
       // Read inside the lock, so "in progress" is the row's state now.
       const fresh = await tx.scopeItem.findUniqueOrThrow({ where: { id: item.id } });
       if (args.included) {
@@ -348,7 +348,7 @@ export const briefMutations = {
 
     await prisma.$transaction(async (tx) => {
       await lockContract(tx, contract.id);
-      await assertStepOpenOn(contract.id, 'REQUIREMENTS', null, tx);
+      await assertStepOpenOn(contract.id, 'PHASES', null, tx);
 
       // J13 (J4's owed item): a replace deletes every planned invoice, and one
       // that has been issued is a customer's invoice with a number. Refused

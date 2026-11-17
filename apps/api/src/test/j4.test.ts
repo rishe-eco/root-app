@@ -81,6 +81,7 @@ const CONTRACT = `
     templateType { id slug }
   }
   briefCompleteness { code key }
+  planCompleteness { code key }
   paymentPlan { id split total invoices { id ordinal labelFa labelEn amount phaseId paymentTermDays } }
   phases { id number contractId plannedEndAt }
   project { dependencies { id side briefKey technical dueAt verifiedAt titleEn } phases { id contractId } }
@@ -96,6 +97,7 @@ type Contract = {
   id: string;
   brief: Record<string, unknown> | null;
   briefCompleteness: Array<{ code: string; key: string | null }>;
+  planCompleteness: Array<{ code: string; key: string | null }>;
   paymentPlan: { id: string; split: string; total: string; invoices: Array<Record<string, unknown>> } | null;
   phases: Array<{ id: string; number: number; contractId: string; plannedEndAt: string | null }>;
   project: {
@@ -997,9 +999,13 @@ test('the customer cannot read a contract that has not been handed over, and can
   const seen = await read(f.customer, false, draft.id);
   assert.equal(seen.brief!.designTier, 'CLAUDE_ASSISTED');
   const missing = seen.briefCompleteness.map((m) => m.code);
-  for (const code of ['BUDGET_CAP', 'HARD_DEADLINE', 'DOMAIN_PROVIDER', 'PHASES', 'PAYMENT_PLAN', 'MOCKUP_ITERATIONS']) {
+  for (const code of ['BUDGET_CAP', 'HARD_DEADLINE', 'DOMAIN_PROVIDER', 'MOCKUP_ITERATIONS']) {
     assert.ok(missing.includes(code), `${code} is named`);
   }
+  // DX2a: the phases and the plan are the PHASES step's list now, not the brief's.
+  assert.ok(!missing.includes('PHASES') && !missing.includes('PAYMENT_PLAN'), 'the brief no longer names the plan');
+  const planMissing = seen.planCompleteness.map((m) => m.code);
+  for (const code of ['PHASES', 'PAYMENT_PLAN']) assert.ok(planMissing.includes(code), `${code} is named by the plan list`);
   assert.equal(seen.brief!.budgetCap, null);
 });
 
@@ -1065,30 +1071,39 @@ test('verification is routed by the flag: a technical row is the developer’s, 
 // the wizard's signal
 // =================================================================================
 
-test('REQUIREMENTS is done exactly when briefCompleteness is empty — and the current step moves on with it', async () => {
+test('REQUIREMENTS is done exactly when briefCompleteness is empty, PHASES exactly when planCompleteness is — and the current step moves on with each', async () => {
   await sensitiveArticles(); // gives the contract a draft fee of 180,000,000 already
-  const road = (c: Contract) => Object.fromEntries(c.wizard.map((w) => [w.step, w.status]).filter(([s]) => ['REQUIREMENTS', 'SCOPE'].includes(s as string)));
+  const steps = ['REQUIREMENTS', 'SCOPE', 'PHASES'];
+  const road = (c: Contract) => Object.fromEntries(c.wizard.map((w) => [w.step, w.status]).filter(([s]) => steps.includes(s as string)));
 
   const start = await read(staff.SALES);
-  assert.deepEqual(road(start), { REQUIREMENTS: 'CURRENT', SCOPE: 'UPCOMING' });
+  assert.deepEqual(road(start), { REQUIREMENTS: 'CURRENT', SCOPE: 'UPCOMING', PHASES: 'UPCOMING' });
   assert.equal(start.briefCompleteness.length > 0, true);
 
   await setBriefOk();
+  // The brief is complete: REQUIREMENTS is done on the brief alone, before any phase or plan exists.
+  const briefDone = await read(staff.SALES);
+  assert.deepEqual(briefDone.briefCompleteness, []);
+  assert.equal(road(briefDone).REQUIREMENTS, 'DONE');
+  assert.deepEqual(briefDone.planCompleteness.map((m) => m.code), ['PHASES', 'PAYMENT_PLAN']);
+  assert.equal(road(briefDone).PHASES, 'UPCOMING');
+
   const phase = ok(await exec(CREATE_PHASE, { as: staff.SALES, variables: { c: f.contract.id, n: 1, end: onDay('2026-11-10') } })).createPhase as Contract;
   const midway = await read(staff.SALES);
-  assert.deepEqual(midway.briefCompleteness.map((m) => m.code), ['PAYMENT_PLAN'], 'only the plan is left');
-  assert.equal(road(midway).REQUIREMENTS, 'CURRENT');
+  assert.deepEqual(midway.planCompleteness.map((m) => m.code), ['PAYMENT_PLAN'], 'only the plan is left');
 
   // A plan that does not add up to the fee is still incomplete…
   ok(await exec(SET_PLAN, { as: staff.SALES, variables: { c: f.contract.id, s: 'INSTALLMENTS', r: rows(['A', '100000000', phase.phases[0].id, 7]) } }));
-  assert.deepEqual((await read(staff.SALES)).briefCompleteness.map((m) => m.code), ['PAYMENT_PLAN_TOTAL']);
+  assert.deepEqual((await read(staff.SALES)).planCompleteness.map((m) => m.code), ['PAYMENT_PLAN_TOTAL']);
   // …and one that does is done.
   ok(await exec(SET_PLAN, { as: staff.SALES, variables: { c: f.contract.id, s: 'INSTALLMENTS', r: rows(['A', '100000000', phase.phases[0].id, 7], ['B', '80000000', '', 7]) } }));
   const done = await read(staff.SALES);
   assert.deepEqual(done.briefCompleteness, []);
-  assert.deepEqual(road(done), { REQUIREMENTS: 'DONE', SCOPE: 'CURRENT' });
+  assert.deepEqual(done.planCompleteness, []);
+  // SCOPE has no data yet in this fixture, so it stays the current step; PHASES is done behind it.
+  assert.deepEqual(road(done), { REQUIREMENTS: 'DONE', SCOPE: 'CURRENT', PHASES: 'DONE' });
   // The customer's road agrees — the signal is not a staff-only view.
-  assert.deepEqual(road(await read(f.customer)), { REQUIREMENTS: 'DONE', SCOPE: 'CURRENT' });
+  assert.deepEqual(road(await read(f.customer)), { REQUIREMENTS: 'DONE', SCOPE: 'CURRENT', PHASES: 'DONE' });
 });
 
 // ---- DX1 (desk UX review 33): withheld is not the same as never written -------------

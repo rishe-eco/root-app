@@ -7,6 +7,7 @@ import {
   COMMITMENT_KEYS,
   EXTRA_COMMITMENT,
   briefCompleteness,
+  planCompleteness,
   briefDependencies,
   checkBriefInput,
   isBriefField,
@@ -222,21 +223,18 @@ const inputFor = (over: Partial<Parameters<typeof briefCompleteness>[0]> = {}): 
   brief: complete(),
   commitmentDates: { domain: d(10), host: d(10), content: d(10) },
   includedExtraKeys: [],
-  phases: [{ id: 'p1', plannedEndAt: d(28) }],
-  plan: { invoiceAmounts: [60n, 40n] },
-  fee: 100n,
   ...over,
 });
 
 const codes = (over?: Partial<Parameters<typeof briefCompleteness>[0]>) =>
   briefCompleteness(inputFor(over)).map((m) => (m.key ? `${m.code}:${m.key}` : m.code));
 
-test('briefCompleteness: a complete brief, dated commitments, dated phases and a plan that matches the fee lacks nothing', () => {
+test('briefCompleteness: a complete brief with dated commitments lacks nothing', () => {
   assert.deepEqual(codes(), []);
 });
 
-test('briefCompleteness: no brief at all is BRIEF, alongside what the rest of the step lacks', () => {
-  assert.deepEqual(codes({ brief: null, plan: null, phases: [] }), ['BRIEF', 'PHASES', 'PAYMENT_PLAN']);
+test('briefCompleteness: no brief at all is BRIEF — and since DX2a it no longer names phases or the plan', () => {
+  assert.deepEqual(codes({ brief: null }), ['BRIEF']);
 });
 
 test('briefCompleteness: each field the later steps read is named when it is missing', () => {
@@ -261,6 +259,8 @@ test('briefCompleteness: the allowance a design path counts against is the one r
   assert.ok(!codes({ brief: complete({ premadeRounds: null, designTier: 'SENIOR_DESIGNER', mockupIterations: 2 }) }).includes('PREMADE_ROUNDS'));
   assert.ok(codes({ brief: complete({ designTier: 'CLAUDE_ASSISTED' }) }).includes('MOCKUP_ITERATIONS'));
   assert.ok(!codes({ brief: complete() }).includes('MOCKUP_ITERATIONS'));
+  // DX2a: no design, no allowance to set — neither is required.
+  assert.deepEqual(codes({ brief: complete({ designTier: 'NONE', premadeRounds: null, mockupIterations: null }) }), []);
 });
 
 test('briefCompleteness: every implied commitment needs a date (COMMITMENT_UNDATED) — extras included; a wish is never required', () => {
@@ -273,12 +273,22 @@ test('briefCompleteness: every implied commitment needs a date (COMMITMENT_UNDAT
   // nothing about them can make a step incomplete.
 });
 
-test('briefCompleteness: phases need a planned end date each; the plan must exist and, given a fee, add up to it', () => {
-  assert.deepEqual(codes({ phases: [{ id: 'a', plannedEndAt: d(1) }, { id: 'b', plannedEndAt: null }] }), ['PHASE_END_DATE:b']);
-  assert.deepEqual(codes({ plan: { invoiceAmounts: [] } }), ['PAYMENT_PLAN']);
-  assert.deepEqual(codes({ plan: { invoiceAmounts: [60n, 30n] } }), ['PAYMENT_PLAN_TOTAL']);
+const planCodes = (over: Partial<Parameters<typeof planCompleteness>[0]> = {}) =>
+  planCompleteness({ phases: [{ id: 'p1', plannedEndAt: d(28) }], plan: { invoiceAmounts: [60n, 40n] }, fee: 100n, ...over }).map((m) =>
+    m.key ? `${m.code}:${m.key}` : m.code,
+  );
+
+test('planCompleteness (DX2a): dated phases and a plan that matches the fee lack nothing', () => {
+  assert.deepEqual(planCodes(), []);
+});
+
+test('planCompleteness: no phase and no plan are named; phases need a planned end date each; the plan must exist and, given a fee, add up to it', () => {
+  assert.deepEqual(planCodes({ phases: [], plan: null }), ['PHASES', 'PAYMENT_PLAN']);
+  assert.deepEqual(planCodes({ phases: [{ id: 'a', plannedEndAt: d(1) }, { id: 'b', plannedEndAt: null }] }), ['PHASE_END_DATE:b']);
+  assert.deepEqual(planCodes({ plan: { invoiceAmounts: [] } }), ['PAYMENT_PLAN']);
+  assert.deepEqual(planCodes({ plan: { invoiceAmounts: [60n, 30n] } }), ['PAYMENT_PLAN_TOTAL']);
   // No fee yet: the plan is not compared with nothing (`planMatchesFee` makes the same choice).
-  assert.deepEqual(codes({ plan: { invoiceAmounts: [60n, 30n] }, fee: null }), []);
+  assert.deepEqual(planCodes({ plan: { invoiceAmounts: [60n, 30n] }, fee: null }), []);
 });
 
 // --- anchors ---------------------------------------------------------------------------

@@ -138,12 +138,13 @@ test('requirements inputs: accordions open on what is missing, support months an
 
     // Nothing is written: the first panel that lacks something is open, the others are folded.
     await expect(page.getByTestId('acc-brief')).toHaveAttribute('data-open', 'true');
-    await expect(page.getByTestId('acc-phases')).toHaveAttribute('data-open', 'false');
+    // (DX2a: Requirements holds the brief and the hand-over; the phases and the plan are the next step's accordions.)
+    await expect(page.getByTestId('acc-handOver')).toHaveAttribute('data-open', 'false');
     await expect(page.getByTestId('acc-brief').locator('[data-missing]')).toHaveAttribute('data-missing', /[1-9]/);
-    await page.getByTestId('acc-phases').getByRole('button').first().click();
-    await expect(page.getByTestId('acc-phases')).toHaveAttribute('data-open', 'true');
-    await page.getByTestId('acc-phases').getByRole('button').first().click();
-    await expect(page.getByTestId('acc-phases')).toHaveAttribute('data-open', 'false');
+    await page.getByTestId('acc-handOver').getByRole('button').first().click();
+    await expect(page.getByTestId('acc-handOver')).toHaveAttribute('data-open', 'true');
+    await page.getByTestId('acc-handOver').getByRole('button').first().click();
+    await expect(page.getByTestId('acc-handOver')).toHaveAttribute('data-open', 'false');
 
     // Money: the input stays plain digits, the readout groups them in the panel's own digits.
     const budget = page.locator('#brief-budget');

@@ -318,10 +318,10 @@ test('approving writes the StepApproval and the revision’s approvedAt together
     variables: { c: f.contract.id },
   })).contract as { gate: { contractApproved: boolean; signed: boolean }; wizard: Wizard; statusSummary: Record<string, unknown> };
   assert.deepEqual(after.gate, { contractApproved: true, signed: false });
-  for (const step of ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT']) {
+  for (const step of ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT', 'AGREEMENT']) {
     assert.equal(wizardRow(after.wizard, step).locked, true, `${step} is locked`);
   }
-  for (const step of ['REQUIREMENTS', 'SCOPE', 'DRAFT']) assert.equal(wizardRow(after.wizard, step).status, 'DONE', step);
+  for (const step of ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT']) assert.equal(wizardRow(after.wizard, step).status, 'DONE', step);
   // **Done means signed**: approved-and-unsigned is locked, and still the current step.
   assert.equal(wizardRow(after.wizard, 'AGREEMENT').status, 'CURRENT');
   assert.equal(wizardRow(after.wizard, 'AGREEMENT').finishedAt, null);
@@ -615,14 +615,14 @@ test('every step 1–2 mutation is STEP_LOCKED once the agreement is approved �
 test('the lock table is complete: every file’s count of guarded writes matches the rows above — add a guarded write and this fails until it has a row', () => {
   const dir = fileURLToPath(new URL('../graphql/resolvers/', import.meta.url));
   const files = [...readdirSync(dir).map((n) => n), ...readdirSync(`${dir}admin/`).map((n) => `admin/${n}`)].filter((n) => n.endsWith('.ts'));
-  // `assertStepOpenOn(…, 'REQUIREMENTS' | 'SCOPE' | 'DRAFT', …)` call sites, comments stripped.
+  // `assertStepOpenOn(…, 'REQUIREMENTS' | 'SCOPE' | 'PHASES' | 'DRAFT', …)` call sites, comments stripped.
   const sites: Record<string, number> = {};
   for (const name of files) {
     const source = readFileSync(`${dir}${name}`, 'utf8')
       .split('\n')
       .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
       .join('\n');
-    const count = (source.match(/assertStepOpenOn\([^)]*'(REQUIREMENTS|SCOPE|DRAFT)'/g) ?? []).length;
+    const count = (source.match(/assertStepOpenOn\([^)]*'(REQUIREMENTS|SCOPE|PHASES|DRAFT)'/g) ?? []).length;
     if (count > 0) sites[name.replace('admin/', '')] = count;
   }
   // Call sites per file, and the rows each one covers. `scope.ts` has four

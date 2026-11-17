@@ -34,10 +34,12 @@ import type { ContractSequence, StepKind } from '@prisma/client';
  */
 
 /** PD-13: `THEME_PICK` is the pre-made path; `CLAUDE_ASSISTED` and
- *  `SENIOR_DESIGNER` are the custom one. J8 stores the tier and derives this. */
-export type DesignPath = 'PREMADE' | 'CUSTOM';
+ *  `SENIOR_DESIGNER` are the custom one. J8 stores the tier and derives this.
+ *  **DX2a (desk UX review 4): `NONE` is no design at all** — chiefly a feature on
+ *  an existing site — and its road has neither DESIGN nor MOCKUP. */
+export type DesignPath = 'PREMADE' | 'CUSTOM' | 'NONE';
 
-export type DesignTierName = 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+export type DesignTierName = 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' | 'NONE';
 
 /**
  * **The one place a brief's design tier becomes a path** (PD-13; journeys build
@@ -48,7 +50,8 @@ export type DesignTierName = 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER
  * pre-made to one of them and custom to another. (J4 wrote the comparison
  * inline in `briefCompleteness`; that call comes here now.)
  */
-export const designPathOf = (tier: DesignTierName): DesignPath => (tier === 'THEME_PICK' ? 'PREMADE' : 'CUSTOM');
+export const designPathOf = (tier: DesignTierName): DesignPath =>
+  tier === 'NONE' ? 'NONE' : tier === 'THEME_PICK' ? 'PREMADE' : 'CUSTOM';
 
 /**
  * The sequence `createContract` gives a new contract — **`AGREEMENT_FIRST`, the
@@ -68,10 +71,13 @@ export const designPathOf = (tier: DesignTierName): DesignPath => (tier === 'THE
  */
 export const SEQUENCE_FOR_NEW_CONTRACTS: ContractSequence = 'AGREEMENT_FIRST';
 
-/** The three steps that lock when AGREEMENT is approved (plan J3): what the
- *  customer agreed to is the brief, the scope and the draft, so none of them
- *  can change once it is agreed. */
-export const LOCKS_WITH_AGREEMENT: ReadonlySet<StepKind> = new Set<StepKind>(['REQUIREMENTS', 'SCOPE', 'DRAFT']);
+/** The steps that lock when AGREEMENT is approved (plan J3): what the customer
+ *  agreed to is the brief, the scope, the phases and the plan, and the draft,
+ *  so none of them can change once it is agreed. **DX2a added PHASES** (desk UX
+ *  review 12 says "at signing"; the code has always locked steps 1–3 at the
+ *  agreement's approval, a moment before the signature, and PHASES does the
+ *  same — one lock rule, not two). */
+export const LOCKS_WITH_AGREEMENT: ReadonlySet<StepKind> = new Set<StepKind>(['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT']);
 
 export type PhaseRef = { id: string; number: number };
 
@@ -81,9 +87,9 @@ export type StepSlot = { step: StepKind; phaseId: string | null; phaseNumber: nu
 const slot = (step: StepKind): StepSlot => ({ step, phaseId: null, phaseNumber: null });
 
 /**
- * The road, in order. `AGREEMENT_FIRST`: REQUIREMENTS, SCOPE, DRAFT,
- * AGREEMENT, DESIGN, MOCKUP (only on the custom design path), DEMO × each
- * phase, SUMMARY. `DESIGN_FIRST`: DESIGN, AGREEMENT, DEMO × each phase —
+ * The road, in order. `AGREEMENT_FIRST`: REQUIREMENTS, SCOPE, PHASES (DX2a),
+ * DRAFT, AGREEMENT, DESIGN (not on the no-design path), MOCKUP (only on the
+ * custom design path), DEMO × each phase, SUMMARY. `DESIGN_FIRST`: DESIGN, AGREEMENT, DEMO × each phase —
  * today's page, regrouped, and **nothing else**: it has no summary and no
  * placeholder.
  *
@@ -106,9 +112,10 @@ export function stepsFor(
   return [
     slot('REQUIREMENTS'),
     slot('SCOPE'),
+    slot('PHASES'),
     slot('DRAFT'),
     slot('AGREEMENT'),
-    slot('DESIGN'),
+    ...(designPath === 'NONE' ? [] : [slot('DESIGN')]),
     ...(designPath === 'CUSTOM' ? [slot('MOCKUP')] : []),
     ...(demos.length > 0 ? demos : [slot('DEMO')]),
     slot('SUMMARY'),
@@ -120,8 +127,9 @@ export function stepsFor(
  * phases and design path (journeys build plan S2). `DESIGN_FIRST` is today's
  * page regrouped — design, agreement, demos — and has no requirements, scope,
  * draft, mockup or summary, so the feedback API refuses those for it rather
- * than growing rows nothing will ever show. `AGREEMENT_FIRST` has all eight
- * (MOCKUP joins the road only on the custom design path, which J8 decides).
+ * than growing rows nothing will ever show. `AGREEMENT_FIRST` has all nine
+ * (MOCKUP joins the road only on the custom design path, which J8 decides, and
+ * DESIGN leaves it on the no-design path, DX2a).
  */
 export function stepOnRoad(sequence: ContractSequence, step: StepKind): boolean {
   if (sequence === 'DESIGN_FIRST') return step === 'DESIGN' || step === 'AGREEMENT' || step === 'DEMO';
@@ -177,7 +185,7 @@ const sameSlot = (a: { step: StepKind; phaseId: string | null }, b: { step: Step
  * The wizard, derived. **The rule, written once:**
  *
  * - A step is **locked** when the approval that seals it exists — its own, or
- *   for REQUIREMENTS / SCOPE / DRAFT the AGREEMENT's. `DESIGN_FIRST` is never
+ *   for REQUIREMENTS / SCOPE / PHASES / DRAFT the AGREEMENT's. `DESIGN_FIRST` is never
  *   locked: the legacy flow has no `StepApproval` rows and must behave exactly
  *   as it did, so any that exist on such a contract are ignored.
  * - A step is **done** when it is locked, or when something else says its work
@@ -323,6 +331,8 @@ export function designMissing(input: {
   concepts: ReadonlyArray<{ chosenAt: Date | null; pages: ReadonlyArray<{ approvedAt: Date | null }> }>;
   paletteCount: number;
 }): DesignMissing[] {
+  // DX2a: a contract with no design has no design step, so nothing about it can be missing.
+  if (input.path === 'NONE') return [];
   if (!input.hasRound) return ['NO_ROUND'];
   if (input.path === null) return ['BRIEF_MISSING'];
   if (input.path === 'PREMADE') {

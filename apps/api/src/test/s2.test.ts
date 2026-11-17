@@ -182,10 +182,10 @@ test('answerFeedback: every role × every feedback step — direct or pending, e
   const { phase } = await seedDemo();
   const steps: StepKind[] = ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'DESIGN', 'MOCKUP', 'DEMO'];
   const who: Array<[string, User, Record<StepKind, "D" | "A">]> = [
-    ["SALES", sales, { REQUIREMENTS: 'D', SCOPE: 'D', DRAFT: 'D', AGREEMENT: 'D', DESIGN: 'D', MOCKUP: 'D', DEMO: 'D', SUMMARY: 'A' }],
-    ["ADMIN", f.admin, { REQUIREMENTS: 'D', SCOPE: 'D', DRAFT: 'D', AGREEMENT: 'D', DESIGN: 'D', MOCKUP: 'D', DEMO: 'D', SUMMARY: 'A' }],
-    ["DESIGNER", designer, { REQUIREMENTS: 'A', SCOPE: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'D', MOCKUP: 'D', DEMO: 'A', SUMMARY: 'A' }],
-    ["DEVELOPER", developer, { REQUIREMENTS: 'A', SCOPE: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'A', MOCKUP: 'A', DEMO: 'D', SUMMARY: 'A' }],
+    ["SALES", sales, { REQUIREMENTS: 'D', SCOPE: 'D', PHASES: 'D', DRAFT: 'D', AGREEMENT: 'D', DESIGN: 'D', MOCKUP: 'D', DEMO: 'D', SUMMARY: 'A' }],
+    ["ADMIN", f.admin, { REQUIREMENTS: 'D', SCOPE: 'D', PHASES: 'D', DRAFT: 'D', AGREEMENT: 'D', DESIGN: 'D', MOCKUP: 'D', DEMO: 'D', SUMMARY: 'A' }],
+    ["DESIGNER", designer, { REQUIREMENTS: 'A', SCOPE: 'A', PHASES: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'D', MOCKUP: 'D', DEMO: 'A', SUMMARY: 'A' }],
+    ["DEVELOPER", developer, { REQUIREMENTS: 'A', SCOPE: 'A', PHASES: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'A', MOCKUP: 'A', DEMO: 'D', SUMMARY: 'A' }],
   ];
   for (const step of steps) {
     for (const [name, actor, row] of who) {

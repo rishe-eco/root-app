@@ -6,7 +6,7 @@ import { can } from '../../lib/capabilities.js';
 import { scopeSeeded, scopeStepDone } from '../../lib/scopeProposals.js';
 import type { FullContract } from './contracts.js';
 import { assertStepOpen } from '../../lib/steps.js';
-import { briefIncompleteOn, wizardStateOn } from './wizard.js';
+import { briefIncompleteOn, planIncompleteOn, wizardStateOn } from './wizard.js';
 
 /**
  * What stops a new-road contract's draft from being published, as data (DX1,
@@ -17,19 +17,22 @@ import { briefIncompleteOn, wizardStateOn } from './wizard.js';
  * blocker at once instead of one per press.
  *
  * The order is the plan's (J6): the scope first, because it names what is on the
- * step sales is looking at when they press the button, then the brief. Both
- * exist on the new road only; the legacy road has neither gate.
+ * step sales is looking at when they press the button, then the brief, then —
+ * since DX2a made phases and payment a step of their own — the plan: its gaps
+ * (`PLAN_INCOMPLETE`) and then whether it adds up to the price
+ * (`PLAN_UNBALANCED`, from `planCompleteness`, which asks `planMatchesFee`). All
+ * exist on the new road only; the legacy road has none of these gates.
  *
  * Reads are of the contract as given. `briefIncompleteOn` reads through
  * `prisma`, not `db`, exactly as the mutation always did.
  */
 
 export type PublishRefusal = {
-  code: 'SCOPE_UNCONFIRMED' | 'BRIEF_INCOMPLETE';
+  code: 'SCOPE_UNCONFIRMED' | 'BRIEF_INCOMPLETE' | 'PLAN_INCOMPLETE' | 'PLAN_UNBALANCED';
   message: string;
   /** Where in the wizard it is fixed. */
   step: StepKind;
-  /** How many things: proposals waiting, or brief fields missing. */
+  /** How many things: proposals waiting, brief fields missing, or plan gaps. */
   count: number;
   /** The mutation's own `extensions`, besides the code. */
   extensions: Record<string, unknown>;
@@ -63,6 +66,29 @@ export async function publishContentRefusals(
       step: 'REQUIREMENTS',
       count: missing.length,
       extensions: { missing: missing.map((m) => m.code) },
+    });
+  }
+  // DX2a: the phases and the payment plan. Two refusals, both pointing at the PHASES step: a gap (no phase, a phase
+  // without its end, no plan) and a plan that does not add up to the price. The unbalanced one is only named
+  // when the plan exists and the price is set — `planCompleteness` decides, not this file.
+  const planGaps = await planIncompleteOn(contract);
+  const gaps = planGaps.filter((m) => m.code !== 'PAYMENT_PLAN_TOTAL');
+  if (gaps.length > 0) {
+    out.push({
+      code: 'PLAN_INCOMPLETE',
+      message: 'Phases and payment are not complete yet.',
+      step: 'PHASES',
+      count: gaps.length,
+      extensions: { missing: gaps.map((m) => m.code) },
+    });
+  }
+  if (planGaps.some((m) => m.code === 'PAYMENT_PLAN_TOTAL')) {
+    out.push({
+      code: 'PLAN_UNBALANCED',
+      message: 'The payment plan does not add up to the price.',
+      step: 'PHASES',
+      count: 1,
+      extensions: {},
     });
   }
   return out;

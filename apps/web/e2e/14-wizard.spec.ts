@@ -42,19 +42,19 @@ async function openFromPortalList(page: Page, title: string, lang = 'en') {
   await page.waitForURL(new RegExp(`/${lang}/app/contracts/[^/]+$`));
 }
 
-test('the customer sees the new road: seven steps, the status area, an honest "not available yet"', async ({ page }) => {
+test('the customer sees the new road: eight steps, the status area, an honest "not available yet"', async ({ page }) => {
   await signIn(page, CUSTOMER);
   await openFromPortalList(page, WIZARD_CONTRACT_TITLE);
 
   const wizard = page.getByTestId('wizard');
   await expect(wizard).toBeVisible();
-  // No phases yet: requirements … design, one placeholder demo, summary.
+  // No phases yet: requirements … phases and payment … design, one placeholder demo, summary.
   const items = page.locator('.stepper-item');
-  await expect(items).toHaveCount(7);
+  await expect(items).toHaveCount(8);
   await expect(items.first()).toHaveAttribute('data-step', 'REQUIREMENTS');
   await expect(items.first()).toHaveAttribute('data-status', 'CURRENT');
   await expect(page.locator('.stepper-item[data-status="CURRENT"]')).toHaveCount(1);
-  await expect(page.locator('.stepper-item[data-status="UPCOMING"]')).toHaveCount(6);
+  await expect(page.locator('.stepper-item[data-status="UPCOMING"]')).toHaveCount(7);
 
   const status = page.getByTestId('status-area');
   await expect(status.locator('[data-fact="current"] dd')).toHaveText('Requirements');
@@ -95,7 +95,7 @@ test('the same contract in Persian: right-to-left, every label translated, nothi
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await expect(page.locator('html')).toHaveAttribute('lang', 'fa');
-  await expect(page.locator('.stepper-item')).toHaveCount(7);
+  await expect(page.locator('.stepper-item')).toHaveCount(8);
 
   const status = page.getByTestId('status-area');
   await expect(status.getByRole('heading', { name: 'وضعیت کار' })).toBeVisible();
@@ -167,8 +167,9 @@ test('sales reads the same steps in the workspace, writes a note, and "view as c
   await page.locator('tr.crow', { hasText: WIZARD_CONTRACT_REF }).locator('td').first().click();
   await page.waitForURL(/\/en\/desk\/contracts\/[^/]+\/steps$/);
   const contractId = page.url().match(/contracts\/([^/]+)\//)![1];
-  await expect(page.locator('.workspace-tab').first()).toHaveText('Steps');
-  await expect(page.locator('.stepper-item')).toHaveCount(7);
+  // DX2a: five tabs on the new road — Scope, Phases and Design moved into steps.
+  await expect(page.locator('.workspace-tab')).toHaveText(['Steps', 'Contract', 'Dependencies', 'Activity', 'Notes']);
+  await expect(page.locator('.stepper-item')).toHaveCount(8);
   const status = page.getByTestId('status-area');
   // Written for staff: it is not "waiting on you".
   await expect(status.locator('[data-fact="waiting-customer"] dt')).toHaveText('Waiting on the customer');

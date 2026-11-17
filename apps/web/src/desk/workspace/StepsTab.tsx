@@ -45,6 +45,7 @@ export default function StepsTab() {
         onSelect={setPicked}
         nextMoveOn={contract.statusSummary?.nextMoveOn ?? null}
         briefMissing={contract.briefCompleteness?.length ?? 0}
+        planMissing={contract.planCompleteness?.length ?? 0}
       />
       {selected ? <StepPanel contract={contract} step={selected} audience="staff" me={me} /> : null}
     </>

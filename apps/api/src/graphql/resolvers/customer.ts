@@ -16,7 +16,7 @@ import { notify, recipientsHolding } from '../../lib/notify.js';
 import { env } from '../../lib/env.js';
 import { contractInclude, loadForActor, log, nudgeStatus, reload, type FullContract } from './contracts.js';
 import { loadAgreementParts } from './agreement.js';
-import { briefIncompleteOn } from './wizard.js';
+import { briefIncompleteOn, planIncompleteOn } from './wizard.js';
 import { linkContractId } from './admin/shared.js';
 import { designPathOn, openDesign, tellDesigner } from './design.js';
 
@@ -107,7 +107,9 @@ async function approveAgreement(contractId: string, customerId: string): Promise
         plannedStartAt: contract.plannedStartAt,
         plannedEndAt: contract.plannedEndAt,
         phases: parts.phases,
-        briefMissing: (await briefIncompleteOn(contract)).map((m) => m.code),
+        // DX2a: the phases and the plan left `briefCompleteness` for `planCompleteness`; approval still
+        // refuses on both under the one `BRIEF_INCOMPLETE`, so the agreement is no easier to approve than it was.
+        briefMissing: [...(await briefIncompleteOn(contract)), ...(await planIncompleteOn(contract))].map((m) => m.code),
         revisionStale: stale,
       });
 

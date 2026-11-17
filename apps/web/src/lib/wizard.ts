@@ -19,7 +19,7 @@ export type Audience = 'customer' | 'staff';
 /** The subset of i18next's `t` these helpers use. */
 export type Translate = (key: string, options?: Record<string, unknown>) => string;
 
-const ORDER: StepKind[] = ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT', 'DESIGN', 'MOCKUP', 'DEMO', 'SUMMARY'];
+const ORDER: StepKind[] = ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT', 'AGREEMENT', 'DESIGN', 'MOCKUP', 'DEMO', 'SUMMARY'];
 export const STEP_KINDS: readonly StepKind[] = ORDER;
 
 /** «دمو · فاز ۲» for a demo with a phase, the step's own name otherwise. */
@@ -156,12 +156,18 @@ export function pillState(step: Pick<WizardStep, 'status'>, nextMoveOn: WaitingO
 /**
  * How many things a step is still missing, for its pill ("Requirements · 2
  * missing"). Only a step whose data already says it counts: REQUIREMENTS, from
- * `briefCompleteness`. A step with nothing to count gets none — a zero would be
- * a claim the pill has no data for. Null means "show no count".
+ * `briefCompleteness`, and — since DX2a made phases and payment a step of their
+ * own — PHASES, from `planCompleteness`. A step with nothing to count gets none
+ * — a zero would be a claim the pill has no data for. Null means "show no count".
  */
-export function pillMissing(step: Pick<WizardStep, 'step' | 'status'>, briefMissing: number | undefined): number | null {
-  if (step.step !== 'REQUIREMENTS' || step.status === 'DONE') return null;
-  return briefMissing && briefMissing > 0 ? briefMissing : null;
+export function pillMissing(
+  step: Pick<WizardStep, 'step' | 'status'>,
+  briefMissing: number | undefined,
+  planMissing?: number,
+): number | null {
+  if (step.status === 'DONE') return null;
+  const n = step.step === 'REQUIREMENTS' ? briefMissing : step.step === 'PHASES' ? planMissing : undefined;
+  return n && n > 0 ? n : null;
 }
 
 /**

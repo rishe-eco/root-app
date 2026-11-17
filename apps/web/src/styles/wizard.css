@@ -187,15 +187,18 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 
 /* The staff phase rows and the payment table: a grid that wraps, so a narrow
    screen stacks the cells instead of scrolling the page sideways. */
+/* A phase row wraps instead of running off a narrow column (DX2a: the phases are
+   a step of their own now, and the step is measured at 360 and 180 px). */
 .req-phase {
-  display: grid;
-  grid-template-columns: auto minmax(8rem, 1fr) minmax(8rem, 1fr) auto auto;
-  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--space-2);
   padding-block: var(--space-2);
   border-block-end: 1px solid var(--color-border);
 }
-.req-phase .error { grid-column: 1 / -1; margin: 0; }
+.req-phase > .input, .req-phase > .dayinput { flex: 1 1 8rem; min-inline-size: 0; }
+.req-phase .error { flex-basis: 100%; margin: 0; }
 .plan-table { display: flex; flex-direction: column; gap: var(--space-2); }
 .plan-row {
   display: grid;

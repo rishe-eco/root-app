@@ -29,15 +29,15 @@ const user = (...roles: Role[]) => ({ id: roles.join('+') || 'nobody', roles });
 
 // --- answerRoute: the matrix (PD-3), each role × each step -----------------
 
-const STEPS: StepKind[] = ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT', 'DESIGN', 'MOCKUP', 'DEMO', 'SUMMARY'];
+const STEPS: StepKind[] = ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT', 'AGREEMENT', 'DESIGN', 'MOCKUP', 'DEMO', 'SUMMARY'];
 
 /** journeys §7.3, written out: D = direct, A = needs approval. */
 const MATRIX: Record<string, Record<StepKind, 'D' | 'A'>> = {
-  SALES: { REQUIREMENTS: 'D', SCOPE: 'D', DRAFT: 'D', AGREEMENT: 'D', DESIGN: 'D', MOCKUP: 'D', DEMO: 'D', SUMMARY: 'A' },
-  DESIGNER: { REQUIREMENTS: 'A', SCOPE: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'D', MOCKUP: 'D', DEMO: 'A', SUMMARY: 'A' },
-  DEVELOPER: { REQUIREMENTS: 'A', SCOPE: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'A', MOCKUP: 'A', DEMO: 'D', SUMMARY: 'A' },
-  ADMIN: { REQUIREMENTS: 'D', SCOPE: 'D', DRAFT: 'D', AGREEMENT: 'D', DESIGN: 'D', MOCKUP: 'D', DEMO: 'D', SUMMARY: 'A' },
-  CUSTOMER: { REQUIREMENTS: 'A', SCOPE: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'A', MOCKUP: 'A', DEMO: 'A', SUMMARY: 'A' },
+  SALES: { REQUIREMENTS: 'D', SCOPE: 'D', PHASES: 'D', DRAFT: 'D', AGREEMENT: 'D', DESIGN: 'D', MOCKUP: 'D', DEMO: 'D', SUMMARY: 'A' },
+  DESIGNER: { REQUIREMENTS: 'A', SCOPE: 'A', PHASES: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'D', MOCKUP: 'D', DEMO: 'A', SUMMARY: 'A' },
+  DEVELOPER: { REQUIREMENTS: 'A', SCOPE: 'A', PHASES: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'A', MOCKUP: 'A', DEMO: 'D', SUMMARY: 'A' },
+  ADMIN: { REQUIREMENTS: 'D', SCOPE: 'D', PHASES: 'D', DRAFT: 'D', AGREEMENT: 'D', DESIGN: 'D', MOCKUP: 'D', DEMO: 'D', SUMMARY: 'A' },
+  CUSTOMER: { REQUIREMENTS: 'A', SCOPE: 'A', PHASES: 'A', DRAFT: 'A', AGREEMENT: 'A', DESIGN: 'A', MOCKUP: 'A', DEMO: 'A', SUMMARY: 'A' },
 };
 
 for (const [role, row] of Object.entries(MATRIX)) {

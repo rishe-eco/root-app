@@ -3,6 +3,7 @@ import { useLocale } from '@/lib/locale';
 import type { Contract, ContractRevision } from '@/lib/queries';
 import { calendarDate, formatAmount, formatCount, pick } from '@/lib/format';
 import { groupScopeByKind, isPaymentScheduleArticle } from '@/lib/agreement';
+import { designPath } from '@/lib/brief';
 
 /**
  * The agreement as a document (journeys build plan J7) — the parties, steps 1
@@ -61,7 +62,7 @@ function BriefSection({ revision }: { revision: ContractRevision }) {
   const brief = a?.brief;
   if (!a || !brief) return null;
   const allowances = a.allowances;
-  const path = brief.designTier === 'THEME_PICK' ? 'PREMADE' : 'CUSTOM';
+  const path = designPath(brief.designTier);
 
   return (
     <section className="doc-sec" data-testid="agreement-brief">
@@ -96,7 +97,10 @@ function BriefSection({ revision }: { revision: ContractRevision }) {
             {allowances.premadeRounds !== null ? (
               <li>{t('brief.allowance.premadeRounds', { count: allowances.premadeRounds, n: formatCount(allowances.premadeRounds, locale) })}</li>
             ) : null}
-            <li>{t('brief.allowance.wireframes', { count: allowances.wireframeIterations, n: formatCount(allowances.wireframeIterations, locale) })}</li>
+            {/* DX2a: a contract with no design has no wireframe rounds to promise. */}
+            {path !== 'NONE' ? (
+              <li>{t('brief.allowance.wireframes', { count: allowances.wireframeIterations, n: formatCount(allowances.wireframeIterations, locale) })}</li>
+            ) : null}
             {allowances.mockupIterations !== null ? (
               <li>{t('brief.allowance.mockups', { count: allowances.mockupIterations, n: formatCount(allowances.mockupIterations, locale) })}</li>
             ) : null}
