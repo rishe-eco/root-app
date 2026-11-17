@@ -2671,11 +2671,15 @@ model Dependency {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  side    DependencySide
+  /// DX3a: null while a requirements row is undecided (nobody has said whose it
+  /// is yet). A row that is only on the board (`inBrief` false) always has one:
+  /// `Dependency_board_row_complete`.
+  side    DependencySide?
   titleFa String
   titleEn String
 
-  dueAt DateTime
+  /// DX3a: null while undated — never overdue, last on the board.
+  dueAt DateTime?
 
   createdById String
   createdBy   User     @relation("DependencyCreatedBy", fields: [createdById], references: [id])
@@ -2707,12 +2711,41 @@ model Dependency {
   /// (`dependencies.verifyGeneral`) for the rest.
   technical Boolean @default(false)
 
+  /// DX3a: the row is part of the requirements the customer agrees to — it is
+  /// a handover item (Requirements' "Who provides what, by when" panel) as well
+  /// as a board row, and they are the same record. Locked with the agreement.
+  inBrief Boolean @default(false)
+  /// DX3a: nobody needs to provide this (a feature on an existing site has a
+  /// domain already). Never overdue, hidden from the customer's board.
+  notNeeded Boolean @default(false)
+
   @@index([projectId, dueAt])
 }
 
 // ---------------------------------------------------------------------------
 // Step 1 — requirements (journeys build plan J4)
 // ---------------------------------------------------------------------------
+
+/// DX3a: the desk's default list of handover items (domain, host, content, and
+/// whatever sales adds — SMS, say). A new brief gets one `inBrief` `Dependency`
+/// row per active type; the row's `briefKey` is the type's `key`, so the
+/// partial unique index keeps it one row per project. Managed on the desk
+/// (Templates > Handover items) like `TemplateType`: renamed, reordered,
+/// deactivated, never deleted (rows carry their own titles, but a key in use
+/// is an identity).
+model HandoverItemType {
+  id String @id @default(cuid())
+
+  /// Latin slug — an identifier (house rule 14), copied to `Dependency.briefKey`.
+  key     String @unique
+  titleFa String
+  titleEn String
+  /// The developer verifies it (`dependencies.verifyTechnical`) rather than sales.
+  technical Boolean
+
+  position Int     @default(0)
+  active   Boolean @default(true)
+}
 
 /// Whether the customer wants a new site or a feature for one that exists
 /// (the founder's Q5: the second is a new contract on the existing project).
@@ -2780,13 +2813,9 @@ model ContractBrief {
   idealDeadline DateTime? @db.Date
   hardDeadline  DateTime? @db.Date
 
-  domainName        String?
-  /// Who provides the domain, the host and the content — the three commitments
-  /// every site needs. Setting one makes `briefDependencies` imply a row on
-  /// the dependency board on that side; switching it to `ROOT` flips the row.
-  domainProvidedBy  DependencySide?
-  hostProvidedBy    DependencySide?
-  contentProvidedBy DependencySide?
+  domainName String?
+  // DX3a: who provides the domain, the host and the content is no longer here:
+  // each is a handover item, an `inBrief` `Dependency` row (`HandoverItemType`).
 
   /// Months of support after delivery.
   supportMonths Int?
