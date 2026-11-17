@@ -459,3 +459,20 @@ test('agreementSignedAt (J13): the signature, on both roads — an AGREEMENT app
   assert.deepEqual(agreementSignedAt({ signatureSignedAt: signed }), signed);
   assert.equal(agreementSignedAt({ signatureSignedAt: null }), null);
 });
+
+// ---- DX2b: a phase without a demo has no DEMO step -----------------------------------------
+
+test('stepsFor: a phase with "Has a demo" off has no DEMO step; the placeholder is for no phases at all', () => {
+  const kickoff = { id: 'k', number: 1, hasDemo: false };
+  const build = { id: 'b', number: 2, hasDemo: true };
+  const demos = (phases: Array<{ id: string; number: number; hasDemo?: boolean }>) =>
+    stepsFor('AGREEMENT_FIRST', 'PREMADE', phases).filter((s) => s.step === 'DEMO').map((s) => s.phaseId);
+  assert.deepEqual(demos([kickoff, build]), ['b']);
+  assert.deepEqual(demos([build]), ['b']);
+  // Every phase without a demo: no demo step at all — not the placeholder, which means "phases not made yet".
+  assert.deepEqual(demos([kickoff]), []);
+  // No phases yet: the one placeholder, as before.
+  assert.deepEqual(demos([]), [null]);
+  // An absent switch reads as a demo (every caller that predates it).
+  assert.deepEqual(demos([{ id: 'x', number: 1 }]), ['x']);
+});

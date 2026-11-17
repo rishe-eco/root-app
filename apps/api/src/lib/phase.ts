@@ -108,3 +108,65 @@ export function computeProjectProgress(phases: PhaseLike[]): ProjectProgress {
     itemsTotalInPhase: counted.length,
   };
 }
+
+// --- DX2b: a phase without a demo, and an item in several phases ------------
+
+/** The rows `phaseFinished` reads of a phase. */
+export type PhaseFinishFacts = { id: string; hasDemo: boolean; doneAt: Date | null };
+
+/**
+ * **"This phase is finished" — the one rule** (desk UX review item 10, decision
+ * 8; house rule 3). A phase is finished when the customer approved its demo (a
+ * DEMO `StepApproval` for it), or — a phase with no demo — when staff marked it
+ * done (`doneAt`). `canIssuePlanned` (`PHASE_NOT_ACCEPTED`), `closeBlockers`
+ * (`PHASES_NOT_ACCEPTED`) and the wizard's invoice signals all ask here, so a
+ * kick-off phase cannot be "done" for the invoice and open for the close.
+ *
+ * **A phase that has a demo is never finished by `doneAt`**: `markPhaseDone`
+ * refuses `PHASE_HAS_DEMO`, but a switch turned off after the fact must not
+ * leave a stale `doneAt` standing in for an approval, nor turn a phase whose
+ * demo exists back into one with a flag to tick.
+ */
+export function phaseFinished(
+  phase: PhaseFinishFacts,
+  approvals: ReadonlyArray<{ step: string; phaseId: string | null }>,
+): boolean {
+  if (approvals.some((a) => a.step === 'DEMO' && a.phaseId === phase.id)) return true;
+  return !phase.hasDemo && phase.doneAt !== null;
+}
+
+/** *When* a finished phase finished (`phaseFinished`'s other face): the approval's
+ *  moment, or a no-demo phase's done mark. Null while it is not finished. */
+export function phaseFinishedAt(
+  phase: PhaseFinishFacts,
+  approvals: ReadonlyArray<{ phaseId: string | null; approvedAt: Date; step?: string }>,
+): Date | null {
+  const approved = approvals.find((a) => (a.step === undefined || a.step === 'DEMO') && a.phaseId === phase.id);
+  if (approved) return approved.approvedAt;
+  return !phase.hasDemo ? phase.doneAt : null;
+}
+
+/**
+ * **The phase an item is accepted by**: the highest-numbered of its phases
+ * (desk UX review item 10; decisions 6 and 7). `ScopeItem.phaseId` is always
+ * this, and `setItemPhases` (`lib/itemPhases.ts`) is the only writer — this
+ * pure half is what it and the unit tests ask. Null for an empty set.
+ */
+export function lastPhaseOf(phases: ReadonlyArray<{ id: string; number: number }>): string | null {
+  let last: { id: string; number: number } | null = null;
+  for (const p of phases) if (last === null || p.number > last.number) last = p;
+  return last?.id ?? null;
+}
+
+/**
+ * **Every phase an item is in**, from its join rows and its `phaseId`. The
+ * invariant says `phaseId` is always among the rows (or both are empty), so the
+ * union changes nothing on a row written through `setItemPhases` — and it is
+ * what keeps a row inserted with only a `phaseId` (a fixture, an old script)
+ * counted as being in that phase rather than in none.
+ */
+export function itemPhaseIds(item: { phaseId?: string | null; phaseLinks?: ReadonlyArray<{ phaseId: string }> }): string[] {
+  const ids = new Set((item.phaseLinks ?? []).map((l) => l.phaseId));
+  if (item.phaseId) ids.add(item.phaseId);
+  return [...ids];
+}

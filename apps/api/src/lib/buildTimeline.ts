@@ -21,6 +21,8 @@ export type TimelinePhaseRow = {
   titleFa: string;
   titleEn: string;
   plannedEndAt: Date | null;
+  /** DX2b: when staff marked a phase *with no demo* done — its acceptance, there being no approval. Null otherwise. */
+  doneAt?: Date | null;
   /** SITE demos of the phase that have been published — any number, oldest first
    *  does not matter: the earliest is "when the customer first saw it". */
   demoPublishedAts: Date[];
@@ -59,7 +61,7 @@ export function buildTimelineOf(phases: readonly TimelinePhaseRow[], approvals: 
       titleEn: p.titleEn,
       plannedEndAt: p.plannedEndAt,
       demoPublishedAt: earliest(p.demoPublishedAts),
-      acceptedAt: earliest(approvals.filter((a) => a.phaseId === p.id).map((a) => a.approvedAt)),
+      acceptedAt: earliest(approvals.filter((a) => a.phaseId === p.id).map((a) => a.approvedAt)) ?? p.doneAt ?? null,
       builds: [...p.builds].sort(
         (a, b) => a.publishedAt.getTime() - b.publishedAt.getTime() || a.number - b.number,
       ),

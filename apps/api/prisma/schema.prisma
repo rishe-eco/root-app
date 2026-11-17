@@ -192,6 +192,8 @@ model User {
   /// deliverables they handed over. Disabled, never deleted, like the rest.
   deliveredContracts Contract[]  @relation("ContractDeliveredBy")
   handedOverItems    ScopeItem[] @relation("ScopeItemHandedOverBy")
+  /// DX2b: the no-demo phases this staff member marked done.
+  donePhases         Phase[]     @relation("PhaseDoneBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1242,8 +1244,17 @@ model ScopeItem {
   /// Which phase (L2) is building this item. Nullable — an item can be
   /// agreed long before a phase exists to carry it, and the registry must
   /// not force an assignment just to be editable.
+  ///
+  /// **DX2b: an item may sit in several phases** (`phaseLinks`, below) — shown in
+  /// one, fixed in the next. This column stays and **always equals the
+  /// highest-numbered phase of that set** (null when the set is empty): it is the
+  /// phase whose acceptance accepts the item, and the ~90 readers that mean
+  /// "accepted by" keep reading it unchanged. It is written by `setItemPhases`
+  /// (`lib/itemPhases.ts`) and by nothing else.
   phaseId String?
   phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  /// DX2b: every phase this item is in, this one's `phaseId` included.
+  phaseLinks ScopeItemPhase[]
 
   /// Journeys build plan J11 — **the handover** of a deliverable: the moment
   /// Root gave the customer the thing (the repository, the access, the export)
@@ -1443,7 +1454,22 @@ model Phase {
   /// meaning before a right one (R1's own reasoning, reapplied).
   milestoneLabel String?
 
+  /// DX2b (desk UX review item 10): **whether this phase ends in a demo the
+  /// customer approves.** A kick-off phase usually has neither items nor demo.
+  /// With it off the phase has no DEMO step (`stepsFor`) and is finished by
+  /// staff marking it done (`doneAt`) — `phaseFinished` (lib/phase.ts) is the one
+  /// rule that reads both.
+  hasDemo    Boolean   @default(true)
+  /// When staff marked a no-demo phase done, and who. Only ever set on a phase
+  /// with `hasDemo` false (`markPhaseDone` refuses `PHASE_HAS_DEMO`).
+  doneAt     DateTime?
+  doneById   String?
+  doneBy     User?     @relation("PhaseDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+
+  /// The items whose `phaseId` is this phase (the ones *this* phase accepts).
   scopeItems          ScopeItem[]
+  /// DX2b: every item that is in this phase, whether or not it is the item's last.
+  itemLinks           ScopeItemPhase[]
   demos               Demo[]
   builds              Build[]
   /// Build plan L6, spec §8's milestone linkage — every charge gated on this
@@ -1464,6 +1490,21 @@ model Phase {
 
   @@unique([contractId, number])
   @@index([projectId])
+}
+
+/// DX2b (desk UX review item 10; decision 6): **a scope item in a phase** —
+/// one row per phase the item is in. `ScopeItem.phaseId` is the highest-numbered
+/// of an item's rows (the phase that accepts it), kept in step by `setItemPhases`.
+/// Both sides cascade: deleting a phase or an item removes its links, and the
+/// caller re-derives `phaseId` from what is left.
+model ScopeItemPhase {
+  scopeItemId String
+  scopeItem   ScopeItem @relation(fields: [scopeItemId], references: [id], onDelete: Cascade)
+  phaseId     String
+  phase       Phase     @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  @@id([scopeItemId, phaseId])
+  @@index([phaseId])
 }
 
 /// What a demo shows: a live staging site (`SITE`, L2's original meaning) or
@@ -2803,6 +2844,12 @@ model PlannedInvoice {
 
   phaseId String?
   phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  /// DX2b (desk UX review 11, decision 10): **due on a date** — a calendar day
+  /// (PD-19) before which the row is not issuable (`DATE_NOT_REACHED`). Staff
+  /// issue it; there is no scheduler. At most one of this and `phaseId`: the
+  /// CHECK `PlannedInvoice_phase_xor_date` (hand-written in the migration) says
+  /// so. Neither means "on signing".
+  dueOn   DateTime? @db.Date
 
   /// Days from issue to due.
   paymentTermDays Int

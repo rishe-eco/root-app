@@ -35,6 +35,7 @@ const BLOCK_MESSAGES: Record<IssueBlock | 'ALREADY_ISSUED', string> = {
   NOT_SIGNED: 'The agreement has not been signed yet, so nothing in its payment plan can be issued.',
   PREVIOUS_UNPAID: 'The payment before this one has not been paid yet.',
   PHASE_NOT_ACCEPTED: 'The phase this payment is tied to has not been accepted yet.',
+  DATE_NOT_REACHED: 'The day this payment falls due has not come yet.',
 };
 
 /** Locks one entry's row for the rest of the transaction. */
@@ -157,13 +158,15 @@ export const invoiceMutations = {
       .$transaction(async (tx) => {
         await lockContract(tx, contractId);
         const facts = await loadPlanFacts(tx, row.planId);
-        const plan = facts.plan.invoices.map((i) => ({ id: i.id, ordinal: i.ordinal, phaseId: i.phaseId }));
+        const plan = facts.plan.invoices.map((i) => ({ id: i.id, ordinal: i.ordinal, phaseId: i.phaseId, dueOn: i.dueOn }));
         const verdict = canIssuePlanned(
           plan,
           plan.findIndex((r) => r.id === row.id),
           facts.entries,
           facts.approvals,
           facts.signedAt !== null,
+          facts.phases,
+          new Date(),
         );
         if (!verdict.ok) throw refuse(verdict.reason, BLOCK_MESSAGES[verdict.reason]);
 

@@ -279,6 +279,11 @@ export const typeDefs = /* GraphQL */ `
     """
     phaseId: ID
     """
+    DX2b: every phase this item is in. phaseId is always the last (highest-numbered) of
+    them, the phase whose acceptance accepts the item; empty when it is in none.
+    """
+    phaseIds: [ID!]!
+    """
     Journeys build plan J11: when a deliverable was handed over, by whom, and the
     note saying what was given and how. Null until then, and always null for a
     page or a feature (a CHECK holds it). The note is read by the customer and
@@ -300,6 +305,8 @@ export const typeDefs = /* GraphQL */ `
     labelEn: String!
     "Journeys build plan J7: format-2 snapshots freeze each item's kind so Appendix 1 can be grouped. Null for a format-1 revision."
     kind: ScopeKind
+    "DX2b: the numbers of the phases this item is in (format 3). Null for a format-1 or format-2 revision."
+    phases: [Int!]
   }
 
   """
@@ -532,7 +539,17 @@ export const typeDefs = /* GraphQL */ `
     contractId: ID!
     "A calendar day (PD-19) — render in UTC. Null until sales dates it."
     plannedEndAt: DateTime
+    """
+    DX2b: the items **in** this phase. An item may sit in several phases (shown in
+    one, fixed in the next), so this lists it in each.
+    """
     scopeItems: [ScopeItem!]!
+    "DX2b: whether the phase ends in a demo the customer approves. Off for a kick-off phase."
+    hasDemo: Boolean!
+    "DX2b: when staff marked a phase with no demo done; null until then (and always null for a phase with a demo)."
+    doneAt: DateTime
+    "DX2b: phaseFinished (lib/phase.ts) — its demo approved, or a no-demo phase marked done."
+    finished: Boolean!
     "Newest first."
     demos: [Demo!]!
     """
@@ -1203,7 +1220,7 @@ export const typeDefs = /* GraphQL */ `
     signature: Signature
     "Published amendments, in order. Root's unpublished drafts are admin-only."
     amendments: [Amendment!]!
-    "The snapshot's format: 1 for the legacy road and everything before J7, 2 for the new road's agreement."
+    "The snapshot's format: 1 for the legacy road and everything before J7, 2 for the new road's agreement before DX2b, 3 since."
     format: Int!
     "Journeys build plan J7: steps 1 and 2 as frozen into a format-2 snapshot — what the customer approves and signs. Null for format 1."
     agreement: AgreementSnapshot
@@ -1271,6 +1288,8 @@ export const typeDefs = /* GraphQL */ `
     "Toman, decimal string."
     amount: String!
     phaseNumber: Int
+    "DX2b (format 3): the calendar day the row falls due on, if it is due on a date. Null otherwise and in format 2."
+    dueOn: DateTime
     paymentTermDays: Int!
   }
 
@@ -1280,6 +1299,8 @@ export const typeDefs = /* GraphQL */ `
     titleEn: String!
     plannedEndAt: DateTime
     milestoneLabel: String
+    "DX2b (format 3): whether the phase ends in a demo. Null in a format-2 snapshot, which did not say (every phase had one)."
+    hasDemo: Boolean
   }
 
   """
@@ -1799,6 +1820,8 @@ export const typeDefs = /* GraphQL */ `
     "Toman, as a decimal string."
     amount: String!
     phaseId: ID
+    "DX2b: the calendar day this row falls due on (PD-19, render in UTC); null for the other two triggers."
+    dueOn: DateTime
     paymentTermDays: Int!
     """
     Journeys build plan J13. Where this row stands: issued (and how it is
@@ -1824,6 +1847,8 @@ export const typeDefs = /* GraphQL */ `
     NOT_SIGNED
     PREVIOUS_UNPAID
     PHASE_NOT_ACCEPTED
+    "DX2b: the row is due on a date that has not come yet."
+    DATE_NOT_REACHED
   }
 
   input CommitmentInput {
@@ -1867,6 +1892,8 @@ export const typeDefs = /* GraphQL */ `
     amount: String!
     "Must be one of this contract's phases."
     phaseId: ID
+    "DX2b: YYYY-MM-DD. At most one of phaseId and dueOn (PHASE_AND_DATE); neither means on signing."
+    dueOn: String
     paymentTermDays: Int!
   }
 
@@ -3292,14 +3319,21 @@ export const typeDefs = /* GraphQL */ `
     number is the contract-scoped ordinal (J4) — PHASE_NUMBER_TAKEN if this
     contract already has it. plannedEndAt is a YYYY-MM-DD calendar day
     (INVALID_DATE). Both phase writes are step 1's: STEP_LOCKED once the
-    agreement is approved.
+    agreement is approved. hasDemo (DX2b): omitted means a phase with a demo.
     """
-    createPhase(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, milestoneLabel: String, plannedEndAt: String): Contract!
-    "plannedEndAt: omitted leaves it, null clears it. contractId, when given, must be the phase's own contract."
-    updatePhase(phaseId: ID!, titleFa: String!, titleEn: String!, milestoneLabel: String, plannedEndAt: String, contractId: ID): Contract!
+    createPhase(contractId: ID!, number: Int!, titleFa: String!, titleEn: String!, milestoneLabel: String, plannedEndAt: String, hasDemo: Boolean): Contract!
+    "plannedEndAt: omitted leaves it, null clears it. hasDemo (DX2b): omitted leaves it. contractId, when given, must be the phase's own contract."
+    updatePhase(phaseId: ID!, titleFa: String!, titleEn: String!, milestoneLabel: String, plannedEndAt: String, hasDemo: Boolean, contractId: ID): Contract!
     deletePhase(phaseId: ID!, contractId: ID): Contract!
-    "phaseId: null unassigns the item from whatever phase it was on."
+    "phaseId: null unassigns the item from whatever phase it was on. DX2b: the item ends up in exactly this phase — setScopeItemPhases is the several-phase form."
     assignScopeItemToPhase(scopeItemId: ID!, phaseId: ID, contractId: ID): Contract!
+    """
+    DX2b (desk UX review item 10). contracts.author. Puts the item in all of these
+    phases, replacing what it was in; [] takes it out of every phase. It is accepted
+    by the last (highest-numbered) of them, and ScopeItem.phaseId says which.
+    PHASE_WRONG_PROJECT for a phase of another project.
+    """
+    setScopeItemPhases(scopeItemId: ID!, phaseIds: [ID!]!, contractId: ID): Contract!
 
     "stagingUrl must be HTTPS (L2.2) — refused otherwise, with a code naming why."
     createDemo(phaseId: ID!, stagingUrl: String!, buildRef: String, contractId: ID): Contract!
@@ -3479,6 +3513,15 @@ export const typeDefs = /* GraphQL */ `
     ALREADY_PUBLISHED, STEP_LOCKED.
     """
     confirmPageMap(buildId: ID!): Build!
+
+    """
+    DX2b (desk UX review item 10). Staff (the phase's developer, or sales). Marks a phase
+    that has no demo done: the way it finishes, which its payment and the contract's close
+    wait for, and the customer is told. The items it is the last phase of become ACCEPTED.
+    Usable after signing; not behind the PHASES lock. PHASE_HAS_DEMO, NOT_SIGNED,
+    PHASE_DONE (a second press), STEP_NOT_ON_ROAD (a legacy contract).
+    """
+    markPhaseDone(phaseId: ID!, contractId: ID): Contract!
 
     # --- Builds and the resolution ledger (build plan L3b) ---
     """

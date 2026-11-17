@@ -120,3 +120,13 @@ test('deriveMockupFrame: the same pages with a different bundle are the same lin
   assert.deepEqual(first.map((l) => l.scopeItemId), second.map((l) => l.scopeItemId));
   assert.deepEqual(second.filter((l, i) => l.kind !== first[i].kind).map((l) => l.scopeItemId), ['about']);
 });
+
+test('deriveFrameLines (DX2b): an item in two phases is on both — NEW where it is IN_DEMO, in either phase’s frame', () => {
+  // phaseId is the last phase (the one that accepts it); the join rows say it is also in p1.
+  const shared = item({ id: 'a', phaseId: 'p2', phaseLinks: [{ phaseId: 'p1' }, { phaseId: 'p2' }], status: 'IN_DEMO' });
+  assert.deepEqual(deriveFrameLines('p1', [shared]).map((l) => l.kind), ['NEW']);
+  assert.deepEqual(deriveFrameLines('p2', [shared]).map((l) => l.kind), ['NEW']);
+  assert.deepEqual(deriveFrameLines('p3', [shared]), []);
+  const building = item({ id: 'b', phaseId: 'p2', phaseLinks: [{ phaseId: 'p1' }, { phaseId: 'p2' }], status: 'IN_BUILD' });
+  assert.deepEqual(deriveFrameLines('p1', [building]).map((l) => l.kind), ['KNOWN_MISSING']);
+});

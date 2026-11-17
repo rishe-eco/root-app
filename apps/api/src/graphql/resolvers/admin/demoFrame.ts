@@ -77,7 +77,10 @@ export const demoFrameMutations = {
       await openDemo(tx, demo.phaseId);
       const frame = await ensureFrame(demo.id, admin.id, tx);
 
-      const items = await tx.scopeItem.findMany({ where: { projectId: demo.phase.projectId } });
+      const items = await tx.scopeItem.findMany({
+        where: { projectId: demo.phase.projectId },
+        include: { phaseLinks: { select: { phaseId: true } } },
+      });
       const candidates = deriveFrameLines(demo.phaseId, items);
 
       const existing = await tx.demoFrameLine.findMany({

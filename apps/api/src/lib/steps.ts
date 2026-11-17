@@ -79,7 +79,9 @@ export const SEQUENCE_FOR_NEW_CONTRACTS: ContractSequence = 'AGREEMENT_FIRST';
  *  same — one lock rule, not two). */
 export const LOCKS_WITH_AGREEMENT: ReadonlySet<StepKind> = new Set<StepKind>(['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT']);
 
-export type PhaseRef = { id: string; number: number };
+/** A phase on the road. **`hasDemo` (DX2b)** is the phase's "Has a demo" switch;
+ *  absent means true, so every caller that predates it keeps its road. */
+export type PhaseRef = { id: string; number: number; hasDemo?: boolean };
 
 /** A place on the road: a step, and for DEMO the phase it is the demo of. */
 export type StepSlot = { step: StepKind; phaseId: string | null; phaseNumber: number | null };
@@ -93,6 +95,7 @@ const slot = (step: StepKind): StepSlot => ({ step, phaseId: null, phaseNumber: 
  * today's page, regrouped, and **nothing else**: it has no summary and no
  * placeholder.
  *
+ * A phase whose "Has a demo" switch is off has no DEMO step (DX2b).
  * A new-road contract with no phases yet still shows *one* DEMO step, with no
  * phase: the customer's road should not skip from the design to the summary,
  * and a step with no phase can never take an approval (the approval row's
@@ -104,7 +107,10 @@ export function stepsFor(
   phases: PhaseRef[],
 ): StepSlot[] {
   const ordered = [...phases].sort((a, b) => a.number - b.number);
-  const demos: StepSlot[] = ordered.map((p) => ({ step: 'DEMO', phaseId: p.id, phaseNumber: p.number }));
+  // DX2b: a phase without a demo has no DEMO step — it is finished by staff marking it done.
+  const demos: StepSlot[] = ordered
+    .filter((p) => p.hasDemo !== false)
+    .map((p) => ({ step: 'DEMO', phaseId: p.id, phaseNumber: p.number }));
 
   if (sequence === 'DESIGN_FIRST') {
     return [slot('DESIGN'), slot('AGREEMENT'), ...demos];
@@ -117,7 +123,9 @@ export function stepsFor(
     slot('AGREEMENT'),
     ...(designPath === 'NONE' ? [] : [slot('DESIGN')]),
     ...(designPath === 'CUSTOM' ? [slot('MOCKUP')] : []),
-    ...(demos.length > 0 ? demos : [slot('DEMO')]),
+    // The placeholder is for a contract with *no phases yet*; one whose phases all have
+    // no demo has no demo step at all (DX2b).
+    ...(ordered.length > 0 ? demos : [slot('DEMO')]),
     slot('SUMMARY'),
   ];
 }

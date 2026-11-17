@@ -1,4 +1,5 @@
 import { GraphQLError } from 'graphql';
+import { itemPhaseIds } from './phase.js';
 
 /**
  * The registry's own small rules (build plan L1) — kept beside `gate.ts` in
@@ -41,9 +42,15 @@ export type ScopeItemLike = {
   kind?: ScopeKindLike;
   /** Read only by `agreedScopeSnapshotFor` (format 2). */
   contractId?: string | null;
+  /** Read only by `agreedScopeSnapshotFor` (format 3, DX2b): the item's phases, from its
+   *  `phaseId` and its `phaseLinks` (`itemPhaseIds`). */
+  phaseId?: string | null;
+  phaseLinks?: ReadonlyArray<{ phaseId: string }>;
 };
 
 export type ScopeItemSnapshot = { key: string; labelFa: string; labelEn: string; kind?: ScopeKindLike };
+/** `ScopeItemSnapshot` plus the item's phase ids — the input of a format-3 build (`revision.ts`'s `ScopeItemInput`). */
+export type ScopeItemInput = ScopeItemSnapshot & { phaseIds?: readonly string[] };
 
 /**
  * What Appendix 1 freezes into a contract snapshot, generated from the
@@ -78,11 +85,12 @@ export function agreedScopeSnapshot(items: ScopeItemLike[]): ScopeItemSnapshot[]
  * because the two produce different documents and a flag would make the
  * format-1 caller's output depend on an argument it never passes.
  */
-export function agreedScopeSnapshotFor(contractId: string, items: ScopeItemLike[]): ScopeItemSnapshot[] {
+export function agreedScopeSnapshotFor(contractId: string, items: ScopeItemLike[]): ScopeItemInput[] {
   return [...items]
     .filter((i) => isAgreedOrBeyond(i.status) && (i.kind === 'EXTRA' || i.contractId === contractId))
     .sort((a, b) => a.position - b.position)
-    .map((i) => ({ key: i.key, labelFa: i.labelFa, labelEn: i.labelEn, kind: i.kind }));
+    // DX2b: the phases an item is in ride along as ids; `buildAgreementSnapshot` turns them into numbers.
+    .map((i) => ({ key: i.key, labelFa: i.labelFa, labelEn: i.labelEn, kind: i.kind, phaseIds: itemPhaseIds(i) }));
 }
 
 /** Which neighbour a reorder move targets, or null when the item is already

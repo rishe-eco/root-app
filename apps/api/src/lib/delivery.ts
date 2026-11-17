@@ -1,7 +1,7 @@
 import { GraphQLError } from 'graphql';
 import type { ContractSequence, ScopeKind, ScopeStatus, StepKind } from '@prisma/client';
 import { calendarDayString } from './calendarDay.js';
-import { isPhaseAccepted } from './phase.js';
+import { isPhaseAccepted, phaseFinished } from './phase.js';
 import { isAgreedOrBeyond } from './scope.js';
 
 /**
@@ -28,7 +28,8 @@ import { isAgreedOrBeyond } from './scope.js';
  *    act and the items move as a consequence of it. A legacy (`DESIGN_FIRST`)
  *    contract has no such rows and never had: its phases are accepted the way its
  *    wizard already says they are, every counted scope item `ACCEPTED`
- *    (`isPhaseAccepted`, `legacyFinished`). PD-6 is about delivery, not the road,
+ *    (`isPhaseAccepted`, `legacyFinished`). DX2b: a new-road phase *with no demo* is
+ *    finished by staff marking it done — `phaseFinished`, the one rule. PD-6 is about delivery, not the road,
  *    so `closeContract` applies to both, and each is asked in its own terms.
  *    **A contract with no phases is not deliverable**: nothing accepted is
  *    nothing delivered, and "every phase of none" is true of a contract that
@@ -80,6 +81,10 @@ export type PhaseForClose = {
   number: number;
   /** Read only on the legacy road. */
   scopeItems: Array<{ status: ScopeStatus }>;
+  /** DX2b: the new road's `phaseFinished` reads the switch and the done mark. Absent
+   *  means a phase with a demo that nobody marked done. */
+  hasDemo?: boolean;
+  doneAt?: Date | null;
 };
 
 export type CloseBlockers = {
@@ -109,7 +114,7 @@ export function closeBlockers(input: {
   const accepted = (p: PhaseForClose) =>
     input.sequence === 'DESIGN_FIRST'
       ? isPhaseAccepted(p)
-      : input.approvals.some((a) => a.step === 'DEMO' && a.phaseId === p.id);
+      : phaseFinished({ id: p.id, hasDemo: p.hasDemo ?? true, doneAt: p.doneAt ?? null }, input.approvals);
 
   const notAccepted = phases.filter((p) => !accepted(p)).map((p) => p.number);
   return {

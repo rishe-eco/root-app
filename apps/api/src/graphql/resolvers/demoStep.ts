@@ -5,7 +5,8 @@ import { requireCapability, requireUser, viewerOf, type Context } from '../../co
 import { can } from '../../lib/capabilities.js';
 import { approveStepTx, lockContract } from '../../lib/stepApproval.js';
 import { assertWithinAllowance } from '../../lib/allowance.js';
-import { computeWizard } from '../../lib/steps.js';
+import { agreementSignedAt, computeWizard } from '../../lib/steps.js';
+import { phaseFinished } from '../../lib/phase.js';
 import { buildTimelineOf } from '../../lib/buildTimeline.js';
 import { canAuthorBuildOnPhase, contractVisibleTo, isContractReader, mayReadPlannedDates } from '../../lib/visibility.js';
 import { notify, recipientsHolding } from '../../lib/notify.js';
@@ -179,6 +180,69 @@ export const demoStepMutations = {
   },
 
   /**
+   * **Marks a phase with no demo done** (DX2b; desk UX review item 10, decision 8) — the
+   * way a kick-off phase (no items, no demo) is finished, and so what its invoice and the
+   * contract's close wait for (`phaseFinished`, lib/phase.ts: its demo approved, *or* a
+   * no-demo phase marked done). Does what the customer's approval does for a phase with a
+   * demo, in the same transaction under the contract's lock: sets `doneAt`/`doneById`, and
+   * settles the registry (`settleItemsOfFinishedPhase` — the items this phase is the last
+   * of become `ACCEPTED`). Then tells the customer (`PHASE_DONE`, best-effort).
+   *
+   * **Usable after signing, and not behind the PHASES lock** (review item 12): that is
+   * precisely when it is used. Before the agreement is signed there is nothing to be done
+   * *of* (`NOT_SIGNED`). Who: the phase's developer (`builds.author`, the assignment edge) or
+   * sales (`contracts.author`, on a contract they see) — `requireReadinessRecorder`'s guard,
+   * the one that already says who answers for a phase's state. Refusals, in order: `FORBIDDEN`,
+   * `NOT_FOUND`, `NOT_ASSIGNED`, `STEP_NOT_ON_ROAD` (a legacy contract's phases are accepted
+   * through their scope items), `PHASE_HAS_DEMO` (its demo's approval is how it finishes),
+   * `NOT_SIGNED`, `PHASE_DONE` (the second press).
+   */
+  markPhaseDone: async (_p: unknown, args: { phaseId: string; contractId?: string | null }, ctx: Context) => {
+    const user = requireUser(ctx);
+    if (!can(user, 'builds.author') && !can(user, 'contracts.author')) {
+      throw refuse('FORBIDDEN', 'You do not have access to that.');
+    }
+    const found = await prisma.phase.findUnique({ where: { id: args.phaseId }, select: { id: true, contractId: true, projectId: true, number: true } });
+    if (!found) throw notFound('phase');
+    await requireReadinessRecorder(ctx, found.id);
+
+    await prisma.$transaction(async (tx) => {
+      await lockContract(tx, found.contractId);
+      const contract = await tx.contract.findUniqueOrThrow({
+        where: { id: found.contractId },
+        select: { id: true, projectId: true, sequence: true, currentContractRevision: { select: { signature: { select: { signedAt: true } } } } },
+      });
+      if (contract.sequence !== 'AGREEMENT_FIRST') {
+        throw refuse('STEP_NOT_ON_ROAD', 'This contract has no such step.');
+      }
+      const phase = await tx.phase.findUniqueOrThrow({ where: { id: found.id }, select: { hasDemo: true, doneAt: true } });
+      if (phase.hasDemo) throw refuse('PHASE_HAS_DEMO', 'This phase has a demo: it is finished when the customer approves it.');
+      if (agreementSignedAt({ signatureSignedAt: contract.currentContractRevision?.signature?.signedAt ?? null }) === null) {
+        throw refuse('NOT_SIGNED', 'A phase is not done before the agreement is signed.');
+      }
+      if (phase.doneAt) throw refuse('PHASE_DONE', 'This phase is already marked done.');
+      await tx.phase.update({ where: { id: found.id }, data: { doneAt: new Date(), doneById: user.id } });
+      await settleItemsOfFinishedPhase(tx, found.id, contract);
+    });
+
+    await tell(async () => {
+      const contract = await prisma.contract.findUniqueOrThrow({ where: { id: found.contractId }, include: { customer: true, project: true } });
+      const contractId = await linkContractId(contract.projectId, 'customer', contract.id);
+      await notify(contract.customer, {
+        kind: 'PHASE_DONE',
+        params: {
+          customerName: contract.customer.name,
+          projectTitleFa: contract.project.titleFa,
+          projectTitleEn: contract.project.titleEn,
+          phaseNumber: found.number,
+          portalUrl: `${env.APP_ORIGIN}/${contract.customer.locale === 'en' ? 'en' : 'fa'}/app/contracts/${contractId}`,
+        },
+      });
+    });
+    return reloadOnProject(found.projectId, args.contractId ?? found.contractId);
+  },
+
+  /**
    * **The developer confirms the page map for this build** (journeys §7.5, the
    * second banked trap): the map is per phase and the staging site per project, so
    * an iteration's map is pre-filled and never trusted. `publishBuild` refuses
@@ -284,7 +348,7 @@ async function tell(work: () => Promise<void>): Promise<void> {
 /** The developer (`stepOwners`' rule: the assigned developer, and only when there
  *  is none — or they are disabled — everyone holding `answers.direct.demo`) and
  *  sales, once each however many hats they wear. */
-async function tellDeveloperAndSalesOfApproval(contract: FullContract, phaseNumber: number) {
+async function tellDeveloperAndSalesOfApproval(contract: FullContract, phaseNumber: number, phaseId: string) {
   await tell(async () => {
     const [developers, sales] = await Promise.all([stepOwners(contract, 'DEMO', false), recipientsHolding('contracts.author')]);
     const recipients = new Map<string, User>();
@@ -299,7 +363,7 @@ async function tellDeveloperAndSalesOfApproval(contract: FullContract, phaseNumb
             projectTitleFa: contract.project.titleFa,
             projectTitleEn: contract.project.titleEn,
             phaseNumber,
-            deskUrl: `${env.APP_ORIGIN}/${r.locale === 'en' ? 'en' : 'fa'}/desk/contracts/${contract.id}/phases`,
+            deskUrl: `${env.APP_ORIGIN}/${r.locale === 'en' ? 'en' : 'fa'}/desk/contracts/${contract.id}/steps?step=DEMO&phase=${phaseId}`,
           },
         }),
       ),
@@ -314,6 +378,41 @@ async function tellDeveloperAndSalesOfApproval(contract: FullContract, phaseNumb
  *  to accept. */
 const ACCEPTED_BY_APPROVAL = ['AGREED', 'IN_BUILD', 'IN_DEMO'] as const;
 
+/**
+ * **What a phase finishing does to the registry** — one function for both ways a phase
+ * finishes (the customer approving its demo, staff marking a no-demo phase done), so the
+ * two cannot move the registry differently (DX2b; desk UX review item 10, decisions 6, 7).
+ *
+ * - Items whose `phaseId` is this phase — it is the **last** phase they are in — become
+ *   `ACCEPTED` (the agreed ones, this contract's, as before).
+ * - Items that are in this phase **but fixed in a later one** (`phaseId` is another phase)
+ *   and are `IN_DEMO` go back to `IN_BUILD`: they were shown here, they are not done, and the
+ *   next phase's demo is where they are accepted. Any other status is left alone.
+ *
+ * Inside the caller's transaction, under the contract's lock.
+ */
+async function settleItemsOfFinishedPhase(tx: Tx, phaseId: string, contract: { id: string; projectId: string }): Promise<void> {
+  await tx.scopeItem.updateMany({
+    where: {
+      phaseId,
+      projectId: contract.projectId,
+      status: { in: [...ACCEPTED_BY_APPROVAL] },
+      OR: [{ contractId: contract.id }, { contractId: null }],
+    },
+    data: { status: 'ACCEPTED' },
+  });
+  await tx.scopeItem.updateMany({
+    where: {
+      phaseLinks: { some: { phaseId } },
+      phaseId: { not: phaseId },
+      projectId: contract.projectId,
+      status: 'IN_DEMO',
+      OR: [{ contractId: contract.id }, { contractId: null }],
+    },
+    data: { status: 'IN_BUILD' },
+  });
+}
+
 export const demoStepCustomerMutations = {
   /**
    * **Approving a phase's demo** — `approveStepTx(DEMO, phase)` in one transaction
@@ -324,8 +423,9 @@ export const demoStepCustomerMutations = {
    * and, the step's own precondition, until the phase's site demo has been published
    * (`NO_PUBLISHED_DEMO`: a customer cannot approve what they have not been shown).
    *
-   * **Effect: that phase's scope items become `ACCEPTED`** — the agreed ones, on this
-   * phase, of this contract — in the same transaction as the lock, so the registry
+   * **Effect: that phase's scope items become `ACCEPTED`** — the agreed ones, whose last
+   * phase this is, of this contract (DX2b: an item that is in this phase but fixed in a later
+   * one goes back from `IN_DEMO` to `IN_BUILD` instead; `settleItemsOfFinishedPhase`) — in the same transaction as the lock, so the registry
    * and the approval cannot disagree. After it `declareBuild`, `publishBuild`, the
    * frame's edits and `submitFeedback` for the phase are `STEP_LOCKED`, and J13's
    * `PHASE_NOT_ACCEPTED` stops refusing the invoice tied to it (it reads the very row
@@ -357,15 +457,7 @@ export const demoStepCustomerMutations = {
             if (shown === 0) throw refuse('NO_PUBLISHED_DEMO', 'There is no demo of this phase to approve yet.');
           },
         ]);
-        await tx.scopeItem.updateMany({
-          where: {
-            phaseId: phase.id,
-            projectId: contract.projectId,
-            status: { in: [...ACCEPTED_BY_APPROVAL] },
-            OR: [{ contractId: contract.id }, { contractId: null }],
-          },
-          data: { status: 'ACCEPTED' },
-        });
+        await settleItemsOfFinishedPhase(tx, phase.id, contract);
       });
     } catch (err) {
       // Two approvals at once: the partial unique index on `StepApproval` refuses
@@ -375,7 +467,7 @@ export const demoStepCustomerMutations = {
       }
       throw err;
     }
-    await tellDeveloperAndSalesOfApproval(contract, phase.number);
+    await tellDeveloperAndSalesOfApproval(contract, phase.number, phase.id);
     return reload(contract.id);
   },
 };
@@ -402,6 +494,8 @@ export const contractDemoFields = {
           titleFa: true,
           titleEn: true,
           plannedEndAt: true,
+          hasDemo: true,
+          doneAt: true,
           demos: { where: { kind: 'SITE', publishedAt: { not: null } }, select: { publishedAt: true } },
           builds: { where: { kind: 'SITE', publishedAt: { not: null } }, select: { id: true, number: true, publishedAt: true } },
         },
@@ -416,6 +510,7 @@ export const contractDemoFields = {
         titleFa: p.titleFa,
         titleEn: p.titleEn,
         plannedEndAt: showDates ? p.plannedEndAt : null,
+        doneAt: p.hasDemo ? null : p.doneAt,
         demoPublishedAts: p.demos.map((d) => d.publishedAt!),
         builds: p.builds.map((b) => ({ id: b.id, number: b.number, publishedAt: b.publishedAt! })),
       })),
@@ -439,6 +534,18 @@ export const demoReadinessFields = {
  *  and nothing else (`Build.changes` is staff's, `fields.ts`). Oldest first — the
  *  order the customer was shown them in. */
 export const phaseDemoFields = {
+  /** DX2b: the items **in** this phase — an item in phases 1 and 2 is listed on both — not just
+   *  the ones it accepts (`ScopeItem.phaseId`, the relation's own meaning). The `phaseId` arm keeps a
+   *  row written with only a `phaseId` (a fixture, an old script) in its phase (`itemPhaseIds`). */
+  scopeItems: (p: { id: string }) =>
+    prisma.scopeItem.findMany({
+      where: { OR: [{ phaseId: p.id }, { phaseLinks: { some: { phaseId: p.id } } }] },
+      orderBy: { position: 'asc' },
+    }),
+  /** DX2b: `phaseFinished` for the wire — the one rule, so a screen cannot call a phase done that the invoice
+   *  or the close does not. */
+  finished: async (p: { id: string; contractId: string; hasDemo: boolean; doneAt: Date | null }) =>
+    phaseFinished(p, await prisma.stepApproval.findMany({ where: { contractId: p.contractId, step: 'DEMO', phaseId: p.id }, select: { step: true, phaseId: true } })),
   builds: async (p: { id: string }, _a: unknown, ctx: Context) => {
     const staff = isContractReader(viewerOf(ctx));
     return prisma.build.findMany({

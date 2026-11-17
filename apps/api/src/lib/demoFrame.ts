@@ -11,6 +11,7 @@
  */
 
 import { isAgreedOrBeyond } from './scope.js';
+import { itemPhaseIds } from './phase.js';
 
 export type ScopeItemForFrame = {
   id: string;
@@ -20,7 +21,10 @@ export type ScopeItemForFrame = {
   temporary: boolean;
   decidedAt: Date | null;
   decidedNote: string | null;
+  /** The phase that accepts the item (its last). */
   phaseId: string | null;
+  /** DX2b: every phase the item is in (`ScopeItemPhase`). Absent reads as just `phaseId`. */
+  phaseLinks?: ReadonlyArray<{ phaseId: string }>;
 };
 
 export type GeneratedLine = {
@@ -46,6 +50,11 @@ export type GeneratedLine = {
  *   beyond (`lib/scope.ts`'s own test) — a declined item is not part of the
  *   build the frame is describing, whatever else is flagged on it.
  *
+ * **"On this phase" is the item's whole set of phases** (DX2b: an item may be shown
+ * in one phase and fixed in the next, so it is on both), not its `phaseId` — that
+ * is the phase that *accepts* it, which is a different question and is read where
+ * acceptance is meant (`approveDemo`).
+ *
  * An item can land in more than one bucket (an `IN_DEMO` item that is also
  * `temporary` appears under both) — that is not a bug to collapse, it is two
  * true things about the same fact.
@@ -59,10 +68,11 @@ export function deriveFrameLines(phaseId: string, items: readonly ScopeItemForFr
   const lines: GeneratedLine[] = [];
 
   for (const item of items) {
-    if (item.phaseId === phaseId && item.status === 'IN_DEMO') {
+    const onThisPhase = itemPhaseIds(item).includes(phaseId);
+    if (onThisPhase && item.status === 'IN_DEMO') {
       lines.push({ kind: 'NEW', scopeItemId: item.id, textFa: item.labelFa, textEn: item.labelEn });
     }
-    if (item.phaseId === phaseId && item.status === 'IN_BUILD') {
+    if (onThisPhase && item.status === 'IN_BUILD') {
       lines.push({ kind: 'KNOWN_MISSING', scopeItemId: item.id, textFa: item.labelFa, textEn: item.labelEn });
     }
     if (item.temporary && isAgreedOrBeyond(item.status)) {

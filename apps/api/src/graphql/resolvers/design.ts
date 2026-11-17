@@ -60,6 +60,12 @@ const notFound = (what: string) => refuse('NOT_FOUND', `No such ${what}.`);
 export async function openDesign(tx: Tx, contractId: string): Promise<void> {
   await lockContract(tx, contractId);
   await assertStepOpenOn(contractId, 'DESIGN', null, tx);
+  // DX2b (DX2a's review): a contract with *no design* has no DESIGN step on its road, so every
+  // design write is refused here — `assertStepOpenOn` returns quietly for a step that is not on
+  // the road, and the lock check alone let a NONE contract grow rounds nothing would ever show.
+  if ((await designPathOn(tx, contractId)) === 'NONE') {
+    throw refuse('STEP_NOT_ON_ROAD', 'This contract has no design step.');
+  }
   const contract = await tx.contract.findUnique({
     where: { id: contractId },
     select: { sequence: true, currentContractRevision: { select: { signature: { select: { signedAt: true } } } } },
