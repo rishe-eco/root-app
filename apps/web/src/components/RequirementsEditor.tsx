@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { createContext, useContext, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
@@ -6,6 +6,9 @@ import { can } from '@/lib/access';
 import { pick, formatAmount, formatCount } from '@/lib/format';
 import { errorCode } from '@/components/FeedbackPanel';
 import DayInput from '@/components/DayInput';
+import CountStepper from '@/components/CountStepper';
+import MoneyReadout from '@/components/MoneyReadout';
+import PillChoice from '@/components/PillChoice';
 import i18n from '@/i18n';
 import {
   COMMITMENT_KEYS,
@@ -46,8 +49,19 @@ import {
  * hand-over. Each is a `contracts.author` write and refuses with `STEP_LOCKED`
  * once the agreement is approved, so the panel does not render this at all for
  * a locked step (a control that can only fail is worse than one that is not
- * there). **Every date is a `DayInput`** — three selects over the Jalali
- * calendar, speaking `YYYY-MM-DD` and never a `Date` (PD-19).
+ * there). **Every date is a `DayInput`** — one text field and a calendar
+ * popover, speaking `YYYY-MM-DD` and never a `Date` (PD-19).
+ *
+ * **DX1 (desk UX review 3, 5, 6, 23, 25).** The sub-panels are accordions, and
+ * the one that opens first is the first that still lacks something
+ * (`briefCompleteness`, through `panelOf`). Support months are pills — 1 · 3 · 6
+ * · 12 · Other, the last revealing the number field — and who provides each of
+ * the domain, host and content is a pair of pills, each optional (a press on the
+ * chosen one clears it). The stored values are today's: a number, and
+ * `ROOT` / `CUSTOMER` / null. *Not needed* is **not** a pill yet: the brief
+ * stores a side or nothing, and a third value needs the handover-item table that
+ * is DX2's (review 7, 8). The allowance counts are steppers; money inputs show a
+ * grouped readout.
  *
  * **Money** (`budgetCap`, the plan) is written by whoever holds
  * `money.read` and shown to nobody else — the API resolves both to null for
@@ -55,6 +69,9 @@ import {
  */
 
 type T = (key: string, opts?: Record<string, unknown>) => string;
+
+/** The support terms offered as pills (DX1, review 5); anything else is "Other". */
+const SUPPORT_PILLS = ['1', '3', '6', '12'];
 
 const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : '');
 const numberOrNull = (text: string) => (text.trim() === '' ? null : Number(text));
@@ -66,12 +83,69 @@ function refusalText(t: T, err: unknown): string {
   return code && t(`brief.error.${code}`, { defaultValue: '' }) ? t(`brief.error.${code}`) : (err as Error).message;
 }
 
+/** Inside an accordion the panel's title is on its header bar, so the card does not say it twice. */
+const InAccordion = createContext(false);
+
 function SectionHead({ title, help }: { title: string; help?: string }) {
+  const inAccordion = useContext(InAccordion);
   return (
     <>
-      <h4 className="t-h4">{title}</h4>
+      {inAccordion ? null : <h4 className="t-h4">{title}</h4>}
       {help ? <p className="sec-help">{help}</p> : null}
     </>
+  );
+}
+
+type PanelId = 'brief' | 'extras' | 'phases' | 'plan' | 'handOver';
+
+/**
+ * Which sub-panel a `briefCompleteness` code is fixed in — so the accordion can
+ * open the first one that still lacks something. The codes are the API's
+ * (`BriefMissingCode`); this only files them.
+ */
+export function panelOf(code: string): PanelId {
+  if (code === 'PHASES' || code === 'PHASE_END_DATE') return 'phases';
+  if (code === 'PAYMENT_PLAN' || code === 'PAYMENT_PLAN_TOTAL') return 'plan';
+  return 'brief';
+}
+
+/** A collapsible sub-panel: a header bar that is the toggle, and the body kept mounted (hidden when closed) so a half-typed form survives a fold. */
+function Accordion({
+  id,
+  title,
+  open,
+  onToggle,
+  missing,
+  children,
+}: {
+  id: PanelId;
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  /** How many things this panel still lacks; 0 says "Complete". Null for a panel the completeness list says nothing about. */
+  missing: number | null;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const locale = useLocale();
+  const body = useId();
+  return (
+    <section className="req-acc" data-testid={`acc-${id}`} data-open={open ? 'true' : 'false'}>
+      <h4 className="req-acc-title">
+        <button type="button" className="req-acc-head" aria-expanded={open} aria-controls={body} onClick={onToggle}>
+          <span className="req-acc-name">{title}</span>
+          {missing === null ? null : (
+            <span className={`req-acc-state${missing > 0 ? ' req-acc-missing' : ''}`} data-missing={missing}>
+              {missing > 0 ? t('brief.accordion.missing', { count: missing, n: formatCount(missing, locale) }) : t('brief.accordion.complete')}
+            </span>
+          )}
+          <span className="req-acc-mark" aria-hidden="true">{open ? '▾' : locale === 'fa' ? '◂' : '▸'}</span>
+        </button>
+      </h4>
+      <div id={body} hidden={!open}>
+        <InAccordion.Provider value={true}>{children}</InAccordion.Provider>
+      </div>
+    </section>
   );
 }
 
@@ -105,6 +179,8 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
     content: brief?.contentProvidedBy ?? '',
   });
   const [supportMonths, setSupportMonths] = useState(str(brief?.supportMonths));
+  // "Other" is chosen when asked for, or when the stored number is not one of the pills.
+  const [supportOther, setSupportOther] = useState(() => brief?.supportMonths != null && !SUPPORT_PILLS.includes(String(brief.supportMonths)));
   const [premadeRounds, setPremadeRounds] = useState(str(brief?.premadeRounds));
   const [wireframeIterations, setWireframeIterations] = useState(str(brief?.wireframeIterations ?? 2));
   const [mockupIterations, setMockupIterations] = useState(str(brief?.mockupIterations));
@@ -155,21 +231,23 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
     }
   }
 
-  const providerSelect = (key: ProviderKey) => (
+  // Who provides it, as pills (DX1, review 6). Optional: a press on the chosen pill clears it. Same stored values as the select had.
+  const providerPills = (key: ProviderKey) => (
     <div className="field" key={key}>
-      <label className="label" htmlFor={`brief-provider-${key}`}>
+      <span className="label" id={`brief-provider-${key}-label`}>
         {t(`brief.form.provider.${key}`)}
-      </label>
-      <select
-        id={`brief-provider-${key}`}
-        className="input"
-        value={providers[key]}
-        onChange={(e) => setProviders({ ...providers, [key]: e.target.value as DependencySide | '' })}
-      >
-        <option value="">{t('brief.form.providerUnset')}</option>
-        <option value="CUSTOMER">{t('brief.side.CUSTOMER')}</option>
-        <option value="ROOT">{t('brief.side.ROOT')}</option>
-      </select>
+      </span>
+      <PillChoice
+        label={t(`brief.form.provider.${key}`)}
+        clearable
+        value={providers[key] || null}
+        onChange={(v) => setProviders({ ...providers, [key]: v ?? '' })}
+        options={[
+          { value: 'ROOT', label: t('brief.side.ROOT') },
+          { value: 'CUSTOMER', label: t('brief.side.CUSTOMER') },
+        ]}
+        testId={`brief-provider-${key}`}
+      />
     </div>
   );
 
@@ -250,6 +328,7 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
             value={budgetCap}
             onChange={(e) => setBudgetCap(e.target.value)}
           />
+          <MoneyReadout value={budgetCap} testId="budget-readout" />
           <p className="t-caption">{t('brief.form.budgetCapHelp')}</p>
         </div>
       ) : null}
@@ -266,22 +345,42 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
       </div>
 
       <div className="field">
-        <label className="label" htmlFor="brief-support">
+        <span className="label" id="brief-support-label">
           {t('brief.form.supportMonths')}
-        </label>
-        <input
-          id="brief-support"
-          className="input num-latin"
-          dir="ltr"
-          inputMode="numeric"
-          value={supportMonths}
-          onChange={(e) => setSupportMonths(e.target.value)}
+        </span>
+        <PillChoice
+          label={t('brief.form.supportMonths')}
+          value={supportOther ? 'other' : SUPPORT_PILLS.includes(supportMonths) ? supportMonths : null}
+          onChange={(v) => {
+            if (v === 'other') {
+              setSupportOther(true);
+            } else if (v) {
+              setSupportOther(false);
+              setSupportMonths(v);
+            }
+          }}
+          options={[
+            ...SUPPORT_PILLS.map((m) => ({ value: m, label: t('brief.months', { count: Number(m), n: formatCount(Number(m), locale) }) })),
+            { value: 'other', label: t('brief.form.supportOther') },
+          ]}
+          testId="brief-support-pills"
         />
+        {supportOther ? (
+          <input
+            id="brief-support"
+            className="input num-latin"
+            dir="ltr"
+            inputMode="numeric"
+            aria-label={t('brief.form.supportMonths')}
+            value={supportMonths}
+            onChange={(e) => setSupportMonths(e.target.value)}
+          />
+        ) : null}
       </div>
 
       <p className="t-eyebrow">{t('brief.form.providersTitle')}</p>
       <div className="editor-grid-2">
-        {PROVIDER_KEYS.map(providerSelect)}
+        {PROVIDER_KEYS.map(providerPills)}
         <div className="field">
           <label className="label" htmlFor="brief-domain-name">
             {t('brief.form.domainName')}
@@ -336,32 +435,24 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
       <div className="editor-grid-2">
         {designTier === 'THEME_PICK' ? (
           <div className="field">
-            <label className="label" htmlFor="brief-premade">
-              {t('brief.form.premadeRounds')}
-            </label>
-            <input id="brief-premade" className="input num-latin" dir="ltr" inputMode="numeric" value={premadeRounds} onChange={(e) => setPremadeRounds(e.target.value)} />
+            <span className="label">{t('brief.form.premadeRounds')}</span>
+            <CountStepper label={t('brief.form.premadeRounds')} value={premadeRounds} onChange={setPremadeRounds} max={20} testId="brief-premade" />
           </div>
         ) : (
           <>
             <div className="field">
-              <label className="label" htmlFor="brief-wireframes">
-                {t('brief.form.wireframeIterations')}
-              </label>
-              <input id="brief-wireframes" className="input num-latin" dir="ltr" inputMode="numeric" value={wireframeIterations} onChange={(e) => setWireframeIterations(e.target.value)} />
+              <span className="label">{t('brief.form.wireframeIterations')}</span>
+              <CountStepper label={t('brief.form.wireframeIterations')} value={wireframeIterations} onChange={setWireframeIterations} max={20} testId="brief-wireframes" />
             </div>
             <div className="field">
-              <label className="label" htmlFor="brief-mockups">
-                {t('brief.form.mockupIterations')}
-              </label>
-              <input id="brief-mockups" className="input num-latin" dir="ltr" inputMode="numeric" value={mockupIterations} onChange={(e) => setMockupIterations(e.target.value)} />
+              <span className="label">{t('brief.form.mockupIterations')}</span>
+              <CountStepper label={t('brief.form.mockupIterations')} value={mockupIterations} onChange={setMockupIterations} max={20} testId="brief-mockups" />
             </div>
           </>
         )}
         <div className="field">
-          <label className="label" htmlFor="brief-demos">
-            {t('brief.form.demoIterations')}
-          </label>
-          <input id="brief-demos" className="input num-latin" dir="ltr" inputMode="numeric" value={demoIterations} onChange={(e) => setDemoIterations(e.target.value)} />
+          <span className="label">{t('brief.form.demoIterations')}</span>
+          <CountStepper label={t('brief.form.demoIterations')} value={demoIterations} onChange={setDemoIterations} max={20} testId="brief-demos" />
         </div>
       </div>
 
@@ -645,7 +736,10 @@ function PlanEditor({ contract }: { contract: Contract }) {
             <div className="plan-row" role="row" key={i} data-testid="plan-row">
               <input className="input" dir="rtl" required aria-label={t('brief.plan.labelFa')} value={r.labelFa} onChange={(e) => edit(i, { labelFa: e.target.value })} />
               <input className="input" dir="ltr" required aria-label={t('brief.plan.labelEn')} value={r.labelEn} onChange={(e) => edit(i, { labelEn: e.target.value })} />
-              <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.amount')} value={r.amount} onChange={(e) => edit(i, { amount: e.target.value })} />
+              <div className="money-field">
+                <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.amount')} value={r.amount} onChange={(e) => edit(i, { amount: e.target.value })} />
+                <MoneyReadout value={normalizeAmount(r.amount)} testId="plan-amount-readout" />
+              </div>
               <select className="input" aria-label={t('brief.plan.phase')} value={r.phaseId} onChange={(e) => edit(i, { phaseId: e.target.value })}>
                 <option value="">{t('brief.plan.noPhase')}</option>
                 {phases.map((p) => (
@@ -739,17 +833,40 @@ function HandOver({ contract }: { contract: Contract }) {
 
 export default function RequirementsEditor({ contract, me }: { contract: Contract; me: User }) {
   const { t } = useTranslation();
+  const missing = contract.briefCompleteness ?? [];
+  const lacking = (panel: PanelId) => missing.filter((m) => panelOf(m.code) === panel).length;
+  const hasExtras = contract.scopeItems.some((s) => s.kind === 'EXTRA');
+  const canMoney = can(me, 'money.read');
+
+  // The panels that exist for this contract and reader, in the order they are drawn.
+  const panels: PanelId[] = ['brief', ...(hasExtras ? (['extras'] as const) : []), 'phases', ...(canMoney ? (['plan'] as const) : []), ...(contract.publishedAt ? [] : (['handOver'] as const))];
+  // Opened once, on arrival: the first panel that still lacks something — else the brief, where a finished step's
+  // edits usually are. Saving never refolds a panel under the person typing in it.
+  const [open, setOpen] = useState<ReadonlySet<PanelId>>(() => new Set([panels.find((p) => lacking(p) > 0) ?? 'brief']));
+  const toggle = (id: PanelId) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const acc = (id: PanelId, title: string, children: ReactNode) => (
+    <Accordion id={id} title={title} open={open.has(id)} onToggle={() => toggle(id)} missing={id === 'extras' || id === 'handOver' ? null : lacking(id)}>
+      {children}
+    </Accordion>
+  );
+
   return (
     <div className="req-editor" data-testid="requirements-editor">
       {/* No `key` on the forms: after a save the form already holds what the server
           now holds, and remounting would drop the "saved" line the person is
           reading. (A change made elsewhere — a due date edited on the dependency
           board — shows on the next visit, not live.) */}
-      <BriefForm contract={contract} me={me} />
-      <ExtrasEditor contract={contract} />
-      <PhasesEditor contract={contract} />
-      {can(me, 'money.read') ? <PlanEditor contract={contract} /> : null}
-      <HandOver contract={contract} />
+      {acc('brief', t('brief.form.title'), <BriefForm contract={contract} me={me} />)}
+      {hasExtras ? acc('extras', t('brief.extras.title'), <ExtrasEditor contract={contract} />) : null}
+      {acc('phases', t('brief.phases.title'), <PhasesEditor contract={contract} />)}
+      {canMoney ? acc('plan', t('brief.plan.title'), <PlanEditor contract={contract} />) : null}
+      {contract.publishedAt ? null : acc('handOver', t('brief.handOver.title'), <HandOver contract={contract} />)}
       <p className="t-caption desk-muted">{t('brief.form.savedSeparately')}</p>
     </div>
   );

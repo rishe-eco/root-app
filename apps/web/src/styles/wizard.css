@@ -56,8 +56,12 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 .stepper-current .stepper-hit { border-color: var(--color-accent); }
 .stepper-current .stepper-dot { background: transparent; border: 2px solid var(--color-accent); color: var(--color-accent); }
 .stepper-upcoming .stepper-label { color: var(--color-text-muted); font-weight: var(--weight-regular); }
-.stepper-selected .stepper-hit { background: var(--color-panel); border-color: var(--color-border-strong); }
-.stepper-selected.stepper-current .stepper-hit { border-color: var(--color-accent); }
+.stepper-selected .stepper-hit { background: var(--color-panel); border-color: var(--color-text); box-shadow: 0 0 0 2px var(--color-text); color: var(--color-text); }
+.stepper-selected.stepper-current .stepper-hit { border-color: var(--color-text); }
+/* The pill you are on says so in more than colour: a heavy outline, a bold label and a bar at its start edge. */
+.stepper-selected .stepper-label { font-weight: var(--weight-bold); }
+.stepper-selected .stepper-hit { border-inline-start-width: 6px; }
+.stepper-missing { color: var(--color-error); font-weight: var(--weight-medium); }
 
 /* ---- the status area ---------------------------------------------------- */
 .status-area {
@@ -200,11 +204,53 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
   align-items: center;
 }
 
-/* The Jalali day input: day, month, year — in the reader's reading order. */
-.dayinput { display: flex; flex-direction: column; gap: var(--space-1); }
-.dayinput-selects { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.dayinput-select { inline-size: auto; min-inline-size: 5.5rem; }
+/* The day input (DX1): one text field and a calendar popover — Jalali in the
+   Persian panel, Gregorian in English. The popover opens under the field, from
+   its start edge. */
+.dayinput { position: relative; display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.dayinput-field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.dayinput-text { flex: 1 1 8rem; inline-size: auto; min-inline-size: 0; }
 .dayinput-readout { color: var(--color-text-subtle); }
+.dayinput-error { color: var(--color-error); }
+.dayinput-pop {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-start: 0;
+  z-index: 20;
+  margin-block-start: var(--space-1);
+  inline-size: min(19rem, 100%);
+  min-inline-size: 15rem;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-raised);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.dayinput-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.dayinput-month { font-size: var(--text-small); font-weight: var(--weight-semibold); text-align: center; }
+.dayinput-grid { display: flex; flex-direction: column; gap: var(--space-1); }
+.dayinput-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1); }
+.dayinput-wd { text-align: center; font-size: var(--text-caption); color: var(--color-text-subtle); }
+.dayinput-day {
+  aspect-ratio: 1;
+  min-inline-size: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-small);
+  cursor: pointer;
+}
+.dayinput-day:hover { background: var(--color-panel); }
+.dayinput-day:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.dayinput-day-today { border-color: var(--color-border-strong); }
+.dayinput-day-chosen { background: var(--color-accent); color: var(--color-on-accent); font-weight: var(--weight-semibold); }
+.dayinput-day-chosen:hover { background: var(--color-accent-hover); }
 
 /* ---- steps 2a and 2b, the scope and the draft (journeys build plan J5, J6) ---
    The scope list is the generic feedback panel with each item as a target; what
@@ -367,3 +413,102 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
   .stepper-item { flex-basis: 100%; }
   .view-as-banner { padding-inline: var(--space-6); }
 }
+
+/* ---- DX1: the desk's inputs and the draft (desk UX review) ----------------- */
+
+/* "What's next": one line at the top of a new-road contract. */
+.nextup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border: 1px solid var(--color-border);
+  border-inline-start: 6px solid var(--color-secondary);
+  border-radius: var(--radius-md);
+  background: var(--color-raised);
+}
+.nextup-root { border-inline-start-color: var(--color-accent); }
+.nextup-text { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; flex: 1 1 14rem; }
+.nextup-line { font-size: var(--text-body); color: var(--color-text); overflow-wrap: anywhere; }
+
+/* A money input's readout and the wrapper that stacks them. */
+.money-field { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.money-readout { margin: 0; color: var(--color-text-muted); }
+
+/* Pills that pick one thing (support months, who provides). */
+.pillchoice { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.pillchoice-pill {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-full);
+  background: var(--color-raised);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-small);
+  cursor: pointer;
+  min-block-size: 2.25rem;
+}
+.pillchoice-pill:hover { border-color: var(--color-text); }
+.pillchoice-pill:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.pillchoice-pill:disabled { opacity: 0.5; cursor: default; }
+.pillchoice-chosen { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); font-weight: var(--weight-semibold); }
+.pillchoice-chosen:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
+
+/* A count with − and + around a large number. */
+.stepper-count { display: inline-flex; align-items: center; gap: var(--space-3); }
+.stepper-count-value { min-inline-size: 2.5rem; text-align: center; font-size: var(--text-h3); font-weight: var(--weight-semibold); line-height: 1; }
+.stepper-count-btn { min-inline-size: 2.5rem; min-block-size: 2.5rem; font-size: var(--text-body-lg); }
+
+/* Accordion sub-panels of the requirements editor. */
+.req-editor { display: flex; flex-direction: column; gap: var(--space-3); }
+.req-acc { display: flex; flex-direction: column; gap: var(--space-2); }
+.req-acc-title { margin: 0; }
+.req-acc-head {
+  inline-size: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel);
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.req-acc-head:hover { border-color: var(--color-border-strong); }
+.req-acc-head:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.req-acc-name { flex: 1 1 auto; min-inline-size: 0; font-size: var(--text-body); font-weight: var(--weight-semibold); }
+.req-acc-state { flex: none; font-size: var(--text-caption); color: var(--color-text-subtle); }
+.req-acc-missing { color: var(--color-error); font-weight: var(--weight-medium); }
+.req-acc-mark { flex: none; color: var(--color-text-muted); }
+
+/* The draft step's summary, the readiness box, a folding article. */
+.draft-summary-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-3); margin: 0; }
+.draft-summary-facts dt { font-size: var(--text-caption); color: var(--color-text-subtle); }
+.draft-summary-facts dd { margin: 0; font-size: var(--text-small); overflow-wrap: anywhere; }
+.draft-summary-block { display: flex; flex-direction: column; gap: var(--space-2); }
+.draft-summary-kind { margin: 0; overflow-wrap: anywhere; }
+.draft-foot { justify-content: flex-start; }
+.readiness-list { margin: 0; padding-inline-start: var(--space-6); display: flex; flex-direction: column; gap: var(--space-1); color: var(--color-error); }
+.readiness-list a { color: inherit; font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.article-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.article-toggle:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.article-toggle-title { font-size: var(--text-body); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.article-toggle-mark { color: var(--color-text-muted); }

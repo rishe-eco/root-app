@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dirFor, formatCitation, translationLangFor } from './format.js';
+import { dirFor, formatCitation, moneyReadout, translationLangFor } from './format.js';
 
 test('translationLangFor: a Persian original is translated outward, not into Persian again', () => {
   // The regression this exists for: the reader hardcoded the translation
@@ -85,4 +85,16 @@ test('formatCitation: a missing year reads "n.d.", not a blank', () => {
     'apa',
   );
   assert.equal(apa, 'A. Author (n.d.). Untitled.');
+});
+
+test('moneyReadout groups thousands in the panel’s own digits, keeps every digit of a big sum, and reads nothing from nothing', () => {
+  assert.equal(moneyReadout('150000000', 'en'), '150,000,000');
+  assert.equal(moneyReadout('150000000', 'fa'), '۱۵۰٬۰۰۰٬۰۰۰');
+  assert.equal(moneyReadout('۱۵۰۰۰۰۰۰۰', 'en'), '150,000,000', 'Persian digits typed are read');
+  assert.equal(moneyReadout('1 234,5', 'en'), '12,345', 'separators typed are ignored');
+  assert.equal(moneyReadout('9007199254740993', 'en'), '9,007,199,254,740,993', 'no Number rounding');
+  assert.equal(moneyReadout('', 'fa'), null);
+  assert.equal(moneyReadout(null, 'en'), null);
+  assert.equal(moneyReadout('abc', 'en'), null);
+  assert.equal(moneyReadout('0', 'en'), '0');
 });

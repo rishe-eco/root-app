@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { calendarDate } from './format.js';
-import { STEP_KINDS, attentionText, captionFor, defaultStep, sameStep, showBuildTimeline, stepLabel, timelineText } from './wizard.js';
+import { STEP_KINDS, attentionText, captionFor, defaultStep, nextUp, pillMissing, pillState, sameStep, showBuildTimeline, stepFromParams, stepLabel, stepLink, timelineText } from './wizard.js';
 import type { AttentionItem, TimelineItem, WizardStep } from './queries.js';
 
 const LOCALES = join(dirname(fileURLToPath(import.meta.url)), '../i18n/locales');
@@ -177,4 +177,45 @@ test('showBuildTimeline (J10): from the design’s approval until the summary cl
   assert.equal(showBuildTimeline(custom, []), false, 'no phases, nothing to show');
   assert.equal(showBuildTimeline(road(['DESIGN', 'DONE'], ['DEMO', 'DONE'], ['SUMMARY', 'DONE']), entries), false, 'delivered');
   assert.equal(showBuildTimeline(road(['DESIGN', 'DONE'], ['SUMMARY', 'UPCOMING']), entries), false, 'a road with no demo step');
+});
+
+test('pillState: done and upcoming are what they say; the current step says whose move it is, from the API’s own answer', () => {
+  assert.equal(pillState({ status: 'DONE' }, 'ROOT'), 'DONE');
+  assert.equal(pillState({ status: 'UPCOMING' }, 'CUSTOMER'), 'UPCOMING');
+  assert.equal(pillState({ status: 'CURRENT' }, 'CUSTOMER'), 'WAITING_CUSTOMER');
+  assert.equal(pillState({ status: 'CURRENT' }, 'ROOT'), 'YOUR_TURN');
+  assert.equal(pillState({ status: 'CURRENT' }, null), 'CURRENT');
+  assert.equal(pillState({ status: 'CURRENT' }, undefined), 'CURRENT');
+});
+
+test('pillMissing: only Requirements counts, only while it is not done, and a zero is no count at all', () => {
+  assert.equal(pillMissing({ step: 'REQUIREMENTS', status: 'CURRENT' }, 2), 2);
+  assert.equal(pillMissing({ step: 'REQUIREMENTS', status: 'UPCOMING' }, 1), 1);
+  assert.equal(pillMissing({ step: 'REQUIREMENTS', status: 'CURRENT' }, 0), null);
+  assert.equal(pillMissing({ step: 'REQUIREMENTS', status: 'CURRENT' }, undefined), null);
+  assert.equal(pillMissing({ step: 'REQUIREMENTS', status: 'DONE' }, 3), null);
+  assert.equal(pillMissing({ step: 'SCOPE', status: 'CURRENT' }, 3), null);
+});
+
+const aItem = (waitingOn: 'ROOT' | 'CUSTOMER', kind = 'X'): AttentionItem =>
+  ({ kind, variant: 'v', contractId: 'c1', phaseId: null, waitingOn, role: null, since: '2026-11-01T00:00:00.000Z', params: [] });
+
+test('nextUp: the API’s step and whose move it is, with the first attention item of that side — and nothing once the road is done', () => {
+  const summary = { currentStep: 'DRAFT' as const, currentPhaseId: null, currentPhaseNumber: null, nextMoveOn: 'ROOT' as const };
+  const n = nextUp(summary, [aItem('CUSTOMER', 'A'), aItem('ROOT', 'B'), aItem('ROOT', 'C')])!;
+  assert.deepEqual([n.who, n.step, n.attention?.kind], ['ROOT', 'DRAFT', 'B']);
+  assert.equal(nextUp({ ...summary, nextMoveOn: 'CUSTOMER' }, [aItem('ROOT')])!.attention, null, 'no item on that side: the line names the step');
+  assert.equal(nextUp({ ...summary, nextMoveOn: null }, [aItem('ROOT')])!.attention, null);
+  assert.equal(nextUp({ ...summary, currentStep: null }, []), null);
+});
+
+test('stepLink names the step, and a demo’s phase; stepFromParams reads it back', () => {
+  const wizard = [
+    { step: 'REQUIREMENTS', phaseId: null },
+    { step: 'DEMO', phaseId: 'p1' },
+    { step: 'DEMO', phaseId: 'p2' },
+  ] as WizardStep[];
+  assert.equal(stepLink('c1', { step: 'DRAFT', phaseId: null }), '/desk/contracts/c1/steps?step=DRAFT');
+  const url = new URL(`http://x${stepLink('c1', { step: 'DEMO', phaseId: 'p2' })}`);
+  assert.equal(stepFromParams(wizard, url.searchParams), wizard[2]);
 });

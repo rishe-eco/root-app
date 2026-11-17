@@ -11,6 +11,7 @@ import {
   type User,
 } from '@/lib/queries';
 import { formatAmount, formatCount, fullDateTime, pick } from '@/lib/format';
+import MoneyReadout from '@/components/MoneyReadout';
 
 /**
  * The desk's own service-runs surface (build plan L7; spec §9, §11) — every
@@ -57,14 +58,17 @@ function BillForm({ run }: { run: ServiceRun }) {
 
   return (
     <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-      <input
-        className="input num-latin"
-        type="text"
-        inputMode="numeric"
-        placeholder={t('desk.services.billAmountPlaceholder')}
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-      />
+      <div className="money-field">
+        <input
+          className="input num-latin"
+          type="text"
+          inputMode="numeric"
+          placeholder={t('desk.services.billAmountPlaceholder')}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+        <MoneyReadout value={amount} />
+      </div>
       <button type="button" className="btn btn-secondary btn-sm" disabled={loading || !amount.trim()} onClick={onBill}>
         {t('desk.services.billAction')}
       </button>

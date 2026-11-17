@@ -3442,6 +3442,27 @@ export const CONTRACT_FEEDBACK = gql`
 `;
 
 /**
+ * DX1 (desk UX review 16): what stops the draft from being published, from the
+ * API's own gate (`Contract.publishBlockers`). Asked when the Contract tab opens
+ * and again whenever the draft changes — a separate query, so the box can be
+ * fresh without refetching the whole workspace.
+ */
+export type PublishBlocker = { code: string; step: StepKind | null; count: number };
+
+export const CONTRACT_READINESS = gql`
+  query ContractReadiness($id: ID!) {
+    contract(id: $id) {
+      id
+      publishBlockers {
+        code
+        step
+        count
+      }
+    }
+  }
+`;
+
+/**
  * Step 2b's notes (journeys build plan J6): the DRAFT items anchored to an
  * article, each with where its article is now, plus the draft-wide note (which
  * is not anchored to a revision and so stays on `feedbackItems`). `asCustomer`

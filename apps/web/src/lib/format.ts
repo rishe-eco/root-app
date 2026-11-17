@@ -192,3 +192,20 @@ export function formatCitation(entry: CitableEntry, style: 'bibtex' | 'apa'): st
   ].filter((v): v is string => Boolean(v));
   return parts.join(' ');
 }
+
+/**
+ * A money input's readout (DX1, desk UX review 23): what the person has typed,
+ * thousands-grouped in the panel's own digits — «۱۵۰٬۰۰۰٬۰۰۰» in Persian
+ * (README rule 14: money is Persian digits), `150,000,000` in English. Null
+ * when there is nothing to read. Non-digits are ignored (the inputs are plain
+ * text), and the number goes through `BigInt` because a decimal string is how
+ * money crosses every boundary (rule 9) and must not lose digits to a `Number`.
+ */
+export function moneyReadout(value: string | null | undefined, locale: Locale): string | null {
+  const digits = (value ?? '')
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/\D/g, '');
+  if (digits === '') return null;
+  return new Intl.NumberFormat(intlTag(locale)).format(BigInt(digits));
+}

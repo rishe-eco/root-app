@@ -128,3 +128,76 @@ export function showBuildTimeline(
   if (!wizard.slice(0, firstDemo).every((s) => s.status === 'DONE')) return false;
   return !wizard.some((s) => s.step === 'SUMMARY' && s.status === 'DONE');
 }
+
+/**
+ * What a step pill says about its step (DX1, desk UX review 22) — the second
+ * signal beside *which step am I on*: where the contract itself is.
+ *
+ * - `DONE` — finished.
+ * - `WAITING_CUSTOMER` / `YOUR_TURN` — the current step, whose move it is
+ *   (`StatusSummary.nextMoveOn`, which the API decided: this never works it
+ *   out). "Your turn" is the staff reader's, since only the desk asks for it.
+ * - `CURRENT` — the current step when nobody is named.
+ * - `UPCOMING` — not reached yet.
+ *
+ * A *locked* step (`WizardStep.locked`) is not a separate state: it is a done
+ * step the signature froze, and the pill adds it as a suffix.
+ */
+export type PillState = 'DONE' | 'WAITING_CUSTOMER' | 'YOUR_TURN' | 'CURRENT' | 'UPCOMING';
+
+export function pillState(step: Pick<WizardStep, 'status'>, nextMoveOn: WaitingOn | null | undefined): PillState {
+  if (step.status === 'DONE') return 'DONE';
+  if (step.status === 'UPCOMING') return 'UPCOMING';
+  if (nextMoveOn === 'CUSTOMER') return 'WAITING_CUSTOMER';
+  if (nextMoveOn === 'ROOT') return 'YOUR_TURN';
+  return 'CURRENT';
+}
+
+/**
+ * How many things a step is still missing, for its pill ("Requirements · 2
+ * missing"). Only a step whose data already says it counts: REQUIREMENTS, from
+ * `briefCompleteness`. A step with nothing to count gets none — a zero would be
+ * a claim the pill has no data for. Null means "show no count".
+ */
+export function pillMissing(step: Pick<WizardStep, 'step' | 'status'>, briefMissing: number | undefined): number | null {
+  if (step.step !== 'REQUIREMENTS' || step.status === 'DONE') return null;
+  return briefMissing && briefMissing > 0 ? briefMissing : null;
+}
+
+/**
+ * The "what's next" line at the top of a new-road contract on the desk (DX1,
+ * desk UX review 28): whose turn it is, what to do, and the step to open.
+ * **Nothing here decides anything** — the step and whose move it is are
+ * `statusSummary`'s (the API's single derivation), and the thing to do is the
+ * first attention item that is that side's, worded by `attentionText`; this
+ * only picks among them. With no such item the line names the step itself.
+ * Null when the road is finished.
+ */
+export type NextUp = {
+  who: WaitingOn | null;
+  step: StepKind;
+  phaseId: string | null;
+  phaseNumber: number | null;
+  /** The attention item that says what to do, if the API has one for this side. */
+  attention: AttentionItem | null;
+};
+
+export function nextUp(
+  summary: { currentStep: StepKind | null; currentPhaseId: string | null; currentPhaseNumber: number | null; nextMoveOn: WaitingOn | null },
+  attention: ReadonlyArray<AttentionItem>,
+): NextUp | null {
+  if (!summary.currentStep) return null;
+  return {
+    who: summary.nextMoveOn,
+    step: summary.currentStep,
+    phaseId: summary.currentPhaseId,
+    phaseNumber: summary.currentPhaseNumber,
+    attention: summary.nextMoveOn ? (attention.find((a) => a.waitingOn === summary.nextMoveOn) ?? null) : null,
+  };
+}
+
+/** The link that opens a step on the desk's Steps tab (`stepFromParams` reads it back). */
+export function stepLink(contractId: string, n: Pick<NextUp, 'step' | 'phaseId'>): string {
+  const phase = n.phaseId ? `&phase=${encodeURIComponent(n.phaseId)}` : '';
+  return `/desk/contracts/${contractId}/steps?step=${n.step}${phase}`;
+}
