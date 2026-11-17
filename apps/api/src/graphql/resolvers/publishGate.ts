@@ -5,7 +5,8 @@ import { viewerOf, type Context } from '../../context.js';
 import { can } from '../../lib/capabilities.js';
 import { scopeSeeded, scopeStepDone } from '../../lib/scopeProposals.js';
 import type { FullContract } from './contracts.js';
-import { assertStepOpenOn, briefIncompleteOn } from './wizard.js';
+import { assertStepOpen } from '../../lib/steps.js';
+import { briefIncompleteOn, wizardStateOn } from './wizard.js';
 
 /**
  * What stops a new-road contract's draft from being published, as data (DX1,
@@ -77,7 +78,7 @@ export function refusalError(r: PublishRefusal): GraphQLError {
  * every blocker at once, for whoever holds `contracts.author` (the capability
  * the button itself needs); empty for everyone else, not an error. **Signed**
  * and **locked** are the mutation's first two refusals (`CONTRACT_SIGNED`,
- * `STEP_LOCKED`), asked of the same `assertStepOpenOn`; then the content gates
+ * `STEP_LOCKED`), asked of the same `assertStepOpen` over the same `wizardStateOn`; then the content gates
  * above. "Nothing has changed" (`NO_CHANGES`) is not a blocker here: it is the
  * draft's `dirty` flag, which the box shows on its own line.
  */
@@ -89,7 +90,9 @@ export const contractPublishFields = {
     const out: PublishBlocker[] = [];
     if (c.currentContractRevision?.signature) out.push({ code: 'CONTRACT_SIGNED', step: null, count: 0 });
     try {
-      await assertStepOpenOn(c.id, 'DRAFT', null);
+      // The same check `assertStepOpenOn` makes for the mutation — asked of the same state and rule, but not through
+      // that name: this is a read, and the lock table (j7) counts the guarded *writes* by it.
+      assertStepOpen(await wizardStateOn(c.id), 'DRAFT', null);
     } catch (err) {
       if (!(err instanceof GraphQLError) || err.extensions?.code !== 'STEP_LOCKED') throw err;
       out.push({ code: 'STEP_LOCKED', step: 'AGREEMENT', count: 0 });
