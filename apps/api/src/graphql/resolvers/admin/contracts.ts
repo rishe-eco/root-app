@@ -58,6 +58,17 @@ async function assertAssignable(userId: string | null | undefined, capability: C
     throw new GraphQLError('That account is not active.', { extensions: { code: 'ASSIGNEE_INACTIVE' } });
   }
 }
+/** DX3b review: a typed reference that loses a race to another create (or to a generated one,
+ *  which doesn't wait on a typed one) reaches the unique index; that is still `REF_TAKEN`, not an
+ *  uncoded error (house rule 12). */
+function asRefTaken(err: unknown): never {
+  const e = err as { code?: string; meta?: { target?: unknown } };
+  if (e?.code === 'P2002' && JSON.stringify(e.meta?.target ?? '').includes('ref')) {
+    throw new GraphQLError('That reference is already used by another contract.', { extensions: { code: 'REF_TAKEN' } });
+  }
+  throw err;
+}
+
 export const contractAdminMutations = {
   /**
    * Creates a contract — and, unless it is handed a project, the project
@@ -212,7 +223,7 @@ export const contractAdminMutations = {
     // inserts — neither is slow, but a busy database should make it late, not
     // make it fail half-way.
     { timeout: 20_000 },
-    );
+    ).catch(asRefTaken);
     return reload(contractId);
   },
 
