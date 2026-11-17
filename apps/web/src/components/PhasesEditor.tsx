@@ -33,6 +33,8 @@ export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNu
   const [titleFa, setTitleFa] = useState(phase.titleFa);
   const [titleEn, setTitleEn] = useState(phase.titleEn);
   const [end, setEnd] = useState(day(phase.plannedEndAt));
+  // The milestone label the invoices and the agreement print beside the phase (the old Phases tab edited it; DX2a keeps it here).
+  const [milestone, setMilestone] = useState(phase.milestoneLabel ?? '');
   const [error, setError] = useState<string | null>(null);
 
   async function save(e: FormEvent) {
@@ -40,7 +42,7 @@ export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNu
     setError(null);
     try {
       await update({
-        variables: { phaseId: phase.id, titleFa, titleEn, plannedEndAt: end || null, contractId: contract.id },
+        variables: { phaseId: phase.id, titleFa, titleEn, milestoneLabel: milestone.trim() || null, plannedEndAt: end || null, contractId: contract.id },
       });
     } catch (err) {
       setError(refusalText(t, err));
@@ -63,6 +65,7 @@ export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNu
       <input className="input" dir="rtl" required aria-label={t('workspace.titleFa')} value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
       <input className="input" dir="ltr" required aria-label={t('workspace.titleEn')} value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
       <DayInput value={end} onChange={setEnd} label={t('brief.phases.plannedEnd', { n: formatCount(phase.number, locale) })} testId={`phase-end-${phase.number}`} />
+      <input className="input" aria-label={t('workspace.phaseMilestone')} placeholder={t('workspace.phaseMilestone')} value={milestone} onChange={(e) => setMilestone(e.target.value)} data-testid={`phase-milestone-${phase.number}`} />
       <span className="workspace-row">
         <button className="btn btn-secondary btn-sm" type="submit" disabled={loading}>
           {t('workspace.save')}
@@ -105,7 +108,7 @@ export function PhasesEditor({ contract }: { contract: Contract }) {
     <div className="card editor-card" data-testid="phases-editor">
       <SectionHead title={t('brief.phases.title')} help={t('brief.phases.help')} />
       {phases.map((p) => (
-        <PhaseRow key={`${p.id}:${p.plannedEndAt ?? ''}:${p.titleFa}:${p.titleEn}`} contract={contract} phase={p} />
+        <PhaseRow key={`${p.id}:${p.plannedEndAt ?? ''}:${p.titleFa}:${p.titleEn}:${p.milestoneLabel ?? ''}`} contract={contract} phase={p} />
       ))}
       <form className="req-phase req-phase-new" onSubmit={add} data-testid="brief-phase-new">
         <span className="badge num-latin">+</span>

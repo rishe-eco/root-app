@@ -42,7 +42,7 @@ async function openFromPortalList(page: Page, title: string, lang = 'en') {
   await page.waitForURL(new RegExp(`/${lang}/app/contracts/[^/]+$`));
 }
 
-test('the customer sees the new road: seven steps, the status area, an honest "not available yet"', async ({ page }) => {
+test('the customer sees the new road: eight steps, the status area, an honest "not available yet"', async ({ page }) => {
   await signIn(page, CUSTOMER);
   await openFromPortalList(page, WIZARD_CONTRACT_TITLE);
 

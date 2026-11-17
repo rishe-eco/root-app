@@ -872,7 +872,7 @@ export type Contract = {
   /** Money (PD-14): null for staff without `money.read` who are not the customer. */
   paymentPlan?: PaymentPlan | null;
   /** This contract's own phases (`project.phases` is every phase of the project). */
-  phases?: Array<Pick<Phase, 'id' | 'number' | 'titleFa' | 'titleEn' | 'contractId' | 'plannedEndAt'>>;
+  phases?: Array<Pick<Phase, 'id' | 'number' | 'titleFa' | 'titleEn' | 'contractId' | 'plannedEndAt' | 'milestoneLabel'>>;
   /** Journeys build plan J5 — step 2a: the customer's proposals, oldest first. */
   scopeProposals?: ScopeProposal[];
   /** SC1 — the site type's list has been applied to this contract (hand-added items do not count). */
@@ -1247,6 +1247,7 @@ export const WIZARD_FIELDS = gql`
       titleEn
       contractId
       plannedEndAt
+      milestoneLabel
     }
   }
 `;

@@ -312,6 +312,10 @@ test('J8: the custom path puts MOCKUP on the road and the pre-made path does not
 
 // ---- designMissing: the new road's design completeness (J8) ---------------------------
 
+test('DX2a designMissing: a contract with no design has nothing missing — there is no design step to complete', () => {
+  assert.deepEqual(designMissing({ path: 'NONE', hasRound: false, concepts: [], paletteCount: 0 }), []);
+});
+
 test('J8 designMissing: pre-made needs a chosen concept; custom needs every page approved, one page at least, and a palette', () => {
   const concept = (chosen: boolean, ...pages: boolean[]) => ({
     chosenAt: chosen ? T(1) : null,

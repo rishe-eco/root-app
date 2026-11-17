@@ -128,8 +128,11 @@ test('Phases and payment: "X of Y allocated", a warning while the plan is short 
   await expect(acc).toHaveAttribute('data-open', 'true');
   const row = page.getByTestId('brief-phase').first();
   await row.locator('input').nth(1).fill('Kick-off');
+  await page.getByTestId('phase-milestone-1').fill('Deposit');
   await row.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByTestId('phases-readout')).toContainText('Kick-off');
+  // The milestone label (the old Phases tab edited it) round-trips: the row remounts with what the server now holds.
+  await expect(page.getByTestId('phase-milestone-1')).toHaveValue('Deposit');
 
   // The plan is fixed: the one row takes the whole price, and the step is done.
   await page.getByTestId('acc-plan').getByRole('button').first().click();

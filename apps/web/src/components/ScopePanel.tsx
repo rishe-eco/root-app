@@ -776,11 +776,13 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
         </section>
       ) : null}
 
-      {items.length === 0 && extras.length === 0 ? (
+      {/* The empty line speaks of pages, features and deliverables; the extras (always seeded) are their own group below it. */}
+      {items.length === 0 ? (
         <p className="t-small desk-muted" data-testid="scope-empty">
           {staff ? t('scope.empty.staff') : t('scope.empty.customer')}
         </p>
-      ) : (
+      ) : null}
+      {items.length + extras.length > 0 ? (
         <FeedbackPanel
           contractId={contract.id}
           step="SCOPE"
@@ -792,7 +794,7 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
           locked={step.locked}
           onChanged={() => void refetch()}
         />
-      )}
+      ) : null}
 
       {step.locked ? (
         <p className="t-small locknote" data-testid="scope-locked-note">
