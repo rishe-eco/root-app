@@ -9,7 +9,7 @@ import { exec, ok, stop, type ExecResult } from './graphql.js';
 import { __setMailTransportForTests, __resetMailTransportForTests, type MailMessage } from '../lib/mail.js';
 import { __setSmsTransportForTests, __resetSmsTransportForTests } from '../lib/sms.js';
 import { __resetNamedRateLimitsForTests } from '../lib/rateLimit.js';
-import { AGREEMENT_FORMAT, buildContractSnapshot, contentHash, readContractSnapshot } from '../lib/revision.js';
+import { FORMAT_3, buildContractSnapshot, contentHash, readContractSnapshot } from '../lib/revision.js';
 import { draftStateOn } from '../graphql/resolvers/agreement.js';
 import { loadContract } from '../graphql/resolvers/contracts.js';
 
@@ -161,7 +161,7 @@ const publish = () => exec(PUBLISH, { as: staff.SALES, variables: { c: f.contrac
 async function ready() {
   const steps = await stepsOneAndTwo();
   const published = ok(await publish()).publishContractRevision as { revision: { id: string; version: number; format: number } };
-  assert.equal(published.revision.format, 2);
+  assert.equal(published.revision.format, 3);
   return { ...steps, revisionId: published.revision.id };
 }
 
@@ -716,7 +716,7 @@ test('a format-1 revision still verifies byte-for-byte: the fixture’s v1 is re
 });
 
 test('a revision in a format nobody reads is unsealed, not guessed at', () => {
-  assert.equal(readContractSnapshot({ format: 3, ref: 'x' }), null);
+  assert.equal(readContractSnapshot({ format: 4, ref: 'x' }), null);
   assert.equal(readContractSnapshot({ ref: 'x' }), null);
   assert.notEqual(readContractSnapshot({ format: 2, ref: 'x' }), null);
 });
@@ -726,7 +726,7 @@ test('a format-2 snapshot carries steps 1 and 2, and its hash is stable across t
   const revision = await prisma.contractRevision.findFirstOrThrow({ where: { contractId: f.contract.id }, orderBy: { version: 'desc' } });
   assert.equal(revision.version, 2);
   const snapshot = readContractSnapshot(revision.snapshot) as unknown as Record<string, unknown> & { format: number };
-  assert.equal(snapshot.format, AGREEMENT_FORMAT);
+  assert.equal(snapshot.format, FORMAT_3);
   for (const key of ['brief', 'allowances', 'paymentPlan', 'phases', 'plannedStartAt', 'plannedEndAt', 'articles', 'scopeItems']) {
     assert.ok(key in snapshot, key);
   }
@@ -1074,6 +1074,6 @@ test('a refusal tells no one', async () => {
 test('publishDraftDirect follows the road: a new-road contract’s revision is format 2, and is approvable without going through the gates that published it', async () => {
   await stepsOneAndTwo();
   const revision = await publishDraftDirect(f.contract.id);
-  assert.equal(readContractSnapshot(revision.snapshot)?.format, 2);
+  assert.equal(readContractSnapshot(revision.snapshot)?.format, 3);
   ok(await approve());
 });

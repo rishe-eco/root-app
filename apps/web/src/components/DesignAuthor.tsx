@@ -17,6 +17,7 @@ import {
   SET_PAGE_IMAGE,
   SET_PALETTE_ITEM_IMAGE,
   START_DESIGN_DRAFT,
+  UPDATE_PAGE_DESIGN,
   THEMES,
   UPDATE_PALETTE_ITEM,
   type Contract,
@@ -352,6 +353,10 @@ function WireframeRow({ contractId, page }: { contractId: string; page: DesignCo
   const locale = useLocale();
   const [setImage] = useMutation(SET_PAGE_IMAGE);
   const [remove] = useMutation(DELETE_PAGE_DESIGN);
+  const [rename] = useMutation(UPDATE_PAGE_DESIGN);
+  // The label the Design tab let a designer rename (`updatePageDesign`); DX2a moved the tab's work here and dropped it (DX2b restores it).
+  const [labelFa, setLabelFa] = useState(page.labelFa);
+  const [labelEn, setLabelEn] = useState(page.labelEn);
   const { act, busy, error } = useAct();
   return (
     <li className="design-page-row card" data-testid="wireframe-row" data-key={page.key}>
@@ -361,6 +366,20 @@ function WireframeRow({ contractId, page }: { contractId: string; page: DesignCo
           {page.key}
         </span>
       </div>
+      <form
+        className="workspace-row"
+        data-testid="wireframe-rename"
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault();
+          void act(() => rename({ variables: { pageId: page.id, labelFa, labelEn } }));
+        }}
+      >
+        <input className="input" dir="rtl" required aria-label={t('workspace.titleFa')} value={labelFa} onChange={(e) => setLabelFa(e.target.value)} />
+        <input className="input" dir="ltr" required aria-label={t('workspace.titleEn')} value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
+        <button className="btn btn-ghost btn-sm" type="submit" disabled={busy}>
+          {t('workspace.save')}
+        </button>
+      </form>
       <ImageUploader
         contractId={contractId}
         currentUrl={page.imageUrl}

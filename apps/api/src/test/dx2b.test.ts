@@ -185,7 +185,8 @@ test('an item in two phases: phaseId is the last, the join rows are both, and Ph
   const r = await read();
   const listed = (n: number) => r.phases.find((x) => x.number === n)!.scopeItems.map((s) => s.key);
   assert.deepEqual([listed(1), listed(2), listed(3)], [[], ['home'], ['home']]);
-  const wire = ok(await exec('query($c: ID!){ contract(id: $c) { scopeItems { key phaseId phaseIds } } }', { as: staff.SALES, variables: { c: f.contract.id } })).contract.scopeItems as Array<{ key: string; phaseId: string | null; phaseIds: string[] }>;
+  const wireData = ok(await exec('query($c: ID!){ contract(id: $c) { scopeItems { key phaseId phaseIds } } }', { as: staff.SALES, variables: { c: f.contract.id } }));
+  const wire = (wireData.contract as { scopeItems: Array<{ key: string; phaseId: string | null; phaseIds: string[] }> }).scopeItems;
   const w = wire.find((s) => s.key === 'home')!;
   assert.equal(w.phaseId, p.last);
   assert.deepEqual([...w.phaseIds].sort(), [p.build, p.last].sort());
@@ -435,7 +436,8 @@ test('a fresh publish writes format 3, and it reads back: the switch, the item�
 test('changing only an item’s phases makes the published draft dirty — they are part of what was agreed', async () => {
   const p = await drafting();
   ok(await exec(PUBLISH, { as: staff.SALES, variables: { c: f.contract.id } }));
-  const dirty = async () => ok(await exec('query($c: ID!){ contract(id: $c) { draft { dirty } } }', { as: staff.SALES, variables: { c: f.contract.id } })).contract.draft.dirty;
+  const dirty = async () =>
+    (ok(await exec('query($c: ID!){ contract(id: $c) { draft { dirty } } }', { as: staff.SALES, variables: { c: f.contract.id } })).contract as { draft: { dirty: boolean } }).draft.dirty;
   assert.equal(await dirty(), false);
   ok(await exec(SET_PHASES, { as: staff.SALES, variables: { i: (await item('home')).id, p: [p.build] } }));
   assert.equal(await dirty(), true);

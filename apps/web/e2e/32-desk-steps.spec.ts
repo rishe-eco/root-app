@@ -191,8 +191,9 @@ test('Pages and features holds the extras and the registry the Scope tab had: an
   await expect(card).toBeVisible();
   await card.getByTestId('registry-status').selectOption('IN_BUILD');
   await expect(card.getByTestId('registry-status')).toHaveValue('IN_BUILD');
-  await card.getByTestId('registry-phase').selectOption({ index: 1 });
-  await expect(card.getByTestId('registry-phase')).not.toHaveValue('');
+  // DX2b: a set of phases, ticked — here the one phase the contract has.
+  await card.getByTestId('registry-phase-1').click();
+  await expect(card.getByTestId('registry-phase-1')).toBeChecked();
   await card.getByLabel('Temporary').click();
   await expect(card.getByLabel('Temporary')).toBeChecked();
 
@@ -202,7 +203,7 @@ test('Pages and features holds the extras and the registry the Scope tab had: an
   await page.getByTestId('acc-registry').getByRole('button').first().click();
   const again = page.locator('[data-testid="registry-item"][data-key="sample.page"]');
   await expect(again.getByTestId('registry-status')).toHaveValue('IN_BUILD');
-  await expect(again.getByTestId('registry-phase')).not.toHaveValue('');
+  await expect(again.getByTestId('registry-phase-1')).toBeChecked();
 
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 900 });
