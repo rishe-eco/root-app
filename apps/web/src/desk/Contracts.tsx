@@ -9,6 +9,7 @@ import {
   ALL_CUSTOMERS,
   ASSIGNABLE_USERS,
   CREATE_CONTRACT,
+  NEXT_CONTRACT_REF,
   PUBLISH_CONTRACT,
   REQUEST,
   SET_CONTRACT_STATUS,
@@ -21,6 +22,7 @@ import { ALL_STATUSES, fullDateTime, pick } from '@/lib/format';
 import StatusBadge from '@/components/StatusBadge';
 import { requestErrorMessage } from '@/components/RequestThread';
 import { captionFor } from '@/lib/wizard';
+import NewCustomerModal from './NewCustomerModal';
 
 /**
  * Journeys build plan S1: the list itself answers both `contracts.readAll`
@@ -53,6 +55,13 @@ export default function DeskContracts() {
   });
   const [publish] = useMutation(PUBLISH_CONTRACT);
   const [setStatus] = useMutation(SET_CONTRACT_STATUS);
+  // DX3b: the next reference, to prefill. Fetched fresh each time the form
+  // opens (a stale number would only be corrected by the server, but a fresh
+  // one is what the person expects to see).
+  const { data: nextRefData, refetch: refetchNextRef } = useQuery<{ nextContractRef: string }>(NEXT_CONTRACT_REF, {
+    skip: !canAuthor,
+    fetchPolicy: 'network-only',
+  });
   const [createContract, { loading: creating }] = useMutation(CREATE_CONTRACT, {
     refetchQueries: [{ query: ALL_CONTRACTS }, 'AllRequests'],
   });
@@ -77,6 +86,11 @@ export default function DeskContracts() {
   const [showNew, setShowNew] = useState(false);
   const [customerId, setCustomerId] = useState('');
   const [ref, setRef] = useState('');
+  // Whether the reference was typed in. Untouched, none is sent and the server
+  // numbers the contract itself — so the number wins a race instead of the
+  // prefill going stale and being refused.
+  const [refTouched, setRefTouched] = useState(false);
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [titleFa, setTitleFa] = useState('');
   const [titleEn, setTitleEn] = useState('');
   const [designerId, setDesignerId] = useState('');
@@ -91,6 +105,10 @@ export default function DeskContracts() {
     else setTitleEn((v) => v || fromRequest.title);
   }, [fromRequest]);
 
+  useEffect(() => {
+    if (!refTouched && nextRefData) setRef(nextRefData.nextContractRef);
+  }, [refTouched, nextRefData]);
+
   if (!canRead) return <Navigate to={lp(locale, '/desk')} replace />;
 
   async function onCreate(e: FormEvent) {
@@ -101,7 +119,8 @@ export default function DeskContracts() {
         variables: {
           input: {
             customerId,
-            ref,
+            // Blank or untouched: the server numbers it (DX3b).
+            ...(refTouched && ref.trim() ? { ref: ref.trim() } : {}),
             titleFa,
             titleEn,
             designerId: designerId || null,
@@ -111,6 +130,7 @@ export default function DeskContracts() {
         },
       });
       const id = res.data?.createContract.id;
+      void refetchNextRef();
       if (id) navigate(lp(locale, `/desk/contracts/${id}`));
     } catch (err) {
       setError(requestErrorMessage(err, t));
@@ -122,7 +142,11 @@ export default function DeskContracts() {
       <div className="workspace-row">
         <h2 className="t-h2">{t('desk.navContracts')}</h2>
         {canAuthor ? (
-          <button className="btn btn-primary btn-sm" type="button" onClick={() => setShowNew((v) => !v)}>
+          <button className="btn btn-primary btn-sm" type="button" onClick={() => {
+              setShowNew((v) => !v);
+              if (!showNew) void refetchNextRef();
+            }}
+          >
             {t('desk.newContract')}
           </button>
         ) : null}
@@ -171,6 +195,19 @@ export default function DeskContracts() {
                     </option>
                   ))}
                 </select>
+                {/* DX3b (review 2): a customer who is not in the list yet — made here, form kept. */}
+                {can(me, 'customers.manage') && !fromRequest ? (
+                  <div>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      type="button"
+                      data-testid="new-customer"
+                      onClick={() => setNewCustomerOpen(true)}
+                    >
+                      {t('desk.newCustomer')}
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <div className="field">
                 <label className="label" htmlFor="nc-ref">
@@ -180,11 +217,14 @@ export default function DeskContracts() {
                   id="nc-ref"
                   className="input"
                   dir="ltr"
-                  required
-                  placeholder="RC-2026-015"
+                  maxLength={40}
                   value={ref}
-                  onChange={(e) => setRef(e.target.value)}
+                  onChange={(e) => {
+                    setRef(e.target.value);
+                    setRefTouched(true);
+                  }}
                 />
+                <p className="t-caption desk-muted">{t('desk.newContractRefHelp')}</p>
               </div>
             </div>
             <div className="editor-grid-2">
@@ -265,6 +305,13 @@ export default function DeskContracts() {
             </div>
           </form>
         </section>
+      ) : null}
+
+      {newCustomerOpen ? (
+        <NewCustomerModal
+          onClose={() => setNewCustomerOpen(false)}
+          onCreated={(userId) => setCustomerId(userId)}
+        />
       ) : null}
 
       <div className="table-wrap">

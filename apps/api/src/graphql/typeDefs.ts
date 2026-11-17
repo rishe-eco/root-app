@@ -2776,6 +2776,8 @@ export const typeDefs = /* GraphQL */ `
     "Admin only."
     allContracts: [Contract!]!
     allCustomers: [User!]!
+    "DX3b. contracts.author. The reference the next contract would get, R-<Jalali year>-<NNN>: the form prefills it. A suggestion — creation numbers again."
+    nextContractRef: String!
     "The tools the caller holds an active grant for — what the portal's rail offers (journeys build plan S3)."
     myTools: [ToolKey!]!
     "Staff (customers.manage). Null for an id that is not a customer, exactly as for one that does not exist."
@@ -2959,7 +2961,8 @@ export const typeDefs = /* GraphQL */ `
 
   input CreateContractInput {
     customerId: ID!
-    ref: String!
+    "DX3b: leave it out and the server numbers the contract, R-<Jalali year>-<NNN>. Refused: REF_INVALID, REF_TAKEN."
+    ref: String
     titleFa: String!
     titleEn: String!
     amount: String
@@ -3734,6 +3737,8 @@ export const typeDefs = /* GraphQL */ `
     CUSTOMER_INACTIVE, NOT_FOUND (no such contract, or not a customer).
     """
     changeContractCustomer(contractId: ID!, customerId: ID!): Contract!
+    "DX3b. contracts.author. Changes the reference until anything is signed. Refused: REF_INVALID (not Latin letters, digits and dashes, 1-40), REF_TAKEN, CONTRACT_SIGNED, NOT_FOUND."
+    updateContractRef(contractId: ID!, ref: String!): Contract!
     """
     Staff (contracts.readActive or contracts.readAll, and the contract visible
     to them). Journeys build plan J3: a private note on a contract — never read

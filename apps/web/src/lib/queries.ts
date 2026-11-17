@@ -2696,8 +2696,8 @@ export const ACTIVITY = gql`
 `;
 
 export const INVITE_CUSTOMER = gql`
-  mutation InviteCustomer($phone: String!, $name: String!, $clientName: String, $email: String) {
-    inviteCustomer(phone: $phone, name: $name, clientName: $clientName, email: $email) {
+  mutation InviteCustomer($phone: String!, $name: String!, $clientName: String, $email: String, $locale: String) {
+    inviteCustomer(phone: $phone, name: $name, clientName: $clientName, email: $email, locale: $locale) {
       userId
       email
       inviteUrl
@@ -2799,6 +2799,23 @@ export const SET_CONTRACT_STATUS = gql`
 // of the API's convention (T9 in V2.md): one reload keeps the gate, the
 // status, the dirty flag and the carry-forward preview all consistent
 // without the client recomputing any of them.
+
+/** DX3b. contracts.author. The reference the form prefills; creation numbers again. */
+export const NEXT_CONTRACT_REF = gql`
+  query NextContractRef {
+    nextContractRef
+  }
+`;
+
+/** DX3b. contracts.author. Until anything is signed: REF_INVALID, REF_TAKEN, CONTRACT_SIGNED. */
+export const UPDATE_CONTRACT_REF = gql`
+  mutation UpdateContractRef($contractId: ID!, $ref: String!) {
+    updateContractRef(contractId: $contractId, ref: $ref) {
+      id
+      ref
+    }
+  }
+`;
 
 export const CREATE_CONTRACT = gql`
   ${CONTRACT_WORKSPACE_FIELDS}

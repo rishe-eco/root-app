@@ -397,6 +397,7 @@
 .invite-link { display: flex; flex-direction: column; gap: var(--space-2); }
 .invite-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .invite-link-row .desk-code { flex: 1 1 16rem; min-width: 0; }
+.invite-link-row .desk-code { overflow-wrap: anywhere; }
 
 /* The one irreversible act on this page: bordered in the error colour so it
    cannot be mistaken for the forms around it. */
