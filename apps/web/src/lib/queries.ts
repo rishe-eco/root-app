@@ -4202,20 +4202,20 @@ export const CREATE_TICKET_FROM_FEEDBACK = gql`
 // ---------------------------------------------------------------------------
 
 export const CREATE_DEPENDENCY = gql`
-  ${CONTRACT_FIELDS}
+  ${CONTRACT_WORKSPACE_FIELDS}
   mutation CreateDependency($projectId: ID!, $side: DependencySide, $titleFa: String!, $titleEn: String!, $dueAt: DateTime, $notNeeded: Boolean, $contractId: ID) {
     createDependency(projectId: $projectId, side: $side, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt, notNeeded: $notNeeded, contractId: $contractId) {
-      ...ContractFields
+      ...ContractWorkspaceFields
     }
   }
 `;
 
 /** DX3a: an omitted variable is left alone, `null` clears (a side, a date) — only a requirements row may be without them. */
 export const UPDATE_DEPENDENCY = gql`
-  ${CONTRACT_FIELDS}
+  ${CONTRACT_WORKSPACE_FIELDS}
   mutation UpdateDependency($dependencyId: ID!, $titleFa: String, $titleEn: String, $dueAt: DateTime, $side: DependencySide, $notNeeded: Boolean, $contractId: ID) {
     updateDependency(dependencyId: $dependencyId, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt, side: $side, notNeeded: $notNeeded, contractId: $contractId) {
-      ...ContractFields
+      ...ContractWorkspaceFields
     }
   }
 `;
@@ -4239,10 +4239,10 @@ export const UNVERIFY_DEPENDENCY = gql`
 `;
 
 export const DELETE_DEPENDENCY = gql`
-  ${CONTRACT_FIELDS}
+  ${CONTRACT_WORKSPACE_FIELDS}
   mutation DeleteDependency($dependencyId: ID!, $contractId: ID) {
     deleteDependency(dependencyId: $dependencyId, contractId: $contractId) {
-      ...ContractFields
+      ...ContractWorkspaceFields
     }
   }
 `;

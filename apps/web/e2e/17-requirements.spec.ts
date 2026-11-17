@@ -50,7 +50,7 @@ async function pickDay(page: Page, testId: string, [year, month, day]: [number, 
   await expect(box).toHaveAttribute('data-value', gregorian);
 }
 
-/** Opens an accordion panel if it is closed (`brief`, `handOver` on Requirements; `phases`, `plan` on Phases and payment). */
+/** Opens an accordion panel if it is closed (`brief`, `handover`, `handOver` on Requirements; `phases`, `plan` on Phases and payment). */
 async function openPanel(page: Page, id: string) {
   const panel = page.getByTestId(`acc-${id}`);
   if ((await panel.getAttribute('data-open')) !== 'true') await panel.getByRole('button').first().click();
@@ -91,19 +91,29 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await pickDay(page, 'brief-hard', [1405, 8, 1], '2026-10-23'); // 1 Aban 1405
   await page.getByTestId('brief-support-pills').getByRole('button', { name: '6 months' }).click();
   await page.locator('#brief-domain-name').fill('nahal.ir');
-  await page.getByTestId('brief-provider-domain').getByRole('button', { name: 'The customer' }).click();
-  await page.getByTestId('brief-provider-host').getByRole('button', { name: 'Root' }).click();
-  await page.getByTestId('brief-provider-content').getByRole('button', { name: 'The customer' }).click();
   await stepUp(page, 'brief-premade', 2);
   await stepUp(page, 'brief-demos', 2);
-
-  // Each provider chosen asks for its commitment's date — before the first save.
-  await expect(page.getByTestId('brief-commitment')).toHaveCount(3);
-  await pickDay(page, 'brief-due-domain', [1405, 8, 5], '2026-10-27');
-  await pickDay(page, 'brief-due-host', [1405, 8, 6], '2026-10-28');
-  await pickDay(page, 'brief-due-content', [1405, 8, 10], '2026-11-01');
   await page.getByTestId('brief-save').click();
   await expect(page.getByTestId('brief-saved')).toBeVisible();
+
+  // The first save made the handover list (DX3a): one undecided, undated row for each item on the desk's default
+  // list — and an undecided list is a complete one, since no provider is required. Sales then says who provides each
+  // thing, and by when; the pills are Root · Customer · Not needed, and a second press clears one.
+  await openPanel(page, 'handover');
+  await expect(page.getByTestId('handover-row')).toHaveCount(3);
+  const domainWho = page.getByTestId('handover-side-domain');
+  await domainWho.getByRole('button', { name: 'Root' }).click();
+  await expect(domainWho).toHaveAttribute('data-value', 'ROOT');
+  await domainWho.getByRole('button', { name: 'Root' }).click();
+  await expect(domainWho).toHaveAttribute('data-value', '');
+  await domainWho.getByRole('button', { name: 'Customer' }).click();
+  await page.getByTestId('handover-side-host').getByRole('button', { name: 'Root' }).click();
+  await page.getByTestId('handover-side-content').getByRole('button', { name: 'Customer' }).click();
+  await pickDay(page, 'handover-due-domain', [1405, 8, 5], '2026-10-27');
+  await pickDay(page, 'handover-due-host', [1405, 8, 6], '2026-10-28');
+  await pickDay(page, 'handover-due-content', [1405, 8, 10], '2026-11-01');
+  await page.getByTestId('handover-save').click();
+  await expect(page.getByTestId('handover-saved')).toBeVisible();
 
   // The brief is a brief now, and Requirements is done on the brief alone (DX2a): the phases and the plan
   // are the next step's to name, and it counts them on its pill.
@@ -156,10 +166,11 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await expect(payment).toBeChecked();
   await requirementsStep(page).locator('button').click();
   await expect(missing.locator('[data-code="COMMITMENT_UNDATED"]')).toContainText('Payment gateway account');
-  await openPanel(page, 'brief');
-  await expect(page.getByTestId('brief-commitment')).toHaveCount(4);
-  await pickDay(page, 'brief-due-gateway', [1405, 8, 15], '2026-11-06');
-  await page.getByTestId('brief-save').click();
+  await openPanel(page, 'handover');
+  await expect(page.getByTestId('handover-row')).toHaveCount(4);
+  await pickDay(page, 'handover-due-gateway', [1405, 8, 15], '2026-11-06');
+  await page.getByTestId('handover-save').click();
+  await expect(page.getByTestId('handover-saved')).toBeVisible();
   await expect(page.getByTestId('brief-missing')).toHaveCount(0);
 
   // What sales typed is what the readout below says — the same cards the customer reads.
@@ -188,14 +199,14 @@ test('the customer reads it in Persian — commitments and dates in the Jalali c
   await expect(panel.locator('[data-field="idealDeadline"]')).toContainText('۱ مهر ۱۴۰۵');
   await expect(panel.locator('[data-field="idealDeadline"]')).not.toContainText('شهریور');
 
-  // Their commitments, each with its due date; Root's own beside them.
-  await expect(panel.getByText('تعهدهای شما', { exact: true })).toBeVisible();
+  // The handover items, each with who provides it and its due date — one list, the customer's and Root's together.
+  await expect(panel.getByText('چه کسی چه چیزی را تأمین می‌کند', { exact: true })).toBeVisible();
   await expect(panel.locator('[data-field="domain"]')).toContainText('nahal.ir');
+  await expect(panel.locator('[data-field="domain"]').getByTestId('handover-who')).toHaveText('مشتری');
   await expect(panel.locator('[data-field="domain"]').getByTestId('commitment-due')).toHaveText('مهلت: ۵ آبان ۱۴۰۵');
   await expect(panel.locator('[data-field="content"]').getByTestId('commitment-due')).toHaveText('مهلت: ۱۰ آبان ۱۴۰۵');
   await expect(panel.locator('[data-field="gateway"]').getByTestId('commitment-due')).toHaveText('مهلت: ۱۵ آبان ۱۴۰۵');
-  await expect(panel.getByText('تعهدهای ریشه', { exact: true })).toBeVisible();
-  await expect(panel.locator('[data-field="host"]')).toBeVisible();
+  await expect(panel.locator('[data-field="host"]').getByTestId('handover-who')).toHaveText('ریشه');
 
   // Money is the customer's own to read: in Persian digits, with the unit.
   await expect(panel.locator('[data-field="budgetCap"]')).toContainText('۱۵۰٬۰۰۰٬۰۰۰ تومان');

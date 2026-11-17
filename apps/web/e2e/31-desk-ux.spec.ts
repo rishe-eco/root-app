@@ -161,14 +161,7 @@ test('requirements inputs: accordions open on what is missing, support months an
     await page.locator('#brief-support').fill('18');
     await expect(support.locator('button[data-value="other"]')).toHaveAttribute('aria-pressed', 'true');
 
-    // Who provides: Root / Customer, optional — a second press clears it.
-    const domain = page.getByTestId('brief-provider-domain');
-    await domain.locator('button[data-value="ROOT"]').click();
-    await expect(domain).toHaveAttribute('data-value', 'ROOT');
-    await domain.locator('button[data-value="ROOT"]').click();
-    await expect(domain).toHaveAttribute('data-value', '');
-    await domain.locator('button[data-value="CUSTOMER"]').click();
-    await expect(domain).toHaveAttribute('data-value', 'CUSTOMER');
+    // (Who provides what moved to the handover panel, with Not needed — 35-handover.spec.ts drives it.)
 
     // Counts: a large number between − and +; it never goes below zero.
     const demos = page.getByTestId('brief-demos');

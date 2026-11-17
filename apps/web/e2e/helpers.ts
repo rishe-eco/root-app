@@ -462,7 +462,7 @@ export async function completeStepOneViaApi(
   const { templateTypes } = await gql<{ templateTypes: Array<{ id: string; slug: string }> }>(request, '{ templateTypes(activeOnly: true) { id slug } }');
   const store = templateTypes.find((t) => t.slug === 'store');
   if (!store) throw new Error('completeStepOneViaApi: the seeded store type is missing');
-  await gql(request, 'mutation($c: ID!, $i: BriefInput!){ setBrief(contractId: $c, input: $i) { id } }', {
+  const { setBrief } = await gql<{ setBrief: { handover: Array<{ id: string; briefKey: string | null }> } }>(request, 'mutation($c: ID!, $i: BriefInput!){ setBrief(contractId: $c, input: $i) { id handover { id briefKey } } }', {
     c: contract.id,
     i: {
       kind: 'NEW_SITE',
@@ -471,22 +471,28 @@ export async function completeStepOneViaApi(
       budgetCap: '150000000',
       hardDeadline: '2026-10-23',
       domainName: 'nahal.ir',
-      domainProvidedBy: 'CUSTOMER',
-      hostProvidedBy: 'ROOT',
-      contentProvidedBy: 'CUSTOMER',
       supportMonths: 6,
       // The allowance the tier counts against: two pre-made rounds, or (custom)
       // the default two wireframe iterations plus the mockup's.
       // DX2a: no design, no allowance to set.
       ...(designTier === 'NONE' ? {} : designTier === 'THEME_PICK' ? { premadeRounds: 2 } : { mockupIterations: 2 }),
       demoIterationsPerPhase: 2,
-      commitments: [
-        { key: 'domain', dueAt: '2026-10-05' },
-        { key: 'host', dueAt: '2026-10-06' },
-        { key: 'content', dueAt: '2026-10-07' },
-      ],
     },
   });
+  // DX3a: who provides the domain, the host and the content is on the handover rows the brief just made.
+  for (const [key, side, due] of [
+    ['domain', 'CUSTOMER', '2026-10-05'],
+    ['host', 'ROOT', '2026-10-06'],
+    ['content', 'CUSTOMER', '2026-10-07'],
+  ] as const) {
+    const row = setBrief.handover.find((h) => h.briefKey === key);
+    if (!row) continue;
+    await gql(request, 'mutation($d: ID!, $s: DependencySide, $due: DateTime){ updateDependency(dependencyId: $d, side: $s, dueAt: $due) { id } }', {
+      d: row.id,
+      s: side,
+      due: `${due}T00:00:00.000Z`,
+    });
+  }
   const { createPhase } = await gql<{ createPhase: { phases: Array<{ id: string }> } }>(
     request,
     'mutation($c: ID!){ createPhase(contractId: $c, number: 1, titleFa: "فاز اول", titleEn: "First phase", plannedEndAt: "2026-11-10") { phases { id } } }',
