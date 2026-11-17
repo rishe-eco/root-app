@@ -2536,6 +2536,7 @@
       "count": "Number of rows",
       "propose": "Propose rows",
       "proposeHelp": "Proposing replaces the rows below with an even split of the fee — not of the budget. Edit them afterwards.",
+      "label": "Label",
       "labelFa": "Label (Persian)",
       "labelEn": "Label (English)",
       "amount": "Amount (Toman)",

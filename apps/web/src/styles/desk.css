@@ -420,3 +420,6 @@
 /* DX4: the one title field — an input, and a quiet link to the second language. */
 .title-field { display: flex; flex-direction: column; gap: var(--space-2); min-inline-size: 0; }
 .title-field-add { align-self: flex-start; }
+.req-phase > .title-field, .plan-row > .title-field { flex: 2 1 14rem; }
+.plan-row > .title-field { grid-column: 1 / -1; }
+.req-phase > .autosave-note { flex-basis: 100%; }
