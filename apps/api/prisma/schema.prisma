@@ -398,7 +398,7 @@ enum StepKind {
 
 model Contract {
   id      String @id @default(cuid())
-  /// Human reference shown to the customer, e.g. RC-2026-014.
+  /// Human reference shown to the customer, e.g. R-1405-001 (DX3b: generated, Jalali year and a running number; older ones read RC-2026-014).
   ref     String @unique
   titleFa String
   titleEn String

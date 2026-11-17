@@ -8,6 +8,7 @@ import { can } from '../../lib/capabilities.js';
 import { contractVisibleTo, isActiveContract, projectVisibleToStaff } from '../../lib/visibility.js';
 import { ensureDueEntriesFor, computeBillingReport } from '../../lib/billing.js';
 import { smsProviderConfigured } from '../../lib/sms.js';
+import { nextRef } from '../../lib/contractRef.js';
 
 /** Shared with resolvers/admin/billing.ts, whose mutations return the same
  *  shape — one include, imported both places, rather than two copies that
@@ -163,6 +164,12 @@ export const Query = {
       where: { roles: { has: 'CUSTOMER' } },
       orderBy: { createdAt: 'desc' },
     });
+  },
+
+  /** DX3b. The form's prefill; creation numbers again under its own lock. */
+  nextContractRef: async (_p: unknown, _a: unknown, ctx: Context) => {
+    requireCapability(ctx, 'contracts.author');
+    return nextRef(prisma);
   },
 
   /** The corpus admin's reviewer list (C2 §5). Same `has` reasoning as
