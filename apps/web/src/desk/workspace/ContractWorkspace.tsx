@@ -20,6 +20,7 @@ import { errorCode } from '@/components/FeedbackPanel';
 import StatusArea from '@/components/StatusArea';
 import StepList from '@/components/StepList';
 import NextUp from '@/components/NextUp';
+import DuplicateContractModal from './DuplicateContractModal';
 
 /**
  * `refetch` is the one deliberate exception to "no tab calls refetch" (see
@@ -278,6 +279,7 @@ export default function ContractWorkspace() {
   const locale = useLocale();
   const { id = '' } = useParams();
   const me = useOutletContext<User>();
+  const [duplicating, setDuplicating] = useState(false);
   const { data, loading, error, refetch } = useQuery<{ contract: Contract | null }>(CONTRACT_WORKSPACE, {
     variables: { id },
   });
@@ -314,9 +316,18 @@ export default function ContractWorkspace() {
           <Link className="btn btn-secondary btn-sm" to={lp(locale, `/desk/contracts/${id}/as-customer`)}>
             {t('viewAs.cta')}
           </Link>
+          {/* DX3c: start a new contract from this one (brief, scope, phases, plan, handover rows). */}
+          {can(me, 'contracts.author') ? (
+            <button className="btn btn-secondary btn-sm" type="button" data-testid="duplicate-contract" onClick={() => setDuplicating(true)}>
+              {t('workspace.duplicate')}
+            </button>
+          ) : null}
           <StatusBadge status={contract.status} />
         </div>
       </div>
+      {duplicating ? (
+        <DuplicateContractModal contract={contract} canPickCustomer={can(me, 'customers.manage')} onClose={() => setDuplicating(false)} />
+      ) : null}
 
       {/* DX1: whose turn, what to do, and the step to open — a new-road contract's first question. */}
       {contract.sequence === 'AGREEMENT_FIRST' ? <NextUp contract={contract} /> : null}

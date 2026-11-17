@@ -981,6 +981,16 @@
       "UNKNOWN": "That did not work. Try again."
     },
     "changeCustomer": "Change customer",
+    "duplicate": "Duplicate",
+    "duplicateTitle": "Duplicate this contract",
+    "duplicateHelp": "Starts a new contract on a project of its own, with this one's requirements, agreed pages and features, phases, payment plan and handover items. Dates, articles, approvals, signatures, invoices and everything done are not copied.",
+    "duplicateSubmit": "Create the copy",
+    "copyPrefix": "Copy of",
+    "duplicateError": {
+      "NOT_FOUND": "That is not a customer account, or this contract is gone.",
+      "CUSTOMER_INACTIVE": "That customer account is disabled.",
+      "TITLE_REQUIRED": "Give the copy a title in both languages."
+    },
     "customerSave": "Move to this customer",
     "customerConfirm": "Move this contract and its project to {{name}}? Draft invoices move with it.",
     "customerHelp": "Possible only until the customer approves or signs, and before any invoice is issued.",
