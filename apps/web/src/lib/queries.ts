@@ -2494,6 +2494,16 @@ export const SET_USER_ROLES = gql`
   }
 `;
 
+/** DX3c. contracts.author. A new contract and project from an existing one; lands on the new contract. */
+export const DUPLICATE_CONTRACT = gql`
+  mutation DuplicateContract($contractId: ID!, $customerId: ID!, $titleFa: String!, $titleEn: String!) {
+    duplicateContract(contractId: $contractId, customerId: $customerId, titleFa: $titleFa, titleEn: $titleEn) {
+      id
+      ref
+    }
+  }
+`;
+
 /** CC1. contracts.author. Only before approval, signature or an issued invoice. */
 export const CHANGE_CONTRACT_CUSTOMER = gql`
   ${CONTRACT_WORKSPACE_FIELDS}
