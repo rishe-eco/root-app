@@ -24,6 +24,7 @@ import { publishContentRefusals, refusalError } from '../publishGate.js';
 import { asConcurrentPublish } from './shared.js';
 import { notify } from '../../../lib/notify.js';
 import { env } from '../../../lib/env.js';
+import { REF_PATTERN, lockContractRefs, nextRef } from '../../../lib/contractRef.js';
 
 /**
  * The contract draft (title, fee, articles) and its publish path, plus
@@ -91,7 +92,8 @@ export const contractAdminMutations = {
     args: {
       input: {
         customerId: string;
-        ref: string;
+        /** DX3b: absent (or blank) → the server numbers it, `R-1405-001`. */
+        ref?: string | null;
         titleFa: string;
         titleEn: string;
         amount?: string;
@@ -110,6 +112,14 @@ export const contractAdminMutations = {
     // project behind with no contract on it.
     await assertAssignable(input.designerId, 'design.author');
     await assertAssignable(input.developerId, 'builds.author');
+    // DX3b: a typed reference is checked like updateContractRef's; none typed
+    // means the server numbers it, inside the transaction below.
+    const typedRef = input.ref?.trim() || null;
+    if (typedRef !== null && !REF_PATTERN.test(typedRef)) {
+      throw new GraphQLError('A reference is Latin letters, digits and dashes, up to 40.', {
+        extensions: { code: 'REF_INVALID' },
+      });
+    }
 
     const contractId = await prisma.$transaction(async (tx) => {
       let projectId: string;
@@ -151,11 +161,21 @@ export const contractAdminMutations = {
         projectId = project.id;
       }
 
+      // DX3b. The lock is taken before the number is read and held to the end
+      // of the transaction, so two creations at once get two numbers. A typed
+      // reference skips it: the unique index answers a clash (REF_TAKEN).
+      if (typedRef === null) await lockContractRefs(tx);
+      const ref = typedRef ?? (await nextRef(tx));
+      if (typedRef !== null && (await tx.contract.findUnique({ where: { ref }, select: { id: true } }))) {
+        throw new GraphQLError('That reference is already used by another contract.', {
+          extensions: { code: 'REF_TAKEN' },
+        });
+      }
       const contract = await tx.contract.create({
         data: {
           customerId: input.customerId,
           projectId,
-          ref: input.ref,
+          ref,
           titleFa: input.titleFa,
           titleEn: input.titleEn,
           amount: input.amount ? BigInt(input.amount) : null,
@@ -678,6 +698,56 @@ export const contractAdminMutations = {
     });
     return reload(contract.id);
   },
+  /**
+   * DX3b (desk UX review item 1). contracts.author. Changes the reference
+   * until anything is signed on the contract, the customer-change rule's
+   * `CONTRACT_SIGNED` (any revision or amendment signed) — a signed contract's
+   * number is on a document the customer holds. Trimmed; `REF_INVALID` unless
+   * Latin letters, digits and dashes, 1–40; `REF_TAKEN` on a duplicate (the
+   * unique index decides, so a race is refused the same way). Not logged: the
+   * Activity tab's `ChangeAction` has no value for it, and adding one is a
+   * schema change this stage does not make.
+   */
+  updateContractRef: async (_p: unknown, args: { contractId: string; ref: string }, ctx: Context) => {
+    requireCapability(ctx, 'contracts.author');
+    const ref = args.ref.trim();
+    if (!REF_PATTERN.test(ref)) {
+      throw new GraphQLError('A reference is Latin letters, digits and dashes, up to 40.', {
+        extensions: { code: 'REF_INVALID' },
+      });
+    }
+    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    if (!contract) throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
+    if (contract.ref === ref) return reload(contract.id);
+    try {
+      await prisma.$transaction(async (tx) => {
+        await lockContract(tx, contract.id);
+        const signed = await tx.signature.count({
+          where: {
+            OR: [
+              { contractRevision: { contractId: contract.id } },
+              { amendment: { contractRevision: { contractId: contract.id } } },
+            ],
+          },
+        });
+        if (signed > 0) {
+          throw new GraphQLError('This contract is signed; its reference cannot change.', {
+            extensions: { code: 'CONTRACT_SIGNED' },
+          });
+        }
+        await tx.contract.update({ where: { id: contract.id }, data: { ref } });
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2002') {
+        throw new GraphQLError('That reference is already used by another contract.', {
+          extensions: { code: 'REF_TAKEN' },
+        });
+      }
+      throw err;
+    }
+    return reload(contract.id);
+  },
+
   /**
    * CC1 — move a contract to another customer, for a contract made for the
    * wrong one. **Only before anything binds it to the first**:

@@ -22,6 +22,7 @@ import { isPaymentScheduleArticle } from '@/lib/agreement';
 import { errorCode } from '@/components/FeedbackPanel';
 import Lock from '@/components/Lock';
 import TitleFeeCard from '@/components/TitleFeeCard';
+import ContractRefCard from '@/components/ContractRefCard';
 import PlannedDates from '@/components/PlannedDates';
 import ReadinessBox from './ReadinessBox';
 import type { WorkspaceContext } from './ContractWorkspace';
@@ -468,6 +469,8 @@ export default function ContractTab() {
       {newRoad ? <ReadinessBox contract={contract} /> : null}
 
       {/* DX1 (review 15): the contract's own settings — title, total price, planned dates — are here and only here. */}
+      {/* DX3b (review 1): the generated reference, editable until a signature. */}
+      {can(me, 'contracts.author') ? <ContractRefCard contractId={contract.id} value={contract.ref} signed={baseSigned} /> : null}
       <TitleFeeCard contractId={contract.id} draft={draft} locked={locked} />
       {newRoad ? <PlannedDates contract={contract} canEdit={!locked} /> : null}
 

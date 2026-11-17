@@ -81,6 +81,8 @@
 .auth-head h1 { margin: 0; }
 .auth-head p { margin: 0; }
 .auth-form { display: flex; flex-direction: column; gap: var(--space-4); }
+/* DX3b: at 180 px a button in a form may wrap its label instead of leaving the column (the new-contract form's "Create contract" did). */
+.auth-form .btn { max-inline-size: 100%; white-space: normal; text-align: center; }
 .auth-foot { display: flex; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .auth-notice { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--color-secondary-soft); border: 1px solid var(--color-secondary-border); font-size: var(--text-small); }
 .auth-error { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--color-accent-soft); border: 1px solid var(--color-accent-border); font-size: var(--text-small); color: var(--color-error); }
