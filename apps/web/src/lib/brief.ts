@@ -52,8 +52,8 @@ export function impliedRows(
 }
 
 /** PD-13: the tier is stored, the path is what is shown — two words on screen. */
-export type DesignPath = 'PREMADE' | 'CUSTOM';
-export const designPath = (tier: DesignTier): DesignPath => (tier === 'THEME_PICK' ? 'PREMADE' : 'CUSTOM');
+export type DesignPath = 'PREMADE' | 'CUSTOM' | 'NONE';
+export const designPath = (tier: DesignTier): DesignPath => (tier === 'NONE' ? 'NONE' : tier === 'THEME_PICK' ? 'PREMADE' : 'CUSTOM');
 
 /**
  * The statuses that put an extra in scope — `AGREED` or beyond (a mirror of the

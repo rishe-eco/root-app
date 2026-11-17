@@ -558,7 +558,7 @@ export type AgreementSnapshot = {
     kind: 'NEW_SITE' | 'FEATURE_FOR_EXISTING';
     existingSiteUrl: string | null;
     templateType: { slug: string; labelFa: string; labelEn: string };
-    designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+    designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' | 'NONE';
     budgetCap: string | null;
     idealDeadline: string | null;
     hardDeadline: string | null;
@@ -741,7 +741,7 @@ export type Request = {
  * client renders them and never recomputes one.
  */
 export type ContractSequence = 'DESIGN_FIRST' | 'AGREEMENT_FIRST';
-export type StepKind = 'REQUIREMENTS' | 'SCOPE' | 'DRAFT' | 'AGREEMENT' | 'DESIGN' | 'MOCKUP' | 'DEMO' | 'SUMMARY';
+export type StepKind = 'REQUIREMENTS' | 'SCOPE' | 'PHASES' | 'DRAFT' | 'AGREEMENT' | 'DESIGN' | 'MOCKUP' | 'DEMO' | 'SUMMARY';
 export type WaitingOn = 'CUSTOMER' | 'ROOT';
 
 export type WizardStep = {
@@ -859,6 +859,8 @@ export type Contract = {
   brief?: ContractBrief | null;
   /** What step 1 still lacks, as codes. Empty means the step is done. */
   briefCompleteness?: BriefMissing[];
+  /** DX2a: what the Phases and payment step still lacks (the phases and the plan, once step 1's). Empty means done. */
+  planCompleteness?: BriefMissing[];
   /** Journeys build plan J8 — step 4, selected by `WizardFields`: the current
    *  round's palette (a custom design's), and what the design still lacks
    *  (`CONCEPT_NOT_CHOSEN`, `NO_PAGES`, `PAGE_NOT_APPROVED`, `PALETTE_EMPTY`,
@@ -882,7 +884,7 @@ export type Contract = {
 };
 
 export type BriefKind = 'NEW_SITE' | 'FEATURE_FOR_EXISTING';
-export type DesignTier = 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+export type DesignTier = 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' | 'NONE';
 export type PaymentSplit = 'LUMP_SUM' | 'INSTALLMENTS' | 'MONTHLY';
 
 /** Step 1 (journeys build plan J4). Dates are calendar days (PD-19): ISO
@@ -1165,6 +1167,10 @@ export const WIZARD_FIELDS = gql`
       updatedAt
     }
     briefCompleteness {
+      code
+      key
+    }
+    planCompleteness {
       code
       key
     }

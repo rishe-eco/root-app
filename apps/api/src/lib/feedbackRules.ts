@@ -35,6 +35,9 @@ export type AnswerRoute = 'DIRECT' | 'NEEDS_APPROVAL';
  *  and SUMMARY "never takes input" (J3) — the CHECK in the database refuses a
  *  row for either. */
 export const FEEDBACK_STEPS: readonly StepKind[] = ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'DESIGN', 'MOCKUP', 'DEMO'];
+// DX2a: PHASES is not in the list. The `FeedbackItem_anchor_matches_step` CHECK has no branch for it, and a customer's
+// note about the phases or the plan is still raised as a REQUIREMENTS note anchored to `phases` / `paymentPlan`
+// (`BRIEF_FIELDS`), which is where those notes were before the step existed. The PHASES panel shows those threads.
 
 export const takesFeedback = (step: StepKind): boolean => FEEDBACK_STEPS.includes(step);
 
@@ -47,6 +50,7 @@ export const takesFeedback = (step: StepKind): boolean => FEEDBACK_STEPS.include
 const DIRECT_CAPABILITY: Partial<Record<StepKind, Capability>> = {
   REQUIREMENTS: 'answers.direct.agreement',
   SCOPE: 'answers.direct.agreement',
+  PHASES: 'answers.direct.agreement',
   DRAFT: 'answers.direct.agreement',
   AGREEMENT: 'answers.direct.agreement',
   DESIGN: 'answers.direct.design',

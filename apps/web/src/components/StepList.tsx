@@ -34,6 +34,7 @@ export default function StepList({
   onSelect,
   nextMoveOn,
   briefMissing,
+  planMissing,
 }: {
   steps: WizardStep[];
   selected?: WizardStep | null;
@@ -42,6 +43,8 @@ export default function StepList({
   nextMoveOn?: WaitingOn | null;
   /** `briefCompleteness.length`, for the Requirements pill. */
   briefMissing?: number;
+  /** `planCompleteness.length`, for the Phases and payment pill (DX2a). */
+  planMissing?: number;
 }) {
   const { t } = useTranslation();
   const locale = useLocale();
@@ -51,7 +54,7 @@ export default function StepList({
       {steps.map((s, i) => {
         const chosen = sameStep(s, selected);
         const rich = nextMoveOn !== undefined;
-        const missing = rich ? pillMissing(s, briefMissing) : null;
+        const missing = rich ? pillMissing(s, briefMissing, planMissing) : null;
         const state = rich ? t(`wizard.pill.${pillState(s, nextMoveOn)}`) : t(`wizard.state.${s.status}`);
         const inner = (
           <>

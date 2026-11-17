@@ -1,15 +1,14 @@
-import { createContext, useContext, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
-import { pick, formatAmount, formatCount } from '@/lib/format';
-import { errorCode } from '@/components/FeedbackPanel';
+import { pick, formatCount } from '@/lib/format';
+import { Accordion, SectionHead, day, refusalText } from '@/components/EditorKit';
 import DayInput from '@/components/DayInput';
 import CountStepper from '@/components/CountStepper';
 import MoneyReadout from '@/components/MoneyReadout';
 import PillChoice from '@/components/PillChoice';
-import i18n from '@/i18n';
 import {
   COMMITMENT_KEYS,
   PROVIDER_KEYS,
@@ -18,22 +17,15 @@ import {
   normalizeAmount,
   type ProviderKey,
 } from '@/lib/brief';
-import { proposeRows, type Labeller, type Split } from '@/lib/planProposal';
 import {
-  CREATE_PHASE,
-  DELETE_PHASE,
   PUBLISH_CONTRACT,
   SET_BRIEF,
-  SET_EXTRA,
-  SET_PAYMENT_PLAN,
   TEMPLATE_TYPES,
-  UPDATE_PHASE,
   type BriefInput,
   type BriefKind,
   type Contract,
   type DependencySide,
   type DesignTier,
-  type PlannedInvoiceInput,
   type TemplateType,
   type User,
 } from '@/lib/queries';
@@ -44,9 +36,11 @@ import {
  * (`RequirementsPanel`), so what sales types is what the customer will read,
  * field by field.
  *
- * Five small forms, each saved on its own — the brief (with the dated
- * commitments it implies), the extras, the phases, the payment plan — and the
- * hand-over. Each is a `contracts.author` write and refuses with `STEP_LOCKED`
+ * Small forms, each saved on its own — the brief (with the dated commitments
+ * it implies) and the hand-over. (**DX2a moved the extras to Pages and
+ * features and the phases and payment plan to their own step**, desk UX review
+ * 9–11: Requirements is facts about the job only.) Each is a
+ * `contracts.author` write and refuses with `STEP_LOCKED`
  * once the agreement is approved, so the panel does not render this at all for
  * a locked step (a control that can only fail is worse than one that is not
  * there). **Every date is a `DayInput`** — one text field and a calendar
@@ -68,86 +62,11 @@ import {
  * them, and the fields are not drawn.
  */
 
-type T = (key: string, opts?: Record<string, unknown>) => string;
-
 /** The support terms offered as pills (DX1, review 5); anything else is "Other". */
 const SUPPORT_PILLS = ['1', '3', '6', '12'];
 
-const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : '');
 const numberOrNull = (text: string) => (text.trim() === '' ? null : Number(text));
 const str = (n: number | null | undefined) => (n === null || n === undefined ? '' : String(n));
-
-/** A refusal's sentence: the code's own line when the locale has one, the message otherwise. */
-function refusalText(t: T, err: unknown): string {
-  const code = errorCode(err);
-  return code && t(`brief.error.${code}`, { defaultValue: '' }) ? t(`brief.error.${code}`) : (err as Error).message;
-}
-
-/** Inside an accordion the panel's title is on its header bar, so the card does not say it twice. */
-const InAccordion = createContext(false);
-
-function SectionHead({ title, help }: { title: string; help?: string }) {
-  const inAccordion = useContext(InAccordion);
-  return (
-    <>
-      {inAccordion ? null : <h4 className="t-h4">{title}</h4>}
-      {help ? <p className="sec-help">{help}</p> : null}
-    </>
-  );
-}
-
-type PanelId = 'brief' | 'extras' | 'phases' | 'plan' | 'handOver';
-
-/**
- * Which sub-panel a `briefCompleteness` code is fixed in — so the accordion can
- * open the first one that still lacks something. The codes are the API's
- * (`BriefMissingCode`); this only files them.
- */
-export function panelOf(code: string): PanelId {
-  if (code === 'PHASES' || code === 'PHASE_END_DATE') return 'phases';
-  if (code === 'PAYMENT_PLAN' || code === 'PAYMENT_PLAN_TOTAL') return 'plan';
-  return 'brief';
-}
-
-/** A collapsible sub-panel: a header bar that is the toggle, and the body kept mounted (hidden when closed) so a half-typed form survives a fold. */
-function Accordion({
-  id,
-  title,
-  open,
-  onToggle,
-  missing,
-  children,
-}: {
-  id: PanelId;
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  /** How many things this panel still lacks; 0 says "Complete". Null for a panel the completeness list says nothing about. */
-  missing: number | null;
-  children: ReactNode;
-}) {
-  const { t } = useTranslation();
-  const locale = useLocale();
-  const body = useId();
-  return (
-    <section className="req-acc" data-testid={`acc-${id}`} data-open={open ? 'true' : 'false'}>
-      <h4 className="req-acc-title">
-        <button type="button" className="req-acc-head" aria-expanded={open} aria-controls={body} onClick={onToggle}>
-          <span className="req-acc-name">{title}</span>
-          {missing === null ? null : (
-            <span className={`req-acc-state${missing > 0 ? ' req-acc-missing' : ''}`} data-missing={missing}>
-              {missing > 0 ? t('brief.accordion.missing', { count: missing, n: formatCount(missing, locale) }) : t('brief.accordion.complete')}
-            </span>
-          )}
-          <span className="req-acc-mark" aria-hidden="true">{open ? '▾' : locale === 'fa' ? '◂' : '▸'}</span>
-        </button>
-      </h4>
-      <div id={body} hidden={!open}>
-        <InAccordion.Provider value={true}>{children}</InAccordion.Provider>
-      </div>
-    </section>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // The brief
@@ -311,6 +230,8 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
           <option value="THEME_PICK">{t('brief.tier.THEME_PICK')}</option>
           <option value="CLAUDE_ASSISTED">{t('brief.tier.CLAUDE_ASSISTED')}</option>
           <option value="SENIOR_DESIGNER">{t('brief.tier.SENIOR_DESIGNER')}</option>
+          {/* DX2a (desk UX review 4): chiefly a feature on an existing site — the contract's road has no design and no mockup. */}
+          <option value="NONE">{t('brief.tier.NONE')}</option>
         </select>
         <p className="t-caption">{t('brief.form.designTierHelp')}</p>
       </div>
@@ -433,7 +354,7 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
 
       <p className="t-eyebrow">{t('brief.form.allowancesTitle')}</p>
       <div className="editor-grid-2">
-        {designTier === 'THEME_PICK' ? (
+        {designTier === 'NONE' ? null : designTier === 'THEME_PICK' ? (
           <div className="field">
             <span className="label">{t('brief.form.premadeRounds')}</span>
             <CountStepper label={t('brief.form.premadeRounds')} value={premadeRounds} onChange={setPremadeRounds} max={20} testId="brief-premade" />
@@ -468,324 +389,6 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
       ) : null}
       <div>
         <button className="btn btn-primary btn-sm" type="submit" disabled={loading || !templateTypeId} data-testid="brief-save">
-          {t('workspace.save')}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// The extras
-// ---------------------------------------------------------------------------
-
-function ExtrasEditor({ contract }: { contract: Contract }) {
-  const { t } = useTranslation();
-  const locale = useLocale();
-  const [setExtra, { loading }] = useMutation(SET_EXTRA);
-  const [error, setError] = useState<string | null>(null);
-  const extras = contract.scopeItems.filter((s) => s.kind === 'EXTRA').sort((a, b) => a.position - b.position);
-  if (extras.length === 0) return null;
-
-  async function toggle(id: string, included: boolean) {
-    setError(null);
-    try {
-      await setExtra({ variables: { scopeItemId: id, included, contractId: contract.id } });
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
-
-  return (
-    <div className="card editor-card" data-testid="extras-editor">
-      <SectionHead title={t('brief.extras.title')} help={t('brief.extras.help')} />
-      <div className="req-checklist">
-        {extras.map((s) => (
-          <label className="req-check" key={s.id}>
-            <input
-              type="checkbox"
-              disabled={loading}
-              checked={isIncludedExtra(s.status)}
-              onChange={(e) => toggle(s.id, e.target.checked)}
-              data-key={s.key}
-            />
-            <span>{pick(s, 'label', locale)}</span>
-          </label>
-        ))}
-      </div>
-      {error ? <p className="error">{error}</p> : null}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// The phases
-// ---------------------------------------------------------------------------
-
-function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNullable<Contract['phases']>[number] }) {
-  const { t } = useTranslation();
-  const locale = useLocale();
-  const [update, { loading }] = useMutation(UPDATE_PHASE);
-  const [remove] = useMutation(DELETE_PHASE);
-  const [titleFa, setTitleFa] = useState(phase.titleFa);
-  const [titleEn, setTitleEn] = useState(phase.titleEn);
-  const [end, setEnd] = useState(day(phase.plannedEndAt));
-  const [error, setError] = useState<string | null>(null);
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await update({
-        variables: { phaseId: phase.id, titleFa, titleEn, plannedEndAt: end || null, contractId: contract.id },
-      });
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
-
-  async function onDelete() {
-    if (!confirm(t('brief.phases.confirmDelete'))) return;
-    setError(null);
-    try {
-      await remove({ variables: { phaseId: phase.id, contractId: contract.id } });
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
-
-  return (
-    <form className="req-phase" onSubmit={save} data-testid="brief-phase" data-number={phase.number}>
-      <span className="badge num-latin">{formatCount(phase.number, locale)}</span>
-      <input className="input" dir="rtl" required aria-label={t('workspace.titleFa')} value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-      <input className="input" dir="ltr" required aria-label={t('workspace.titleEn')} value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-      <DayInput value={end} onChange={setEnd} label={t('brief.phases.plannedEnd', { n: formatCount(phase.number, locale) })} testId={`phase-end-${phase.number}`} />
-      <span className="workspace-row">
-        <button className="btn btn-secondary btn-sm" type="submit" disabled={loading}>
-          {t('workspace.save')}
-        </button>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete}>
-          {t('workspace.delete')}
-        </button>
-      </span>
-      {error ? <p className="error">{error}</p> : null}
-    </form>
-  );
-}
-
-function PhasesEditor({ contract }: { contract: Contract }) {
-  const { t } = useTranslation();
-  const [create, { loading }] = useMutation(CREATE_PHASE);
-  const phases = [...(contract.phases ?? [])].sort((a, b) => a.number - b.number);
-  const [titleFa, setTitleFa] = useState('');
-  const [titleEn, setTitleEn] = useState('');
-  const [end, setEnd] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const next = phases.length === 0 ? 1 : Math.max(...phases.map((p) => p.number)) + 1;
-
-  async function add(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await create({
-        variables: { contractId: contract.id, number: next, titleFa: titleFa.trim(), titleEn: titleEn.trim(), plannedEndAt: end || null },
-      });
-      setTitleFa('');
-      setTitleEn('');
-      setEnd('');
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
-
-  return (
-    <div className="card editor-card" data-testid="phases-editor">
-      <SectionHead title={t('brief.phases.title')} help={t('brief.phases.help')} />
-      {phases.map((p) => (
-        <PhaseRow key={`${p.id}:${p.plannedEndAt ?? ''}:${p.titleFa}:${p.titleEn}`} contract={contract} phase={p} />
-      ))}
-      <form className="req-phase req-phase-new" onSubmit={add} data-testid="brief-phase-new">
-        <span className="badge num-latin">+</span>
-        <input className="input" dir="rtl" required aria-label={t('workspace.titleFa')} placeholder={t('workspace.titleFa')} value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-        <input className="input" dir="ltr" required aria-label={t('workspace.titleEn')} placeholder={t('workspace.titleEn')} value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-        <DayInput value={end} onChange={setEnd} label={t('brief.phases.newPlannedEnd')} testId="phase-end-new" />
-        <span className="workspace-row">
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={loading || !titleFa.trim() || !titleEn.trim()}>
-            {t('brief.phases.add')}
-          </button>
-        </span>
-      </form>
-      {error ? <p className="error">{error}</p> : null}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// The payment plan
-// ---------------------------------------------------------------------------
-
-type PlanRow = { labelFa: string; labelEn: string; amount: string; phaseId: string; paymentTermDays: string };
-
-/** A row's label in each language, whichever the desk is read in — a stored label is bilingual. */
-function labellerFor(lang: 'fa' | 'en'): Labeller {
-  const t = i18n.getFixedT(lang);
-  return {
-    lump: () => t('brief.plan.proposal.lump'),
-    installment: (n, of) => {
-      const nf = new Intl.NumberFormat(lang === 'fa' ? 'fa-IR' : 'en-US', { useGrouping: false });
-      return t('brief.plan.proposal.installment', { n: nf.format(n), of: nf.format(of) });
-    },
-    month: (m, y) => {
-      const nf = new Intl.NumberFormat(lang === 'fa' ? 'fa-IR' : 'en-US', { useGrouping: false });
-      return t('brief.plan.proposal.month', { month: t(`jalali.months.${m}`), year: nf.format(y) });
-    },
-  };
-}
-
-function PlanEditor({ contract }: { contract: Contract }) {
-  const { t } = useTranslation();
-  const locale = useLocale();
-  const [save, { loading }] = useMutation(SET_PAYMENT_PLAN);
-  const plan = contract.paymentPlan ?? null;
-  const phases = [...(contract.phases ?? [])].sort((a, b) => a.number - b.number);
-  const fee = contract.amount ? BigInt(contract.amount) : null;
-
-  const [split, setSplit] = useState<Split>(plan?.split ?? 'INSTALLMENTS');
-  const [count, setCount] = useState('3');
-  const [rows, setRows] = useState<PlanRow[]>(() =>
-    (plan?.invoices ?? []).map((i) => ({
-      labelFa: i.labelFa,
-      labelEn: i.labelEn,
-      amount: i.amount,
-      phaseId: i.phaseId ?? '',
-      paymentTermDays: String(i.paymentTermDays),
-    })),
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  function propose() {
-    const proposed = proposeRows({
-      split,
-      total: fee,
-      count: Number(count) || 1,
-      phases,
-      start: null,
-      today: new Date().toISOString().slice(0, 10),
-      fa: labellerFor('fa'),
-      en: labellerFor('en'),
-    });
-    setRows(proposed.map((p) => ({ ...p, phaseId: p.phaseId ?? '', paymentTermDays: String(p.paymentTermDays) })));
-    setSaved(false);
-  }
-
-  const edit = (i: number, patch: Partial<PlanRow>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-
-  const total = rows.reduce((sum, r) => {
-    const a = normalizeAmount(r.amount);
-    return /^\d+$/.test(a) ? sum + BigInt(a) : sum;
-  }, 0n);
-
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSaved(false);
-    const invoices: PlannedInvoiceInput[] = rows.map((r) => ({
-      labelFa: r.labelFa,
-      labelEn: r.labelEn,
-      amount: normalizeAmount(r.amount),
-      phaseId: r.phaseId || null,
-      paymentTermDays: Number(r.paymentTermDays),
-    }));
-    try {
-      await save({ variables: { contractId: contract.id, split, invoices } });
-      setSaved(true);
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
-
-  return (
-    <form className="card editor-card auth-form" onSubmit={onSave} data-testid="plan-editor">
-      <SectionHead title={t('brief.plan.title')} help={t('brief.plan.help')} />
-      <div className="workspace-row">
-        <select className="input" aria-label={t('brief.plan.splitLabel')} value={split} onChange={(e) => setSplit(e.target.value as Split)}>
-          <option value="LUMP_SUM">{t('brief.plan.splitOption.LUMP_SUM')}</option>
-          <option value="INSTALLMENTS">{t('brief.plan.splitOption.INSTALLMENTS')}</option>
-          <option value="MONTHLY">{t('brief.plan.splitOption.MONTHLY')}</option>
-        </select>
-        {split === 'LUMP_SUM' ? null : (
-          <input
-            className="input num-latin"
-            dir="ltr"
-            inputMode="numeric"
-            aria-label={t('brief.plan.count')}
-            value={count}
-            onChange={(e) => setCount(e.target.value)}
-          />
-        )}
-        <button className="btn btn-ghost btn-sm" type="button" onClick={propose} data-testid="plan-propose">
-          {t('brief.plan.propose')}
-        </button>
-      </div>
-      <p className="t-caption">{t('brief.plan.proposeHelp')}</p>
-
-      {rows.length > 0 ? (
-        <div className="plan-table" role="table">
-          {rows.map((r, i) => (
-            <div className="plan-row" role="row" key={i} data-testid="plan-row">
-              <input className="input" dir="rtl" required aria-label={t('brief.plan.labelFa')} value={r.labelFa} onChange={(e) => edit(i, { labelFa: e.target.value })} />
-              <input className="input" dir="ltr" required aria-label={t('brief.plan.labelEn')} value={r.labelEn} onChange={(e) => edit(i, { labelEn: e.target.value })} />
-              <div className="money-field">
-                <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.amount')} value={r.amount} onChange={(e) => edit(i, { amount: e.target.value })} />
-                <MoneyReadout value={normalizeAmount(r.amount)} testId="plan-amount-readout" />
-              </div>
-              <select className="input" aria-label={t('brief.plan.phase')} value={r.phaseId} onChange={(e) => edit(i, { phaseId: e.target.value })}>
-                <option value="">{t('brief.plan.noPhase')}</option>
-                {phases.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {t('brief.plan.phaseOption', { n: formatCount(p.number, locale), title: pick(p, 'title', locale) })}
-                  </option>
-                ))}
-              </select>
-              <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.term')} value={r.paymentTermDays} onChange={(e) => edit(i, { paymentTermDays: e.target.value })} />
-              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
-                {t('workspace.delete')}
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      <button
-        className="btn btn-ghost btn-sm"
-        type="button"
-        onClick={() => setRows([...rows, { labelFa: '', labelEn: '', amount: '', phaseId: '', paymentTermDays: '7' }])}
-      >
-        {t('brief.plan.addRow')}
-      </button>
-
-      <p className="t-small" data-testid="plan-total">
-        {fee === null
-          ? t('brief.plan.totalNoFee', { total: formatAmount(total.toString(), locale) })
-          : total === fee
-            ? t('brief.plan.totalMatches', { total: formatAmount(total.toString(), locale) })
-            : t('brief.plan.totalDiffers', {
-                total: formatAmount(total.toString(), locale),
-                fee: formatAmount(fee.toString(), locale),
-              })}
-      </p>
-      {error ? (
-        <p className="error" role="alert" data-testid="plan-error">
-          {error}
-        </p>
-      ) : null}
-      {saved ? (
-        <p className="t-small" role="status" data-testid="plan-saved">
-          {t('brief.form.saved')}
-        </p>
-      ) : null}
-      <div>
-        <button className="btn btn-primary btn-sm" type="submit" disabled={loading || rows.length === 0} data-testid="plan-save">
           {t('workspace.save')}
         </button>
       </div>
@@ -831,18 +434,16 @@ function HandOver({ contract }: { contract: Contract }) {
 
 // ---------------------------------------------------------------------------
 
+type PanelId = 'brief' | 'handOver';
+
 export default function RequirementsEditor({ contract, me }: { contract: Contract; me: User }) {
   const { t } = useTranslation();
-  const missing = contract.briefCompleteness ?? [];
-  const lacking = (panel: PanelId) => missing.filter((m) => panelOf(m.code) === panel).length;
-  const hasExtras = contract.scopeItems.some((s) => s.kind === 'EXTRA');
-  const canMoney = can(me, 'money.read');
+  // DX2a: this list is the brief's alone now — the phases and the plan are the Phases and payment step's own.
+  const briefLacks = (contract.briefCompleteness ?? []).length;
 
-  // The panels that exist for this contract and reader, in the order they are drawn.
-  const panels: PanelId[] = ['brief', ...(hasExtras ? (['extras'] as const) : []), 'phases', ...(canMoney ? (['plan'] as const) : []), ...(contract.publishedAt ? [] : (['handOver'] as const))];
-  // Opened once, on arrival: the first panel that still lacks something — else the brief, where a finished step's
-  // edits usually are. Saving never refolds a panel under the person typing in it.
-  const [open, setOpen] = useState<ReadonlySet<PanelId>>(() => new Set([panels.find((p) => lacking(p) > 0) ?? 'brief']));
+  // Opened once, on arrival, and never refolded under the person typing in it. The brief is the only panel that can lack
+  // something; the hand-over is the other, and a finished step's edits are in the brief.
+  const [open, setOpen] = useState<ReadonlySet<PanelId>>(() => new Set<PanelId>(['brief']));
   const toggle = (id: PanelId) =>
     setOpen((prev) => {
       const next = new Set(prev);
@@ -850,8 +451,8 @@ export default function RequirementsEditor({ contract, me }: { contract: Contrac
       else next.add(id);
       return next;
     });
-  const acc = (id: PanelId, title: string, children: ReactNode) => (
-    <Accordion id={id} title={title} open={open.has(id)} onToggle={() => toggle(id)} missing={id === 'extras' || id === 'handOver' ? null : lacking(id)}>
+  const acc = (id: PanelId, title: string, missing: number | null, children: ReactNode) => (
+    <Accordion id={id} title={title} open={open.has(id)} onToggle={() => toggle(id)} missing={missing}>
       {children}
     </Accordion>
   );
@@ -862,11 +463,8 @@ export default function RequirementsEditor({ contract, me }: { contract: Contrac
           now holds, and remounting would drop the "saved" line the person is
           reading. (A change made elsewhere — a due date edited on the dependency
           board — shows on the next visit, not live.) */}
-      {acc('brief', t('brief.form.title'), <BriefForm contract={contract} me={me} />)}
-      {hasExtras ? acc('extras', t('brief.extras.title'), <ExtrasEditor contract={contract} />) : null}
-      {acc('phases', t('brief.phases.title'), <PhasesEditor contract={contract} />)}
-      {canMoney ? acc('plan', t('brief.plan.title'), <PlanEditor contract={contract} />) : null}
-      {contract.publishedAt ? null : acc('handOver', t('brief.handOver.title'), <HandOver contract={contract} />)}
+      {acc('brief', t('brief.form.title'), briefLacks, <BriefForm contract={contract} me={me} />)}
+      {contract.publishedAt ? null : acc('handOver', t('brief.handOver.title'), null, <HandOver contract={contract} />)}
       <p className="t-caption desk-muted">{t('brief.form.savedSeparately')}</p>
     </div>
   );

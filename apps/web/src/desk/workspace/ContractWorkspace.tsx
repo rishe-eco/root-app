@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
 import type { DocumentNode } from 'graphql';
@@ -57,7 +57,27 @@ export function useWorkspaceMutation(document: DocumentNode) {
  * registry, dependencies and history that every contract has.
  */
 const LEGACY_TABS = ['contract', 'design', 'scope', 'phases', 'dependencies', 'activity', 'notes'] as const;
-const NEW_ROAD_TABS = ['steps', ...LEGACY_TABS] as const;
+/**
+ * DX2a (desk UX review 1, 9, 18, 19): a new-road contract's tabs are Steps, Contract and the three records.
+ * **Scope, Phases and Design are gone from it** — their controls live on Pages and features, Phases and payment
+ * and each Demo step — while a legacy (DESIGN_FIRST) contract keeps `LEGACY_TABS` exactly (review 34: those are
+ * converted in the release stage, not here).
+ */
+const NEW_ROAD_TABS = ['steps', 'contract', 'dependencies', 'activity', 'notes'] as const;
+
+/** The step that now holds what each removed tab held. */
+const TAB_TO_STEP = { design: 'DESIGN', scope: 'SCOPE', phases: 'PHASES' } as const;
+
+/**
+ * The route element for one of the three removed tabs. On a legacy contract it is the tab itself; on a new-road
+ * contract an old link (`/desk/contracts/:id/scope`, a bookmark, a changelog entry) goes to the step that holds
+ * its work now (`?step=`, which the Steps tab reads), so no link dies.
+ */
+export function LegacyTab({ tab, children }: { tab: keyof typeof TAB_TO_STEP; children: ReactNode }) {
+  const { contract } = useOutletContext<WorkspaceContext>();
+  if (contract.sequence === 'AGREEMENT_FIRST') return <Navigate to={`../steps?step=${TAB_TO_STEP[tab]}`} replace />;
+  return <>{children}</>;
+}
 
 /** The workspace's index: a new-road contract opens on its steps, a legacy one
  *  on the contract text it has always opened on. */

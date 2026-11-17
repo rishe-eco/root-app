@@ -385,6 +385,9 @@ enum ContractSequence {
 enum StepKind {
   REQUIREMENTS
   SCOPE
+  /// DX2a: phases and the payment plan, between the scope and the draft on the
+  /// new road. Locks with the agreement like steps 1–3.
+  PHASES
   DRAFT
   AGREEMENT
   DESIGN
@@ -2684,6 +2687,9 @@ enum DesignTier {
   THEME_PICK
   CLAUDE_ASSISTED
   SENIOR_DESIGNER
+  /// DX2a: no design at all (chiefly a feature on an existing site) — the
+  /// contract's road has neither DESIGN nor MOCKUP.
+  NONE
 }
 
 /// How the fee is split — **descriptive, not generative**: the rows are the

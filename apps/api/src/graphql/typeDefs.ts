@@ -1508,6 +1508,8 @@ export const typeDefs = /* GraphQL */ `
     brief: ContractBrief
     "What step 1 still lacks, as codes; empty means the step is done. Never carries a value."
     briefCompleteness: [BriefMissing!]!
+    "DX2a: what the Phases and payment step still lacks (PHASES, PHASE_END_DATE, PAYMENT_PLAN, PAYMENT_PLAN_TOTAL), as codes; empty means the step is done."
+    planCompleteness: [BriefMissing!]!
     "DX1: what stops the draft from being published, every blocker at once — from the gate's own code. Empty for anyone without contracts.author."
     publishBlockers: [PublishBlocker!]!
     "Null for staff without money.read who are not the customer (PD-14), and until a plan exists."
@@ -1730,6 +1732,8 @@ export const typeDefs = /* GraphQL */ `
     THEME_PICK
     CLAUDE_ASSISTED
     SENIOR_DESIGNER
+    "DX2a: no design at all — the road has neither DESIGN nor MOCKUP."
+    NONE
   }
 
   "Descriptive, not generative: the rows are the plan."
@@ -1876,6 +1880,8 @@ export const typeDefs = /* GraphQL */ `
   enum StepKind {
     REQUIREMENTS
     SCOPE
+    "DX2a: phases and the payment plan, between SCOPE and DRAFT on the new road."
+    PHASES
     DRAFT
     AGREEMENT
     DESIGN
@@ -1949,7 +1955,7 @@ export const typeDefs = /* GraphQL */ `
     phaseId: ID
     phaseNumber: Int
     status: StepStatus!
-    "Locked by the approval that seals it — its own, or AGREEMENT's for REQUIREMENTS, SCOPE and DRAFT. Never true on a DESIGN_FIRST contract."
+    "Locked by the approval that seals it — its own, or AGREEMENT's for REQUIREMENTS, SCOPE, PHASES and DRAFT. Never true on a DESIGN_FIRST contract."
     locked: Boolean!
     lockedAt: DateTime
     "False only for SUMMARY."

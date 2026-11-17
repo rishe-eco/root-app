@@ -38,7 +38,7 @@ import { clearPageMapConfirmation, openDemo } from '../demoStep.js';
  * mutations' assignment edge is the phase's own contract's developer — the
  * project no longer decides whose work a phase is. A phase is part of step 1
  * (what is delivered when, and by which planned day), so creating, editing and
- * deleting one asks `assertStepOpenOn(REQUIREMENTS)` after taking the
+ * deleting one asks `assertStepOpenOn(PHASES)` (DX2a: REQUIREMENTS until phases and payment became a step) after taking the
  * contract's row lock, exactly as S2's feedback writes do: once the agreement
  * is approved the phases are frozen with it (`STEP_LOCKED`). A legacy
  * (`DESIGN_FIRST`) contract has no REQUIREMENTS step, so nothing locks its
@@ -172,7 +172,7 @@ export const phaseMutations = {
     try {
       await prisma.$transaction(async (tx) => {
         await lockContract(tx, contract.id);
-        await assertStepOpenOn(contract.id, 'REQUIREMENTS', null, tx);
+        await assertStepOpenOn(contract.id, 'PHASES', null, tx);
         await tx.phase.create({
           data: {
             projectId: contract.projectId,
@@ -213,7 +213,7 @@ export const phaseMutations = {
     const end = plannedEnd(args.plannedEndAt);
     await prisma.$transaction(async (tx) => {
       await lockContract(tx, phase.contractId);
-      await assertStepOpenOn(phase.contractId, 'REQUIREMENTS', null, tx);
+      await assertStepOpenOn(phase.contractId, 'PHASES', null, tx);
       await tx.phase.update({
         where: { id: phase.id },
         data: {
@@ -237,7 +237,7 @@ export const phaseMutations = {
     const phase = await phaseOnContract(args.phaseId, args.contractId);
     await prisma.$transaction(async (tx) => {
       await lockContract(tx, phase.contractId);
-      await assertStepOpenOn(phase.contractId, 'REQUIREMENTS', null, tx);
+      await assertStepOpenOn(phase.contractId, 'PHASES', null, tx);
       // An approved phase cannot be deleted out from under its own lock
       // (`StepApproval.phaseId` restricts; this is the code before Postgres's).
       await assertStepOpenOn(phase.contractId, 'DEMO', phase.id, tx);

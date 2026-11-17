@@ -131,8 +131,9 @@ test.afterAll(async () => {
 });
 
 async function developerPhases(page: Page) {
+  // DX2a: the demo setup is on the phase's Demo step now (the Phases tab is gone from a new-road contract).
   await signIn(page, DEVELOPER, 'en');
-  await page.goto(`/en/desk/contracts/${contractId}/phases`);
+  await page.goto(`/en/desk/contracts/${contractId}/steps?step=DEMO`);
   await expect(page.getByTestId('demo-readiness')).toBeVisible();
 }
 

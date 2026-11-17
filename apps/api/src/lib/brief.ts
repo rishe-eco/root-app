@@ -1,5 +1,6 @@
 import type { DependencySide } from '@prisma/client';
 import { designPathOf } from './steps.js';
+import { planMatchesFee } from './plan.js';
 
 /**
  * Step 1's own rules (journeys build plan J4, house rule 3): what the brief
@@ -239,16 +240,18 @@ export type BriefMissingCode =
   | 'PREMADE_ROUNDS'
   | 'MOCKUP_ITERATIONS'
   | 'DEMO_ITERATIONS'
-  | 'COMMITMENT_UNDATED'
-  | 'PHASES'
-  | 'PHASE_END_DATE'
-  | 'PAYMENT_PLAN'
-  | 'PAYMENT_PLAN_TOTAL';
+  | 'COMMITMENT_UNDATED';
+
+/** One thing the PHASES step still lacks (DX2a). Same shape as `BriefMissing`,
+ *  so the wire type (`BriefMissing { code key }`) serves both lists. */
+export type PlanMissing = { code: PlanMissingCode; key: string | null };
+
+export type PlanMissingCode = 'PHASES' | 'PHASE_END_DATE' | 'PAYMENT_PLAN' | 'PAYMENT_PLAN_TOTAL';
 
 export type BriefForCompleteness = BriefCommitmentSource & {
   kind: 'NEW_SITE' | 'FEATURE_FOR_EXISTING';
   existingSiteUrl: string | null;
-  designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+  designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' | 'NONE';
   budgetCap: bigint | null;
   hardDeadline: Date | null;
   supportMonths: number | null;
@@ -265,22 +268,20 @@ export type BriefForCompleteness = BriefCommitmentSource & {
  * What counts as required is a choice the plan did not make, made here: the
  * brief's own fields that the later steps read (a budget to design against, a
  * hard deadline to plan to, a provider for each of the three commitments, the
- * support term, the allowance each design path counts against), every implied
- * commitment *dated*, at least one phase and each phase dated, and a payment
- * plan whose total matches the fee once there is a fee to compare with.
- * `idealDeadline` is a wish and is never required; `domainName` is what the
- * provider decides, and the customer may not have one yet.
+ * support term, the allowance each design path counts against) and every
+ * implied commitment *dated*. `idealDeadline` is a wish and is never required;
+ * `domainName` is what the provider decides, and the customer may not have one
+ * yet.
+ *
+ * **DX2a moved the phases and the payment plan out** to `planCompleteness`
+ * below: they are their own step now, with their own done signal and their own
+ * publish refusal. Until then this list named them too.
  */
 export function briefCompleteness(input: {
   brief: BriefForCompleteness | null;
   /** The dates of the board's brief-owned rows, by key. */
   commitmentDates: Partial<Record<CommitmentKey, Date | null>>;
   includedExtraKeys: readonly string[];
-  phases: ReadonlyArray<{ id: string; plannedEndAt: Date | null }>;
-  plan: { invoiceAmounts: readonly bigint[] } | null;
-  /** The draft fee, if there is one — the plan is compared with it (never the
-   *  other way round; `budgetCap` is a different number, PD-14). */
-  fee: bigint | null;
 }): BriefMissing[] {
   const missing: BriefMissing[] = [];
   const add = (code: BriefMissingCode, key: string | null = null) => missing.push({ code, key });
@@ -296,9 +297,11 @@ export function briefCompleteness(input: {
     if (!brief.hostProvidedBy) add('HOST_PROVIDER');
     if (!brief.contentProvidedBy) add('CONTENT_PROVIDER');
     if (brief.supportMonths === null) add('SUPPORT_MONTHS');
-    if (designPathOf(brief.designTier) === 'PREMADE') {
+    // DX2a: the no-design path has no design allowance to set.
+    const path = designPathOf(brief.designTier);
+    if (path === 'PREMADE') {
       if (brief.premadeRounds === null) add('PREMADE_ROUNDS');
-    } else if (brief.mockupIterations === null) {
+    } else if (path === 'CUSTOM' && brief.mockupIterations === null) {
       add('MOCKUP_ITERATIONS');
     }
     if (brief.demoIterationsPerPhase === null) add('DEMO_ITERATIONS');
@@ -307,6 +310,29 @@ export function briefCompleteness(input: {
       if (!input.commitmentDates[imp.key]) add('COMMITMENT_UNDATED', imp.key);
     }
   }
+  return missing;
+}
+
+/**
+ * What the PHASES step still lacks (DX2a, desk UX review 10–11). **Empty means
+ * done**, the step's signal in `stateOf`. At least one phase and each phase
+ * dated, and a payment plan whose total matches the fee once there is a fee to
+ * compare with (`planMatchesFee`, the one sum rule — the agreement gate asks the
+ * same function; never the other way round, `budgetCap` is a different number,
+ * PD-14). A plan against a contract with no fee yet is not a mismatch here: the
+ * fee is set on the Contract tab, and `PLAN_TOTAL_MISMATCH` at approval
+ * ("no fee is not a match") is what holds the agreement to it.
+ *
+ * `PAYMENT_PLAN_TOTAL` is the *unbalanced* code (the publish gate names it
+ * `PLAN_UNBALANCED`); the other three are gaps (`PLAN_INCOMPLETE`).
+ */
+export function planCompleteness(input: {
+  phases: ReadonlyArray<{ id: string; plannedEndAt: Date | null }>;
+  plan: { invoiceAmounts: readonly bigint[] } | null;
+  fee: bigint | null;
+}): PlanMissing[] {
+  const missing: PlanMissing[] = [];
+  const add = (code: PlanMissingCode, key: string | null = null) => missing.push({ code, key });
 
   if (input.phases.length === 0) add('PHASES');
   for (const phase of input.phases) {
@@ -315,7 +341,7 @@ export function briefCompleteness(input: {
 
   if (!input.plan || input.plan.invoiceAmounts.length === 0) {
     add('PAYMENT_PLAN');
-  } else if (input.fee !== null && input.plan.invoiceAmounts.reduce((a, b) => a + b, 0n) !== input.fee) {
+  } else if (input.fee !== null && !planMatchesFee({ invoices: input.plan.invoiceAmounts.map((amount) => ({ amount })) }, input.fee)) {
     add('PAYMENT_PLAN_TOTAL');
   }
   return missing;

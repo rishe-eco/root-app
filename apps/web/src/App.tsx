@@ -50,7 +50,7 @@ import Templates, { TemplatesIndex } from '@/desk/templates/Templates';
 import TemplateTypesTab from '@/desk/templates/TypesTab';
 import TemplateScopeTab from '@/desk/templates/ScopeTab';
 import TemplateThemesTab from '@/desk/templates/ThemesTab';
-import ContractWorkspace, { WorkspaceIndex } from '@/desk/workspace/ContractWorkspace';
+import ContractWorkspace, { LegacyTab, WorkspaceIndex } from '@/desk/workspace/ContractWorkspace';
 import WorkspaceStepsTab from '@/desk/workspace/StepsTab';
 import WorkspaceNotesTab from '@/desk/workspace/NotesTab';
 import WorkspaceContractTab from '@/desk/workspace/ContractTab';
@@ -149,9 +149,10 @@ export default function App() {
             <Route index element={<WorkspaceIndex />} />
             <Route path="steps" element={<WorkspaceStepsTab />} />
             <Route path="contract" element={<WorkspaceContractTab />} />
-            <Route path="design" element={<WorkspaceDesignTab />} />
-            <Route path="scope" element={<WorkspaceScopeTab />} />
-            <Route path="phases" element={<WorkspacePhasesTab />} />
+            {/* DX2a: these three are the legacy road's tabs; on a new-road contract they redirect to their step. */}
+            <Route path="design" element={<LegacyTab tab="design"><WorkspaceDesignTab /></LegacyTab>} />
+            <Route path="scope" element={<LegacyTab tab="scope"><WorkspaceScopeTab /></LegacyTab>} />
+            <Route path="phases" element={<LegacyTab tab="phases"><WorkspacePhasesTab /></LegacyTab>} />
             <Route path="dependencies" element={<WorkspaceDependenciesTab />} />
             <Route path="activity" element={<WorkspaceActivityTab />} />
             <Route path="notes" element={<WorkspaceNotesTab />} />

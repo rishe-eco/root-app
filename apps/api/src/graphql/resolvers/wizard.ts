@@ -21,8 +21,10 @@ import {
   briefCompleteness,
   isCommitmentKey,
   isIncludedExtra,
+  planCompleteness,
   type BriefMissing,
   type CommitmentKey,
+  type PlanMissing,
 } from '../../lib/brief.js';
 import {
   attentionFor,
@@ -331,10 +333,24 @@ function briefMissing(c: WizardContract, facts: Facts): BriefMissing[] {
     brief: facts.brief,
     commitmentDates,
     includedExtraKeys: includedExtraKeys(c),
+  });
+}
+
+/** The PHASES step's missing list (`lib/brief.ts`, DX2a), from the loaded facts —
+ *  one computation for the step's done signal, `Contract.planCompleteness` and the
+ *  publish gate, so the step cannot be "done" on one screen and incomplete on
+ *  another (house rule 3). */
+function planMissing(c: WizardContract, facts: Facts): PlanMissing[] {
+  return planCompleteness({
     phases: facts.phases,
     plan: facts.plan ? { invoiceAmounts: facts.plan.invoices.map((i) => i.amount) } : null,
     fee: c.amount,
   });
+}
+
+/** `planMissing` for a caller outside the field resolvers — the publish gate and the agreement gate. */
+export async function planIncompleteOn(c: FullContract): Promise<PlanMissing[]> {
+  return planMissing(c, await loadFacts(c));
 }
 
 /**
@@ -385,6 +401,12 @@ export function stateOf(c: WizardContract, facts: Facts): WizardState {
       : [];
   if (c.sequence === 'AGREEMENT_FIRST' && facts.brief && briefMissing(c, facts).length === 0) {
     finished.push({ step: 'REQUIREMENTS', phaseId: null, at: facts.brief.updatedAt });
+  }
+  // PHASES (DX2a): the phases and the payment plan are complete and add up to the
+  // fee — what REQUIREMENTS' signal also asked until phases and the plan became a
+  // step of their own. The rows carry no completion clock, so `at` is null.
+  if (c.sequence === 'AGREEMENT_FIRST' && planMissing(c, facts).length === 0) {
+    finished.push({ step: 'PHASES', phaseId: null, at: null });
   }
   if (c.sequence === 'AGREEMENT_FIRST') {
     // SCOPE (J5): the contract has a scope of its own and nothing the customer
@@ -706,6 +728,8 @@ export const contractWizardFields = {
    * here carries a money value (PD-14).
    */
   briefCompleteness: async (c: FullContract, _a: unknown, ctx: Context) => briefMissing(c, await factsFor(ctx, c)),
+  /** DX2a: what the PHASES step lacks — the phases and the plan, once REQUIREMENTS' list. */
+  planCompleteness: async (c: FullContract, _a: unknown, ctx: Context) => planMissing(c, await factsFor(ctx, c)),
 
   /** The contract's planned start and end (J6, Q12) — `null` to a customer until
    *  the draft is in front of them (`plannedDatesShown`), and to no staff reader. */

@@ -85,7 +85,7 @@ async function approveAndSign(page: Page, lang: 'en' | 'fa') {
   await expect(page.locator('[data-fact="agreement"]')).toHaveAttribute('data-state', 'approved');
   // Locked, but not done: the agreement is still the customer's until they sign.
   await expect(page.locator('.stepper-item[data-step="AGREEMENT"]')).toHaveAttribute('data-status', 'CURRENT');
-  for (const step of ['REQUIREMENTS', 'SCOPE', 'DRAFT'] as const) {
+  for (const step of ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT'] as const) {
     await expect(page.locator(`.stepper-item[data-step="${step}"]`)).toHaveAttribute('data-status', 'DONE');
   }
 

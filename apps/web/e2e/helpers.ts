@@ -452,7 +452,7 @@ export async function completeStepOneViaApi(
   request: APIRequestContext,
   ref = WIZARD_CONTRACT_REF,
   // J8: the design path is the brief's tier — pre-made by default, as before.
-  opts: { designTier?: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' } = {},
+  opts: { designTier?: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' | 'NONE' } = {},
 ): Promise<string> {
   const designTier = opts.designTier ?? 'THEME_PICK';
   await apiSignIn(request, SALES);
@@ -477,7 +477,8 @@ export async function completeStepOneViaApi(
       supportMonths: 6,
       // The allowance the tier counts against: two pre-made rounds, or (custom)
       // the default two wireframe iterations plus the mockup's.
-      ...(designTier === 'THEME_PICK' ? { premadeRounds: 2 } : { mockupIterations: 2 }),
+      // DX2a: no design, no allowance to set.
+      ...(designTier === 'NONE' ? {} : designTier === 'THEME_PICK' ? { premadeRounds: 2 } : { mockupIterations: 2 }),
       demoIterationsPerPhase: 2,
       commitments: [
         { key: 'domain', dueAt: '2026-10-05' },

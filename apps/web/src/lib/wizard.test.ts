@@ -195,6 +195,11 @@ test('pillMissing: only Requirements counts, only while it is not done, and a ze
   assert.equal(pillMissing({ step: 'REQUIREMENTS', status: 'CURRENT' }, undefined), null);
   assert.equal(pillMissing({ step: 'REQUIREMENTS', status: 'DONE' }, 3), null);
   assert.equal(pillMissing({ step: 'SCOPE', status: 'CURRENT' }, 3), null);
+  // DX2a: Phases and payment counts its own list, not the brief's.
+  assert.equal(pillMissing({ step: 'PHASES', status: 'CURRENT' }, 3, 2), 2);
+  assert.equal(pillMissing({ step: 'PHASES', status: 'UPCOMING' }, 3, 0), null);
+  assert.equal(pillMissing({ step: 'PHASES', status: 'DONE' }, 3, 2), null);
+  assert.equal(pillMissing({ step: 'PHASES', status: 'CURRENT' }, 3), null);
 });
 
 const aItem = (waitingOn: 'ROOT' | 'CUSTOMER', kind = 'X'): AttentionItem =>

@@ -30,8 +30,10 @@ import {
  * Gregorian day it means — so this asserts the conversion as well as the
  * rendering (1 Aban 1405 is 2026-10-23).
  *
- * **Panels** are accordions (DX1): the first one lacking something is open, and
- * the others are opened by their header — `openPanel`.
+ * **Panels** are accordions (DX1) — `openPanel`. **DX2a** moved the phases and
+ * the payment plan to their own step (Phases and payment) and the extras to Pages
+ * and features, so this story now visits three steps: Requirements for the brief,
+ * Phases and payment for the phases and the plan, Pages and features for the extra.
  */
 
 test.describe.configure({ mode: 'serial' });
@@ -48,7 +50,7 @@ async function pickDay(page: Page, testId: string, [year, month, day]: [number, 
   await expect(box).toHaveAttribute('data-value', gregorian);
 }
 
-/** Opens a requirements accordion panel if it is closed (`brief`, `extras`, `phases`, `plan`, `handOver`). */
+/** Opens an accordion panel if it is closed (`brief`, `handOver` on Requirements; `phases`, `plan` on Phases and payment). */
 async function openPanel(page: Page, id: string) {
   const panel = page.getByTestId(`acc-${id}`);
   if ((await panel.getAttribute('data-open')) !== 'true') await panel.getByRole('button').first().click();
@@ -72,6 +74,7 @@ async function staffSteps(page: Page, who: typeof SALES, ref: string) {
 }
 
 const requirementsStep = (page: Page) => page.locator('.stepper-item[data-step="REQUIREMENTS"]');
+const stepItem = (page: Page, step: string) => page.locator(`.stepper-item[data-step="${step}"]`);
 
 test('sales fills step 1 from the desk, and the wizard calls it done once nothing is missing', async ({ page }) => {
   await staffSteps(page, SALES, WIZARD_CONTRACT_REF);
@@ -102,13 +105,19 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await page.getByTestId('brief-save').click();
   await expect(page.getByTestId('brief-saved')).toBeVisible();
 
-  // The brief is a brief now; phases and the plan are what is left.
+  // The brief is a brief now, and Requirements is done on the brief alone (DX2a): the phases and the plan
+  // are the next step's to name, and it counts them on its pill.
   const missing = page.getByTestId('brief-missing');
   await expect(missing.locator('[data-code="BRIEF"]')).toHaveCount(0);
-  await expect(missing.locator('[data-code="PHASES"]')).toBeVisible();
-  await expect(missing.locator('[data-code="PAYMENT_PLAN"]')).toBeVisible();
+  await expect(missing.locator('[data-code="PHASES"]')).toHaveCount(0);
+  await expect(requirementsStep(page)).toHaveAttribute('data-status', 'DONE');
+  await expect(stepItem(page, 'PHASES').getByTestId('pill-missing')).toBeVisible();
 
-  // A phase with its planned end (1 Azar 1405).
+  // Phases and payment: the step names what is left, and a phase gets its planned end (1 Azar 1405).
+  await stepItem(page, 'PHASES').locator('button').click();
+  const phasesPanel = page.getByTestId('phases-panel');
+  await expect(phasesPanel.getByTestId('plan-missing').locator('[data-code="PHASES"]')).toBeVisible();
+  await expect(phasesPanel.getByTestId('plan-missing').locator('[data-code="PAYMENT_PLAN"]')).toBeVisible();
   await openPanel(page, 'phases');
   const newPhase = page.getByTestId('brief-phase-new');
   await newPhase.locator('input').nth(0).fill('فاز اول');
@@ -116,7 +125,7 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await pickDay(page, 'phase-end-new', [1405, 9, 1], '2026-11-22');
   await newPhase.getByRole('button', { name: 'Add phase' }).click();
   await expect(page.getByTestId('brief-phase')).toHaveCount(1);
-  await expect(missing.locator('[data-code="PHASES"]')).toHaveCount(0);
+  await expect(phasesPanel.getByTestId('plan-missing').locator('[data-code="PHASES"]')).toHaveCount(0);
 
   // The payment plan: the split proposes rows, sales edits them (there is no fee on this
   // contract yet, so the proposal leaves the amounts blank), and they are stored as typed.
@@ -131,18 +140,23 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await page.getByTestId('plan-save').click();
   await expect(page.getByTestId('plan-saved')).toBeVisible();
 
-  // Nothing is missing: the step is done, and the road moves on.
-  await expect(page.getByTestId('brief-missing')).toHaveCount(0);
-  await expect(requirementsStep(page)).toHaveAttribute('data-status', 'DONE');
-  await expect(page.locator('.stepper-item[data-step="SCOPE"]')).toHaveAttribute('data-status', 'CURRENT');
+  // Nothing is missing: the step is done, and the road moves on to the scope (nothing there yet).
+  await expect(page.getByTestId('plan-missing')).toHaveCount(0);
+  await expect(stepItem(page, 'PHASES')).toHaveAttribute('data-status', 'DONE');
+  await expect(stepItem(page, 'SCOPE')).toHaveAttribute('data-status', 'CURRENT');
+  // The pill carries no count any more, and the step says how much of the price the plan covers.
+  await expect(stepItem(page, 'PHASES').getByTestId('pill-missing')).toHaveCount(0);
 
-  // An extra that needs the customer to bring something becomes a commitment that wants a date.
+  // An extra — now a checkbox in Pages and features — that needs the customer to bring something becomes a
+  // commitment on Requirements that wants a date.
   // (A click and then a wait, not `check()`: the box is controlled, so it only flips once the server has answered.)
-  await openPanel(page, 'extras');
-  const payment = page.getByTestId('extras-editor').locator('input[data-key="checklist.payment"]');
+  await stepItem(page, 'SCOPE').locator('button').click();
+  const payment = page.getByTestId('scope-panel').locator('input[data-key="checklist.payment"]');
   await payment.click();
   await expect(payment).toBeChecked();
+  await requirementsStep(page).locator('button').click();
   await expect(missing.locator('[data-code="COMMITMENT_UNDATED"]')).toContainText('Payment gateway account');
+  await openPanel(page, 'brief');
   await expect(page.getByTestId('brief-commitment')).toHaveCount(4);
   await pickDay(page, 'brief-due-gateway', [1405, 8, 15], '2026-11-06');
   await page.getByTestId('brief-save').click();
@@ -152,6 +166,7 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await expect(page.locator('[data-field="hardDeadline"]')).toContainText('Oct 23, 2026');
   await expect(page.locator('[data-field="gateway"]')).toContainText('Nov 6, 2026');
   await expect(page.locator('[data-field="budgetCap"]')).toContainText('150,000,000 Toman');
+  await stepItem(page, 'PHASES').locator('button').click();
   await expect(page.getByTestId('plan-readout')).toContainText('90,000,000 Toman');
 });
 
@@ -172,7 +187,6 @@ test('the customer reads it in Persian — commitments and dates in the Jalali c
   await expect(panel.locator('[data-field="hardDeadline"]')).toContainText('۱ آبان ۱۴۰۵');
   await expect(panel.locator('[data-field="idealDeadline"]')).toContainText('۱ مهر ۱۴۰۵');
   await expect(panel.locator('[data-field="idealDeadline"]')).not.toContainText('شهریور');
-  await expect(panel.getByTestId('phases-readout')).toContainText('۱ آذر ۱۴۰۵');
 
   // Their commitments, each with its due date; Root's own beside them.
   await expect(panel.getByText('تعهدهای شما', { exact: true })).toBeVisible();
@@ -185,8 +199,16 @@ test('the customer reads it in Persian — commitments and dates in the Jalali c
 
   // Money is the customer's own to read: in Persian digits, with the unit.
   await expect(panel.locator('[data-field="budgetCap"]')).toContainText('۱۵۰٬۰۰۰٬۰۰۰ تومان');
-  await expect(panel.getByTestId('plan-readout')).toContainText('۹۰٬۰۰۰٬۰۰۰ تومان');
-  await expect(panel.getByTestId('extras-readout')).toContainText('درگاه پرداخت');
+
+  // The phases and the plan are the next step's now (DX2a), with the same cards and the same notes.
+  await stepItem(page, 'PHASES').locator('button').click();
+  const phasesPanel = page.getByTestId('phases-panel');
+  await expect(phasesPanel.getByTestId('phases-readout')).toContainText('۱ آذر ۱۴۰۵');
+  await expect(phasesPanel.getByTestId('plan-readout')).toContainText('۹۰٬۰۰۰٬۰۰۰ تومان');
+  // …and the extras are a group in Pages and features.
+  await stepItem(page, 'SCOPE').locator('button').click();
+  await expect(page.getByTestId('scope-panel').locator('[data-testid="scope-extra"][data-key="checklist.payment"]')).toContainText('درگاه پرداخت');
+  await requirementsStep(page).locator('button').click();
 
   // A note on a field: one thread, open until Root answers.
   const hard = panel.locator('[data-key="hardDeadline"]');
@@ -233,9 +255,16 @@ test('a designer reads step 1 and is shown none of its money — no budget, no p
   // …and the money is not drawn at all, nor is the form (they author nothing here).
   await expect(panel.locator('[data-field="budgetCap"]')).toHaveCount(0);
   await expect(panel.locator('[data-field="paymentPlan"]')).toHaveCount(0);
-  await expect(panel.getByTestId('plan-readout')).toHaveCount(0);
   await expect(page.getByTestId('requirements-editor')).toHaveCount(0);
   await expect(panel).not.toContainText('150,000,000');
+  // Phases and payment: the phases are theirs to read; the plan and the allocation line are money, and not drawn.
+  await stepItem(page, 'PHASES').locator('button').click();
+  const phasesPanel = page.getByTestId('phases-panel');
+  await expect(phasesPanel.getByTestId('phases-readout')).toBeVisible();
+  await expect(phasesPanel.getByTestId('plan-readout')).toHaveCount(0);
+  await expect(phasesPanel.getByTestId('plan-allocated')).toHaveCount(0);
+  await expect(page.getByTestId('plan-editor')).toHaveCount(0);
+  await expect(phasesPanel).not.toContainText('90,000,000');
 });
 
 test('a contract that has not been handed over is refused without a brief, then handed over and read by the customer', async ({ page }) => {

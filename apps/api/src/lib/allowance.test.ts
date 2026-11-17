@@ -42,6 +42,11 @@ test('DESIGN counts against the allowance that matches the design path — the p
   assert.equal(baseAllowance('DESIGN', custom), 2);
   // The other tier of the custom path is custom too (PD-13): one function, not two lists.
   assert.equal(baseAllowance('DESIGN', { ...custom, designTier: 'CLAUDE_ASSISTED' }), 2);
+  // DX2a: no design, nothing to count — neither the design nor the mockup, while the demos still count.
+  const none = { ...custom, designTier: 'NONE' as const };
+  assert.equal(baseAllowance('DESIGN', none), null);
+  assert.equal(baseAllowance('MOCKUP', none), null);
+  assert.equal(baseAllowance('DEMO', none), 2);
 });
 
 test('MOCKUP has an allowance only on the custom path; DEMO is per-phase and the same on both', () => {

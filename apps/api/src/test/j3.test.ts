@@ -267,13 +267,14 @@ test('a DESIGN_FIRST contract shows a demo step per phase, done when the phase�
   assert.equal(v.wizard[2].status, 'DONE');
 });
 
-test('an AGREEMENT_FIRST contract starts at requirements, is Root’s move, and locks four steps when the agreement is approved', async () => {
+test('an AGREEMENT_FIRST contract starts at requirements, is Root’s move, and locks five steps when the agreement is approved (DX2a added PHASES)', async () => {
   await prisma.contract.update({ where: { id: f.contract.id }, data: { sequence: 'AGREEMENT_FIRST' } });
   let v = await view(staff.SALES);
   assert.equal(v.sequence, 'AGREEMENT_FIRST');
   assert.deepEqual(steps(v), [
     'REQUIREMENTS=CURRENT',
     'SCOPE=UPCOMING',
+    'PHASES=UPCOMING',
     // The fixture has a published revision and no note waiting, which is J6's
     // DONE for the draft — in a state the real road cannot reach (publishing is
     // gated on the two steps before it). The road is walked in order, so the
@@ -297,13 +298,14 @@ test('an AGREEMENT_FIRST contract starts at requirements, is Root’s move, and 
   assert.deepEqual(steps(v), [
     'REQUIREMENTS=DONE',
     'SCOPE=DONE',
+    'PHASES=DONE',
     'DRAFT=DONE',
     'AGREEMENT=CURRENT',
     'DESIGN=UPCOMING',
     'DEMO=UPCOMING',
     'SUMMARY=UPCOMING',
   ]);
-  assert.deepEqual(v.wizard.filter((w) => w.locked).map((w) => w.step), ['REQUIREMENTS', 'SCOPE', 'DRAFT', 'AGREEMENT']);
+  assert.deepEqual(v.wizard.filter((w) => w.locked).map((w) => w.step), ['REQUIREMENTS', 'SCOPE', 'PHASES', 'DRAFT', 'AGREEMENT']);
   assert.ok(v.wizard.filter((w) => w.locked).every((w) => w.lockedAt === approval.approvedAt.toISOString()));
   // Approved is not signed (J13 review): the steps lock, but "started" waits
   // for the signature — `agreementSignedAt` reads only the revision's signature.
@@ -321,6 +323,7 @@ test('an AGREEMENT_FIRST contract starts at requirements, is Root’s move, and 
   assert.deepEqual(steps(v), [
     'REQUIREMENTS=DONE',
     'SCOPE=DONE',
+    'PHASES=DONE',
     'DRAFT=DONE',
     'AGREEMENT=DONE',
     'DESIGN=CURRENT',

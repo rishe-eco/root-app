@@ -69,7 +69,7 @@ export type BriefSnapshot = {
   /** Frozen labels, not an id: the type can be renamed or deactivated later
    *  and a signed agreement must keep saying what it said. */
   templateType: { slug: string; labelFa: string; labelEn: string };
-  designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER';
+  designTier: 'THEME_PICK' | 'CLAUDE_ASSISTED' | 'SENIOR_DESIGNER' | 'NONE';
   /** The customer's own statement of a ceiling — not the fee (J4's trap). */
   budgetCap: string | null;
   idealDeadline: string | null;

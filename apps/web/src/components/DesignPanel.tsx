@@ -363,7 +363,7 @@ export default function DesignPanel({ contract, step, audience, me, asCustomer =
             : t(path === 'PREMADE' ? 'design.lede.customerPremade' : 'design.lede.customerCustom')}
       </p>
 
-      {staff && path ? (
+      {staff && path && path !== 'NONE' ? (
         <>
           <AllowanceBox contract={contract} step={step} me={me} />
           <DesignAuthor contract={contract} step={step} me={me} path={path} />

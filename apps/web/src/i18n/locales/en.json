@@ -1581,6 +1581,7 @@
     "step": {
       "REQUIREMENTS": "Requirements",
       "SCOPE": "Pages and features",
+      "PHASES": "Phases and payment",
       "DRAFT": "The draft",
       "AGREEMENT": "Approve and sign",
       "DESIGN": "Design",
@@ -1676,7 +1677,8 @@
     "group": {
       "PAGE": "Pages",
       "FEATURE": "Features",
-      "DELIVERABLE": "Deliverables"
+      "DELIVERABLE": "Deliverables",
+      "EXTRA": "Extras"
     },
     "kind": {
       "PAGE": "Page",
@@ -1811,6 +1813,14 @@
       "help": "Added straight to this contract, as agreed. The site type’s list is not changed.",
       "submit": "Add",
       "done": "Added to the list."
+    },
+    "extras": {
+      "include": "Include {{label}}"
+    },
+    "registry": {
+      "title": "Status, flags, trades and phase",
+      "help": "Everything about each item beyond its name: where it stands, its flags, the phase it is built in, its order, and swapping one item for another. Changes here are live for the customer the moment they are saved.",
+      "phase": "Built in phase"
     },
     "staffRemove": {
       "action": "Remove",
@@ -2379,12 +2389,14 @@
     },
     "path": {
       "PREMADE": "Pre-made design — picked from a catalogue of themes",
-      "CUSTOM": "Custom design — wireframes and a palette made for you"
+      "CUSTOM": "Custom design — wireframes and a palette made for you",
+      "NONE": "No design"
     },
     "tier": {
       "THEME_PICK": "Pre-made — pick a theme",
       "CLAUDE_ASSISTED": "Custom — assisted by Claude",
-      "SENIOR_DESIGNER": "Custom — a senior designer"
+      "SENIOR_DESIGNER": "Custom — a senior designer",
+      "NONE": "No design — nothing to design (for example a feature for an existing site)"
     },
     "side": {
       "CUSTOMER": "The customer",
@@ -2695,7 +2707,7 @@
   "demoStep": {
     "lede": {
       "customer": "This phase of your site is ready on a test copy of it. Click through it, leave a note on any page or line that is not right, and approve the phase when you are happy. Approving accepts everything in this phase and locks it.",
-      "staff": "The customer’s view of this phase. Authoring — the staging address, the frame, each version — is in the contract’s Phases tab."
+      "staff": "The customer’s view of this phase. The demo setup — the live demo link, the readiness check, the frame, each version and the declared demo pages — is below."
     },
     "notYet": {
       "customer": "Root has not shown this phase yet. When it does you will find it here, and we will tell you.",
@@ -2795,6 +2807,20 @@
     "noScope": "Nothing in the scope yet.",
     "sep": ", "
   },
+  "phasesStep": {
+    "lede": {
+      "customer": "How the work is cut into phases, and how the price is paid. Each phase ends in a demo you review; each payment is due when its row says. Ask about anything that does not look right.",
+      "staff": "Cut the work into phases with an end date each, then lay out the payment plan against the price (set on the Contract tab). The plan must add up to the price before the draft can be published."
+    },
+    "allocated": "{{allocated}} of {{total}} Toman allocated",
+    "allocatedNoPrice": "{{allocated}} Toman allocated — the price is not set yet (Contract tab)",
+    "noPlanYet": "no payment plan yet",
+    "unbalanced": "the plan does not add up to the price",
+    "missingTitle": {
+      "customer": "Root is still completing:",
+      "staff": "Still missing on this step:"
+    }
+  },
   "readiness": {
     "title": "Ready to publish?",
     "clear": "Nothing blocks publishing.",
@@ -2804,6 +2830,9 @@
       "SCOPE_PROPOSALS_other": "Pages and features: {{n}} proposals are waiting for a decision",
       "BRIEF_INCOMPLETE_one": "Requirements: {{n}} item is missing",
       "BRIEF_INCOMPLETE_other": "Requirements: {{n}} items are missing",
+      "PLAN_INCOMPLETE_one": "Phases and payment: {{n}} item is missing",
+      "PLAN_INCOMPLETE_other": "Phases and payment: {{n}} items are missing",
+      "PLAN_UNBALANCED": "Phases and payment: the plan does not add up to the price",
       "STEP_LOCKED": "The customer has approved the agreement, so the draft is locked",
       "CONTRACT_SIGNED": "The contract is signed — changes now go in as amendments"
     },

@@ -7,6 +7,7 @@ import { stepLabel, type Audience } from '@/lib/wizard';
 import Lock from '@/components/Lock';
 import RequirementsPanel from '@/components/RequirementsPanel';
 import ScopePanel from '@/components/ScopePanel';
+import PhasesPanel from '@/components/PhasesPanel';
 import DraftPanel from '@/components/DraftPanel';
 import AgreementPanel from '@/components/AgreementPanel';
 import DesignPanel from '@/components/DesignPanel';
@@ -33,6 +34,8 @@ import DemoPanel from '@/components/DemoPanel';
  *   (`RequirementsEditor`)
  * - J5  `SCOPE`        — ✔ built: pages, features and deliverables, the customer's
  *   proposals and Root's decisions (`ScopePanel`)
+ * - DX2a `PHASES`     — ✔ built: the phases and the payment plan, "X of Y allocated" against the
+ *   price (`PhasesPanel`); they were Requirements' until then
  * - J6  `DRAFT`        — ✔ built: the published draft article by article with its
  *   anchored notes and where each note's article is now (`DraftPanel`)
  * - J7  `AGREEMENT`    — ✔ built: the snapshot as a document, then Approve and Sign on one
@@ -69,6 +72,7 @@ export type StepPanelProps = {
 const PANELS: Partial<Record<StepKind, ComponentType<StepPanelProps>>> = {
   REQUIREMENTS: RequirementsPanel,
   SCOPE: ScopePanel,
+  PHASES: PhasesPanel,
   DRAFT: DraftPanel,
   AGREEMENT: AgreementPanel,
   DESIGN: DesignPanel,

@@ -318,6 +318,7 @@ export function buildPublishedEmail(
 const STEP_NAMES: Record<string, { fa: string; en: string }> = {
   REQUIREMENTS: { fa: 'نیازمندی‌ها', en: 'Requirements' },
   SCOPE: { fa: 'صفحه‌ها و امکانات', en: 'Pages and features' },
+  PHASES: { fa: 'فازها و پرداخت', en: 'Phases and payment' },
   DRAFT: { fa: 'پیش‌نویس قرارداد', en: 'The draft' },
   AGREEMENT: { fa: 'تأیید و امضا', en: 'Approve and sign' },
   DESIGN: { fa: 'طرح', en: 'Design' },
