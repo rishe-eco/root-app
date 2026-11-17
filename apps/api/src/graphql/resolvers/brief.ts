@@ -62,7 +62,7 @@ const BRIEF_MESSAGES: Record<BriefInputProblem, string> = {
 const PLAN_MESSAGES: Record<PlanProblem, string> = {
   PLAN_ROWS_REQUIRED: 'A payment plan needs at least one row.',
   TOO_MANY_ROWS: 'That is more rows than a payment plan can have.',
-  LABEL_REQUIRED: 'Every row needs a label in both languages.',
+  LABEL_REQUIRED: 'Every row needs a label, in either language.',
   INVALID_AMOUNT: 'Every amount must be a whole number of Toman above zero.',
   INVALID_TERM: 'A payment term is a whole number of days from 0 to 365.',
   INVALID_DATE: 'That is not a date.',

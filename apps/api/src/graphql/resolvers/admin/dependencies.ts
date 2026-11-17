@@ -1,6 +1,7 @@
 import { GraphQLError } from 'graphql';
 import type { Dependency, DependencySide, Prisma, User } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
+import { requireOneTitle } from '../../../lib/titles.js';
 import { requireCapability, requireUser, type Context } from '../../../context.js';
 import { can } from '../../../lib/capabilities.js';
 import { boardRowIsComplete, changesLockedFields, verificationRequiresNote } from '../../../lib/dependency.js';
@@ -116,9 +117,7 @@ export const dependencyMutations = {
     // A request has no commitments to track (J2).
     await assertProjectActive(project.id);
     const contractId = await contractOnProject(project.id, args.contractId);
-    const titleFa = args.titleFa.trim();
-    const titleEn = args.titleEn.trim();
-    if (!titleFa || !titleEn) throw new GraphQLError('A commitment needs a title in both languages.', { extensions: { code: 'TITLE_REQUIRED' } });
+    const { fa: titleFa, en: titleEn } = requireOneTitle(args.titleFa, args.titleEn);
 
     await prisma.$transaction(async (tx) => {
       const inBrief = (await requirementsState(tx, contractId)) === 'OPEN';
@@ -155,9 +154,8 @@ export const dependencyMutations = {
     const edit: { side?: DependencySide | null; dueAt?: Date | null; notNeeded?: boolean; titleFa?: string; titleEn?: string } = {};
     if (args.titleFa != null) edit.titleFa = args.titleFa.trim();
     if (args.titleEn != null) edit.titleEn = args.titleEn.trim();
-    if (edit.titleFa === '' || edit.titleEn === '') {
-      throw new GraphQLError('A commitment needs a title in both languages.', { extensions: { code: 'TITLE_REQUIRED' } });
-    }
+    // DX4: the title that results must say something in at least one language.
+    requireOneTitle(edit.titleFa ?? found.titleFa, edit.titleEn ?? found.titleEn);
     if ('dueAt' in args) edit.dueAt = dayOrNull(args.dueAt);
     if ('side' in args) edit.side = args.side ?? null;
     if (args.notNeeded != null) edit.notNeeded = args.notNeeded;

@@ -1,6 +1,7 @@
 import { GraphQLError } from 'graphql';
 import type { Prisma, ScopeKind, ScopeStatus } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
+import { requireOneTitle } from '../../../lib/titles.js';
 import { requireCapability, type Context } from '../../../context.js';
 import { buildAmendmentSnapshot, contentHash } from '../../../lib/revision.js';
 import {
@@ -83,7 +84,7 @@ export const registryMutations = {
    * a confirmed customer proposal uses), so sales types a label, not an
    * identifier. A typed key must pass `checkScopeKey` (`INVALID_KEY`), and one
    * already on the project is `KEY_TAKEN` rather than a database error. Both
-   * labels are required (`LABEL_REQUIRED`). The project row is locked with the
+   * label is required, in either language (`LABEL_REQUIRED`: both blank). The project row is locked with the
    * contract, so two items added at once cannot choose the same number.
    */
   addScopeItem: async (
@@ -96,11 +97,7 @@ export const registryMutations = {
     if (!contract) {
       throw new GraphQLError('No such contract.', { extensions: { code: 'NOT_FOUND' } });
     }
-    const labelFa = args.labelFa.trim();
-    const labelEn = args.labelEn.trim();
-    if (!labelFa || !labelEn) {
-      throw new GraphQLError('Both labels are required.', { extensions: { code: 'LABEL_REQUIRED' } });
-    }
+    const { fa: labelFa, en: labelEn } = requireOneTitle(args.labelFa, args.labelEn, 'LABEL_REQUIRED');
     const typedKey = args.key?.trim() || null;
     if (typedKey && checkScopeKey(typedKey)) {
       throw new GraphQLError('That key is not valid.', { extensions: { code: 'INVALID_KEY' } });
@@ -148,11 +145,12 @@ export const registryMutations = {
     ctx: Context,
   ) => {
     requireCapability(ctx, 'contracts.author');
+    const label = requireOneTitle(args.labelFa, args.labelEn, 'LABEL_REQUIRED');
     const item = await loadScopeItem(args.scopeItemId);
     await inOpenScope(item, args.contractId, (tx) =>
       tx.scopeItem.update({
         where: { id: item.id },
-        data: { labelFa: args.labelFa, labelEn: args.labelEn },
+        data: { labelFa: label.fa, labelEn: label.en },
       }),
     );
     return reloadOnProject(item.projectId, args.contractId);
@@ -323,6 +321,7 @@ export const registryMutations = {
     ctx: Context,
   ) => {
     const admin = requireCapability(ctx, 'contracts.author');
+    const inLabel = requireOneTitle(args.inLabelFa, args.inLabelEn, 'LABEL_REQUIRED');
     await assertProjectActive(args.projectId);
     const outItem = await prisma.scopeItem.findUnique({ where: { id: args.outItemId } });
     if (!outItem || outItem.projectId !== args.projectId) {
@@ -340,8 +339,8 @@ export const registryMutations = {
         data: {
           projectId: args.projectId,
           key: args.inKey,
-          labelFa: args.inLabelFa,
-          labelEn: args.inLabelEn,
+          labelFa: inLabel.fa,
+          labelEn: inLabel.en,
           position: count,
           status: 'PROPOSED',
           kind: scopeKindForKey(args.inKey),
