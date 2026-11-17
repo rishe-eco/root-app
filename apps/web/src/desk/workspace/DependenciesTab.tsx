@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
 import { useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
 import { pick, fullDateTime, calendarDate } from '@/lib/format';
@@ -115,7 +119,7 @@ function DependencyRow({ dep, canManage, me, locked }: { dep: Dependency; canMan
   const [side, setSide] = useState<DependencySide | ''>(dep.side ?? '');
   const [notNeeded, setNotNeeded] = useState(dep.notNeeded);
   const [error, setError] = useState<string | null>(null);
-  const [update, { loading }] = useWorkspaceMutation(UPDATE_DEPENDENCY);
+  const [update] = useWorkspaceMutation(UPDATE_DEPENDENCY);
   const [remove] = useWorkspaceMutation(DELETE_DEPENDENCY);
   // Journeys build plan J4: a technical row (the domain, the hosting) is the
   // developer's to verify, every other row sales'. The API holds the same rule
@@ -131,25 +135,26 @@ function DependencyRow({ dep, canManage, me, locked }: { dep: Dependency; canMan
   // A requirements row may be undecided and undated; a board-only one needs both.
   const optional = dep.inBrief;
 
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await update({
+  // DX4 (review 27): a commitment saves when a field in its edit form is left. `updateDependency`
+  // is a replace of what is named, so a save sends the form as it stands.
+  const autosave = useAutosave({
+    value: { titleFa, titleEn, side, notNeeded, dueAt },
+    baseline: { titleFa: dep.titleFa, titleEn: dep.titleEn, side: dep.side ?? '', notNeeded: dep.notNeeded, dueAt: day(dep.dueAt) },
+    valid: (v) => (fromBrief || hasOneTitle(v.titleFa, v.titleEn)) && (optional || (v.side !== '' && v.dueAt !== '')),
+    save: (v) =>
+      update({
         variables: {
           dependencyId: dep.id,
           // The default list's and the extras' titles are the list's (an extra's is rewritten by the next save of the requirements).
-          ...(fromBrief ? {} : { titleFa, titleEn }),
-          side: side || null,
-          notNeeded,
-          dueAt: instantOf(dueAt),
+          ...(fromBrief ? {} : { titleFa: v.titleFa, titleEn: v.titleEn }),
+          side: v.side || null,
+          notNeeded: v.notNeeded,
+          dueAt: instantOf(v.dueAt),
         },
-      });
-      setEditing(false);
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
+      }),
+    disabled: !canManage || fixed,
+    errorText: (err) => refusalText(t, err),
+  });
 
   async function onDelete() {
     if (!confirm(t('workspace.confirmDeleteDependency'))) return;
@@ -201,24 +206,23 @@ function DependencyRow({ dep, canManage, me, locked }: { dep: Dependency; canMan
       {error ? <p className="error" role="alert" data-testid="dependency-error">{error}</p> : null}
 
       {editing && canManage && !fixed ? (
-        <form className="card editor-card auth-form" onSubmit={onSave}>
+        <form className="card editor-card auth-form" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur}>
           {fromBrief ? (
             <p className="t-caption">{t('workspace.dependencyBriefOwnedHelp')}</p>
           ) : (
-            <div className="editor-grid-2">
-              <div className="field">
-                <label className="label">{t('workspace.titleFa')}</label>
-                <input className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-              </div>
-              <div className="field">
-                <label className="label">{t('workspace.titleEn')}</label>
-                <input className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-              </div>
-            </div>
+            <TitleField idBase={`dependency-${dep.id}`} testId="dependency-title" fa={titleFa} en={titleEn} onChange={(v) => { setTitleFa(v.fa); setTitleEn(v.en); }} />
           )}
           <div className="field">
             <label className="label">{t('workspace.dependencySideLabel')}</label>
-            <select className="input" required={!optional} value={side} onChange={(e) => setSide(e.target.value as DependencySide | '')}>
+            <select
+              className="input"
+              required={!optional}
+              value={side}
+              onChange={(e) => {
+                setSide(e.target.value as DependencySide | '');
+                autosave.commit({ titleFa, titleEn, side: e.target.value, notNeeded, dueAt });
+              }}
+            >
               {optional ? <option value="">{t('workspace.dependencyUndecided')}</option> : null}
               <option value="CUSTOMER">{t('workspace.dependencySide.CUSTOMER')}</option>
               <option value="ROOT">{t('workspace.dependencySide.ROOT')}</option>
@@ -226,7 +230,14 @@ function DependencyRow({ dep, canManage, me, locked }: { dep: Dependency; canMan
           </div>
           {optional ? (
             <label className="theme-check">
-              <input type="checkbox" checked={notNeeded} onChange={(e) => setNotNeeded(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={notNeeded}
+                onChange={(e) => {
+                  setNotNeeded(e.target.checked);
+                  autosave.commit({ titleFa, titleEn, side, notNeeded: e.target.checked, dueAt });
+                }}
+              />
               {t('workspace.dependencyNotNeededLabel')}
             </label>
           ) : null}
@@ -234,9 +245,7 @@ function DependencyRow({ dep, canManage, me, locked }: { dep: Dependency; canMan
             <label className="label">{optional ? t('workspace.dependencyDueOptional') : t('workspace.dependencyDueAt')}</label>
             <input className="input num-latin" type="date" required={!optional} value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
           </div>
-          <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
-            {t('workspace.save')}
-          </button>
+          <AutosaveNote autosave={autosave} testId="dependency-autosave" />
         </form>
       ) : null}
 
@@ -318,23 +327,14 @@ export default function DependenciesTab() {
               <option value="ROOT">{t('workspace.dependencySide.ROOT')}</option>
             </select>
           </div>
-          <div className="editor-grid-2">
-            <div className="field">
-              <label className="label">{t('workspace.titleFa')}</label>
-              <input className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label">{t('workspace.titleEn')}</label>
-              <input className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-            </div>
-          </div>
+          <TitleField idBase="tf-2" fa={titleFa} en={titleEn} onChange={(v) => { setTitleFa(v.fa); setTitleEn(v.en); }} />
           <div className="field">
             <label className="label">{optional ? t('workspace.dependencyDueOptional') : t('workspace.dependencyDueAt')}</label>
             <input className="input num-latin" type="date" required={!optional} value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
           </div>
           {error ? <p className="error">{error}</p> : null}
           <div>
-            <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
+            <button className="btn btn-primary btn-sm" type="submit" disabled={loading || !hasOneTitle(titleFa, titleEn)}>
               {t('workspace.save')}
             </button>
           </div>

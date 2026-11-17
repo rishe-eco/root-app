@@ -17,6 +17,10 @@ import {
   type ScopeItem,
 } from '@/lib/queries';
 import DemoSetup from '@/components/DemoSetup';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
 import { useWorkspaceMutation, type WorkspaceContext } from './ContractWorkspace';
 
 /**
@@ -76,7 +80,7 @@ function PhaseCard({
   const [titleFa, setTitleFa] = useState(phase.titleFa);
   const [titleEn, setTitleEn] = useState(phase.titleEn);
   const [milestoneLabel, setMilestoneLabel] = useState(phase.milestoneLabel ?? '');
-  const [update, { loading }] = useWorkspaceMutation(UPDATE_PHASE);
+  const [update] = useWorkspaceMutation(UPDATE_PHASE);
   const [remove] = useWorkspaceMutation(DELETE_PHASE);
   const [assign] = useWorkspaceMutation(ASSIGN_SCOPE_ITEM_TO_PHASE);
 
@@ -87,11 +91,15 @@ function PhaseCard({
 
   const [pickedItem, setPickedItem] = useState('');
 
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    await update({ variables: { phaseId: phase.id, titleFa, titleEn, milestoneLabel: milestoneLabel || null } });
-    setEditing(false);
-  }
+  // DX4 (review 27): the edit form saves when a field is left; `updatePhase` takes the title and the
+  // milestone together.
+  const autosave = useAutosave({
+    value: { titleFa, titleEn, milestoneLabel },
+    baseline: { titleFa: phase.titleFa, titleEn: phase.titleEn, milestoneLabel: phase.milestoneLabel ?? '' },
+    valid: (v) => hasOneTitle(v.titleFa, v.titleEn),
+    save: (v) => update({ variables: { phaseId: phase.id, titleFa: v.titleFa, titleEn: v.titleEn, milestoneLabel: v.milestoneLabel || null } }),
+    errorText: (err) => errorMessage(err, t),
+  });
 
   async function onDelete() {
     if (!confirm(t('workspace.confirmDeletePhase'))) return;
@@ -147,26 +155,22 @@ function PhaseCard({
       ) : null}
 
       {editing && canManagePhases ? (
-        <form className="card editor-card auth-form" onSubmit={onSave}>
-          <div className="editor-grid-2">
-            <div className="field">
-              <label className="label">{t('workspace.titleFa')}</label>
-              <input className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label">{t('workspace.titleEn')}</label>
-              <input className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-            </div>
-          </div>
+        <form className="card editor-card auth-form" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur}>
+          <TitleField
+            idBase={`phase-card-${phase.number}`}
+            testId="phase-card-title"
+            fa={titleFa}
+            en={titleEn}
+            onChange={(v) => {
+              setTitleFa(v.fa);
+              setTitleEn(v.en);
+            }}
+          />
           <div className="field">
             <label className="label">{t('workspace.phaseMilestone')}</label>
             <input className="input" value={milestoneLabel} onChange={(e) => setMilestoneLabel(e.target.value)} />
           </div>
-          <div>
-            <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
-              {t('workspace.save')}
-            </button>
-          </div>
+          <AutosaveNote autosave={autosave} testId="phase-card-autosave" />
         </form>
       ) : null}
 
@@ -342,19 +346,10 @@ export default function PhasesTab() {
 
       {adding && canManagePhases ? (
         <form className="card editor-card auth-form" onSubmit={onAdd}>
-          <div className="editor-grid-2">
-            <div className="field">
-              <label className="label">{t('workspace.titleFa')}</label>
-              <input className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label">{t('workspace.titleEn')}</label>
-              <input className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-            </div>
-          </div>
+          <TitleField idBase="phase-add" testId="phase-add-title" fa={titleFa} en={titleEn} onChange={(v) => { setTitleFa(v.fa); setTitleEn(v.en); }} />
           {error ? <p className="error">{error}</p> : null}
           <div>
-            <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
+            <button className="btn btn-primary btn-sm" type="submit" disabled={loading || !hasOneTitle(titleFa, titleEn)}>
               {t('workspace.save')}
             </button>
           </div>

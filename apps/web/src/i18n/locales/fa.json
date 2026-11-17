@@ -507,8 +507,7 @@
     "newContract": "قرارداد جدید",
     "newContractCta": "ساخت قرارداد",
     "newContractPickCustomer": "یک مشتری انتخاب کن…",
-    "newContractTitleFa": "عنوان (فارسی)",
-    "newContractTitleEn": "عنوان (انگلیسی)",
+    "newContractTitle": "عنوان قرارداد",
     "newContractDesigner": "طراح (اختیاری)",
     "newContractDeveloper": "توسعه‌دهنده (اختیاری)",
     "newContractUnassigned": "تخصیص‌نیافته",
@@ -1787,7 +1786,8 @@
       "title_other": "{{n}} پیشنهاد منتظر تصمیم"
     },
     "decide": {
-      "langHint": "مشتری این را به {{lang}} نوشته؛ برچسب زبان دیگر را شما بنویسید.",
+      "langHint": "مشتری این را به {{lang}} نوشته است. برچسب زبان دیگر اختیاری است.",
+      "label": "برچسب",
       "labelFa": "برچسب (فارسی)",
       "labelEn": "برچسب (انگلیسی)",
       "kind": "نوع",

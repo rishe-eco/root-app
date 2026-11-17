@@ -507,8 +507,7 @@
     "newContract": "New contract",
     "newContractCta": "Create contract",
     "newContractPickCustomer": "Pick a customer…",
-    "newContractTitleFa": "Title (Persian)",
-    "newContractTitleEn": "Title (English)",
+    "newContractTitle": "Contract title",
     "newContractDesigner": "Designer (optional)",
     "newContractDeveloper": "Developer (optional)",
     "newContractUnassigned": "Unassigned",
@@ -1787,7 +1786,8 @@
       "title_other": "{{n}} requests waiting for a decision"
     },
     "decide": {
-      "langHint": "The customer wrote this in {{lang}} — write the other label.",
+      "langHint": "The customer wrote this in {{lang}}. A label in the other language is optional.",
+      "label": "Label",
       "labelFa": "Label (Persian)",
       "labelEn": "Label (English)",
       "kind": "Kind",

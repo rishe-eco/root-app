@@ -17,6 +17,10 @@ import {
   type User,
 } from '@/lib/queries';
 import DemoViewport from '@/components/DemoViewport';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
 import DemoFeedbackPanel from '@/components/DemoFeedbackPanel';
 import DemoSubmission, { ReadinessStep, mayRecordReadiness, useDemoReadiness } from '@/components/DemoSubmission';
 
@@ -72,27 +76,22 @@ function DemoPageRow({
   const [labelEn, setLabelEn] = useState(page.labelEn);
   const [canonicalPath, setCanonicalPath] = useState(page.canonicalPath);
   const [pageDesignId, setPageDesignId] = useState(page.pageDesign?.id ?? '');
-  const [error, setError] = useState<string | null>(null);
-  const [update, { loading }] = useMutation(UPDATE_DEMO_PAGE, { variables: { contractId } });
+  const [update] = useMutation(UPDATE_DEMO_PAGE, { variables: { contractId } });
   const [remove] = useMutation(DELETE_DEMO_PAGE, { variables: { contractId } });
 
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await update({
-        variables: {
-          demoPageId: page.id,
-          labelFa,
-          labelEn,
-          canonicalPath,
-          pageDesignId: pageDesignId || null,
-        },
-      });
-    } catch (err) {
-      setError(errorMessage(err, t));
-    }
-  }
+  // DX4 (review 27): a declared page saves when a field in its row is left; `updateDemoPage` takes
+  // the label, the path and the design together.
+  const autosave = useAutosave({
+    value: { labelFa, labelEn, canonicalPath, pageDesignId },
+    baseline: { labelFa: page.labelFa, labelEn: page.labelEn, canonicalPath: page.canonicalPath, pageDesignId: page.pageDesign?.id ?? '' },
+    valid: (v) => hasOneTitle(v.labelFa, v.labelEn) && v.canonicalPath.trim() !== '',
+    save: (v) =>
+      update({
+        variables: { demoPageId: page.id, labelFa: v.labelFa, labelEn: v.labelEn, canonicalPath: v.canonicalPath, pageDesignId: v.pageDesignId || null },
+      }),
+    disabled: !editable,
+    errorText: (err) => errorMessage(err, t),
+  });
 
   async function onDelete() {
     if (!confirm(t('workspace.confirmDeleteDemoPage'))) return;
@@ -114,17 +113,32 @@ function DemoPageRow({
   }
 
   return (
-    <form className="demo-page-row" onSubmit={onSave}>
+    <form className="demo-page-row" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur}>
       <span className="t-eyebrow num-latin">{page.key}</span>
-      <input className="input" dir="rtl" value={labelFa} onChange={(e) => setLabelFa(e.target.value)} />
-      <input className="input" dir="ltr" value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
+      <TitleField
+        idBase={`demo-page-${page.key}`}
+        testId={`demo-page-title-${page.key}`}
+        fa={labelFa}
+        en={labelEn}
+        onChange={(v) => {
+          setLabelFa(v.fa);
+          setLabelEn(v.en);
+        }}
+      />
       <input
         className="input num-latin"
         dir="ltr"
         value={canonicalPath}
         onChange={(e) => setCanonicalPath(e.target.value)}
       />
-      <select className="input" value={pageDesignId} onChange={(e) => setPageDesignId(e.target.value)}>
+      <select
+        className="input"
+        value={pageDesignId}
+        onChange={(e) => {
+          setPageDesignId(e.target.value);
+          autosave.commit({ labelFa, labelEn, canonicalPath, pageDesignId: e.target.value });
+        }}
+      >
         <option value="">{t('workspace.demoPageNoDesign')}</option>
         {designOptions.map((o) => (
           <option key={o.id} value={o.id}>
@@ -132,13 +146,10 @@ function DemoPageRow({
           </option>
         ))}
       </select>
-      <button className="btn btn-secondary btn-sm" type="submit" disabled={loading}>
-        {t('workspace.save')}
-      </button>
       <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete}>
         {t('workspace.delete')}
       </button>
-      {error ? <span className="error">{error}</span> : null}
+      <AutosaveNote autosave={autosave} testId={`demo-page-autosave-${page.key}`} />
     </form>
   );
 }
@@ -342,23 +353,14 @@ export default function DemoSetup({
             <label className="label">{t('workspace.scopeKey')}</label>
             <input className="input num-latin" dir="ltr" required value={pageKey} onChange={(e) => setPageKey(e.target.value)} />
           </div>
-          <div className="editor-grid-2">
-            <div className="field">
-              <label className="label">{t('workspace.titleFa')}</label>
-              <input className="input" dir="rtl" required value={pageLabelFa} onChange={(e) => setPageLabelFa(e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label">{t('workspace.titleEn')}</label>
-              <input className="input" dir="ltr" required value={pageLabelEn} onChange={(e) => setPageLabelEn(e.target.value)} />
-            </div>
-          </div>
+          <TitleField idBase="demo-page-new" testId="demo-page-new-title" fa={pageLabelFa} en={pageLabelEn} onChange={(v) => { setPageLabelFa(v.fa); setPageLabelEn(v.en); }} />
           <div className="field">
             <label className="label">{t('workspace.demoPagePath')}</label>
             <input className="input num-latin" dir="ltr" required value={pagePath} onChange={(e) => setPagePath(e.target.value)} />
           </div>
           {pageError ? <p className="error">{pageError}</p> : null}
           <div>
-            <button className="btn btn-primary btn-sm" type="submit" disabled={declaring}>
+            <button className="btn btn-primary btn-sm" type="submit" disabled={declaring || !hasOneTitle(pageLabelFa, pageLabelEn)}>
               {t('workspace.save')}
             </button>
           </div>

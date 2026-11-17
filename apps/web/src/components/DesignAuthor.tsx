@@ -33,6 +33,10 @@ import ImageUploader from '@/components/ImageUploader';
 import { PaletteItemView } from '@/components/PaletteView';
 import { isInScope, ownItems } from '@/lib/scopeStep';
 import MoneyReadout from '@/components/MoneyReadout';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
 
 /**
  * The designer's half of step 4 (journeys build plan J8), and sales' "extend the
@@ -358,6 +362,14 @@ function WireframeRow({ contractId, page }: { contractId: string; page: DesignCo
   const [labelFa, setLabelFa] = useState(page.labelFa);
   const [labelEn, setLabelEn] = useState(page.labelEn);
   const { act, busy, error } = useAct();
+  // DX4 (review 27): the label saves when the field is left.
+  const autosave = useAutosave({
+    value: { labelFa, labelEn },
+    baseline: { labelFa: page.labelFa, labelEn: page.labelEn },
+    valid: (v) => hasOneTitle(v.labelFa, v.labelEn),
+    save: (v) => rename({ variables: { pageId: page.id, labelFa: v.labelFa, labelEn: v.labelEn } }),
+    errorText: (err) => (err as { message?: string })?.message ?? String(err),
+  });
   return (
     <li className="design-page-row card" data-testid="wireframe-row" data-key={page.key}>
       <div className="design-palette-head">
@@ -366,19 +378,9 @@ function WireframeRow({ contractId, page }: { contractId: string; page: DesignCo
           {page.key}
         </span>
       </div>
-      <form
-        className="workspace-row"
-        data-testid="wireframe-rename"
-        onSubmit={(e: FormEvent) => {
-          e.preventDefault();
-          void act(() => rename({ variables: { pageId: page.id, labelFa, labelEn } }));
-        }}
-      >
-        <input className="input" dir="rtl" required aria-label={t('workspace.titleFa')} value={labelFa} onChange={(e) => setLabelFa(e.target.value)} />
-        <input className="input" dir="ltr" required aria-label={t('workspace.titleEn')} value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
-        <button className="btn btn-ghost btn-sm" type="submit" disabled={busy}>
-          {t('workspace.save')}
-        </button>
+      <form className="workspace-row" data-testid="wireframe-rename" onSubmit={(e: FormEvent) => e.preventDefault()} onBlur={autosave.onBlur}>
+        <TitleField idBase={`wireframe-${page.key}`} testId="wireframe-title" fa={labelFa} en={labelEn} onChange={(v) => { setLabelFa(v.fa); setLabelEn(v.en); }} />
+        <AutosaveNote autosave={autosave} testId="wireframe-autosave" />
       </form>
       <ImageUploader
         contractId={contractId}

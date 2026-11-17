@@ -23,6 +23,8 @@ import StatusBadge from '@/components/StatusBadge';
 import { requestErrorMessage } from '@/components/RequestThread';
 import { captionFor } from '@/lib/wizard';
 import NewCustomerModal from './NewCustomerModal';
+import TitleField from '@/components/TitleField';
+import { hasOneTitle } from '@/lib/titleScript';
 
 /**
  * Journeys build plan S1: the list itself answers both `contracts.readAll`
@@ -227,34 +229,17 @@ export default function DeskContracts() {
                 <p className="t-caption desk-muted">{t('desk.newContractRefHelp')}</p>
               </div>
             </div>
-            <div className="editor-grid-2">
-              <div className="field">
-                <label className="label" htmlFor="nc-fa">
-                  {t('desk.newContractTitleFa')}
-                </label>
-                <input
-                  id="nc-fa"
-                  className="input"
-                  dir="rtl"
-                  required
-                  value={titleFa}
-                  onChange={(e) => setTitleFa(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label className="label" htmlFor="nc-en">
-                  {t('desk.newContractTitleEn')}
-                </label>
-                <input
-                  id="nc-en"
-                  className="input"
-                  dir="ltr"
-                  required
-                  value={titleEn}
-                  onChange={(e) => setTitleEn(e.target.value)}
-                />
-              </div>
-            </div>
+            <TitleField
+              idBase="nc"
+              testId="nc-title"
+              label={t('desk.newContractTitle')}
+              fa={titleFa}
+              en={titleEn}
+              onChange={(v) => {
+                setTitleFa(v.fa);
+                setTitleEn(v.en);
+              }}
+            />
             {/* Journeys build plan S1 (Q-S4): sales may pick a designer and a
                 developer at creation — both optional, both fed by
                 assignableUsers so this list and assignContract's own refusal
@@ -299,7 +284,7 @@ export default function DeskContracts() {
             </div>
             {error ? <p className="error">{error}</p> : null}
             <div>
-              <button className="btn btn-primary btn-sm" type="submit" disabled={creating}>
+              <button className="btn btn-primary btn-sm" type="submit" disabled={creating || !hasOneTitle(titleFa, titleEn)}>
                 {t('desk.newContractCta')}
               </button>
             </div>
