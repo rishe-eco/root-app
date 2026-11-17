@@ -465,6 +465,23 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 .stepper-count-value { min-inline-size: 2.5rem; text-align: center; font-size: var(--text-h3); font-weight: var(--weight-semibold); line-height: 1; }
 .stepper-count-btn { min-inline-size: 2.5rem; min-block-size: 2.5rem; font-size: var(--text-body-lg); }
 
+/* Requirements' "Who provides what, by when" (DX3a): a row is the item, its pills, its date and — for a one-off —
+   remove, wrapping rather than overflowing; every child may shrink to the column. */
+.handover-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.handover-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--color-border);
+}
+.handover-row > * { min-inline-size: 0; max-inline-size: 100%; }
+.handover-item { flex: 1 1 100%; margin: 0; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.handover-due { display: flex; flex-direction: column; gap: var(--space-1); }
+.handover-remove { margin-inline-start: auto; }
+.handover-add { display: flex; flex-direction: column; gap: var(--space-3); }
+
 /* Accordion sub-panels of the requirements editor. */
 .req-editor { display: flex; flex-direction: column; gap: var(--space-3); }
 .req-acc { display: flex; flex-direction: column; gap: var(--space-2); }

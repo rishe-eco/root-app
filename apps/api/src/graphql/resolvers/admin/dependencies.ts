@@ -107,7 +107,7 @@ export const dependencyMutations = {
    *  out; after, it is board-only and needs both. */
   createDependency: async (
     _p: unknown,
-    args: { projectId: string; side?: DependencySide | null; titleFa: string; titleEn: string; dueAt?: string | null; contractId?: string | null },
+    args: { projectId: string; side?: DependencySide | null; titleFa: string; titleEn: string; dueAt?: string | null; notNeeded?: boolean | null; contractId?: string | null },
     ctx: Context,
   ) => {
     const user = requireCapability(ctx, 'contracts.author');
@@ -126,7 +126,7 @@ export const dependencyMutations = {
       const dueAt = dayOrNull(args.dueAt);
       if (!inBrief && !boardRowIsComplete({ side, dueAt })) throw incomplete();
       await tx.dependency.create({
-        data: { projectId: project.id, side, titleFa, titleEn, dueAt, inBrief, createdById: user.id },
+        data: { projectId: project.id, side, titleFa, titleEn, dueAt, inBrief, notNeeded: args.notNeeded === true, createdById: user.id },
       });
     });
     return reloadOnProject(project.id, args.contractId);

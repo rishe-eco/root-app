@@ -325,7 +325,8 @@
       "tab": {
         "types": "Types",
         "scope": "Scope",
-        "themes": "Themes"
+        "themes": "Themes",
+        "handover": "Handover items"
       },
       "typesHelp": "A designer keeps the types. Nothing is deleted — a type is deactivated, which takes it out of the picker and leaves everything that already chose it untouched.",
       "scopeHelp": "Sales keeps each type's list. Saving replaces the type's whole list with what is on screen.",
@@ -415,8 +416,20 @@
         "INVALID_AMOUNT": "The licence cost must be a whole number of Toman, digits only.",
         "DUPLICATE_THEME": "A theme was ticked twice — reload the page.",
         "THEME_NOT_FOUND": "One of those themes no longer exists — reload the page.",
+        "HANDOVER_KEY_TAKEN": "An item with that key already exists.",
+        "TITLE_REQUIRED": "Both titles are required.",
         "FORBIDDEN": "You are not allowed to do that.",
         "UNKNOWN": "That did not work. Try again."
+      },
+      "handover": {
+        "help": "The things a project usually needs handed over: the domain, the hosting, the content, and whatever you add. A new contract's requirements start with a row for each active item. Nothing is deleted — an item is deactivated, and rows already made keep the title they have.",
+        "newItem": "New item",
+        "key": "Key",
+        "keyHint": "Lowercase Latin letters, digits and hyphens only, e.g. sms-line. It cannot be changed later.",
+        "technical": "Verified by the developer",
+        "technicalHint": "A technical item (domain, hosting) is marked done by the developer; any other by sales.",
+        "add": "Add item",
+        "none": "No handover items yet."
       }
     },
     "builds": {
@@ -948,7 +961,15 @@
     "tabNotes": "Notes",
     "dependencyFromBrief": "From the requirements",
     "dependencyTechnical": "Technical",
-    "dependencyBriefOwnedHelp": "This commitment comes from the requirements: its title and who provides it are set there. Only its due date is changed here.",
+    "dependencyBriefOwnedHelp": "This item is on the default list and in the requirements: it cannot be deleted, only marked not needed. It is the same row as in Requirements.",
+    "dependencyInRequirements": "In the requirements",
+    "dependencyUndecided": "Not decided",
+    "dependencyUndated": "No date yet",
+    "dependencyNotNeeded": "Not needed",
+    "dependencyNotNeededLabel": "Not needed",
+    "dependencyAgreed": "Agreed",
+    "dependencyLockedHelp": "The agreement is approved, so this item's title, who provides it and its date are fixed. You can still mark it done.",
+    "dependencyDueOptional": "Due date (optional for a requirements item)",
     "customerLine": "Customer: {{name}}",
     "refHelp": "Changeable until the contract is signed.",
     "refSigned": "The contract is signed, so its reference can no longer change.",
@@ -2286,6 +2307,10 @@
   "agreement": {
     "brief": "Requirements",
     "designPath": "Design path",
+    "handover": "Who provides what, by when",
+    "handoverItem": "Item",
+    "handoverWho": "Provided by",
+    "handoverBy": "By",
     "moneyHidden": "Not shown to you — it is money.",
     "phasesAndDates": "Phases and dates",
     "plannedStart": "Planned start",
@@ -2364,9 +2389,6 @@
       "EXISTING_SITE_URL": "the address of the existing site",
       "BUDGET_CAP": "the budget",
       "HARD_DEADLINE": "the hard deadline",
-      "DOMAIN_PROVIDER": "who provides the domain",
-      "HOST_PROVIDER": "who provides the hosting",
-      "CONTENT_PROVIDER": "who provides the content",
       "SUPPORT_MONTHS": "the support period",
       "PREMADE_ROUNDS": "how many rounds of changes the pre-made design includes",
       "MOCKUP_ITERATIONS": "how many rounds of mockup changes are included",
@@ -2457,7 +2479,6 @@
       "idealDeadline": "Ideal deadline",
       "hardDeadline": "Hard deadline",
       "supportMonths": "Months of support after delivery",
-      "providersTitle": "Who provides what",
       "provider": {
         "domain": "Domain provided by",
         "host": "Hosting provided by",
@@ -2465,10 +2486,6 @@
       },
       "providerUnset": "Not decided",
       "domainName": "Domain name",
-      "commitmentsTitle": "Commitments and their due dates",
-      "commitmentsHelp": "Every commitment the requirements imply needs a due date. It goes on the dependency board, and the customer sees their own.",
-      "commitmentDue": "Due date — {{what}}",
-      "commitmentSide": "Provided by",
       "allowancesTitle": "What is included",
       "premadeRounds": "Rounds of changes to the pre-made design",
       "wireframeIterations": "Rounds of wireframe changes",
@@ -2476,7 +2493,9 @@
       "demoIterations": "Rounds of demo changes per phase",
       "saved": "Saved.",
       "savedSeparately": "Each part above is saved on its own.",
-      "supportOther": "Other"
+      "supportOther": "Other",
+      "presetHint": "Saving applies the existing-site preset: no design, every extra left out, domain and hosting not needed. Everything can be changed afterwards.",
+      "presetApplied": "The existing-site preset was applied: no design, extras left out, domain and hosting marked not needed."
     },
     "extras": {
       "title": "Extras",
@@ -2541,6 +2560,34 @@
         "month": "Payment for {{month}} {{year}}"
       }
     },
+    "handover": {
+      "title": "Who provides what, by when",
+      "help": "One row for each thing the project needs handed over. Choose who provides it — or that it is not needed — and a due date. All of it is optional. These are the same rows as the Dependencies tab.",
+      "side": {
+        "ROOT": "Root",
+        "CUSTOMER": "Customer",
+        "NOT_NEEDED": "Not needed"
+      },
+      "who": "Provided by — {{what}}",
+      "due": "Due date — {{what}}",
+      "undecided": "Not decided",
+      "undated": "No date yet",
+      "dueOn": "Due {{date}}",
+      "empty": "There are no handover items yet. They appear when the requirements are first saved.",
+      "add": "Add item",
+      "addTitle": "A new item for this contract",
+      "titleFa": "Persian title",
+      "titleEn": "English title",
+      "addConfirm": "Add to the list",
+      "cancel": "Cancel",
+      "remove": "Remove",
+      "removeWhat": "Remove {{what}}",
+      "oneOff": "Added for this contract",
+      "save": "Save",
+      "saved": "Saved.",
+      "locked": "The agreement is approved, so this list is fixed.",
+      "group": "Who provides what"
+    },
     "handOver": {
       "title": "Hand over to the customer",
       "help": "The customer cannot see this contract until you do. They are told by email and SMS, and anything still unfinished is shown to them as “Root is completing this”. The kind of site must be set first.",
@@ -2575,6 +2622,9 @@
       "EXTRA_IN_PROGRESS": "Work has started on that, so it cannot be switched off here.",
       "STEP_NOT_ON_ROAD": "This contract has no requirements step.",
       "FORBIDDEN": "You do not have access to that.",
+      "DEPENDENCY_INCOMPLETE": "An item that is only on the board needs a side and a due date.",
+      "TITLE_REQUIRED": "Give it a title in both languages.",
+      "BRIEF_OWNED": "This item comes from the requirements — mark it not needed instead of deleting it.",
       "NOT_FOUND": "Not found."
     },
     "accordion": {

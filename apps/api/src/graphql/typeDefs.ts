@@ -3643,7 +3643,7 @@ export const typeDefs = /* GraphQL */ `
     same board, the same rule. Returns the whole contract (T9), reached via
     project.dependencies.
     """
-    createDependency(projectId: ID!, side: DependencySide, titleFa: String!, titleEn: String!, dueAt: DateTime, contractId: ID): Contract!
+    createDependency(projectId: ID!, side: DependencySide, titleFa: String!, titleEn: String!, dueAt: DateTime, notNeeded: Boolean, contractId: ID): Contract!
     "Staff (contracts.author)."
     updateDependency(dependencyId: ID!, titleFa: String, titleEn: String, dueAt: DateTime, side: DependencySide, notNeeded: Boolean, contractId: ID): Contract!
     """

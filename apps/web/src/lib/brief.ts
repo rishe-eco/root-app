@@ -18,10 +18,6 @@ export type CommitmentKey = (typeof COMMITMENT_KEYS)[number];
 
 export const isCommitmentKey = (key: string): key is CommitmentKey => (COMMITMENT_KEYS as readonly string[]).includes(key);
 
-/** The three whose side the brief itself records — the form's provider selects. */
-export const PROVIDER_KEYS = ['domain', 'host', 'content'] as const;
-export type ProviderKey = (typeof PROVIDER_KEYS)[number];
-
 /** Which completeness-checklist area implies which commitment (a mirror of the
  *  API's `EXTRA_COMMITMENT`). */
 export const EXTRA_COMMITMENT: Readonly<Record<string, CommitmentKey>> = {
@@ -30,26 +26,25 @@ export const EXTRA_COMMITMENT: Readonly<Record<string, CommitmentKey>> = {
   'checklist.legal': 'enamad',
 };
 
-/** A commitment implied by the form as it stands — what the editor asks a date for. */
-export type ImpliedRow = { key: CommitmentKey; fromBrief: boolean };
-
 /**
- * The commitments the form implies *as typed* — a provider chosen, an extra in
- * scope — so the editor can offer each its date before the first save, instead
- * of asking sales to save, look, and save again. The server computes the same
- * set on save (`briefDependencies`) and is the authority; this is only what the
- * form draws.
+ * A handover item's "who" as the panel's pills show it (DX3a): Root, Customer or
+ * Not needed — one choice, where the record has a side and a not-needed flag.
+ * The flag is shown when it is set and the side otherwise, and a press sets both
+ * (`handoverPatch`), so the two never disagree on screen.
  */
-export function impliedRows(
-  providers: Record<ProviderKey, DependencySide | ''>,
-  includedExtraKeys: readonly string[],
-): ImpliedRow[] {
-  const out: ImpliedRow[] = [];
-  for (const key of PROVIDER_KEYS) if (providers[key]) out.push({ key, fromBrief: true });
-  const fromExtras = new Set(includedExtraKeys.map((k) => EXTRA_COMMITMENT[k]).filter((k): k is CommitmentKey => !!k));
-  for (const key of COMMITMENT_KEYS) if (fromExtras.has(key)) out.push({ key, fromBrief: false });
-  return out;
-}
+export type HandoverChoice = 'ROOT' | 'CUSTOMER' | 'NOT_NEEDED';
+
+export const choiceOf = (d: { side: DependencySide | null; notNeeded: boolean }): HandoverChoice | null =>
+  d.notNeeded ? 'NOT_NEEDED' : d.side;
+
+/** What a pill press writes: the side (null for Not needed and for a cleared pill) and the flag. */
+export const handoverPatch = (choice: HandoverChoice | null): { side: DependencySide | null; notNeeded: boolean } => ({
+  side: choice === 'ROOT' || choice === 'CUSTOMER' ? choice : null,
+  notNeeded: choice === 'NOT_NEEDED',
+});
+
+/** A calendar day (`YYYY-MM-DD`) as the DateTime the board's mutations take: its midnight in UTC (PD-19). Empty is no date. */
+export const instantOf = (day: string): string | null => (day ? `${day}T00:00:00.000Z` : null);
 
 /** PD-13: the tier is stored, the path is what is shown — two words on screen. */
 export type DesignPath = 'PREMADE' | 'CUSTOM' | 'NONE';

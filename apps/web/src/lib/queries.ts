@@ -197,10 +197,12 @@ export type DependencySide = 'CUSTOMER' | 'ROOT';
 
 export type Dependency = {
   id: string;
-  side: DependencySide;
+  /** DX3a: null while a requirements row is undecided (nobody owes it yet). */
+  side: DependencySide | null;
   titleFa: string;
   titleEn: string;
-  dueAt: string;
+  /** DX3a: null while undated — never overdue, last on the board. */
+  dueAt: string | null;
   /** Derived server-side (lib/dependency.ts) — never a hand-typed flag (F5). */
   overdue: boolean;
   createdBy: Pick<User, 'id' | 'name'>;
@@ -214,6 +216,22 @@ export type Dependency = {
   briefKey: string | null;
   /** J4: verified by the developer (`dependencies.verifyTechnical`) rather than sales. */
   technical: boolean;
+  /** DX3a: a handover item — part of the requirements the customer agrees to, the same record as this
+   *  board row. Locked (STEP_LOCKED) once the agreement is approved. */
+  inBrief: boolean;
+  /** DX3a: nobody needs to provide it. */
+  notNeeded: boolean;
+};
+
+/** DX3a: one item on the desk's default list of handover items (Templates > Handover items). */
+export type HandoverItemType = {
+  id: string;
+  key: string;
+  titleFa: string;
+  titleEn: string;
+  technical: boolean;
+  position: number;
+  active: boolean;
 };
 
 /** The staff dashboard's own cross-project shape — a Dependency plus which
@@ -570,11 +588,14 @@ export type AgreementSnapshot = {
     idealDeadline: string | null;
     hardDeadline: string | null;
     domainName: string | null;
-    domainProvidedBy: 'CUSTOMER' | 'ROOT' | null;
-    hostProvidedBy: 'CUSTOMER' | 'ROOT' | null;
-    contentProvidedBy: 'CUSTOMER' | 'ROOT' | null;
+    /** Format 2 only — format 3 has `handover` instead (DX3a). */
+    domainProvidedBy?: 'CUSTOMER' | 'ROOT' | null;
+    hostProvidedBy?: 'CUSTOMER' | 'ROOT' | null;
+    contentProvidedBy?: 'CUSTOMER' | 'ROOT' | null;
     supportMonths: number | null;
   } | null;
+  /** Format 3 (DX3a): who provides what, by when, in the agreement's order. Empty for format 2. */
+  handover: Array<{ key: string | null; titleFa: string; titleEn: string; side: DependencySide | null; dueOn: string | null; notNeeded: boolean }>;
   allowances: {
     premadeRounds: number | null;
     wireframeIterations: number;
@@ -866,6 +887,9 @@ export type Contract = {
   brief?: ContractBrief | null;
   /** What step 1 still lacks, as codes. Empty means the step is done. */
   briefCompleteness?: BriefMissing[];
+  /** DX3a: the handover items — the project's `inBrief` board rows, in the agreement's order. All of them,
+   *  the not-needed and the undecided too (the customer's board hides those; Requirements lists them). */
+  handover?: Dependency[];
   /** DX2a: what the Phases and payment step still lacks (the phases and the plan, once step 1's). Empty means done. */
   planCompleteness?: BriefMissing[];
   /** Journeys build plan J8 — step 4, selected by `WizardFields`: the current
@@ -908,9 +932,6 @@ export type ContractBrief = {
   idealDeadline: string | null;
   hardDeadline: string | null;
   domainName: string | null;
-  domainProvidedBy: DependencySide | null;
-  hostProvidedBy: DependencySide | null;
-  contentProvidedBy: DependencySide | null;
   supportMonths: number | null;
   premadeRounds: number | null;
   wireframeIterations: number;
@@ -1070,6 +1091,8 @@ export const DEPENDENCY_FIELDS = gql`
     }
     briefKey
     technical
+    inBrief
+    notNeeded
   }
 `;
 
@@ -1165,9 +1188,6 @@ export const WIZARD_FIELDS = gql`
       idealDeadline
       hardDeadline
       domainName
-      domainProvidedBy
-      hostProvidedBy
-      contentProvidedBy
       supportMonths
       premadeRounds
       wireframeIterations
@@ -1289,6 +1309,9 @@ export const CONTRACT_FIELDS = gql`
       signed
       approvedPageCount
       totalPageCount
+    }
+    handover {
+      ...DependencyFields
     }
     concepts {
       id
@@ -1527,6 +1550,14 @@ export const CONTRACT_FIELDS = gql`
           hostProvidedBy
           contentProvidedBy
           supportMonths
+        }
+        handover {
+          key
+          titleFa
+          titleEn
+          side
+          dueOn
+          notNeeded
         }
         allowances {
           premadeRounds
@@ -2763,9 +2794,6 @@ export type BriefInput = {
   idealDeadline?: string | null;
   hardDeadline?: string | null;
   domainName?: string | null;
-  domainProvidedBy?: DependencySide | null;
-  hostProvidedBy?: DependencySide | null;
-  contentProvidedBy?: DependencySide | null;
   supportMonths?: number | null;
   premadeRounds?: number | null;
   wireframeIterations?: number | null;
@@ -4175,17 +4203,18 @@ export const CREATE_TICKET_FROM_FEEDBACK = gql`
 
 export const CREATE_DEPENDENCY = gql`
   ${CONTRACT_FIELDS}
-  mutation CreateDependency($projectId: ID!, $side: DependencySide!, $titleFa: String!, $titleEn: String!, $dueAt: DateTime!, $contractId: ID) {
-    createDependency(projectId: $projectId, side: $side, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt, contractId: $contractId) {
+  mutation CreateDependency($projectId: ID!, $side: DependencySide, $titleFa: String!, $titleEn: String!, $dueAt: DateTime, $notNeeded: Boolean, $contractId: ID) {
+    createDependency(projectId: $projectId, side: $side, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt, notNeeded: $notNeeded, contractId: $contractId) {
       ...ContractFields
     }
   }
 `;
 
+/** DX3a: an omitted variable is left alone, `null` clears (a side, a date) — only a requirements row may be without them. */
 export const UPDATE_DEPENDENCY = gql`
   ${CONTRACT_FIELDS}
-  mutation UpdateDependency($dependencyId: ID!, $titleFa: String!, $titleEn: String!, $dueAt: DateTime!, $contractId: ID) {
-    updateDependency(dependencyId: $dependencyId, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt, contractId: $contractId) {
+  mutation UpdateDependency($dependencyId: ID!, $titleFa: String, $titleEn: String, $dueAt: DateTime, $side: DependencySide, $notNeeded: Boolean, $contractId: ID) {
+    updateDependency(dependencyId: $dependencyId, titleFa: $titleFa, titleEn: $titleEn, dueAt: $dueAt, side: $side, notNeeded: $notNeeded, contractId: $contractId) {
       ...ContractFields
     }
   }
@@ -4246,6 +4275,58 @@ export const MY_OVERDUE_DEPENDENCIES = gql`
   query MyOverdueDependencies {
     myOverdueDependencies {
       ...DependencyFields
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// The desk's default list of handover items (DX3a; Templates > Handover items).
+// ---------------------------------------------------------------------------
+
+export const HANDOVER_ITEM_TYPE_FIELDS = gql`
+  fragment HandoverItemTypeFields on HandoverItemType {
+    id
+    key
+    titleFa
+    titleEn
+    technical
+    position
+    active
+  }
+`;
+
+export const HANDOVER_ITEM_TYPES = gql`
+  ${HANDOVER_ITEM_TYPE_FIELDS}
+  query HandoverItemTypes {
+    handoverItemTypes {
+      ...HandoverItemTypeFields
+    }
+  }
+`;
+
+export const CREATE_HANDOVER_ITEM_TYPE = gql`
+  ${HANDOVER_ITEM_TYPE_FIELDS}
+  mutation CreateHandoverItemType($key: String!, $titleFa: String!, $titleEn: String!, $technical: Boolean) {
+    createHandoverItemType(key: $key, titleFa: $titleFa, titleEn: $titleEn, technical: $technical) {
+      ...HandoverItemTypeFields
+    }
+  }
+`;
+
+export const UPDATE_HANDOVER_ITEM_TYPE = gql`
+  ${HANDOVER_ITEM_TYPE_FIELDS}
+  mutation UpdateHandoverItemType($id: ID!, $titleFa: String, $titleEn: String, $technical: Boolean, $active: Boolean) {
+    updateHandoverItemType(id: $id, titleFa: $titleFa, titleEn: $titleEn, technical: $technical, active: $active) {
+      ...HandoverItemTypeFields
+    }
+  }
+`;
+
+export const REORDER_HANDOVER_ITEM_TYPES = gql`
+  ${HANDOVER_ITEM_TYPE_FIELDS}
+  mutation ReorderHandoverItemTypes($ids: [ID!]!) {
+    reorderHandoverItemTypes(ids: $ids) {
+      ...HandoverItemTypeFields
     }
   }
 `;

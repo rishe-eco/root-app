@@ -9,7 +9,9 @@ import {
   EXTRA_COMMITMENT,
   MONEY_FIELDS,
   designPath,
-  impliedRows,
+  choiceOf,
+  handoverPatch,
+  instantOf,
   isCommitmentKey,
   isIncludedExtra,
   missingParams,
@@ -66,11 +68,19 @@ test('the feedback anchors are the API’s BRIEF_FIELDS — a card can never off
   for (const money of MONEY_FIELDS) assert.ok((BRIEF_FIELDS as readonly string[]).includes(money));
 });
 
-test('impliedRows: a chosen provider and an in-scope extra each imply a dated commitment', () => {
-  assert.deepEqual(impliedRows({ domain: '', host: '', content: '' }, []), []);
-  assert.deepEqual(impliedRows({ domain: 'CUSTOMER', host: '', content: 'ROOT' }, []).map((r) => r.key), ['domain', 'content']);
-  const withExtras = impliedRows({ domain: '', host: 'ROOT', content: '' }, ['checklist.payment', 'checklist.analytics', 'checklist.legal']);
-  assert.deepEqual(withExtras.map((r) => [r.key, r.fromBrief]), [['host', true], ['gateway', false], ['enamad', false]]);
+test('a handover row’s pills are one choice: the flag when set, the side otherwise; a press writes both and a cleared pill neither (DX3a)', () => {
+  assert.equal(choiceOf({ side: null, notNeeded: false }), null);
+  assert.equal(choiceOf({ side: 'ROOT', notNeeded: false }), 'ROOT');
+  assert.equal(choiceOf({ side: 'CUSTOMER', notNeeded: true }), 'NOT_NEEDED', 'the flag wins, whatever the side says');
+  assert.deepEqual(handoverPatch('ROOT'), { side: 'ROOT', notNeeded: false });
+  assert.deepEqual(handoverPatch('CUSTOMER'), { side: 'CUSTOMER', notNeeded: false });
+  assert.deepEqual(handoverPatch('NOT_NEEDED'), { side: null, notNeeded: true });
+  assert.deepEqual(handoverPatch(null), { side: null, notNeeded: false });
+});
+
+test('a calendar day goes to the API as its midnight in UTC, and no day as null', () => {
+  assert.equal(instantOf('2026-12-01'), '2026-12-01T00:00:00.000Z');
+  assert.equal(instantOf(''), null);
 });
 
 test('the design path is what is shown; the tier is what is stored (PD-13)', () => {

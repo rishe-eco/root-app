@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
 import { pick, fullDateTime, calendarDate } from '@/lib/format';
+import { day, refusalText } from '@/components/EditorKit';
+import { instantOf } from '@/lib/brief';
 import {
   CREATE_DEPENDENCY,
   UPDATE_DEPENDENCY,
@@ -22,6 +24,15 @@ import { useWorkspaceMutation, type WorkspaceContext } from './ContractWorkspace
  * the entire feature: verifying a row requires saying *what was done*, never
  * only a click — the form below has no way to submit a verification with an
  * empty note (the server holds the same rule structurally either way).
+ *
+ * **DX3a: this board and Requirements' "Who provides what, by when" panel are
+ * the same rows.** A row with `inBrief` is a handover item — it may be
+ * undecided (no side) or undated, shows as such, and sorts last; before the
+ * agreement is approved a row added here is `inBrief` and appears in
+ * Requirements too. Once the agreement is approved those rows' title, side,
+ * date and not-needed flag are fixed (the API refuses with `STEP_LOCKED`; the
+ * form is not drawn for them) while marking one done still works, and a row
+ * added after the lock is the board's alone and needs a side and a date.
  */
 
 type T = (key: string, opts?: Record<string, unknown>) => string;
@@ -94,13 +105,16 @@ function VerifyForm({
   );
 }
 
-function DependencyRow({ dep, canManage, me }: { dep: Dependency; canManage: boolean; me: User }) {
+function DependencyRow({ dep, canManage, me, locked }: { dep: Dependency; canManage: boolean; me: User; locked: boolean }) {
   const { t } = useTranslation();
   const locale = useLocale();
   const [editing, setEditing] = useState(false);
   const [titleFa, setTitleFa] = useState(dep.titleFa);
   const [titleEn, setTitleEn] = useState(dep.titleEn);
-  const [dueAt, setDueAt] = useState(dep.dueAt.slice(0, 10));
+  const [dueAt, setDueAt] = useState(day(dep.dueAt));
+  const [side, setSide] = useState<DependencySide | ''>(dep.side ?? '');
+  const [notNeeded, setNotNeeded] = useState(dep.notNeeded);
+  const [error, setError] = useState<string | null>(null);
   const [update, { loading }] = useWorkspaceMutation(UPDATE_DEPENDENCY);
   const [remove] = useWorkspaceMutation(DELETE_DEPENDENCY);
   // Journeys build plan J4: a technical row (the domain, the hosting) is the
@@ -112,22 +126,52 @@ function DependencyRow({ dep, canManage, me }: { dep: Dependency; canManage: boo
   // come from the brief, and it is not deleted from here (`BRIEF_OWNED`) — only
   // its date is edited, the one thing the brief's form asks separately.
   const fromBrief = dep.briefKey !== null;
+  // A handover item the agreement has fixed: nothing on it is edited or deleted here, only marked done.
+  const fixed = dep.inBrief && locked;
+  // A requirements row may be undecided and undated; a board-only one needs both.
+  const optional = dep.inBrief;
 
   async function onSave(e: FormEvent) {
     e.preventDefault();
-    await update({ variables: { dependencyId: dep.id, titleFa, titleEn, dueAt: new Date(dueAt).toISOString() } });
-    setEditing(false);
+    setError(null);
+    try {
+      await update({
+        variables: {
+          dependencyId: dep.id,
+          // The default list's and the extras' titles are the list's (an extra's is rewritten by the next save of the requirements).
+          ...(fromBrief ? {} : { titleFa, titleEn }),
+          side: side || null,
+          notNeeded,
+          dueAt: instantOf(dueAt),
+        },
+      });
+      setEditing(false);
+    } catch (err) {
+      setError(refusalText(t, err));
+    }
   }
 
   async function onDelete() {
     if (!confirm(t('workspace.confirmDeleteDependency'))) return;
-    await remove({ variables: { dependencyId: dep.id } });
+    setError(null);
+    try {
+      await remove({ variables: { dependencyId: dep.id } });
+    } catch (err) {
+      setError(refusalText(t, err));
+    }
   }
 
   return (
-    <div className={`card editor-card${dep.overdue ? ' dependency-overdue' : ''}`}>
+    <div className={`card editor-card${dep.overdue ? ' dependency-overdue' : ''}`} data-testid="dependency-row" data-key={dep.briefKey ?? dep.id}>
       <div className="workspace-row">
-        <span className="badge">{t(`workspace.dependencySide.${dep.side}`)}</span>
+        {dep.notNeeded ? (
+          <span className="badge badge-neutral" data-testid="dependency-not-needed">{t('workspace.dependencyNotNeeded')}</span>
+        ) : dep.side ? (
+          <span className="badge">{t(`workspace.dependencySide.${dep.side}`)}</span>
+        ) : (
+          <span className="badge badge-neutral" data-testid="dependency-undecided">{t('workspace.dependencyUndecided')}</span>
+        )}
+        {dep.inBrief ? <span className="badge" data-testid="dependency-in-brief">{t('workspace.dependencyInRequirements')}</span> : null}
         {dep.overdue ? <span className="badge dependency-overdue-badge">{t('workspace.dependencyOverdue')}</span> : null}
         {fromBrief ? <span className="badge" data-testid="dependency-from-brief">{t('workspace.dependencyFromBrief')}</span> : null}
         {dep.technical ? <span className="badge" data-testid="dependency-technical">{t('workspace.dependencyTechnical')}</span> : null}
@@ -136,8 +180,10 @@ function DependencyRow({ dep, canManage, me }: { dep: Dependency; canManage: boo
         </span>
         {/* A due date is a day (PD-19), whatever the column's type: the board's
             own date input writes midnight UTC, and so does the brief. */}
-        <span className="t-caption" data-testid="dependency-due">{calendarDate(dep.dueAt, locale)}</span>
-        {canManage ? (
+        <span className="t-caption" data-testid="dependency-due">
+          {dep.dueAt ? calendarDate(dep.dueAt, locale) : t('workspace.dependencyUndated')}
+        </span>
+        {canManage && !fixed ? (
           <>
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditing((v) => !v)}>
               {t('workspace.edit')}
@@ -151,7 +197,10 @@ function DependencyRow({ dep, canManage, me }: { dep: Dependency; canManage: boo
         ) : null}
       </div>
 
-      {editing && canManage ? (
+      {fixed && canManage ? <p className="t-caption" data-testid="dependency-fixed">{t('workspace.dependencyLockedHelp')}</p> : null}
+      {error ? <p className="error" role="alert" data-testid="dependency-error">{error}</p> : null}
+
+      {editing && canManage && !fixed ? (
         <form className="card editor-card auth-form" onSubmit={onSave}>
           {fromBrief ? (
             <p className="t-caption">{t('workspace.dependencyBriefOwnedHelp')}</p>
@@ -168,8 +217,22 @@ function DependencyRow({ dep, canManage, me }: { dep: Dependency; canManage: boo
             </div>
           )}
           <div className="field">
-            <label className="label">{t('workspace.dependencyDueAt')}</label>
-            <input className="input num-latin" type="date" required value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+            <label className="label">{t('workspace.dependencySideLabel')}</label>
+            <select className="input" required={!optional} value={side} onChange={(e) => setSide(e.target.value as DependencySide | '')}>
+              {optional ? <option value="">{t('workspace.dependencyUndecided')}</option> : null}
+              <option value="CUSTOMER">{t('workspace.dependencySide.CUSTOMER')}</option>
+              <option value="ROOT">{t('workspace.dependencySide.ROOT')}</option>
+            </select>
+          </div>
+          {optional ? (
+            <label className="theme-check">
+              <input type="checkbox" checked={notNeeded} onChange={(e) => setNotNeeded(e.target.checked)} />
+              {t('workspace.dependencyNotNeededLabel')}
+            </label>
+          ) : null}
+          <div className="field">
+            <label className="label">{optional ? t('workspace.dependencyDueOptional') : t('workspace.dependencyDueAt')}</label>
+            <input className="input num-latin" type="date" required={!optional} value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
           </div>
           <button className="btn btn-primary btn-sm" type="submit" disabled={loading}>
             {t('workspace.save')}
@@ -194,33 +257,42 @@ export default function DependenciesTab() {
   const canManage = can(me, 'contracts.author');
 
   const [adding, setAdding] = useState(false);
-  const [side, setSide] = useState<DependencySide>('CUSTOMER');
+  const [side, setSide] = useState<DependencySide | ''>('CUSTOMER');
   const [titleFa, setTitleFa] = useState('');
   const [titleEn, setTitleEn] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [createDependency, { loading }] = useWorkspaceMutation(CREATE_DEPENDENCY);
+  // Before the agreement is approved a row added here is a requirements row too, and may be left undecided and
+  // undated; after, it is the board's alone and needs both (`DEPENDENCY_INCOMPLETE`).
+  const locked = contract.wizard?.find((w) => w.step === 'REQUIREMENTS')?.locked ?? false;
+  const onRoad = contract.sequence === 'AGREEMENT_FIRST';
+  const optional = onRoad && !locked;
 
   if (!project) {
     return <p className="t-small muted">{t('workspace.phaseNoProject')}</p>;
   }
 
-  const rows = [...project.dependencies].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+  // Soonest first, the undated last (the API sorts the same way; sorted again so a refetch cannot reorder it).
+  const rows = [...project.dependencies].sort((a, b) => {
+    if (a.dueAt === null || b.dueAt === null) return a.dueAt === b.dueAt ? 0 : a.dueAt === null ? 1 : -1;
+    return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+  });
 
   async function onAdd(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!titleFa.trim() || !titleEn.trim() || !dueAt) return;
+    if (!titleFa.trim() || !titleEn.trim() || (!optional && (!dueAt || !side))) return;
     try {
       await createDependency({
-        variables: { projectId: project!.id, side, titleFa: titleFa.trim(), titleEn: titleEn.trim(), dueAt: new Date(dueAt).toISOString() },
+        variables: { projectId: project!.id, side: side || null, titleFa: titleFa.trim(), titleEn: titleEn.trim(), dueAt: instantOf(dueAt) },
       });
       setAdding(false);
       setTitleFa('');
       setTitleEn('');
       setDueAt('');
     } catch (err) {
-      setError((err as Error).message);
+      setError(refusalText(t, err));
     }
   }
 
@@ -240,7 +312,8 @@ export default function DependenciesTab() {
         <form className="card editor-card auth-form" onSubmit={onAdd}>
           <div className="field">
             <label className="label">{t('workspace.dependencySideLabel')}</label>
-            <select className="input" value={side} onChange={(e) => setSide(e.target.value as DependencySide)}>
+            <select className="input" required={!optional} value={side} onChange={(e) => setSide(e.target.value as DependencySide | '')}>
+              {optional ? <option value="">{t('workspace.dependencyUndecided')}</option> : null}
               <option value="CUSTOMER">{t('workspace.dependencySide.CUSTOMER')}</option>
               <option value="ROOT">{t('workspace.dependencySide.ROOT')}</option>
             </select>
@@ -256,8 +329,8 @@ export default function DependenciesTab() {
             </div>
           </div>
           <div className="field">
-            <label className="label">{t('workspace.dependencyDueAt')}</label>
-            <input className="input num-latin" type="date" required value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+            <label className="label">{optional ? t('workspace.dependencyDueOptional') : t('workspace.dependencyDueAt')}</label>
+            <input className="input num-latin" type="date" required={!optional} value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
           </div>
           {error ? <p className="error">{error}</p> : null}
           <div>
@@ -273,7 +346,7 @@ export default function DependenciesTab() {
       ) : (
         <div className="editor-list">
           {rows.map((dep) => (
-            <DependencyRow key={dep.id} dep={dep} canManage={canManage} me={me} />
+            <DependencyRow key={dep.id} dep={dep} canManage={canManage} me={me} locked={locked} />
           ))}
         </div>
       )}
