@@ -106,11 +106,13 @@ for (const { lang, width } of CASES) {
     await expect(page.locator('#ct-en')).toHaveValue(english);
     await expect(page.locator('#ct-amount')).toHaveValue('2500000');
 
-    // Clearing both is not saved: a title needs one language, and nothing is sent.
+    // Clearing one language is saved (the other still names the contract); clearing the last is not: a title needs one
+    // language, so nothing is sent and the saved one stays.
     await page.locator('#ct-fa').fill('');
     await page.locator('#ct-en').fill('');
     await page.locator('#ct-en').blur();
     await page.reload();
-    await expect(page.locator('#ct-en')).toHaveValue(english);
+    await expect(page.locator('#ct-title')).toHaveValue(english);
+    await expect(page.locator('#ct-fa')).toHaveCount(0);
   });
 }
