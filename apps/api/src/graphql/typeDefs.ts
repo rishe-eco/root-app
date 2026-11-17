@@ -3793,6 +3793,13 @@ export const typeDefs = /* GraphQL */ `
     CUSTOMER_INACTIVE, NOT_FOUND (no such contract, or not a customer).
     """
     changeContractCustomer(contractId: ID!, customerId: ID!): Contract!
+    """
+    DX3c. contracts.author. Starts a new contract (and project) from an existing one the actor
+    can see: brief, agreed scope, phases, payment plan and handover rows are copied; dates,
+    articles, approvals and everything done are not. Refused: NOT_FOUND (no such contract, or
+    not a customer), CUSTOMER_INACTIVE, TITLE_REQUIRED.
+    """
+    duplicateContract(contractId: ID!, customerId: ID!, titleFa: String!, titleEn: String!): Contract!
     "DX3b. contracts.author. Changes the reference until anything is signed. Refused: REF_INVALID (not Latin letters, digits and dashes, 1-40), REF_TAKEN, CONTRACT_SIGNED, NOT_FOUND."
     updateContractRef(contractId: ID!, ref: String!): Contract!
     """

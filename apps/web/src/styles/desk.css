@@ -135,7 +135,11 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
+  /* DX3c: with Duplicate beside View as customer, the actions drop under the title on a narrow screen. */
+  flex-wrap: wrap;
 }
+.workspace-head > * { min-inline-size: 0; max-inline-size: 100%; }
+.workspace-head-actions .btn { max-inline-size: 100%; white-space: normal; text-align: center; }
 
 .workspace-tabs {
   display: flex;

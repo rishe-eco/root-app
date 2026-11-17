@@ -18,7 +18,7 @@ import {
   partiesFor,
   renderArticleBody,
 } from '../../../lib/templates.js';
-import { contractInclude, log, nudgeStatus, reload, type FullContract } from '../contracts.js';
+import { contractInclude, loadForActor, log, nudgeStatus, reload, type FullContract } from '../contracts.js';
 import { assertStepOpenOn } from '../wizard.js';
 import { publishContentRefusals, refusalError } from '../publishGate.js';
 import { asConcurrentPublish } from './shared.js';
@@ -26,6 +26,7 @@ import { notify } from '../../../lib/notify.js';
 import { env } from '../../../lib/env.js';
 import { requireOneTitle } from '../../../lib/titles.js';
 import { REF_PATTERN, lockContractRefs, nextRef } from '../../../lib/contractRef.js';
+import { setItemPhases } from '../../../lib/itemPhases.js';
 
 /**
  * The contract draft (title, fee, articles) and its publish path, plus
@@ -229,6 +230,185 @@ export const contractAdminMutations = {
     { timeout: 20_000 },
     ).catch(asRefTaken);
     return reload(contractId);
+  },
+
+  /**
+   * DX3c (desk UX review item 30): starts a new contract from an old one — its
+   * brief, scope, phases, payment plan and handover rows — on a project of its
+   * own, for the customer named (the same one or another). `contracts.author`,
+   * and the source must be visible to the actor (`loadForActor`: `NOT_FOUND`
+   * otherwise). The new customer is checked as `changeContractCustomer` checks
+   * one.
+   *
+   * What is copied, in one transaction (nothing half-made):
+   * - the brief, every field;
+   * - the scope items the source agreed — `AGREED` or later become `AGREED`;
+   *   proposed, declined and traded items are not copied, and neither are the
+   *   source's own `checklist.*` rows, because the completeness checklist is
+   *   seeded afresh exactly as `createContract` does (copying them too would
+   *   double every key);
+   * - the phases (number, titles, milestone label, `hasDemo`), without the
+   *   planned end date — dates are typed per contract (spec item 15) — and not
+   *   done; each copied item keeps its phase set through `setItemPhases`;
+   * - the payment plan: split, ordinals, labels, amounts, terms, and a phase
+   *   trigger mapped to the new phase. **A date trigger becomes "on signing"**:
+   *   the old day means nothing to a new contract;
+   * - the handover rows that were in the brief: title, side, technical flag,
+   *   not-needed — no due date, no verification.
+   *
+   * Not copied: articles (the template button is there), revisions, signatures,
+   * approvals, feedback, demos, builds, designs, invoices, notes, the log,
+   * assignments. The new contract is a draft on the new road, unsigned, with a
+   * generated reference, the source's price, and one `CREATED` log row.
+   */
+  duplicateContract: async (
+    _p: unknown,
+    args: { contractId: string; customerId: string; titleFa: string; titleEn: string },
+    ctx: Context,
+  ) => {
+    const actor = requireCapability(ctx, 'contracts.author');
+    const source = await loadForActor(args.contractId, actor);
+    const customer = await prisma.user.findUnique({ where: { id: args.customerId } });
+    if (!customer || !hasCustomerRole(customer)) {
+      throw new GraphQLError('No such customer.', { extensions: { code: 'NOT_FOUND' } });
+    }
+    if (customer.state === 'DISABLED' || isErased(customer)) {
+      throw new GraphQLError('That customer account is not active.', { extensions: { code: 'CUSTOMER_INACTIVE' } });
+    }
+    const titleFa = args.titleFa.trim();
+    const titleEn = args.titleEn.trim();
+    if (!titleFa || !titleEn) {
+      throw new GraphQLError('A contract needs a title in both languages.', { extensions: { code: 'TITLE_REQUIRED' } });
+    }
+
+    const newId = await prisma.$transaction(
+      async (tx) => {
+        // The source is read under its lock, so a phase or plan edit cannot land half-way through the copy.
+        await lockContract(tx, source.id);
+        const [brief, plan, phases, items, handover] = await Promise.all([
+          tx.contractBrief.findUnique({ where: { contractId: source.id } }),
+          tx.paymentPlan.findUnique({ where: { contractId: source.id }, include: { invoices: { orderBy: { ordinal: 'asc' } } } }),
+          tx.phase.findMany({ where: { contractId: source.id }, orderBy: { number: 'asc' } }),
+          tx.scopeItem.findMany({
+            where: {
+              projectId: source.projectId,
+              contractId: source.id,
+              status: { in: ['AGREED', 'IN_BUILD', 'IN_DEMO', 'ACCEPTED'] },
+              NOT: { key: { startsWith: 'checklist.' } },
+            },
+            orderBy: [{ position: 'asc' }, { key: 'asc' }],
+            include: { phaseLinks: { select: { phaseId: true } } },
+          }),
+          tx.dependency.findMany({ where: { projectId: source.projectId, inBrief: true }, orderBy: { createdAt: 'asc' } }),
+        ]);
+
+        const project = await tx.project.create({ data: { customerId: customer.id, titleFa, titleEn } });
+        await lockContractRefs(tx);
+        const contract = await tx.contract.create({
+          data: {
+            customerId: customer.id,
+            projectId: project.id,
+            ref: await nextRef(tx),
+            titleFa,
+            titleEn,
+            amount: source.amount,
+            sequence: SEQUENCE_FOR_NEW_CONTRACTS,
+          },
+        });
+
+        if (brief) {
+          const { id: _id, contractId: _c, createdAt: _ca, updatedAt: _ua, ...fields } = brief;
+          await tx.contractBrief.create({ data: { ...fields, contractId: contract.id } });
+        }
+
+        const phaseMap = new Map<string, string>();
+        for (const ph of phases) {
+          const made = await tx.phase.create({
+            data: {
+              projectId: project.id,
+              contractId: contract.id,
+              number: ph.number,
+              titleFa: ph.titleFa,
+              titleEn: ph.titleEn,
+              milestoneLabel: ph.milestoneLabel,
+              hasDemo: ph.hasDemo,
+            },
+          });
+          phaseMap.set(ph.id, made.id);
+        }
+
+        for (const item of items) {
+          const made = await tx.scopeItem.create({
+            data: {
+              projectId: project.id,
+              contractId: contract.id,
+              key: item.key,
+              labelFa: item.labelFa,
+              labelEn: item.labelEn,
+              position: item.position,
+              kind: item.kind,
+              status: 'AGREED',
+              temporary: item.temporary,
+              outOfScope: item.outOfScope,
+              adminWork: item.adminWork,
+            },
+          });
+          const mapped = item.phaseLinks.flatMap((l) => (phaseMap.has(l.phaseId) ? [phaseMap.get(l.phaseId)!] : []));
+          if (mapped.length > 0) await setItemPhases(tx, made.id, mapped);
+        }
+        // As createContract seeds it, after the copied rows so the order reads scope first.
+        await tx.scopeItem.createMany({
+          data: CHECKLIST.map(([key, labelFa, labelEn], i) => ({
+            projectId: project.id,
+            key,
+            labelFa,
+            labelEn,
+            position: items.length + i,
+            kind: 'EXTRA' as const,
+            status: 'DECLINED' as const,
+            contractId: contract.id,
+          })),
+        });
+
+        if (plan) {
+          const newPlan = await tx.paymentPlan.create({ data: { contractId: contract.id, split: plan.split } });
+          await tx.plannedInvoice.createMany({
+            data: plan.invoices.map((row) => ({
+              planId: newPlan.id,
+              ordinal: row.ordinal,
+              labelFa: row.labelFa,
+              labelEn: row.labelEn,
+              amount: row.amount,
+              // A phase trigger follows its phase; a date trigger (and none) is "on signing".
+              phaseId: row.phaseId ? (phaseMap.get(row.phaseId) ?? null) : null,
+              dueOn: null,
+              paymentTermDays: row.paymentTermDays,
+            })),
+          });
+        }
+
+        if (handover.length > 0) {
+          await tx.dependency.createMany({
+            data: handover.map((d) => ({
+              projectId: project.id,
+              side: d.side,
+              titleFa: d.titleFa,
+              titleEn: d.titleEn,
+              briefKey: d.briefKey,
+              technical: d.technical,
+              inBrief: true,
+              notNeeded: d.notNeeded,
+              createdById: actor.id,
+            })),
+          });
+        }
+
+        await log(contract.id, actor.id, 'CREATED', null, tx);
+        return contract.id;
+      },
+      { timeout: 30_000 },
+    );
+    return reload(newId);
   },
 
   /**
