@@ -22,6 +22,10 @@ import { isPaymentScheduleArticle } from '@/lib/agreement';
 import { errorCode } from '@/components/FeedbackPanel';
 import Lock from '@/components/Lock';
 import TitleFeeCard from '@/components/TitleFeeCard';
+import TitleField from '@/components/TitleField';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
+import { hasOneTitle } from '@/lib/titleScript';
 import ContractRefCard from '@/components/ContractRefCard';
 import PlannedDates from '@/components/PlannedDates';
 import ReadinessBox from './ReadinessBox';
@@ -30,7 +34,7 @@ import type { WorkspaceContext } from './ContractWorkspace';
 function errorMessage(err: unknown, t?: (key: string, opts?: Record<string, unknown>) => string): string {
   // The refusals J7 added get a sentence in the reader's language; everything else keeps the server's own message, as it always did.
   const code = errorCode(err);
-  if (t && code && ['STEP_LOCKED', 'SCHEDULE_IS_GENERATED'].includes(code)) return t(`workspace.error.${code}`);
+  if (t && code && ['STEP_LOCKED', 'SCHEDULE_IS_GENERATED', 'TITLE_REQUIRED'].includes(code)) return t(`workspace.error.${code}`);
   return (err as { message?: string })?.message ?? String(err);
 }
 
@@ -72,29 +76,50 @@ function ArticleCard({
   // trap): a body typed here would be a second schedule, so there is no field.
   const scheduleGenerated = newRoad && isPaymentScheduleArticle(number, titleEn);
 
+  const vars = (v: { titleFa: string; titleEn: string; bodyFa: string; bodyEn: string; sensitive: boolean }) => ({
+    contractId,
+    number,
+    titleFa: v.titleFa,
+    titleEn: v.titleEn,
+    bodyFa: scheduleGenerated ? null : v.bodyFa || null,
+    bodyEn: scheduleGenerated ? null : v.bodyEn || null,
+    // A new article that is not ticked defers to the template's rule
+    // (Fees and Payment Schedule are sensitive by number and title);
+    // an existing one sends exactly what the box says.
+    sensitive: article ? v.sensitive : v.sensitive ? true : null,
+  });
+
+  // The add form keeps its button (it is an act, not an edit); an article that exists saves when a field is left (DX4, review 27).
   async function onSave(e: FormEvent) {
     e.preventDefault();
+    if (article) return;
     setError(null);
+    if (!hasOneTitle(titleFa, titleEn)) {
+      setError(t('workspace.error.TITLE_REQUIRED'));
+      return;
+    }
     try {
-      await setArticle({
-        variables: {
-          contractId,
-          number,
-          titleFa,
-          titleEn,
-          bodyFa: scheduleGenerated ? null : bodyFa || null,
-          bodyEn: scheduleGenerated ? null : bodyEn || null,
-          // A new article that is not ticked defers to the template's rule
-          // (Fees and Payment Schedule are sensitive by number and title);
-          // an existing one sends exactly what the box says.
-          sensitive: article ? sensitive : sensitive ? true : null,
-        },
-      });
+      await setArticle({ variables: vars({ titleFa, titleEn, bodyFa, bodyEn, sensitive }) });
       onDone?.();
     } catch (err) {
       setError(errorMessage(err, t));
     }
   }
+
+  const autosave = useAutosave({
+    value: { titleFa, titleEn, bodyFa, bodyEn, sensitive },
+    baseline: {
+      titleFa: article?.titleFa ?? '',
+      titleEn: article?.titleEn ?? '',
+      bodyFa: article?.bodyFa ?? '',
+      bodyEn: article?.bodyEn ?? '',
+      sensitive: article?.sensitive ?? false,
+    },
+    valid: (v) => hasOneTitle(v.titleFa, v.titleEn),
+    save: (v) => setArticle({ variables: vars(v) }),
+    disabled: !article || locked,
+    errorText: (err) => errorMessage(err, t),
+  });
 
   async function onDelete() {
     if (!confirm(t('workspace.confirmDeleteArticle'))) return;
@@ -137,17 +162,18 @@ function ArticleCard({
         ) : null}
       </div>
       <div id={bodyId} hidden={folded}>
-      <form className="auth-form" onSubmit={onSave}>
-        <div className="editor-grid-2">
-          <div className="field">
-            <label className="label">{t('workspace.titleFa')}</label>
-            <input className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="label">{t('workspace.titleEn')}</label>
-            <input className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-          </div>
-        </div>
+      <form className="auth-form" onSubmit={onSave} onBlur={autosave.onBlur}>
+        <TitleField
+          idBase={`article-${number}`}
+          testId="article-title-field"
+          fa={titleFa}
+          en={titleEn}
+          disabled={!!article && locked}
+          onChange={(v) => {
+            setTitleFa(v.fa);
+            setTitleEn(v.en);
+          }}
+        />
         {scheduleGenerated ? (
           <p className="t-small desk-muted" data-testid="schedule-generated-note">
             {t('workspace.scheduleGenerated')}
@@ -169,19 +195,29 @@ function ArticleCard({
             type="checkbox"
             data-testid="article-sensitive"
             checked={sensitive}
-            onChange={(e) => setSensitive(e.target.checked)}
+            disabled={!!article && locked}
+            onChange={(e) => {
+              setSensitive(e.target.checked);
+              autosave.commit({ titleFa, titleEn, bodyFa, bodyEn, sensitive: e.target.checked });
+            }}
           />
           <span>
             {t('workspace.sensitive')}
             <span className="t-caption desk-muted"> {t('workspace.sensitiveHelp')}</span>
           </span>
         </label>
-        {error ? <p className="error">{error}</p> : null}
-        <div>
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={saving || locked}>
-            {t('workspace.save')}
-          </button>
-        </div>
+        {article ? (
+          <AutosaveNote autosave={autosave} testId="article-autosave" />
+        ) : (
+          <>
+            {error ? <p className="error">{error}</p> : null}
+            <div>
+              <button className="btn btn-secondary btn-sm" type="submit" disabled={saving || locked}>
+                {t('workspace.save')}
+              </button>
+            </div>
+          </>
+        )}
       </form>
       </div>
     </div>
@@ -198,31 +234,40 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
   const [sensitive, setSensitive] = useState(amendment.sensitive);
   const [relatesToArticle, setRelatesToArticle] = useState(amendment.relatesToArticle ?? '');
   const [error, setError] = useState<string | null>(null);
-  const [update, { loading: saving }] = useMutation(UPDATE_AMENDMENT);
+  const [update] = useMutation(UPDATE_AMENDMENT);
   const [remove, { loading: deleting }] = useMutation(DELETE_AMENDMENT);
   const [publish, { loading: publishing }] = useMutation(PUBLISH_AMENDMENT);
 
   const published = amendment.publishedAt !== null;
 
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await update({
+  // DX4 (review 27): an unpublished amendment saves when a field is left; `updateAmendment` takes
+  // every field together, so each save sends the card as it stands.
+  const autosave = useAutosave({
+    value: { titleFa, titleEn, bodyFa, bodyEn, sensitive, relatesToArticle: String(relatesToArticle) },
+    baseline: {
+      titleFa: amendment.titleFa,
+      titleEn: amendment.titleEn,
+      bodyFa: amendment.bodyFa ?? '',
+      bodyEn: amendment.bodyEn ?? '',
+      sensitive: amendment.sensitive,
+      relatesToArticle: String(amendment.relatesToArticle ?? ''),
+    },
+    valid: (v) => hasOneTitle(v.titleFa, v.titleEn) && v.bodyFa.trim() !== '' && v.bodyEn.trim() !== '',
+    save: (v) =>
+      update({
         variables: {
           amendmentId: amendment.id,
-          titleFa,
-          titleEn,
-          bodyFa,
-          bodyEn,
-          relatesToArticle: relatesToArticle === '' ? null : Number(relatesToArticle),
-          sensitive,
+          titleFa: v.titleFa,
+          titleEn: v.titleEn,
+          bodyFa: v.bodyFa,
+          bodyEn: v.bodyEn,
+          relatesToArticle: v.relatesToArticle === '' ? null : Number(v.relatesToArticle),
+          sensitive: v.sensitive,
         },
-      });
-    } catch (err) {
-      setError(errorMessage(err, t));
-    }
-  }
+      }),
+    disabled: published,
+    errorText: (err) => errorMessage(err, t),
+  });
 
   async function onDelete() {
     if (!confirm(t('workspace.confirmDeleteAmendment'))) return;
@@ -255,7 +300,7 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
                 : t('workspace.amendmentWaiting')}
           </span>
         </div>
-        <p className="t-body">{titleEn}</p>
+        <p className="t-body">{pick(amendment, 'title', locale)}</p>
         <p className="t-small desk-muted">{fullDateTime(amendment.publishedAt!, locale)}</p>
       </div>
     );
@@ -274,17 +319,17 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
           </button>
         </div>
       </div>
-      <form className="auth-form" onSubmit={onSave}>
-        <div className="editor-grid-2">
-          <div className="field">
-            <label className="label">{t('workspace.titleFa')}</label>
-            <input className="input" dir="rtl" required value={titleFa} onChange={(e) => setTitleFa(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="label">{t('workspace.titleEn')}</label>
-            <input className="input" dir="ltr" required value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
-          </div>
-        </div>
+      <form className="auth-form" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur}>
+        <TitleField
+          idBase={`amendment-${amendment.ordinal}`}
+          testId="amendment-title-field"
+          fa={titleFa}
+          en={titleEn}
+          onChange={(v) => {
+            setTitleFa(v.fa);
+            setTitleEn(v.en);
+          }}
+        />
         <div className="editor-grid-2">
           <div className="field">
             <label className="label">{t('workspace.bodyFa')}</label>
@@ -297,11 +342,18 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
         </div>
         <div className="field">
           <label className="label">{t('workspace.relatesToArticle')}</label>
-          <select className="select" value={relatesToArticle} onChange={(e) => setRelatesToArticle(e.target.value)}>
+          <select
+            className="select"
+            value={relatesToArticle}
+            onChange={(e) => {
+              setRelatesToArticle(e.target.value);
+              autosave.commit({ titleFa, titleEn, bodyFa, bodyEn, sensitive, relatesToArticle: e.target.value });
+            }}
+          >
             <option value="">{t('workspace.relatesToArticleNone')}</option>
             {articles.map((a) => (
               <option key={a.number} value={a.number}>
-                {a.number}. {a.titleEn}
+                {a.number}. {pick(a, 'title', locale)}
               </option>
             ))}
           </select>
@@ -311,7 +363,10 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
             type="checkbox"
             data-testid="amendment-sensitive"
             checked={sensitive}
-            onChange={(e) => setSensitive(e.target.checked)}
+            onChange={(e) => {
+              setSensitive(e.target.checked);
+              autosave.commit({ titleFa, titleEn, bodyFa, bodyEn, sensitive: e.target.checked, relatesToArticle: String(relatesToArticle) });
+            }}
           />
           <span>
             {t('workspace.amendmentSensitive')}
@@ -319,11 +374,7 @@ function AmendmentCard({ amendment, articles }: { amendment: Amendment; articles
           </span>
         </label>
         {error ? <p className="error">{error}</p> : null}
-        <div>
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={saving}>
-            {t('workspace.save')}
-          </button>
-        </div>
+        <AutosaveNote autosave={autosave} testId="amendment-autosave" />
       </form>
     </div>
   );
@@ -373,6 +424,7 @@ export default function ContractTab() {
   const locale = useLocale();
   const [addingArticle, setAddingArticle] = useState(false);
   const [issuingAmendment, setIssuingAmendment] = useState(false);
+  const [newTitle, setNewTitle] = useState({ fa: '', en: '' });
   const [publishError, setPublishError] = useState<string | null>(null);
   // Which of the two publish rows the message belongs under (DX1 added the top one).
   const [errorAt, setErrorAt] = useState<'top' | 'foot'>('foot');
@@ -442,8 +494,8 @@ export default function ContractTab() {
       await issueAmendment({
         variables: {
           contractId: contract.id,
-          titleFa: form.get('titleFa'),
-          titleEn: form.get('titleEn'),
+          titleFa: newTitle.fa,
+          titleEn: newTitle.en,
           bodyFa: form.get('bodyFa'),
           bodyEn: form.get('bodyEn'),
           // Unticked defers to the API, which follows the article it relates to.
@@ -451,6 +503,7 @@ export default function ContractTab() {
         },
       });
       setIssuingAmendment(false);
+      setNewTitle({ fa: '', en: '' });
     } catch (err) {
       setPublishError(errorMessage(err, t));
     }
@@ -577,16 +630,7 @@ export default function ContractTab() {
           </div>
           {issuingAmendment ? (
             <form className="card editor-card auth-form" onSubmit={onIssueAmendment}>
-              <div className="editor-grid-2">
-                <div className="field">
-                  <label className="label">{t('workspace.titleFa')}</label>
-                  <input className="input" name="titleFa" dir="rtl" required />
-                </div>
-                <div className="field">
-                  <label className="label">{t('workspace.titleEn')}</label>
-                  <input className="input" name="titleEn" dir="ltr" required />
-                </div>
-              </div>
+              <TitleField idBase="new-amendment" testId="new-amendment-title" fa={newTitle.fa} en={newTitle.en} onChange={setNewTitle} />
               <div className="editor-grid-2">
                 <div className="field">
                   <label className="label">{t('workspace.bodyFa')}</label>
@@ -605,7 +649,7 @@ export default function ContractTab() {
                 </span>
               </label>
               <div>
-                <button className="btn btn-primary btn-sm" type="submit" disabled={issuing}>
+                <button className="btn btn-primary btn-sm" type="submit" disabled={issuing || !hasOneTitle(newTitle.fa, newTitle.en)}>
                   {t('workspace.save')}
                 </button>
               </div>

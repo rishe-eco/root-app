@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
@@ -6,6 +6,8 @@ import { calendarDate } from '@/lib/format';
 import { SET_PLANNED_DATES, type Contract } from '@/lib/queries';
 import DayInput from '@/components/DayInput';
 import { errorCode } from '@/components/FeedbackPanel';
+import AutosaveNote from '@/components/AutosaveNote';
+import { useAutosave } from '@/lib/useAutosave';
 
 /**
  * The planned start and end, proposed with the draft (journeys build plan J6,
@@ -27,11 +29,19 @@ function refusalText(t: (key: string, opts?: Record<string, unknown>) => string,
 export default function PlannedDates({ contract, canEdit }: { contract: Contract; canEdit: boolean }) {
   const { t } = useTranslation();
   const locale = useLocale();
-  const [save, { loading }] = useMutation(SET_PLANNED_DATES);
+  const [save] = useMutation(SET_PLANNED_DATES);
   const [start, setStart] = useState(day(contract.plannedStartAt));
   const [end, setEnd] = useState(day(contract.plannedEndAt));
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+
+  // DX4 (review 27): the two dates travel together (`setPlannedDates` replaces both), so a blur
+  // sends both as they stand. A half-typed date reports '' and marks the form invalid; that is
+  // not a save (see the form's onBlur).
+  const autosave = useAutosave({
+    value: { start, end },
+    baseline: { start: day(contract.plannedStartAt), end: day(contract.plannedEndAt) },
+    save: (v) => save({ variables: { contractId: contract.id, plannedStartAt: v.start || null, plannedEndAt: v.end || null } }),
+    errorText: (err) => refusalText(t, err),
+  });
 
   if (!canEdit) {
     if (!contract.plannedStartAt && !contract.plannedEndAt) return null;
@@ -51,31 +61,20 @@ export default function PlannedDates({ contract, canEdit }: { contract: Contract
     );
   }
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSaved(false);
-    try {
-      await save({ variables: { contractId: contract.id, plannedStartAt: start || null, plannedEndAt: end || null } });
-      setSaved(true);
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
-
   return (
-    <form className="card editor-card" onSubmit={onSubmit} data-testid="draft-dates-editor">
+    <form
+      className="card editor-card"
+      onSubmit={(e) => e.preventDefault()}
+      onBlur={(e) => {
+        if (e.currentTarget.checkValidity()) autosave.onBlur();
+      }}
+      data-testid="draft-dates-editor"
+    >
       <h4 className="t-h4">{t('draft.dates.title')}</h4>
       <p className="sec-help">{t('draft.dates.help')}</p>
       <DayInput value={start} onChange={setStart} label={t('draft.dates.start')} testId="draft-date-start" />
       <DayInput value={end} onChange={setEnd} label={t('draft.dates.end')} testId="draft-date-end" />
-      {error ? <p className="error" role="alert" data-testid="draft-dates-error">{error}</p> : null}
-      {saved ? <p className="t-small" role="status" data-testid="draft-dates-saved">{t('brief.form.saved')}</p> : null}
-      <div>
-        <button className="btn btn-primary btn-sm" type="submit" disabled={loading} data-testid="draft-dates-save">
-          {t('workspace.save')}
-        </button>
-      </div>
+      <AutosaveNote autosave={autosave} testId="draft-dates-autosave" />
     </form>
   );
 }

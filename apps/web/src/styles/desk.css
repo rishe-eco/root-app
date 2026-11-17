@@ -411,3 +411,12 @@
 }
 .btn-danger { background: var(--color-error); color: var(--color-text-inverse); border-color: var(--color-error); }
 .btn-danger:disabled { opacity: 0.5; }
+
+/* DX4: the "Saved" mark and inline error of a card that saves on blur. The line keeps its height so the card does not jump. */
+.autosave-note { display: flex; flex-direction: column; gap: var(--space-1); min-block-size: var(--space-5); }
+.autosave-mark { color: var(--color-text-muted); }
+.autosave-note .error { margin: 0; }
+
+/* DX4: the one title field — an input, and a quiet link to the second language. */
+.title-field { display: flex; flex-direction: column; gap: var(--space-2); min-inline-size: 0; }
+.title-field-add { align-self: flex-start; }
