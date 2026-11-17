@@ -291,7 +291,7 @@ export default function DependenciesTab() {
   async function onAdd(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!titleFa.trim() || !titleEn.trim() || (!optional && (!dueAt || !side))) return;
+    if (!hasOneTitle(titleFa, titleEn) || (!optional && (!dueAt || !side))) return;
     try {
       await createDependency({
         variables: { projectId: project!.id, side: side || null, titleFa: titleFa.trim(), titleEn: titleEn.trim(), dueAt: instantOf(dueAt) },

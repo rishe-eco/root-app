@@ -1,5 +1,5 @@
 import type { Locale } from '@/i18n';
-import { calendarDate, formatCount } from './format';
+import { calendarDate, formatCount, pick } from './format';
 import type { AttentionItem, StepKind, TimelineItem, WaitingOn, WizardStep } from './queries';
 
 /**
@@ -79,7 +79,8 @@ export function attentionText(t: Translate, locale: Locale, item: Pick<Attention
   if (typeof options.phase === 'string') options.phaseN = formatCount(Number(options.phase), locale);
   if (typeof options.dueAt === 'string' && options.dueAt !== '') options.date = calendarDate(options.dueAt, locale);
   if (typeof options.titleFa === 'string' || typeof options.titleEn === 'string') {
-    options.title = locale === 'fa' ? options.titleFa : options.titleEn;
+    // DX4: through `pick`, so a title typed in one language only reads in the other too.
+    options.title = pick(options, 'title', locale);
   }
   return t(`attention.${item.kind}.${item.variant}.${audience}`, options);
 }
