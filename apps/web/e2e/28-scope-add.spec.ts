@@ -31,8 +31,7 @@ test('sales adds a page by hand, then still applies the starting list beside it'
 
   const form = page.getByTestId('scope-add');
   await expect(page.getByTestId('scope-add-submit')).toBeDisabled();
-  await form.locator('#scope-add-fa').fill('وبلاگ');
-  await form.locator('#scope-add-en').fill('Blog');
+  await fillTitle(form, 'scope-add', 'scope-add-label', 'وبلاگ', 'Blog');
   await page.getByTestId('scope-add-submit').click();
   await expect(page.getByTestId('scope-add-done')).toBeVisible();
   const blog = page.locator('[data-testid="scope-item"][data-key="custom.1"]');

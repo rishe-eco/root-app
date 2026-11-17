@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { SALES, WIZARD_CONTRACT_REF, apiSignIn, gql, insertDraftNewRoadContract, resetTestDatabase, signIn } from './helpers';
+import { SALES, WIZARD_CONTRACT_REF, apiSignIn, expectSaved, fillTitle, gql, insertDraftNewRoadContract, resetTestDatabase, signIn } from './helpers';
 
 /**
  * DX3a — handover items (desk UX review 6–8, 20, 29): "Who provides what, by
@@ -101,13 +101,14 @@ test('Requirements: Root · Customer · Not needed and a date for each item, a s
   await expect(who(page, 'host')).toHaveAttribute('data-value', 'NOT_NEEDED');
   await expect(page.getByTestId('handover-due-host').locator('input[data-part="text"]')).toBeDisabled();
   await pill(page, 'content', 'ROOT').click();
+  // DX4 (review 27): the list saves as it is edited — a pill at once, a date when its field is left — with no Save button.
+  await expect(page.getByTestId('handover-save')).toHaveCount(0);
   // Someone provides it and nobody has said by when: the step lists it and counts it on the panel.
-  await page.getByTestId('handover-save').click();
-  await expect(page.getByTestId('handover-saved')).toBeVisible();
+  await expectSaved(page, 'handover-autosave');
   await expect(page.getByTestId('brief-missing').locator('[data-code="COMMITMENT_UNDATED"]')).toContainText('Website content');
   await pickDay(page, 'handover-due-content', [1405, 8, 10], '2026-11-01');
-  await page.getByTestId('handover-save').click();
-  await expect(page.getByTestId('handover-saved')).toBeVisible();
+  await page.getByTestId('handover-due-content').locator('input[data-part="text"]').blur();
+  await expectSaved(page, 'handover-autosave');
   await expect(page.locator('[data-code="COMMITMENT_UNDATED"]')).toHaveCount(0);
 
   // The readout under the editor says the same, and a reload keeps it.
@@ -130,15 +131,14 @@ test('a one-off item added on Requirements is the same row on the Dependencies t
   await openPanel(page, 'handover');
 
   await page.getByTestId('handover-add').click();
-  await page.locator('#handover-new-fa').fill('فایل‌های لوگو');
-  await page.locator('#handover-new-en').fill('Logo files');
+  // DX4: one title field. Adding is an act, so the row is made at once and is then edited like the others.
+  await fillTitle(page.getByTestId('handover-add-form'), 'handover-new', 'handover-new-title', 'فایل‌های لوگو', 'Logo files');
   await page.getByTestId('handover-add-confirm').click();
-  await expect(page.locator('[data-testid="handover-row"][data-draft="true"]')).toHaveCount(1);
-  const draftId = (await page.locator('[data-testid="handover-row"][data-draft="true"]').getAttribute('data-key'))!;
-  await who(page, draftId).locator('button[data-value="CUSTOMER"]').click();
-  await page.getByTestId('handover-save').click();
-  await expect(page.getByTestId('handover-saved')).toBeVisible();
   await expect(page.getByTestId('handover-row')).toHaveCount(4);
+  const newKey = (await page.getByTestId('handover-row').filter({ hasText: /Logo files|فایل‌های لوگو/ }).getAttribute('data-key'))!;
+  await who(page, newKey).locator('button[data-value="CUSTOMER"]').click();
+  await expectSaved(page, 'handover-autosave');
+  await expect(who(page, newKey)).toHaveAttribute('data-value', 'CUSTOMER');
   // A one-off can be removed from here; the default list's items cannot (they are marked not needed instead).
   await expect(page.locator('[data-testid^="handover-remove-"]')).toHaveCount(1);
 
@@ -217,14 +217,15 @@ test('the Templates tab adds a default item, and a new contract has it — then 
 
   await openRequirements(page, NEW_TITLE);
   // No brief yet, so no list yet; the first save makes it — domain, host, content and the new item.
+  // DX4: the brief saves as it is edited, so picking the type makes it (and the list) ...
   await page.locator('#brief-type').selectOption({ label: 'Store' });
-  // The preset: choosing the kind says what saving will do, and saving does it.
+  await expectSaved(page, 'brief-autosave');
+  // ... and the preset runs on the save that changes the kind to a feature for an existing site.
   await page.locator('#brief-kind').selectOption('FEATURE_FOR_EXISTING');
-  await expect(page.getByTestId('brief-preset-hint')).toBeVisible();
-  await page.locator('#brief-site').fill('https://old.example.com');
-  await page.getByTestId('brief-save').click();
-  await expect(page.getByTestId('brief-saved')).toBeVisible();
   await expect(page.getByTestId('brief-preset-applied')).toBeVisible();
+  await page.locator('#brief-site').fill('https://old.example.com');
+  await page.locator('#brief-site').blur();
+  await expectSaved(page, 'brief-autosave');
   await expect(page.locator('#brief-tier')).toHaveValue('NONE');
 
   await openPanel(page, 'handover');
@@ -236,8 +237,7 @@ test('the Templates tab adds a default item, and a new contract has it — then 
 
   // Every field stays editable: the design can go back, the domain can be needed after all. A second save is not the preset again.
   await page.locator('#brief-tier').selectOption('THEME_PICK');
-  await page.getByTestId('brief-save').click();
-  await expect(page.getByTestId('brief-saved')).toBeVisible();
+  await expectSaved(page, 'brief-autosave');
   await expect(page.locator('#brief-tier')).toHaveValue('THEME_PICK');
   await expect(page.getByTestId('brief-preset-applied')).toHaveCount(0);
   await expect(who(page, 'host')).toHaveAttribute('data-value', 'NOT_NEEDED');

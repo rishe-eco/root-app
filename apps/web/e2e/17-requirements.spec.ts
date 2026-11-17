@@ -10,6 +10,8 @@ import {
   insertDraftNewRoadContract,
   resetTestDatabase,
   signIn,
+  expectSaved,
+  fillTitle,
 } from './helpers';
 
 /**
@@ -93,8 +95,9 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await page.locator('#brief-domain-name').fill('nahal.ir');
   await stepUp(page, 'brief-premade', 2);
   await stepUp(page, 'brief-demos', 2);
-  await page.getByTestId('brief-save').click();
-  await expect(page.getByTestId('brief-saved')).toBeVisible();
+  // DX4 (review 27): the brief saves as its fields are left (a stepper or a pill at once), with no Save button.
+  await expect(page.getByTestId('brief-save')).toHaveCount(0);
+  await expectSaved(page, 'brief-autosave');
 
   // The first save made the handover list (DX3a): one undecided, undated row for each item on the desk's default
   // list — and an undecided list is a complete one, since no provider is required. Sales then says who provides each
@@ -112,8 +115,8 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await pickDay(page, 'handover-due-domain', [1405, 8, 5], '2026-10-27');
   await pickDay(page, 'handover-due-host', [1405, 8, 6], '2026-10-28');
   await pickDay(page, 'handover-due-content', [1405, 8, 10], '2026-11-01');
-  await page.getByTestId('handover-save').click();
-  await expect(page.getByTestId('handover-saved')).toBeVisible();
+  await page.getByTestId('handover-due-content').locator('input[data-part="text"]').blur();
+  await expectSaved(page, 'handover-autosave');
 
   // The brief is a brief now, and Requirements is done on the brief alone (DX2a): the phases and the plan
   // are the next step's to name, and it counts them on its pill.
@@ -130,8 +133,7 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await expect(phasesPanel.getByTestId('plan-missing').locator('[data-code="PAYMENT_PLAN"]')).toBeVisible();
   await openPanel(page, 'phases');
   const newPhase = page.getByTestId('brief-phase-new');
-  await newPhase.locator('input').nth(0).fill('فاز اول');
-  await newPhase.locator('input').nth(1).fill('First phase');
+  await fillTitle(newPhase, 'phase-new', 'phase-title-new', 'فاز اول', 'First phase');
   await pickDay(page, 'phase-end-new', [1405, 9, 1], '2026-11-22');
   await newPhase.getByRole('button', { name: 'Add phase' }).click();
   await expect(page.getByTestId('brief-phase')).toHaveCount(1);
@@ -147,8 +149,8 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await expect(page.getByTestId('plan-row')).toHaveCount(2);
   await page.getByTestId('plan-row').nth(0).getByLabel('Amount (Toman)').fill('90000000');
   await page.getByTestId('plan-row').nth(1).getByLabel('Amount (Toman)').fill('60000000');
-  await page.getByTestId('plan-save').click();
-  await expect(page.getByTestId('plan-saved')).toBeVisible();
+  await page.getByTestId('plan-row').nth(1).getByLabel('Amount (Toman)').blur();
+  await expectSaved(page, 'plan-autosave');
 
   // Nothing is missing: the step is done, and the road moves on to the scope (nothing there yet).
   await expect(page.getByTestId('plan-missing')).toHaveCount(0);
@@ -169,8 +171,8 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await openPanel(page, 'handover');
   await expect(page.getByTestId('handover-row')).toHaveCount(4);
   await pickDay(page, 'handover-due-gateway', [1405, 8, 15], '2026-11-06');
-  await page.getByTestId('handover-save').click();
-  await expect(page.getByTestId('handover-saved')).toBeVisible();
+  await page.getByTestId('handover-due-gateway').locator('input[data-part="text"]').blur();
+  await expectSaved(page, 'handover-autosave');
   await expect(page.getByTestId('brief-missing')).toHaveCount(0);
 
   // What sales typed is what the readout below says — the same cards the customer reads.
@@ -289,8 +291,7 @@ test('a contract that has not been handed over is refused without a brief, then 
 
   // The kind of site and its type are all a brief needs to be handed over.
   await page.locator('#brief-type').selectOption({ label: 'Store' });
-  await page.getByTestId('brief-save').click();
-  await expect(page.getByTestId('brief-saved')).toBeVisible();
+  await expectSaved(page, 'brief-autosave');
   await page.getByTestId('hand-over-button').click();
   await expect(page.getByTestId('hand-over')).toHaveCount(0);
   await expect(page.getByTestId('not-handed-over')).toHaveCount(0);

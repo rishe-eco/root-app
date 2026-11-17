@@ -735,3 +735,44 @@ export async function signIn(
     await page.waitForURL((url) => !/\/portal\/factor\/?$/.test(url.pathname));
   }
 }
+
+// ---------------------------------------------------------------------------
+// DX4 — the one title field, and cards that save when a field is left
+// ---------------------------------------------------------------------------
+
+import { expect, type Locator } from '@playwright/test';
+
+/**
+ * Types a title into DX4's one title field (`components/TitleField.tsx`).
+ * `idBase` and `testId` are the field's own (`nc` and `nc-title` on the
+ * new-contract form). With only `fa`, whichever script it is in goes into its
+ * language's column. With `en` as well, the other-language input is opened and
+ * the two are the two columns: `fa` in the Persian one, `en` in the English one.
+ */
+export async function fillTitle(scope: Page | Locator, idBase: string, testId: string, fa: string | null, en?: string | null): Promise<void> {
+  if (en === undefined || en === null) {
+    // One input — unless the field already shows two (a row that has both).
+    const one = scope.locator(`#${idBase}-title`);
+    if (await one.count()) await one.fill(fa ?? '');
+    else await scope.locator(`#${idBase}-${/[؀-ۿ]/.test(fa ?? '') ? 'fa' : 'en'}`).fill(fa ?? '');
+    return;
+  }
+  const one = scope.locator(`#${idBase}-title`);
+  if (await one.count()) {
+    // The one input holds the first text; "Add the other language" turns it into the two columns.
+    await one.fill(fa ?? en);
+    await scope.getByTestId(`${testId}-add-other`).click();
+  }
+  await scope.locator(`#${idBase}-fa`).fill(fa ?? '');
+  await scope.locator(`#${idBase}-en`).fill(en);
+}
+
+/** Leaves the field it is on, which is what saves a card (DX4, review 27). */
+export async function leave(field: Locator): Promise<void> {
+  await field.blur();
+}
+
+/** The "Saved" mark of a card (`AutosaveNote`): the polite status says so, in the panel's language. */
+export async function expectSaved(scope: Page | Locator, testId: string): Promise<void> {
+  await expect(scope.getByTestId(`${testId}-status`)).toHaveText(/^(Saved|ذخیره شد)$/);
+}

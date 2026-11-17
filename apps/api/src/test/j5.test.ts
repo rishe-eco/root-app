@@ -383,12 +383,12 @@ test('ADD accepted: a bilingual item, agreed, of this contract, with a Latin cus
   assert.deepEqual([typed.kind, typed.status], ['DELIVERABLE', 'AGREED']);
 });
 
-test('ADD accepted refuses without both labels, on a malformed or taken key, and never twice', async () => {
+test('ADD accepted refuses without a label (either language will do), on a malformed or taken key, and never twice', async () => {
   await seed();
   const c = await addOk();
   const id = c.scopeProposals[0].id;
-  assert.equal((await decide(id, { en: '' })).code, 'LABEL_REQUIRED');
-  assert.equal((await decide(id, { fa: '  ' })).code, 'LABEL_REQUIRED');
+  // DX4: one language is enough; LABEL_REQUIRED now means both are blank.
+  assert.equal((await decide(id, { fa: '  ', en: '' })).code, 'LABEL_REQUIRED');
   assert.equal((await decide(id, { key: 'Bad Key' })).code, 'INVALID_KEY');
   assert.equal((await decide(id, { key: 'checklist.auth' })).code, 'INVALID_KEY');
   assert.equal((await decide(id, { key: 'home' })).code, 'KEY_TAKEN');

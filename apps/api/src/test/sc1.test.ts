@@ -74,9 +74,9 @@ test('without a key an item takes the next custom.<n>, agreed, of this contract,
   );
 });
 
-test('refusals: both labels, a valid typed key, a key not already on the project, staff only', async () => {
-  assert.equal((await add({ fa: '   ' })).code, 'LABEL_REQUIRED');
-  assert.equal((await add({ en: '' })).code, 'LABEL_REQUIRED');
+test('refusals: a label (either language), a valid typed key, a key not already on the project, staff only', async () => {
+  // DX4: one language is enough; LABEL_REQUIRED now means both are blank.
+  assert.equal((await add({ fa: '   ', en: '' })).code, 'LABEL_REQUIRED');
   assert.equal((await add({ k: 'Not A Key' })).code, 'INVALID_KEY');
   assert.equal((await add({ k: 'checklist.hosting' })).code, 'INVALID_KEY');
   ok(await add({ k: 'blog' }));

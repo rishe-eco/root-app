@@ -118,6 +118,9 @@ test('sales converts the request: the contract form opens prefilled, and the thr
   await expect(page).toHaveURL(/\/en\/desk\/contracts\?request=/);
   await expect(page.getByTestId('converting-request')).toContainText(TITLE);
   await expect(page.locator('#nc-customer')).toBeDisabled();
+  // DX4: one title field, holding the request's title; "Add the other language" opens the Persian one.
+  await expect(page.locator('#nc-title')).toHaveValue(TITLE);
+  await page.getByTestId('nc-title-add-other').click();
   await expect(page.locator('#nc-en')).toHaveValue(TITLE);
   await expect(page.locator('#nc-fa')).toHaveValue('');
   await page.locator('#nc-fa').fill('فروشگاه برای استودیوی من');

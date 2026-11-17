@@ -659,7 +659,8 @@ test('setPaymentPlan refuses bad rows and a phase that is not this contract’s,
   assert.equal((await attempt(rows(['Zero', '0', '', 0]))).code, 'INVALID_AMOUNT');
   assert.equal((await attempt(rows(['Decimal', '1.5', '', 0]))).code, 'INVALID_AMOUNT');
   assert.equal((await attempt(rows(['Term', '10', '', -1]))).code, 'INVALID_TERM');
-  assert.equal((await attempt([{ ...rows(['x', '1', '', 0])[0], labelEn: ' ' }])).code, 'LABEL_REQUIRED');
+  // DX4: a label in one language is enough; LABEL_REQUIRED now means both are blank.
+  assert.equal((await attempt([{ ...rows(['x', '1', '', 0])[0], labelFa: ' ', labelEn: ' ' }])).code, 'LABEL_REQUIRED');
   assert.equal((await attempt(rows(['Foreign', '10', foreign.id, 0]))).code, 'PHASE_WRONG_CONTRACT');
   const still = await prisma.plannedInvoice.findMany();
   assert.deepEqual(still.map((i) => i.labelEn), ['Keep']);

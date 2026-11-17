@@ -1,16 +1,17 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
   ADMIN,
-  DRAFT_CONTRACT_REF,
-  SALES,
-  WIZARD_CONTRACT_REF,
   apiSignIn,
   completeStepOneViaApi,
   completeStepTwoViaApi,
+  DRAFT_CONTRACT_REF,
+  expectSaved,
   gql,
   insertDraftNewRoadContract,
   resetTestDatabase,
+  SALES,
   signIn,
+  WIZARD_CONTRACT_REF,
 } from './helpers';
 
 /**
@@ -231,8 +232,8 @@ test.describe('with steps 1 and 2 done', () => {
 
     const end = page.getByTestId('draft-date-end');
     await end.locator('input[data-part="text"]').fill('2027-01-21');
-    await page.getByTestId('draft-dates-save').click();
-    await expect(page.getByTestId('draft-dates-saved')).toBeVisible();
+    await end.locator('input[data-part="text"]').blur();
+    await expectSaved(page, 'draft-dates-autosave');
 
     // Persian: the same stored day, shown as a Jalali date in Persian digits; the calendar is Jalali (Azar 1405).
     await page.goto(contractTab('fa'));
@@ -310,7 +311,9 @@ test.describe('with steps 1 and 2 done', () => {
     const cards = page.getByTestId('article-card');
     await expect(cards.first()).toHaveAttribute('data-folded', 'false');
     await cards.first().locator('textarea').nth(1).fill('Changed English text');
-    await cards.first().getByRole('button', { name: 'Save' }).click();
+    await cards.first().locator('textarea').nth(1).blur();
+    await expectSaved(cards.first(), 'article-autosave');
+    await expect(cards.first().getByRole('button', { name: 'Save' })).toHaveCount(0);
     await expect(box.locator('[data-fact="unpublished-changes"]')).toHaveAttribute('data-dirty', 'yes');
     await expect(page.getByTestId('publish-top')).toBeEnabled();
 

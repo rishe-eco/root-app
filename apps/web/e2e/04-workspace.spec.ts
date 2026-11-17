@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN, CUSTOMER, PNG, makeContractLegacy, resetTestDatabase, signIn } from './helpers';
+import { ADMIN, CUSTOMER, PNG, fillTitle, makeContractLegacy, resetTestDatabase, signIn } from './helpers';
 
 /**
  * V2's acceptance test, driven through the browser: Root takes a contract
@@ -23,8 +23,7 @@ test('a contract goes from nothing to signed, then an amendment to signature', a
   await page.getByRole('button', { name: 'New contract' }).click();
   await page.locator('#nc-customer').selectOption({ index: 1 });
   await page.locator('#nc-ref').fill('RC-2026-099');
-  await page.locator('#nc-fa').fill('قرارداد آزمایشی دو');
-  await page.locator('#nc-en').fill('Workspace test contract');
+  await fillTitle(page, 'nc', 'nc-title', 'قرارداد آزمایشی دو', 'Workspace test contract');
   await page.getByRole('button', { name: 'Create contract' }).click();
 
   // A new-road contract lands on its steps; the legacy one on its contract tab.
@@ -115,9 +114,8 @@ test('a contract goes from nothing to signed, then an amendment to signature', a
   await expect(page.getByRole('heading', { name: 'Amendments' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Issue amendment' }).click();
-  const amendForm = page.locator('form').filter({ has: page.locator('input[name="titleFa"]') });
-  await amendForm.locator('input[name="titleFa"]').fill('الحاقیه یک');
-  await amendForm.locator('input[name="titleEn"]').fill('Amendment One');
+  const amendForm = page.locator('form').filter({ has: page.locator('textarea[name="bodyFa"]') });
+  await fillTitle(amendForm, 'new-amendment', 'new-amendment-title', 'الحاقیه یک', 'Amendment One');
   await amendForm.locator('textarea[name="bodyFa"]').fill('متنِ الحاقیه.');
   await amendForm.locator('textarea[name="bodyEn"]').fill('The amendment text.');
   await amendForm.getByRole('button', { name: 'Save' }).click();
