@@ -124,6 +124,8 @@ VA1   view as customer: step 3 says it is read-only, not "Root has not finished"
 SC1   Root adds pages, features and deliverables straight into step 2a   ✔ built 2026-11-12 [SC1.md]
 US1   edit, delete and anonymize accounts; a fresh invite link to copy   ✔ built 2026-11-12 [US1.md]
 CC1   the title on the draft step; moving a contract to another customer (one migration)   ✔ built 2026-11-12 [CC1.md]
+──── the founder's desk walk, 2026-11-16 (desk UX review, four stages) ───────
+DX1   the desk's inputs and the draft step; English draft no longer reads "money"   ✔ built 2026-11-17 [DX1.md]
 ```
 
 **R3 and the Persian pass each have their own build-ready file; L8 and the
@@ -425,6 +427,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`SC1.md`](SC1.md) | Change: add and remove items on step 2a without touching the site type | ✔ built |
 | [`US1.md`](US1.md) | Change: edit, delete, anonymize accounts; reissue an invite link | ✔ built |
 | [`CC1.md`](CC1.md) | Change: the title on the draft step; change a contract's customer before signature | ✔ built |
+| [`DX1.md`](DX1.md) | Change: desk UX review stage 1 — step pills, one date field, money readout, Draft step and Contract tab, readiness box | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |
