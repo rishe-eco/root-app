@@ -13,6 +13,7 @@ import AutosaveNote from '@/components/AutosaveNote';
 import { useAutosave } from '@/lib/useAutosave';
 import { normalizeAmount } from '@/lib/brief';
 import HandoverPanel from '@/components/HandoverPanel';
+import NewSiteTypeModal from '@/components/NewSiteTypeModal';
 import {
   PUBLISH_CONTRACT,
   SET_BRIEF,
@@ -95,6 +96,9 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   // The "feature for an existing site" preset (DX3a, review 29) runs on the save that changes the kind to it; this is
   // the sentence that says so, until the next edit.
   const [presetNotice, setPresetNotice] = useState(false);
+  // Founder walk 2026-11-18: a site type made from here, as "New customer" is made from the contract form.
+  const [newType, setNewType] = useState(false);
+  const canNewType = can(me, 'templates.types');
   const presetPending = kind === 'FEATURE_FOR_EXISTING' && brief?.kind !== 'FEATURE_FOR_EXISTING';
 
   /** What `setBrief` is sent for the form as it stands, with `over` standing in for the fields a control has just changed (its state has not rendered yet). */
@@ -169,6 +173,7 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   });
 
   return (
+    <>
     <form
       className="card editor-card auth-form"
       onSubmit={(e) => e.preventDefault()}
@@ -220,6 +225,11 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
               </option>
             ))}
           </select>
+          {canNewType ? (
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setNewType(true)} data-testid="brief-new-type">
+              {t('brief.form.newSiteType')}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -379,6 +389,16 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
       ) : null}
       <AutosaveNote autosave={autosave} testId="brief-autosave" />
     </form>
+    {newType ? (
+      <NewSiteTypeModal
+        onClose={() => setNewType(false)}
+        onCreated={(id) => {
+          setTemplateTypeId(id);
+          autosave.commit(inputOf({ templateTypeId: id }));
+        }}
+      />
+    ) : null}
+    </>
   );
 }
 

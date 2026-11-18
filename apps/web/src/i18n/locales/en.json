@@ -2485,6 +2485,9 @@
       "help": "The customer reads what you save here as cards. Dates are chosen in the Jalali calendar.",
       "kind": "Kind of project",
       "templateType": "Type of site",
+      "newSiteType": "New site type",
+      "newSiteTypeTitle": "A new site type",
+      "newSiteTypeCreate": "Add and choose it",
       "templateTypePick": "Choose a type…",
       "existingSiteUrl": "Address of the existing site",
       "designTier": "Design",
@@ -2586,6 +2589,9 @@
       },
       "who": "Provided by — {{what}}",
       "due": "Due date — {{what}}",
+      "whoLabel": "Provided by",
+      "dueLabel": "Due date",
+      "newItem": "the new item",
       "undecided": "Not decided",
       "undated": "No date yet",
       "dueOn": "Due {{date}}",
@@ -2887,6 +2893,7 @@
     "invalid": "That is not a real date. Use 2026-11-17 or 1405/08/26."
   },
   "countStepper": {
+    "beyond": "More",
     "less": "Decrease {{label}}",
     "more": "Increase {{label}}"
   },

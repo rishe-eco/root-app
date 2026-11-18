@@ -59,9 +59,9 @@ async function openPanel(page: Page, id: string) {
   await expect(panel).toHaveAttribute('data-open', 'true');
 }
 
-/** Presses + on a count stepper `times` times. */
-async function stepUp(page: Page, testId: string, times: number) {
-  for (let i = 0; i < times; i += 1) await page.getByTestId(testId).getByRole('button', { name: /^Increase/ }).click();
+/** Picks a count on a count track (founder walk 2026-11-18: one press on its chip). */
+async function stepUp(page: Page, testId: string, count: number) {
+  await page.getByTestId(testId).locator(`button[data-value="${count}"]`).click();
 }
 
 /** A staff member's Steps tab for a contract, by the ref the desk list shows. */
