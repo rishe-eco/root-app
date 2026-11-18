@@ -12,7 +12,6 @@ import { scopeSeeded, seedRows } from '../../../lib/scopeProposals.js';
 import {
   ARTICLES,
   SCOPE,
-  CHECKLIST,
   isPaymentScheduleArticle,
   isTemplateSensitiveArticle,
   partiesFor,
@@ -206,8 +205,10 @@ export const contractAdminMutations = {
         // its agreement from birth (T1's `ScopeItem.contractId`) — rather than
         // a follow-up `updateMany where contractId is null`, which on a
         // project that already held a proposed item would claim that too.
+        // DX6: the desk's default list of extras (`ExtraType`), the active rows.
+        const extras = await tx.extraType.findMany({ where: { active: true }, orderBy: [{ position: 'asc' }, { key: 'asc' }] });
         await tx.scopeItem.createMany({
-          data: CHECKLIST.map(([key, labelFa, labelEn], position) => ({
+          data: extras.map(({ key, labelFa, labelEn }, position) => ({
             projectId,
             key,
             labelFa,
@@ -357,8 +358,9 @@ export const contractAdminMutations = {
           if (mapped.length > 0) await setItemPhases(tx, made.id, mapped);
         }
         // As createContract seeds it, after the copied rows so the order reads scope first.
+        const extras = await tx.extraType.findMany({ where: { active: true }, orderBy: [{ position: 'asc' }, { key: 'asc' }] });
         await tx.scopeItem.createMany({
-          data: CHECKLIST.map(([key, labelFa, labelEn], i) => ({
+          data: extras.map(({ key, labelFa, labelEn }, i) => ({
             projectId: project.id,
             key,
             labelFa,

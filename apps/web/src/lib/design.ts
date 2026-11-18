@@ -82,8 +82,10 @@ export function roundCounter(step: Pick<WizardStep, 'iterationsUsed' | 'allowanc
   return { used: step.iterationsUsed ?? 0, total: step.allowance };
 }
 
-/** The allowance is spent — the next publish will be refused. */
-export const isExhausted = (c: { used: number; total: number | null }): boolean => c.total !== null && c.used >= c.total;
+/** The allowance is spent — the next publish will be refused. A total of zero
+ *  (DX6: "no rounds of change") still allows the one presentation, as the
+ *  API's `isExhausted` does. */
+export const isExhausted = (c: { used: number; total: number | null }): boolean => c.total !== null && c.used >= Math.max(c.total, 1);
 
 /** The published revision the customer is looking at: the newest with a `publishedAt`. */
 export function currentRevisionId(contract: Pick<Contract, 'designRevisions'>): string | null {

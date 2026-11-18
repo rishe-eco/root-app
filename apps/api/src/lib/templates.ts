@@ -133,6 +133,12 @@ export const SCOPE: Array<[string, string, string]> = [
  * spaces are kept apart (`checklist.*` vs the plain keys in SCOPE) so the two
  * mechanisms never collide on one row.
  *
+ * **DX6: this is now the seed, not the source.** The list a new contract is
+ * made from is the desk's `ExtraType` table (Templates > Extras); the DX6
+ * migration seeded it with exactly these ten, and `prisma/seed.ts` and the
+ * test database's reset put the same ten back. Nothing reads this constant at
+ * runtime.
+ *
  * [key, labelFa, labelEn]
  */
 export const CHECKLIST: Array<[string, string, string]> = [

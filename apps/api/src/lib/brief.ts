@@ -428,7 +428,7 @@ export function checkBriefInput(input: {
     return 'INVALID_SUPPORT_MONTHS';
   }
   for (const n of input.allowances) {
-    if (n !== null && (!Number.isInteger(n) || n < 1 || n > ALLOWANCE_MAX)) return 'INVALID_ALLOWANCE';
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > ALLOWANCE_MAX)) return 'INVALID_ALLOWANCE';
   }
   return null;
 }
