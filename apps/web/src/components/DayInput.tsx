@@ -46,6 +46,9 @@ export default function DayInput({ value, onChange, label, required = false, dis
   const id = useId();
   const [text, setText] = useState(() => (value ? formatDayText(value, locale) : ''));
   const [open, setOpen] = useState(false);
+  // Whether the grid holds focus: only when the keyboard went into it (ArrowDown from the field). A click on the
+  // field opens the calendar and leaves the caret where it is, so typing still works (founder walk 2026-11-18).
+  const [inGrid, setInGrid] = useState(false);
   const [cursor, setCursor] = useState<string>(() => value || todayUtc());
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -78,8 +81,8 @@ export default function DayInput({ value, onChange, label, required = false, dis
 
   // The roving focus: the day under the cursor is the one that holds it.
   useEffect(() => {
-    if (open) grid.current?.querySelector<HTMLButtonElement>(`button[data-day="${cursor}"]`)?.focus();
-  }, [open, cursor]);
+    if (open && inGrid) grid.current?.querySelector<HTMLButtonElement>(`button[data-day="${cursor}"]`)?.focus();
+  }, [open, inGrid, cursor]);
 
   function onType(next: string) {
     setText(next);
@@ -92,12 +95,25 @@ export default function DayInput({ value, onChange, label, required = false, dis
     setText(formatDayText(day, locale));
     onChange(day);
     setOpen(false);
+    setInGrid(false);
     input.current?.focus();
   }
 
-  function openCalendar() {
-    setCursor(typed ?? (value || todayUtc()));
+  function openCalendar(focusGrid: boolean) {
+    if (disabled) return;
+    if (!open) setCursor(typed ?? (value || todayUtc()));
     setOpen(true);
+    setInGrid(focusGrid);
+  }
+
+  function onFieldKey(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      openCalendar(true);
+    } else if (e.key === 'Escape' && open) {
+      e.preventDefault();
+      setOpen(false);
+    }
   }
 
   function onGridKey(e: KeyboardEvent) {
@@ -116,6 +132,7 @@ export default function DayInput({ value, onChange, label, required = false, dis
     if (e.key === 'Escape') {
       e.preventDefault();
       setOpen(false);
+      setInGrid(false);
       input.current?.focus();
     } else if (move[e.key]) {
       e.preventDefault();
@@ -141,7 +158,21 @@ export default function DayInput({ value, onChange, label, required = false, dis
   const today = todayUtc();
 
   return (
-    <div className="dayinput" ref={root} data-testid={testId} data-value={typed ?? ''} role="group" aria-label={label}>
+    <div
+      className="dayinput"
+      ref={root}
+      data-testid={testId}
+      data-value={typed ?? ''}
+      role="group"
+      aria-label={label}
+      onBlur={(e) => {
+        // Tabbing out of the field and its calendar closes the calendar.
+        if (open && !root.current?.contains(e.relatedTarget as Node | null)) {
+          setOpen(false);
+          setInGrid(false);
+        }
+      }}
+    >
       <div className="dayinput-field">
         <input
           ref={input}
@@ -157,24 +188,16 @@ export default function DayInput({ value, onChange, label, required = false, dis
           placeholder={t('dayInput.placeholder')}
           disabled={disabled}
           required={required}
+          aria-haspopup="dialog"
+          aria-expanded={open}
           value={text}
+          onClick={() => openCalendar(false)}
+          onKeyDown={onFieldKey}
           onChange={(e) => onType(e.target.value)}
           onBlur={() => {
             if (typed) setText(formatDayText(typed, locale));
           }}
         />
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm dayinput-open"
-          data-part="open"
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          disabled={disabled}
-          onClick={() => (open ? setOpen(false) : openCalendar())}
-        >
-          {t('dayInput.open')}
-          <span className="sr-only"> — {label}</span>
-        </button>
         {value && !disabled ? (
           <button
             type="button"

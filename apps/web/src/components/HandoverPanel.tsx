@@ -54,6 +54,9 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
   const [edits, setEdits] = useState<Record<string, RowState>>({});
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState({ fa: '', en: '' });
+  // Founder walk 2026-11-18: a new item takes its who and its when as it is added, not in a second pass.
+  const [newChoice, setNewChoice] = useState<Choice | null>(null);
+  const [newDue, setNewDue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [update] = useMutation(UPDATE_DEPENDENCY);
   const [create, { loading: creating }] = useMutation(CREATE_DEPENDENCY);
@@ -112,9 +115,18 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
     setError(null);
     try {
       await create({
-        variables: { projectId: contract.project.id, titleFa: newTitle.fa.trim(), titleEn: newTitle.en.trim(), contractId: contract.id },
+        variables: {
+          projectId: contract.project.id,
+          titleFa: newTitle.fa.trim(),
+          titleEn: newTitle.en.trim(),
+          ...handoverPatch(newChoice),
+          dueAt: newChoice === 'NOT_NEEDED' ? null : instantOf(newDue),
+          contractId: contract.id,
+        },
       });
       setNewTitle({ fa: '', en: '' });
+      setNewChoice(null);
+      setNewDue('');
       setAdding(false);
     } catch (err) {
       setError(refusalText(t, err));
@@ -163,9 +175,12 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
           return (
             <div className="handover-row" key={d.id} data-testid="handover-row" data-key={id}>
               <p className="handover-item">{what}</p>
-              {pills(what, id, s.choice, (choice) => choose(d, choice))}
+              <div className="handover-who">
+                <span className="label" aria-hidden="true">{t('brief.handover.whoLabel')}</span>
+                {pills(what, id, s.choice, (choice) => choose(d, choice))}
+              </div>
               <div className="handover-due">
-                <span className="label">{t('brief.handover.due', { what })}</span>
+                <span className="label" aria-hidden="true">{t('brief.handover.dueLabel')}</span>
                 <DayInput
                   value={s.choice === 'NOT_NEEDED' ? '' : s.due}
                   onChange={(due) => setRow(d.id, stateOf(d), { due })}
@@ -194,6 +209,23 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
         <div className="handover-add" data-testid="handover-add-form">
           <p className="t-eyebrow">{t('brief.handover.addTitle')}</p>
           <TitleField idBase="handover-new" testId="handover-new-title" fa={newTitle.fa} en={newTitle.en} onChange={setNewTitle} />
+          <div className="handover-who">
+            <span className="label" aria-hidden="true">{t('brief.handover.whoLabel')}</span>
+            {pills(t('brief.handover.newItem'), 'new', newChoice, (choice) => {
+              setNewChoice(choice);
+              if (choice === 'NOT_NEEDED') setNewDue('');
+            })}
+          </div>
+          <div className="handover-due">
+            <span className="label" aria-hidden="true">{t('brief.handover.dueLabel')}</span>
+            <DayInput
+              value={newChoice === 'NOT_NEEDED' ? '' : newDue}
+              onChange={setNewDue}
+              label={t('brief.handover.due', { what: t('brief.handover.newItem') })}
+              disabled={newChoice === 'NOT_NEEDED'}
+              testId="handover-due-new"
+            />
+          </div>
           <div className="editor-card-actions">
             <button className="btn btn-secondary btn-sm" type="button" disabled={creating || !hasOneTitle(newTitle.fa, newTitle.en)} onClick={onAdd} data-testid="handover-add-confirm">
               {t('brief.handover.addConfirm')}

@@ -108,11 +108,14 @@ test('the step you are on is unmistakable, every pill says where its step stands
   await expect(page.locator('.stepper button[aria-current="step"]')).toHaveCount(1);
   const weight = (step: string) =>
     page.locator(`.stepper-item[data-step="${step}"] .stepper-label`).evaluate((el) => Number(getComputedStyle(el).fontWeight));
-  const outline = (step: string) =>
+  // Founder walk 2026-11-18: the selected pill is marked by a bar at its start edge alone, no outline round it.
+  const bar = (step: string) =>
+    page.locator(`.stepper-item[data-step="${step}"] .stepper-hit`).evaluate((el) => parseFloat(getComputedStyle(el).borderInlineStartWidth));
+  const shadow = (step: string) =>
     page.locator(`.stepper-item[data-step="${step}"] .stepper-hit`).evaluate((el) => getComputedStyle(el).boxShadow);
   expect(await weight('DRAFT')).toBeGreaterThan(await weight('SCOPE'));
-  expect(await outline('DRAFT')).not.toBe('none');
-  expect(await outline('SCOPE')).toBe('none');
+  expect(await bar('DRAFT')).toBeGreaterThan(await bar('SCOPE'));
+  expect(await shadow('DRAFT')).toBe('none');
 
   // "What's next": whose turn, what to do, a button that opens that step.
   const next = page.getByTestId('next-up');
@@ -164,18 +167,20 @@ test('requirements inputs: accordions open on what is missing, support months an
 
     // (Who provides what moved to the handover panel, with Not needed — 35-handover.spec.ts drives it.)
 
-    // Counts: a large number between − and +; it never goes below zero.
+    // Counts: a track of numbered chips, one press each (founder walk 2026-11-18); "More" opens − / + past five.
     const demos = page.getByTestId('brief-demos');
-    await demos.getByRole('button', { name: /^(Increase|زیاد)/ }).click();
-    await demos.getByRole('button', { name: /^(Increase|زیاد)/ }).click();
+    await demos.locator('button[data-value="2"]').click();
     await expect(demos).toHaveAttribute('data-value', '2');
-    await expect(demos.locator('output')).toHaveText(lang === 'fa' ? '۲' : '2');
-    for (let i = 0; i < 3; i += 1) {
-      const less = demos.getByRole('button', { name: /^(Decrease|کم)/ });
-      if (await less.isEnabled()) await less.click();
-    }
+    await expect(demos.locator('button[data-value="2"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(demos.locator('button[data-value="2"]')).toHaveText(lang === 'fa' ? '۲' : '2');
+    await demos.locator('button[data-value="more"]').click();
+    await expect(demos).toHaveAttribute('data-value', '6');
+    await demos.getByRole('button', { name: /^(Increase|زیاد)/ }).click();
+    await expect(demos).toHaveAttribute('data-value', '7');
+    await expect(demos.locator('output')).toHaveText(lang === 'fa' ? '۷' : '7');
+    await demos.locator('button[data-value="0"]').click();
     await expect(demos).toHaveAttribute('data-value', '0');
-    await expect(demos.getByRole('button', { name: /^(Decrease|کم)/ })).toBeDisabled();
+    await expect(demos.locator('output')).toHaveCount(0);
 
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
@@ -217,9 +222,12 @@ test.describe('with steps 1 and 2 done', () => {
 
     // The English calendar is Gregorian: November 2026, picked by the keyboard.
     await text.fill('2026-11-17');
-    await start.locator('button[data-part="open"]').click();
+    // A click on the field opens the calendar and leaves the caret in the field; ArrowDown goes into the grid.
+    await text.click();
     const calendar = start.locator('[data-part="calendar"]');
     await expect(calendar).toContainText('November 2026');
+    await expect(text).toBeFocused();
+    await page.keyboard.press('ArrowDown');
     await expect(calendar.locator('button[data-day="2026-11-17"]')).toBeFocused();
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowDown');
@@ -240,7 +248,7 @@ test.describe('with steps 1 and 2 done', () => {
     const faStart = page.getByTestId('draft-date-start');
     await expect(faStart.locator('input[data-part="text"]')).toHaveValue('۱۴۰۵/۰۹/۰۴');
     await expect(faStart).toHaveAttribute('data-value', '2026-11-25');
-    await faStart.locator('button[data-part="open"]').click();
+    await faStart.locator('input[data-part="text"]').click();
     await expect(faStart.locator('[data-part="calendar"]')).toContainText('آذر ۱۴۰۵');
     // Typed in Persian digits, then in Latin digits: both land on the same day.
     await faStart.locator('input[data-part="text"]').fill('۱۴۰۵/۰۹/۰۱');
@@ -256,11 +264,11 @@ test.describe('with steps 1 and 2 done', () => {
       await page.goto(contractTab(lang));
       for (const width of WIDTHS) {
         await page.setViewportSize({ width, height: 900 });
-        await page.getByTestId('draft-date-start').locator('button[data-part="open"]').click();
+        await page.getByTestId('draft-date-start').locator('input[data-part="text"]').click();
+        await expect(page.getByTestId('draft-date-start').locator('[data-part="calendar"]')).toHaveCount(1);
         await expectFits(page, '[data-testid="draft-dates-editor"]');
-        await page.getByTestId('draft-date-start').locator('input[data-part="text"]').focus();
-        await page.keyboard.press('Escape');
-        await page.getByTestId('draft-date-start').locator('button[data-part="open"]').click(); // closes
+        await page.keyboard.press('Escape'); // closes, from the field
+        await expect(page.getByTestId('draft-date-start').locator('[data-part="calendar"]')).toHaveCount(0);
       }
       await page.setViewportSize({ width: 1280, height: 900 });
     }

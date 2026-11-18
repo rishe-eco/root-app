@@ -64,12 +64,6 @@ export default function StepList({
             <span className="stepper-text">
               <span className="stepper-label">
                 {stepLabel(t, locale, s)}
-                {missing !== null ? (
-                  <span className="stepper-missing" data-testid="pill-missing">
-                    {' · '}
-                    {t('wizard.pill.missing', { count: missing, n: formatCount(missing, locale) })}
-                  </span>
-                ) : null}
               </span>
               <span className="stepper-state" data-testid="pill-state">
                 {state}
@@ -99,6 +93,12 @@ export default function StepList({
             ) : (
               <span className="stepper-hit">{inner}</span>
             )}
+            {/* Reserved on every pill of a counted row, filled only where something is missing (founder walk). */}
+            {rich ? (
+              <span className="stepper-missing" data-testid={missing !== null ? 'pill-missing' : undefined}>
+                {missing !== null ? t('wizard.pill.missing', { count: missing, n: formatCount(missing, locale) }) : null}
+              </span>
+            ) : null}
           </li>
         );
       })}
