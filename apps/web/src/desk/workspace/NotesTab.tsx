@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
 import { ADD_INTERNAL_NOTE } from '@/lib/queries';
 import { clockTime, initialOf, relativeTime } from '@/lib/format';
+import InlineAdd from '@/components/InlineAdd';
 import type { WorkspaceContext } from './ContractWorkspace';
 
 /**
@@ -24,23 +25,18 @@ export default function NotesTab() {
   const locale = useLocale();
   const { contract, me } = useOutletContext<WorkspaceContext>();
   const [body, setBody] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [add, { loading }] = useMutation(ADD_INTERNAL_NOTE);
   const notes = contract.internalNotes ?? [];
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!body.trim()) return;
-    setError(null);
-    try {
-      await add({ variables: { contractId: contract.id, body } });
-      setBody('');
-    } catch (err) {
-      const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })?.graphQLErrors?.[0]
-        ?.extensions?.code;
-      setError(code ? t(`notes.errors.${code}`, { defaultValue: (err as Error).message }) : (err as Error).message);
-    }
+  // Rejects with the refusal's sentence, which `InlineAdd` shows under its buttons.
+  async function onSubmit() {
+    await add({ variables: { contractId: contract.id, body } });
+    setBody('');
   }
+  const errorText = (err: unknown) => {
+    const code = (err as { graphQLErrors?: Array<{ extensions?: { code?: string } }> })?.graphQLErrors?.[0]?.extensions?.code;
+    return code ? t(`notes.errors.${code}`, { defaultValue: (err as Error).message }) : (err as Error).message;
+  };
 
   return (
     <section className="card notes" data-testid="internal-notes">
@@ -70,19 +66,34 @@ export default function NotesTab() {
         </div>
       )}
 
-      <form className="comment-form" onSubmit={onSubmit}>
-        <textarea
-          className="textarea"
-          aria-label={t('notes.title')}
-          placeholder={t('notes.placeholder')}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-        />
-        <button type="submit" className="btn btn-primary btn-sm" disabled={loading || !body.trim()}>
-          {t('notes.cta')}
-        </button>
-      </form>
-      {error ? <p className="error">{error}</p> : null}
+      {/* DX6: the desk's one way to add (`InlineAdd`): a button, then a small form with Add and Cancel. */}
+      <InlineAdd
+        label={t('notes.cta')}
+        testId="note-add"
+        ready={!!body.trim()}
+        busy={loading}
+        onSubmit={onSubmit}
+        onCancel={() => setBody('')}
+        errorText={errorText}
+        buttonClassName="btn btn-primary btn-sm"
+      >
+        <div className="field">
+          <label className="label" htmlFor="note-add-body">
+            {t('notes.title')}
+          </label>
+          <textarea
+            id="note-add-body"
+            className="textarea"
+            placeholder={t('notes.placeholder')}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onKeyDown={(e) => {
+              // A textarea takes Enter for a new line; Ctrl/Cmd+Enter adds, as in the comment boxes elsewhere.
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) e.currentTarget.form?.requestSubmit();
+            }}
+          />
+        </div>
+      </InlineAdd>
     </section>
   );
 }

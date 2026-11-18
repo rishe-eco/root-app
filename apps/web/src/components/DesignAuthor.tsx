@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import InlineAdd from '@/components/InlineAdd';
 import { useMutation, useQuery } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
@@ -276,22 +277,27 @@ function AddPaletteItem({ contractId }: { contractId: string }) {
   const [value, setValue] = useState('');
   const [labelFa, setLabelFa] = useState('');
   const [labelEn, setLabelEn] = useState('');
-  const [add] = useMutation(ADD_PALETTE_ITEM);
-  const { act, busy, error } = useAct();
+  const [add, { loading }] = useMutation(ADD_PALETTE_ITEM);
+  const reset = () => {
+    setRole('');
+    setValue('');
+    setLabelFa('');
+    setLabelEn('');
+  };
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    const done = await act(() => add({ variables: { contractId, kind, role: role.trim(), value: value.trim(), labelFa, labelEn } }));
-    if (done) {
-      setRole('');
-      setValue('');
-      setLabelFa('');
-      setLabelEn('');
-    }
-  }
-
+  // DX6: the desk's one way to add (`InlineAdd`): a button, then a small form with Add and Cancel.
   return (
-    <form className="design-palette-add card" onSubmit={submit} data-testid="palette-add">
+    <InlineAdd
+      label={t('design.paletteEdit.add')}
+      testId="palette-add"
+      busy={loading}
+      onCancel={reset}
+      errorText={(err) => designError(t, err)}
+      onSubmit={async () => {
+        await add({ variables: { contractId, kind, role: role.trim(), value: value.trim(), labelFa, labelEn } });
+        reset();
+      }}
+    >
       <div className="field">
         <label className="label" htmlFor="palette-kind">
           {t('design.paletteEdit.title')}
@@ -338,17 +344,7 @@ function AddPaletteItem({ contractId }: { contractId: string }) {
         </label>
         <input id="palette-label-en" className="input" value={labelEn} onChange={(e) => setLabelEn(e.target.value)} dir="ltr" data-testid="palette-label-en" />
       </div>
-      <div className="workspace-row">
-        <button className="btn btn-primary btn-sm" type="submit" disabled={busy} data-testid="palette-add-submit">
-          {t('design.paletteEdit.add')}
-        </button>
-      </div>
-      {error ? (
-        <p className="error" role="alert" data-testid="design-error">
-          {error}
-        </p>
-      ) : null}
-    </form>
+    </InlineAdd>
   );
 }
 

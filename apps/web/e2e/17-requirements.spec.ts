@@ -134,10 +134,11 @@ test('sales fills step 1 from the desk, and the wizard calls it done once nothin
   await expect(phasesPanel.getByTestId('plan-missing').locator('[data-code="PHASES"]')).toBeVisible();
   await expect(phasesPanel.getByTestId('plan-missing').locator('[data-code="PAYMENT_PLAN"]')).toBeVisible();
   await openPanel(page, 'phases');
+  await page.getByTestId('brief-phase-new-open').click();
   const newPhase = page.getByTestId('brief-phase-new');
   await fillTitle(newPhase, 'phase-new', 'phase-title-new', 'فاز اول', 'First phase');
   await pickDay(page, 'phase-end-new', [1405, 9, 1], '2026-11-22');
-  await newPhase.getByRole('button', { name: 'Add phase' }).click();
+  await newPhase.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.getByTestId('brief-phase')).toHaveCount(1);
   await expect(phasesPanel.getByTestId('plan-missing').locator('[data-code="PHASES"]')).toHaveCount(0);
 

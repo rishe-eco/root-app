@@ -905,6 +905,27 @@ export async function assertStepOpenOn(
 }
 
 /**
+ * `assertStepOpenOn` as a question: whether a write to that step would be
+ * allowed now. For the writes that touch two steps at once and write only the
+ * side that is still open (DX6: the brief's budget and the contract's fee are
+ * one number, held by REQUIREMENTS and DRAFT, and a lock on one must not stop
+ * the other from being edited).
+ */
+export async function isStepOpenOn(
+  contractId: string,
+  step: StepKind,
+  db: typeof prisma | Prisma.TransactionClient = prisma,
+): Promise<boolean> {
+  try {
+    await assertStepOpenOn(contractId, step, null, db);
+    return true;
+  } catch (err) {
+    if (err instanceof GraphQLError && err.extensions?.code === 'STEP_LOCKED') return false;
+    throw err;
+  }
+}
+
+/**
  * A contract's `WizardState` as far as locks are concerned — its sequence,
  * the phases it owns (`Phase.contractId`) and its `StepApproval` rows, with no
  * "finished" signals (a lock does not depend on them). What `assertStepOpenOn`

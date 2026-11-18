@@ -2747,6 +2747,29 @@ model HandoverItemType {
   active   Boolean @default(true)
 }
 
+/// DX6: the desk's default list of extras — the "completeness checklist" areas
+/// (payment, notifications, legal…) every new contract starts with, switched off
+/// until sales agrees one. `createContract` and `duplicateContract` seed a
+/// contract's `EXTRA` scope items from the **active** rows; the migration seeds
+/// the ten that `CHECKLIST` (lib/templates.ts) used to hold. Managed on the desk
+/// (Templates > Extras) like `HandoverItemType`: added, renamed, reordered,
+/// deactivated, never deleted. Editing the list never touches a contract that
+/// has been seeded — a row on the project carries its own labels.
+///
+/// `key` is the seeded item's `ScopeItem.key`, `checklist.<slug>`: the prefix is
+/// what `scopeKindForKey` reads and what `EXTRA_COMMITMENT` (lib/brief.ts) is
+/// keyed by, so the three extras that imply a dependency keep doing so.
+model ExtraType {
+  id String @id @default(cuid())
+
+  key     String @unique
+  labelFa String
+  labelEn String
+
+  position Int     @default(0)
+  active   Boolean @default(true)
+}
+
 /// Whether the customer wants a new site or a feature for one that exists
 /// (the founder's Q5: the second is a new contract on the existing project).
 enum BriefKind {
@@ -2787,8 +2810,10 @@ enum PaymentSplit {
 /// - `ContractBrief_deadlines_ordered` — the ideal deadline is not after the
 ///   hard one when both are set. A NULL on either side makes the comparison
 ///   NULL, which a CHECK passes — the intended reading ("when both set").
-/// - `ContractBrief_allowances_positive` — every allowance that is set is
-///   above zero. An unset allowance passes for the same NULL reason.
+/// - `ContractBrief_allowances_not_negative` — every allowance that is set is
+///   zero or more (DX6: zero is "no rounds of change", the customer approves or
+///   not; it replaced `…_positive`). An unset allowance passes for the same NULL
+///   reason.
 ///
 /// **Calendar days, not instants** (PD-19): the two deadlines are `date`
 /// columns, rendered in UTC. **`budgetCap` is money** (PD-14): resolved to null

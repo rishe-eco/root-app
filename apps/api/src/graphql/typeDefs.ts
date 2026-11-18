@@ -531,6 +531,21 @@ export const typeDefs = /* GraphQL */ `
     active: Boolean!
   }
 
+  """
+  DX6: one item on the desk's default list of extras — the areas every new
+  contract starts with, switched off (Templates > Extras). Never deleted, only
+  deactivated.
+  """
+  type ExtraType {
+    id: ID!
+    "checklist.<slug>: the key of the extra it seeds on a contract."
+    key: String!
+    labelFa: String!
+    labelEn: String!
+    position: Int!
+    active: Boolean!
+  }
+
   # ---------------------------------------------------------------------
   # Phases and the live demo surface (build plan L2; spec §4 stage 6, §6)
   # ---------------------------------------------------------------------
@@ -2838,6 +2853,8 @@ export const typeDefs = /* GraphQL */ `
     templateTypes(activeOnly: Boolean = false): [TemplateType!]!
     "DX3a. Staff (contracts.author). The desk's default list of handover items; activeOnly: true is what a new brief seeds."
     handoverItemTypes(activeOnly: Boolean = false): [HandoverItemType!]!
+    "DX6. Staff (contracts.author). The desk's default list of extras; activeOnly: true is what a new contract seeds."
+    extraTypes(activeOnly: Boolean = false): [ExtraType!]!
     """
     Staff holding templates.types, templates.scope or contracts.author (T2).
     Name order. activeOnly: true is the picker's view; the desk's Themes tab
@@ -3344,6 +3361,16 @@ export const typeDefs = /* GraphQL */ `
     updateHandoverItemType(id: ID!, titleFa: String, titleEn: String, technical: Boolean, active: Boolean): HandoverItemType!
     "DX3a. contracts.author. ids must name every item exactly once. Refused: REORDER_MISMATCH."
     reorderHandoverItemTypes(ids: [ID!]!): [HandoverItemType!]!
+    """
+    DX6. contracts.author. Adds an extra to the end of the default list; the key is checklist.<slug>.
+    Refused: INVALID_SLUG, EXTRA_KEY_TAKEN, LABEL_REQUIRED. A new contract gets an extra for each
+    active entry; existing contracts are untouched.
+    """
+    createExtraType(slug: String!, labelFa: String!, labelEn: String!): ExtraType!
+    "DX6. contracts.author. Omitted fields are left alone; the key never changes. active: false retires an extra. Refused: NOT_FOUND, LABEL_REQUIRED."
+    updateExtraType(id: ID!, labelFa: String, labelEn: String, active: Boolean): ExtraType!
+    "DX6. contracts.author. ids must name every extra exactly once. Refused: REORDER_MISMATCH."
+    reorderExtraTypes(ids: [ID!]!): [ExtraType!]!
     """
     templates.scope. Replaces the type's whole list, in one transaction, in the
     order given. Refused: NOT_FOUND (typeId), INVALID_KEY, DUPLICATE_TEMPLATE_KEY,

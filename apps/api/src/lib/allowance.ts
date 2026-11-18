@@ -148,9 +148,15 @@ export function allowanceState(
 }
 
 /** Whether one more round may be published. Unknown on either side is "yes":
- *  see the file header on why a missing number never blocks. */
+ *  see the file header on why a missing number never blocks.
+ *
+ *  **An allowance of zero (DX6)** means "no rounds of change": the designer still
+ *  presents one version and the customer approves it or not, so the first publish
+ *  is never refused. The cap is therefore at least one — `Math.max(allowance, 1)`
+ *  — and nothing here divides by the allowance. Zero is a number, not "unset":
+ *  `allowanceFor` returns it as it does any other. */
 export function isExhausted(state: AllowanceState): boolean {
-  return state.used !== null && state.allowance !== null && state.used >= state.allowance;
+  return state.used !== null && state.allowance !== null && state.used >= Math.max(state.allowance, 1);
 }
 
 /**

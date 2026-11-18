@@ -326,7 +326,8 @@
         "types": "Types",
         "scope": "Scope",
         "themes": "Themes",
-        "handover": "Handover items"
+        "handover": "Default dependencies",
+        "extras": "Extras"
       },
       "typesHelp": "A designer keeps the types. Nothing is deleted — a type is deactivated, which takes it out of the picker and leaves everything that already chose it untouched.",
       "scopeHelp": "Sales keeps each type's list. Saving replaces the type's whole list with what is on screen.",
@@ -416,20 +417,29 @@
         "INVALID_AMOUNT": "The licence cost must be a whole number of Toman, digits only.",
         "DUPLICATE_THEME": "A theme was ticked twice — reload the page.",
         "THEME_NOT_FOUND": "One of those themes no longer exists — reload the page.",
+        "EXTRA_KEY_TAKEN": "An extra with that key already exists.",
         "HANDOVER_KEY_TAKEN": "An item with that key already exists.",
         "TITLE_REQUIRED": "Both titles are required.",
         "FORBIDDEN": "You are not allowed to do that.",
         "UNKNOWN": "That did not work. Try again."
       },
       "handover": {
-        "help": "The things a project usually needs handed over: the domain, the hosting, the content, and whatever you add. A new contract's requirements start with a row for each active item. Nothing is deleted — an item is deactivated, and rows already made keep the title they have.",
+        "help": "Every new contract starts with these in Requirements → Dependencies. Add or retire items here; nothing is deleted — an item is deactivated, and rows already made keep the title they have.",
         "newItem": "New item",
         "key": "Key",
         "keyHint": "Lowercase Latin letters, digits and hyphens only, e.g. sms-line. It cannot be changed later.",
         "technical": "Verified by the developer",
         "technicalHint": "A technical item (domain, hosting) is marked done by the developer; any other by sales.",
         "add": "Add item",
-        "none": "No handover items yet."
+        "none": "No default dependencies yet."
+      },
+      "extras": {
+        "help": "The extras every new contract starts with in Pages and features, switched off until sales agrees one. Add or retire extras here; nothing is deleted — an extra is deactivated, and contracts already made keep the extras they have.",
+        "newItem": "New extra",
+        "key": "Key",
+        "keyHint": "Lowercase Latin letters, digits and hyphens only, e.g. seo. It cannot be changed later.",
+        "add": "Add extra",
+        "none": "No extras yet."
       }
     },
     "builds": {
@@ -1872,11 +1882,26 @@
       "done": "Added to the list."
     },
     "extras": {
-      "include": "Include {{label}}"
+      "include": "Include {{label}}",
+      "add": "Add extra",
+      "addHelp": "An extra for this contract only. The desk’s default list is in Templates → Extras.",
+      "remove": "Remove"
+    },
+    "list": {
+      "title": "Pages and features"
+    },
+    "details": {
+      "toggle": "Details",
+      "label": "Details of {{label}}",
+      "confirmDelete": "Delete “{{label}}”? This cannot be undone. Anything that refers to it stops the delete.",
+      "statusGroup": "Status and decision",
+      "nameGroup": "Name and order",
+      "phasePill": "{{n}} · {{title}}",
+      "tradeHelp": "Swap this item for another: one out, one in, confirmed by both sides.",
+      "tradeIn": "The item that comes in",
+      "tradeSubmit": "Propose"
     },
     "registry": {
-      "title": "Status, flags, trades and phase",
-      "help": "Everything about each item beyond its name: where it stands, its flags, the phase it is built in, its order, and swapping one item for another. Changes here are live for the customer the moment they are saved.",
       "phase": "Built in phases",
       "phaseHelp": "Tick every phase the item is in: shown in one, fixed in the next. It is accepted in the last.",
       "phasesBadge": "Phases {{list}}"
@@ -2408,6 +2433,7 @@
       "PREMADE_ROUNDS": "how many rounds of changes the pre-made design includes",
       "MOCKUP_ITERATIONS": "how many rounds of mockup changes are included",
       "DEMO_ITERATIONS": "how many rounds of demo changes each phase includes",
+      "COMMITMENT_UNDECIDED": "who provides: {{what}} (or mark it not needed)",
       "COMMITMENT_UNDATED": "a due date for: {{what}}",
       "PHASES": "the phases",
       "PHASE_END_DATE": "a planned end date for phase {{n}}",
@@ -2556,7 +2582,7 @@
       "phase": "Phase",
       "noPhase": "No phase",
       "phaseOption": "Phase {{n}} — {{title}}",
-      "trigger": "Due",
+      "trigger": "Due when",
       "triggerOption": {
         "SIGNING": "On signing",
         "PHASE": "When a phase is done",
@@ -2564,6 +2590,7 @@
       },
       "dueOn": "Due on",
       "term": "Payment term (days)",
+      "termHelp": "Days the customer has to pay once it is issued.",
       "addRow": "Add row",
       "totalNoFee": "Total {{total}} Toman. No fee is set on the contract yet, so there is nothing to compare it with.",
       "totalMatches": "Total {{total}} Toman — it matches the fee.",
@@ -2582,7 +2609,7 @@
     "handover": {
       "title": "Dependencies",
       "aside": "who provides what, by when",
-      "help": "One row for each thing the project needs handed over. Choose who provides it — or that it is not needed — and a due date. All of it is optional. These are the same rows as the Dependencies tab.",
+      "help": "One row for each thing the project needs handed over. Before the contract goes out, every row says who provides it and by when — or that it is not needed. These are the same rows as the Dependencies tab.",
       "side": {
         "ROOT": "Root",
         "CUSTOMER": "Customer",
@@ -2892,6 +2919,10 @@
     "prevMonth": "Previous month",
     "nextMonth": "Next month",
     "invalid": "That is not a real date. Use 2026-11-17 or 1405/08/26."
+  },
+  "inlineAdd": {
+    "add": "Add",
+    "cancel": "Cancel"
   },
   "countStepper": {
     "beyond": "More",

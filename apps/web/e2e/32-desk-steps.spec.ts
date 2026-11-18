@@ -175,11 +175,12 @@ test('Pages and features holds the extras and the registry the Scope tab had: an
   const panel = page.getByTestId('scope-panel');
 
   // An item typed with its key (the old tab asked for one).
+  await page.getByTestId('scope-add-open').click();
   const add = page.getByTestId('scope-add');
   await add.getByLabel('Key (optional)').fill('sample.page');
   await fillTitle(add, 'scope-add', 'scope-add-label', 'صفحه‌ی نمونه', 'Sample page');
   await page.getByTestId('scope-add-submit').click();
-  await expect(page.getByTestId('scope-add-done')).toBeVisible();
+  await expect(add).toHaveCount(0);
 
   // The extras are a group here, switched by a checkbox.
   const payment = panel.locator('[data-testid="scope-extra"][data-key="checklist.payment"]');
@@ -189,25 +190,30 @@ test('Pages and features holds the extras and the registry the Scope tab had: an
   await expect(box).toBeChecked();
   await expect(payment).toHaveAttribute('data-included', 'true');
 
-  // The registry's controls: status, flags, phase.
-  await page.getByTestId('acc-registry').getByRole('button').first().click();
-  const card = page.locator('[data-testid="registry-item"][data-key="sample.page"]');
+  // The old registry block's controls are the item's own Details drawer now (DX6): status, phases, flags.
+  const rowOf = () => page.locator('[data-testid="feedback-target"]').filter({ has: page.locator('[data-testid="scope-item"][data-key="sample.page"]') });
+  const card = rowOf();
   await expect(card).toBeVisible();
+  await card.getByTestId('scope-details').click();
   await card.getByTestId('registry-status').selectOption('IN_BUILD');
   await expect(card.getByTestId('registry-status')).toHaveValue('IN_BUILD');
-  // DX2b: a set of phases, ticked — here the one phase the contract has.
+  await expect(card.getByTestId('scope-chip-status')).toHaveAttribute('data-status', 'IN_BUILD');
+  // DX2b: a set of phases, pressed — here the one phase the contract has.
   await card.getByTestId('registry-phase-1').click();
-  await expect(card.getByTestId('registry-phase-1')).toBeChecked();
-  await card.getByLabel('Temporary').click();
-  await expect(card.getByLabel('Temporary')).toBeChecked();
+  await expect(card.getByTestId('registry-phase-1')).toHaveAttribute('aria-pressed', 'true');
+  await expect(card.getByTestId('scope-chip-phases')).toBeVisible();
+  await card.getByTestId('scope-flag-temporary').click();
+  await expect(card.getByTestId('scope-flag-temporary')).toHaveAttribute('aria-pressed', 'true');
 
   // The registry persists across a reload: the status and the phase are the API's.
   await page.reload();
   await stepButton(page, 'SCOPE').click();
-  await page.getByTestId('acc-registry').getByRole('button').first().click();
-  const again = page.locator('[data-testid="registry-item"][data-key="sample.page"]');
-  await expect(again.getByTestId('registry-status')).toHaveValue('IN_BUILD');
-  await expect(again.getByTestId('registry-phase-1')).toBeChecked();
+  const listAcc = page.getByTestId('acc-scope-list');
+  if ((await listAcc.getAttribute('data-open')) !== 'true') await listAcc.getByRole('button').first().click();
+  const again = rowOf();
+  await expect(again.getByTestId('scope-chip-status')).toHaveAttribute('data-status', 'IN_BUILD');
+  await again.getByTestId('scope-details').click();
+  await expect(again.getByTestId('registry-phase-1')).toHaveAttribute('aria-pressed', 'true');
 
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 900 });
@@ -219,7 +225,8 @@ test('Pages and features holds the extras and the registry the Scope tab had: an
   await page.goto(page.url().replace('/en/', '/fa/'));
   await stepButton(page, 'SCOPE').click();
   await expect(page.getByTestId('scope-panel')).toContainText('افزونه‌ها');
-  await expect(page.getByTestId('acc-registry')).toContainText('وضعیت، نشان‌ها، جایگزینی و فاز');
+  await expect(page.getByTestId('acc-scope-list')).toContainText('صفحه‌ها و قابلیت‌ها');
+  await expect(page.getByTestId('acc-registry')).toHaveCount(0);
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 900 });
     await expectFits(page, '.workspace-panel');
@@ -239,12 +246,12 @@ test('a phase’s Demo step sets the demo up: the live demo link, the readiness 
   await expect(page.locator('.demo-card input[dir="ltr"]').first()).toHaveValue('http://nahal.staging.localhost:1/');
 
   // The declared pages.
-  await page.getByRole('button', { name: 'Declare a page' }).click();
-  const form = page.locator('form.auth-form').filter({ hasText: 'Path (as it appears in the browser)' });
-  await form.locator('input').first().fill('home');
+  await page.getByTestId('demo-page-add-open').click();
+  const form = page.getByTestId('demo-page-add');
+  await form.locator('#demo-page-key').fill('home');
   await fillTitle(form, 'demo-page-new', 'demo-page-new-title', 'خانه', 'Home page');
-  await form.locator('input').last().fill('/'); // key, title (Persian), title (English), path — the path is last
-  await form.getByRole('button', { name: 'Save' }).click();
+  await form.locator('#demo-page-path').fill('/');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.demo-page-row').first()).toContainText('Home page');
 
   for (const width of WIDTHS) {

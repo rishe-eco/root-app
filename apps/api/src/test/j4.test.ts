@@ -113,7 +113,7 @@ const briefInput = (over: Record<string, unknown> = {}) => ({
   kind: 'NEW_SITE',
   templateTypeId: type.id,
   designTier: 'THEME_PICK',
-  budgetCap: '150000000',
+  budgetCap: '180000000',
   idealDeadline: onDay('2026-10-01'),
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
@@ -193,17 +193,17 @@ test('ContractBrief_deadlines_ordered: an ideal deadline after the hard one is r
   }
 });
 
-test('ContractBrief_allowances_positive: any allowance that is set must be above zero — each of the four, by direct insert', async () => {
+test('ContractBrief_allowances_not_negative: any allowance that is set must be zero or more — each of the four, by direct insert (DX6: zero is "no rounds of change")', async () => {
   for (const column of ['premadeRounds', 'wireframeIterations', 'mockupIterations', 'demoIterationsPerPhase']) {
-    for (const value of [0, -1]) {
-      await assert.rejects(
-        () => prisma.contractBrief.create({ data: briefRow({ [column]: value }) }),
-        /ContractBrief_allowances_positive/,
-        `${column} = ${value}`,
-      );
+    await assert.rejects(
+      () => prisma.contractBrief.create({ data: briefRow({ [column]: -1 }) }),
+      /ContractBrief_allowances_not_negative/,
+      `${column} = -1`,
+    );
+    for (const value of [0, 3]) {
+      await prisma.contractBrief.deleteMany();
+      await assert.doesNotReject(() => prisma.contractBrief.create({ data: briefRow({ [column]: value }) }), `${column} = ${value}`);
     }
-    await prisma.contractBrief.deleteMany();
-    await assert.doesNotReject(() => prisma.contractBrief.create({ data: briefRow({ [column]: 3 }) }), `${column} = 3`);
     await prisma.contractBrief.deleteMany();
   }
   // Unset is fine, and the wireframe allowance defaults to two.
@@ -378,7 +378,7 @@ test('setBrief writes the brief; dates come back as the day they were sent; the 
   assert.equal(c.brief!.kind, 'NEW_SITE');
   assert.equal(c.brief!.designTier, 'THEME_PICK');
   assert.deepEqual(c.brief!.templateType, { id: type.id, slug: 'store' });
-  assert.equal(c.brief!.budgetCap, '150000000');
+  assert.equal(c.brief!.budgetCap, '180000000');
   // A calendar day is midnight UTC on the wire, and a `date` in the table.
   assert.equal(c.brief!.hardDeadline, `${onDay('2026-10-23')}T00:00:00.000Z`);
   assert.equal(c.brief!.idealDeadline, `${onDay('2026-10-01')}T00:00:00.000Z`);
@@ -386,7 +386,8 @@ test('setBrief writes the brief; dates come back as the day they were sent; the 
   assert.equal(row.d, onDay('2026-10-23'));
   assert.equal(c.brief!.wireframeIterations, 2, 'the default');
 
-  // budgetCap is not Contract.amount: nothing prefills or moves one from the other, either way.
+  // DX6 reversed PD-14's "budgetCap is not Contract.amount": the brief's budget and the contract's fee are one number,
+  // each side's save writes the other (dx6.test.ts is the table). The fee here already equals the budget, so nothing moved.
   const after = await prisma.contract.findUniqueOrThrow({ where: { id: f.contract.id } });
   assert.equal(after.amount, before.amount);
   assert.equal(String(before.amount), '180000000');
@@ -396,7 +397,7 @@ test('setBrief writes the brief; dates come back as the day they were sent; the 
       variables: { c: f.contract.id },
     }),
   );
-  assert.equal(((await read(staff.SALES)).brief as { budgetCap: string }).budgetCap, '150000000');
+  assert.equal(((await read(staff.SALES)).brief as { budgetCap: string }).budgetCap, '999', 'the fee saved on the Contract tab is the budget too');
 });
 
 /** The wire's DateTime is a full ISO instant; a calendar day goes as its UTC midnight. */
@@ -455,17 +456,26 @@ test('who provides what is edited on the row — flipping a side or a date chang
   assert.deepEqual([cleared.side, cleared.dueAt], [null, null]);
 });
 
-test('an item someone provides without a date is COMMITMENT_UNDATED; undecided or not needed owes none (DX3a — nobody must name a provider)', async () => {
+test('an item someone provides without a date is COMMITMENT_UNDATED; not needed owes none; an undecided one is COMMITMENT_UNDECIDED (DX6)', async () => {
   const c = await setBriefOk();
-  assert.equal(c.briefCompleteness.length, 0, 'a brief with three undecided items is complete — each provider is optional');
+  assert.deepEqual(
+    c.briefCompleteness.map((m) => m.code),
+    ['COMMITMENT_UNDECIDED', 'COMMITMENT_UNDECIDED', 'COMMITMENT_UNDECIDED'],
+    'a brief with three undecided items is not complete — DX6: before signing every dependency is decided',
+  );
 
   const [content, domain, host] = await boardRows();
   ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: domain.id, side: 'CUSTOMER' } }));
   ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: host.id, side: 'ROOT', nn: true } }));
   const undated = (await read(staff.SALES)).briefCompleteness;
-  assert.deepEqual(undated, [{ code: 'COMMITMENT_UNDATED', key: 'domain' }], 'a not-needed item owes no date; an undecided one owes none');
+  assert.deepEqual(
+    undated.map((m) => `${m.code}:${m.key}`).sort(),
+    ['COMMITMENT_UNDATED:domain', 'COMMITMENT_UNDECIDED:content'],
+    'a not-needed item owes no date; an undecided one owes a decision, not a date',
+  );
 
   ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: domain.id, due: iso(onDay('2026-10-05')) } }));
+  ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: content.id, nn: true } }));
   assert.deepEqual((await read(staff.SALES)).briefCompleteness, []);
   assert.ok(content);
 });
@@ -521,7 +531,7 @@ test('setBrief refuses, each with its own code, and writes nothing', async () =>
     ['ideal after hard', { idealDeadline: onDay('2026-11-01'), hardDeadline: onDay('2026-10-01') }, 'DEADLINES_OUT_OF_ORDER'],
     ['an existing site that is not a url', { kind: 'FEATURE_FOR_EXISTING', existingSiteUrl: 'nahal' }, 'INVALID_SITE_URL'],
     ['negative support', { supportMonths: -1 }, 'INVALID_SUPPORT_MONTHS'],
-    ['a zero allowance', { premadeRounds: 0 }, 'INVALID_ALLOWANCE'],
+    ['a negative allowance', { premadeRounds: -1 }, 'INVALID_ALLOWANCE'],
     ['a commitment date that is not a day', { commitments: [{ key: 'gateway', dueAt: '5 Aban' }] }, 'INVALID_DATE'],
     ['a type that does not exist', { templateTypeId: 'nope' }, 'NOT_FOUND'],
   ];
@@ -813,7 +823,7 @@ test('every money field J4 adds is null for the designer and the developer and p
   const budget = (c: Contract) => (c.brief as { budgetCap: string | null }).budgetCap;
   for (const who of [staff.SALES, f.admin, f.customer]) {
     const c = await read(who);
-    assert.equal(budget(c), '150000000', `budgetCap for ${String(who.email)}`);
+    assert.equal(budget(c), '180000000', `budgetCap for ${String(who.email)}`);
     assert.equal(c.paymentPlan!.total, '180000000', `plan for ${String(who.email)}`);
     assert.equal(c.paymentPlan!.invoices.length, 2);
   }
@@ -827,7 +837,7 @@ test('every money field J4 adds is null for the designer and the developer and p
   }
   // View-as-customer is the customer's own read, through the same rule.
   const asCustomer = await read(staff.SALES, true);
-  assert.deepEqual([budget(asCustomer), asCustomer.paymentPlan?.total], ['150000000', '180000000']);
+  assert.deepEqual([budget(asCustomer), asCustomer.paymentPlan?.total], ['180000000', '180000000']);
   // …and sales viewing as the customer reads what the customer reads, nothing more.
   assert.deepEqual(await read(f.customer), asCustomer);
 });
@@ -1100,6 +1110,9 @@ test('REQUIREMENTS is done exactly when briefCompleteness is empty, PHASES exact
   assert.equal(start.briefCompleteness.length > 0, true);
 
   await setBriefOk();
+  // DX6: the brief's dependencies are decided first (the three default rows are undecided).
+  assert.equal((await read(staff.SALES)).briefCompleteness.every((m) => m.code === 'COMMITMENT_UNDECIDED'), true);
+  await prisma.dependency.updateMany({ where: { inBrief: true }, data: { notNeeded: true } });
   // The brief is complete: REQUIREMENTS is done on the brief alone, before any phase or plan exists.
   const briefDone = await read(staff.SALES);
   assert.deepEqual(briefDone.briefCompleteness, []);

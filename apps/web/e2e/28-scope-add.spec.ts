@@ -22,6 +22,9 @@ async function staffScope(page: Page, lang: 'en' | 'fa' = 'en') {
   await page.waitForURL(new RegExp(`/${lang}/desk/contracts/[^/]+/steps$`));
   await page.locator('.stepper-item[data-step="SCOPE"] button').click();
   await expect(page.getByTestId('scope-panel')).toBeVisible();
+  // DX6: staff's list is an accordion; it opens by itself only while it lacks something.
+  const list = page.getByTestId('acc-scope-list');
+  if ((await list.getAttribute('data-open')) !== 'true') await list.getByRole('button').first().click();
 }
 
 test('sales adds a page by hand, then still applies the starting list beside it', async ({ page }) => {
@@ -29,16 +32,16 @@ test('sales adds a page by hand, then still applies the starting list beside it'
   await expect(page.getByTestId('scope-empty')).toBeVisible();
   await expect(page.getByTestId('scope-seed')).toBeVisible();
 
+  // DX6: the desk's one way to add — a button, then a small form with Add and Cancel.
+  await page.getByTestId('scope-add-open').click();
   const form = page.getByTestId('scope-add');
   await expect(page.getByTestId('scope-add-submit')).toBeDisabled();
   await fillTitle(form, 'scope-add', 'scope-add-label', 'وبلاگ', 'Blog');
   await page.getByTestId('scope-add-submit').click();
-  await expect(page.getByTestId('scope-add-done')).toBeVisible();
+  await expect(form).toHaveCount(0);
   const blog = page.locator('[data-testid="scope-item"][data-key="custom.1"]');
   await expect(blog).toContainText('Blog');
   await expect(blog).toHaveAttribute('data-status', 'AGREED');
-  // The form is cleared for the next one.
-  await expect(form.locator('#scope-add-en')).toHaveValue('');
 
   // A hand-added item is not the template: the starting list is still offered.
   await expect(page.getByTestId('scope-seed')).toBeVisible();
@@ -51,7 +54,7 @@ test('sales adds a page by hand, then still applies the starting list beside it'
 
 test('in Persian the form is translated; the customer sees the item and no form of Root’s', async ({ page }) => {
   await staffScope(page, 'fa');
-  await expect(page.getByTestId('scope-add')).toContainText('افزودن مورد');
+  await expect(page.getByTestId('scope-add-open')).toContainText('افزودن مورد');
   expect(await page.getByTestId('scope-panel').innerText()).not.toMatch(/\bscope\.[A-Za-z_.]+/);
 
   await signIn(page, CUSTOMER, 'fa');
@@ -59,7 +62,7 @@ test('in Persian the form is translated; the customer sees the item and no form 
   await page.locator('tr.crow', { hasText: 'فروشگاه آنلاین نهال' }).click();
   await page.locator('.stepper-item[data-step="SCOPE"] button').click();
   await expect(page.locator('[data-testid="scope-item"][data-key="custom.1"]')).toContainText('وبلاگ');
-  await expect(page.getByTestId('scope-add')).toHaveCount(0);
+  await expect(page.getByTestId('scope-add-open')).toHaveCount(0);
   await expect(page.getByTestId('scope-staff-decline')).toHaveCount(0);
 });
 

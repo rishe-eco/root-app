@@ -353,6 +353,12 @@ async function main() {
     });
   }
 
+  // DX6: the desk's default list of extras. The migration seeds the same ten in production; `update: {}` so a
+  // re-seed never puts back what the desk has edited.
+  for (const [position, [key, labelFa, labelEn]] of CHECKLIST.entries()) {
+    await prisma.extraType.upsert({ where: { key }, update: {}, create: { key, labelFa, labelEn, position } });
+  }
+
   for (const [number, titleFa, titleEn, bodyFa, bodyEn] of ARTICLES) {
     await prisma.article.upsert({
       where: { contractId_number: { contractId: contract.id, number } },

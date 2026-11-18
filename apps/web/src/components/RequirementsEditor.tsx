@@ -58,8 +58,8 @@ import {
  * them, and the fields are not drawn.
  */
 
-/** The support terms offered as pills (DX1, review 5); anything else is "Other". */
-const SUPPORT_PILLS = ['1', '3', '6', '12'];
+/** The support terms offered as pills (DX1, review 5; DX6 added 0, no support after delivery); anything else is "Other". */
+const SUPPORT_PILLS = ['0', '1', '3', '6', '12'];
 
 const numberOrNull = (text: string) => (text.trim() === '' ? null : Number(text));
 const str = (n: number | null | undefined) => (n === null || n === undefined ? '' : String(n));
@@ -74,14 +74,21 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   const brief = contract.brief ?? null;
   const canMoney = can(me, 'money.read');
   const { data: typesData } = useQuery<{ templateTypes: TemplateType[] }>(TEMPLATE_TYPES);
-  const types = (typesData?.templateTypes ?? []).filter((x) => x.active || x.id === brief?.templateType.id);
+  // DX6 (the founder's walk: a type just made with "New site type" did not stay picked): the type that was made is kept
+  // here until the list has it, so the picker always has an option for the value it holds — a controlled select whose
+  // value has no option shows its first one, and what the person sees is then not what is saved.
+  const [made, setMade] = useState<Pick<TemplateType, 'id' | 'labelFa' | 'labelEn'> | null>(null);
+  const listed = (typesData?.templateTypes ?? []).filter((x) => x.active || x.id === brief?.templateType.id);
+  const types: Array<Pick<TemplateType, 'id' | 'labelFa' | 'labelEn'>> = made && !listed.some((x) => x.id === made.id) ? [...listed, made] : listed;
   const [setBrief] = useMutation(SET_BRIEF);
 
   const [kind, setKind] = useState<BriefKind>(brief?.kind ?? 'NEW_SITE');
   const [existingSiteUrl, setExistingSiteUrl] = useState(brief?.existingSiteUrl ?? '');
   const [templateTypeId, setTemplateTypeId] = useState(brief?.templateType.id ?? '');
   const [designTier, setDesignTier] = useState<DesignTier>(brief?.designTier ?? 'THEME_PICK');
-  const [budgetCap, setBudgetCap] = useState(brief?.budgetCap ?? '');
+  // DX6: the budget and the contract's fee are one number (the API writes each from the other), so a brief that has no
+  // budget yet starts from the fee the contract was made with.
+  const [budgetCap, setBudgetCap] = useState(brief?.budgetCap ?? contract.draft?.amount ?? contract.amount ?? '');
   const [idealDeadline, setIdealDeadline] = useState(day(brief?.idealDeadline));
   const [hardDeadline, setHardDeadline] = useState(day(brief?.hardDeadline));
   const [domainName, setDomainName] = useState(brief?.domainName ?? '');
@@ -392,9 +399,10 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
     {newType ? (
       <NewSiteTypeModal
         onClose={() => setNewType(false)}
-        onCreated={(id) => {
-          setTemplateTypeId(id);
-          autosave.commit(inputOf({ templateTypeId: id }));
+        onCreated={(type) => {
+          setMade(type);
+          setTemplateTypeId(type.id);
+          autosave.commit(inputOf({ templateTypeId: type.id }));
         }}
       />
     ) : null}
@@ -447,7 +455,7 @@ export default function RequirementsEditor({ contract, me }: { contract: Contrac
   // DX2a: this list is the brief's alone now — the phases and the plan are the Phases and payment step's own.
   // DX3a: a handover item someone provides and nobody has dated belongs to the handover panel's count, not the brief's.
   const lacks = contract.briefCompleteness ?? [];
-  const handoverLacks = lacks.filter((m) => m.code === 'COMMITMENT_UNDATED').length;
+  const handoverLacks = lacks.filter((m) => m.code === 'COMMITMENT_UNDATED' || m.code === 'COMMITMENT_UNDECIDED').length;
   const briefLacks = lacks.length - handoverLacks;
 
   // Opened once, on arrival, and never refolded under the person typing in it. The brief is the only panel that can lack

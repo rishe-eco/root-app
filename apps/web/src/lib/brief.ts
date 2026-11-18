@@ -104,7 +104,7 @@ export function missingParams(
   commitmentTitle: (key: string) => string,
   n: (value: number) => string,
 ): Record<string, unknown> {
-  if (m.code === 'COMMITMENT_UNDATED' && m.key) return { what: commitmentTitle(m.key) };
+  if ((m.code === 'COMMITMENT_UNDATED' || m.code === 'COMMITMENT_UNDECIDED') && m.key) return { what: commitmentTitle(m.key) };
   if (m.code === 'PHASE_END_DATE' && m.key) {
     const number = phaseNumberOf(m.key);
     return { n: number === null ? '' : n(number) };

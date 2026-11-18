@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
@@ -10,6 +10,7 @@ import { useAutosave } from '@/lib/useAutosave';
 import { hasOneTitle } from '@/lib/titleScript';
 import MoneyReadout from '@/components/MoneyReadout';
 import { SectionHead, day, refusalText } from '@/components/EditorKit';
+import InlineAdd from '@/components/InlineAdd';
 import i18n from '@/i18n';
 import { normalizeAmount } from '@/lib/brief';
 import { proposeRows, type Labeller, type Split } from '@/lib/planProposal';
@@ -93,9 +94,17 @@ export function PhaseRow({ contract, phase }: { contract: Contract; phase: NonNu
           setTitleEn(v.en);
         }}
       />
-      <DayInput value={end} onChange={setEnd} label={t('brief.phases.plannedEnd', { n: formatCount(phase.number, locale) })} testId={`phase-end-${phase.number}`} />
-      <input className="input" aria-label={t('workspace.phaseMilestone')} placeholder={t('workspace.phaseMilestone')} value={milestone} onChange={(e) => setMilestone(e.target.value)} data-testid={`phase-milestone-${phase.number}`} />
-      <label className="t-small" title={t('brief.phases.hasDemoHelp')}>
+      <div className="field">
+        <span className="label">{t('brief.phases.plannedEnd', { n: formatCount(phase.number, locale) })}</span>
+        <DayInput value={end} onChange={setEnd} label={t('brief.phases.plannedEnd', { n: formatCount(phase.number, locale) })} testId={`phase-end-${phase.number}`} />
+      </div>
+      <div className="field">
+        <label className="label" htmlFor={`phase-milestone-${phase.number}`}>
+          {t('workspace.phaseMilestone')}
+        </label>
+        <input id={`phase-milestone-${phase.number}`} className="input" value={milestone} onChange={(e) => setMilestone(e.target.value)} data-testid={`phase-milestone-${phase.number}`} />
+      </div>
+      <label className="t-small req-check" title={t('brief.phases.hasDemoHelp')}>
         <input type="checkbox" checked={hasDemo} onChange={(e) => {
           setHasDemo(e.target.checked);
           autosave.commit({ titleFa, titleEn, end, milestone: milestone.trim(), hasDemo: e.target.checked });
@@ -119,23 +128,12 @@ export function PhasesEditor({ contract }: { contract: Contract }) {
   const [titleFa, setTitleFa] = useState('');
   const [titleEn, setTitleEn] = useState('');
   const [end, setEnd] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const next = phases.length === 0 ? 1 : Math.max(...phases.map((p) => p.number)) + 1;
-
-  async function add(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await create({
-        variables: { contractId: contract.id, number: next, titleFa: titleFa.trim(), titleEn: titleEn.trim(), plannedEndAt: end || null },
-      });
-      setTitleFa('');
-      setTitleEn('');
-      setEnd('');
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
+  const reset = () => {
+    setTitleFa('');
+    setTitleEn('');
+    setEnd('');
+  };
 
   return (
     <div className="card editor-card" data-testid="phases-editor">
@@ -143,17 +141,25 @@ export function PhasesEditor({ contract }: { contract: Contract }) {
       {phases.map((p) => (
         <PhaseRow key={p.id} contract={contract} phase={p} />
       ))}
-      <form className="req-phase req-phase-new" onSubmit={add} data-testid="brief-phase-new">
-        <span className="badge num-latin">+</span>
+      {/* DX6: the desk's one way to add — a button, then a small form with Add and Cancel (InlineAdd). */}
+      <InlineAdd
+        label={t('brief.phases.add')}
+        testId="brief-phase-new"
+        ready={hasOneTitle(titleFa, titleEn)}
+        busy={loading}
+        onCancel={reset}
+        errorText={(err) => refusalText(t, err)}
+        onSubmit={async () => {
+          await create({ variables: { contractId: contract.id, number: next, titleFa: titleFa.trim(), titleEn: titleEn.trim(), plannedEndAt: end || null } });
+          reset();
+        }}
+      >
         <TitleField idBase="phase-new" testId="phase-title-new" fa={titleFa} en={titleEn} onChange={(v) => { setTitleFa(v.fa); setTitleEn(v.en); }} />
-        <DayInput value={end} onChange={setEnd} label={t('brief.phases.newPlannedEnd')} testId="phase-end-new" />
-        <span className="workspace-row">
-          <button className="btn btn-secondary btn-sm" type="submit" disabled={loading || !hasOneTitle(titleFa, titleEn)}>
-            {t('brief.phases.add')}
-          </button>
-        </span>
-      </form>
-      {error ? <p className="error">{error}</p> : null}
+        <div className="field">
+          <span className="label">{t('brief.phases.newPlannedEnd')}</span>
+          <DayInput value={end} onChange={setEnd} label={t('brief.phases.newPlannedEnd')} testId="phase-end-new" />
+        </div>
+      </InlineAdd>
     </div>
   );
 }
@@ -307,60 +313,84 @@ export function PlanEditor({ contract }: { contract: Contract }) {
           {rows.map((r, i) => (
             <div className="plan-row" role="row" key={i} data-testid="plan-row">
               <TitleField idBase={`plan-${i}`} testId={`plan-label-${i}`} label={t('brief.plan.label')} fa={r.labelFa} en={r.labelEn} onChange={(v) => edit(i, { labelFa: v.fa, labelEn: v.en })} />
-              <div className="money-field">
-                <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.amount')} value={r.amount} onChange={(e) => edit(i, { amount: e.target.value })} />
+              <div className="field money-field">
+                <label className="label" htmlFor={`plan-amount-${i}`}>
+                  {t('brief.plan.amount')}
+                </label>
+                <input id={`plan-amount-${i}`} className="input num-latin" dir="ltr" inputMode="numeric" required value={r.amount} onChange={(e) => edit(i, { amount: e.target.value })} />
                 <MoneyReadout value={normalizeAmount(r.amount)} testId="plan-amount-readout" />
               </div>
-              <select
-                className="input"
-                aria-label={t('brief.plan.trigger')}
-                value={triggerOf(r)}
-                data-testid="plan-trigger"
-                onChange={(e) => {
-                  const next = e.target.value as Trigger;
-                  // One trigger at a time: choosing one clears the other's value (the database holds the same rule).
-                  const patch = { phaseId: next === 'PHASE' ? (r.phaseId || phases[0]?.id || '') : '', dueOn: next === 'DATE' ? r.dueOn || new Date().toISOString().slice(0, 10) : '' };
-                  edit(i, patch);
-                  autosave.commit({ split, invoices: payloadOf(rows.map((x, j) => (j === i ? { ...x, ...patch } : x))) });
-                }}
-              >
-                <option value="SIGNING">{t('brief.plan.triggerOption.SIGNING')}</option>
-                <option value="PHASE" disabled={phases.length === 0}>{t('brief.plan.triggerOption.PHASE')}</option>
-                <option value="DATE">{t('brief.plan.triggerOption.DATE')}</option>
-              </select>
-              {triggerOf(r) === 'PHASE' ? (
+              <div className="field">
+                <label className="label" htmlFor={`plan-trigger-${i}`}>
+                  {t('brief.plan.trigger')}
+                </label>
                 <select
+                  id={`plan-trigger-${i}`}
                   className="input"
-                  aria-label={t('brief.plan.phase')}
-                  value={r.phaseId}
+                  value={triggerOf(r)}
+                  data-testid="plan-trigger"
                   onChange={(e) => {
-                    edit(i, { phaseId: e.target.value });
-                    autosave.commit({ split, invoices: payloadOf(rows.map((x, j) => (j === i ? { ...x, phaseId: e.target.value } : x))) });
+                    const next = e.target.value as Trigger;
+                    // One trigger at a time: choosing one clears the other's value (the database holds the same rule).
+                    const patch = { phaseId: next === 'PHASE' ? (r.phaseId || phases[0]?.id || '') : '', dueOn: next === 'DATE' ? r.dueOn || new Date().toISOString().slice(0, 10) : '' };
+                    edit(i, patch);
+                    autosave.commit({ split, invoices: payloadOf(rows.map((x, j) => (j === i ? { ...x, ...patch } : x))) });
                   }}
                 >
-                  {phases.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {t('brief.plan.phaseOption', { n: formatCount(p.number, locale), title: pick(p, 'title', locale) })}
-                    </option>
-                  ))}
+                  <option value="SIGNING">{t('brief.plan.triggerOption.SIGNING')}</option>
+                  <option value="PHASE" disabled={phases.length === 0}>{t('brief.plan.triggerOption.PHASE')}</option>
+                  <option value="DATE">{t('brief.plan.triggerOption.DATE')}</option>
                 </select>
+              </div>
+              {triggerOf(r) === 'PHASE' ? (
+                <div className="field">
+                  <label className="label" htmlFor={`plan-phase-${i}`}>
+                    {t('brief.plan.phase')}
+                  </label>
+                  <select
+                    id={`plan-phase-${i}`}
+                    className="input"
+                    value={r.phaseId}
+                    onChange={(e) => {
+                      edit(i, { phaseId: e.target.value });
+                      autosave.commit({ split, invoices: payloadOf(rows.map((x, j) => (j === i ? { ...x, phaseId: e.target.value } : x))) });
+                    }}
+                  >
+                    {phases.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {t('brief.plan.phaseOption', { n: formatCount(p.number, locale), title: pick(p, 'title', locale) })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               ) : null}
               {triggerOf(r) === 'DATE' ? (
-                <DayInput value={r.dueOn} onChange={(v) => edit(i, { dueOn: v })} label={t('brief.plan.dueOn')} testId={`plan-due-${i}`} />
+                <div className="field">
+                  <span className="label">{t('brief.plan.dueOn')}</span>
+                  <DayInput value={r.dueOn} onChange={(v) => edit(i, { dueOn: v })} label={t('brief.plan.dueOn')} testId={`plan-due-${i}`} />
+                </div>
               ) : null}
-              <input className="input num-latin" dir="ltr" inputMode="numeric" required aria-label={t('brief.plan.term')} value={r.paymentTermDays} onChange={(e) => edit(i, { paymentTermDays: e.target.value })} />
-              <button
-                className="btn btn-ghost btn-sm"
-                type="button"
-                onClick={() => {
-                  const next = rows.filter((_, j) => j !== i);
-                  setRows(next);
-                  // Deleting a row is an act, saved at once; the last row cannot be deleted into an empty plan the API would refuse.
-                  autosave.commit({ split, invoices: payloadOf(next) });
-                }}
-              >
-                {t('workspace.delete')}
-              </button>
+              <div className="field">
+                <label className="label" htmlFor={`plan-term-${i}`}>
+                  {t('brief.plan.term')}
+                </label>
+                <input id={`plan-term-${i}`} className="input num-latin" dir="ltr" inputMode="numeric" required value={r.paymentTermDays} onChange={(e) => edit(i, { paymentTermDays: e.target.value })} />
+                <span className="t-caption">{t('brief.plan.termHelp')}</span>
+              </div>
+              <div className="plan-row-actions">
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  onClick={() => {
+                    const next = rows.filter((_, j) => j !== i);
+                    setRows(next);
+                    // Deleting a row is an act, saved at once; the last row cannot be deleted into an empty plan the API would refuse.
+                    autosave.commit({ split, invoices: payloadOf(next) });
+                  }}
+                >
+                  {t('workspace.delete')}
+                </button>
+              </div>
             </div>
           ))}
         </div>

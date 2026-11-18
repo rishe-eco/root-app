@@ -4,6 +4,7 @@ import { agreedScopeSnapshot } from '../lib/scope.js';
 import { draftStateOn } from '../graphql/resolvers/agreement.js';
 import { loadContract } from '../graphql/resolvers/contracts.js';
 import { COMMITMENTS } from '../lib/brief.js';
+import { CHECKLIST } from '../lib/templates.js';
 // The same singleton the resolvers use, deliberately — a second client would
 // be a second connection pool and a second chance to be looking at a different
 // database than the code under test.
@@ -57,6 +58,18 @@ export async function resetDatabase() {
   // could say "INV-000001". (Nothing in production ever does this: an invoice
   // number is never reused.)
   await prisma.$executeRawUnsafe(`ALTER SEQUENCE "invoice_number_seq" RESTART`);
+  // DX6: the desk's default list of extras is what a new contract's extras are made from, and hundreds of tests
+  // create a contract and expect the ten. The migration seeds the table; the truncate above emptied it, so it is
+  // put back (a test of "the list is empty" or "the list was edited" changes it after this).
+  await seedExtraTypes();
+}
+
+/** The desk's default list of extras as the DX6 migration seeds it: the ten areas of `CHECKLIST`, in order. */
+export async function seedExtraTypes() {
+  await prisma.extraType.createMany({
+    data: CHECKLIST.map(([key, labelFa, labelEn], position) => ({ key, labelFa, labelEn, position })),
+    skipDuplicates: true,
+  });
 }
 
 export type Fixture = Awaited<ReturnType<typeof seedFixture>>;

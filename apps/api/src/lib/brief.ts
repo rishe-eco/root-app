@@ -218,6 +218,7 @@ export type BriefMissingCode =
   | 'PREMADE_ROUNDS'
   | 'MOCKUP_ITERATIONS'
   | 'DEMO_ITERATIONS'
+  | 'COMMITMENT_UNDECIDED'
   | 'COMMITMENT_UNDATED';
 
 /** One thing the PHASES step still lacks (DX2a). Same shape as `BriefMissing`,
@@ -240,6 +241,10 @@ export type BriefForCompleteness = {
 
 /** A handover item as completeness reads it. */
 export type HandoverFacts = { key: string; inBrief: boolean; side: DependencySide | null; dueAt: Date | null; notNeeded: boolean };
+
+/** DX6: a row in the brief that nobody has decided: no side, and not marked not needed. Before the contract can go out
+ *  every dependency says who provides it (or that it is not needed). */
+export const handoverUndecided = (item: HandoverFacts): boolean => item.inBrief && item.side === null && !item.notNeeded;
 
 /** Someone provides it, and nobody has said by when. */
 export const handoverUndated = (item: HandoverFacts): boolean =>
@@ -290,7 +295,8 @@ export function briefCompleteness(input: {
     if (brief.demoIterationsPerPhase === null) add('DEMO_ITERATIONS');
 
     for (const item of input.handover) {
-      if (handoverUndated(item)) add('COMMITMENT_UNDATED', item.key);
+      if (handoverUndecided(item)) add('COMMITMENT_UNDECIDED', item.key);
+      else if (handoverUndated(item)) add('COMMITMENT_UNDATED', item.key);
     }
   }
   return missing;
@@ -428,7 +434,7 @@ export function checkBriefInput(input: {
     return 'INVALID_SUPPORT_MONTHS';
   }
   for (const n of input.allowances) {
-    if (n !== null && (!Number.isInteger(n) || n < 1 || n > ALLOWANCE_MAX)) return 'INVALID_ALLOWANCE';
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > ALLOWANCE_MAX)) return 'INVALID_ALLOWANCE';
   }
   return null;
 }

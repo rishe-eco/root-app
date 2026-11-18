@@ -51,6 +51,7 @@ import TemplateTypesTab from '@/desk/templates/TypesTab';
 import TemplateScopeTab from '@/desk/templates/ScopeTab';
 import TemplateThemesTab from '@/desk/templates/ThemesTab';
 import TemplateHandoverTab from '@/desk/templates/HandoverTab';
+import TemplateExtrasTab from '@/desk/templates/ExtrasTab';
 import ContractWorkspace, { LegacyTab, WorkspaceIndex } from '@/desk/workspace/ContractWorkspace';
 import WorkspaceStepsTab from '@/desk/workspace/StepsTab';
 import WorkspaceNotesTab from '@/desk/workspace/NotesTab';
@@ -184,6 +185,7 @@ export default function App() {
             <Route path="scope" element={<TemplateScopeTab />} />
             <Route path="themes" element={<TemplateThemesTab />} />
             <Route path="handover" element={<TemplateHandoverTab />} />
+            <Route path="extras" element={<TemplateExtrasTab />} />
           </Route>
           <Route path="apiTokens" element={<ApiTokens />} />
         </Route>

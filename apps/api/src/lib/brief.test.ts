@@ -9,6 +9,7 @@ import {
   EXTRA_COMMITMENT_KEYS,
   EXISTING_SITE_PRESET,
   handoverUndated,
+  handoverUndecided,
   presetApplies,
   briefCompleteness,
   planCompleteness,
@@ -243,16 +244,19 @@ test('briefCompleteness: the allowance a design path counts against is the one r
   assert.deepEqual(codes({ brief: complete({ designTier: 'NONE', premadeRounds: null, mockupIterations: null }) }), []);
 });
 
-test('briefCompleteness (DX3a): nobody has to say who provides the domain, the host or the content — each is optional', () => {
+test('briefCompleteness (DX6): every item in the brief is decided — a side or not needed (COMMITMENT_UNDECIDED)', () => {
   const undecided = [item('domain', null, null), item('host', null, null), item('content', null, null)];
-  assert.deepEqual(codes({ handover: undecided }), []);
+  assert.deepEqual(codes({ handover: undecided }), ['COMMITMENT_UNDECIDED:domain', 'COMMITMENT_UNDECIDED:host', 'COMMITMENT_UNDECIDED:content']);
   assert.deepEqual(codes({ handover: [] }), []);
+  assert.deepEqual(codes({ handover: [item('host', null, null, { notNeeded: true })] }), [], 'not needed is a decision');
+  assert.deepEqual(codes({ handover: [item('x', null, null, { inBrief: false })] }), [], 'a board-only row is the board’s business');
+  assert.equal(handoverUndecided(item('x', null, null)), true);
+  assert.equal(handoverUndecided(item('x', 'ROOT', null)), false);
 });
 
-test('briefCompleteness: an item someone provides needs a date (COMMITMENT_UNDATED) — not one marked not needed, not an undecided one', () => {
+test('briefCompleteness: an item someone provides needs a date (COMMITMENT_UNDATED) — not one marked not needed', () => {
   assert.deepEqual(codes({ handover: [item('domain', 'CUSTOMER', d(10)), item('host', 'ROOT', null)] }), ['COMMITMENT_UNDATED:host']);
   assert.deepEqual(codes({ handover: [item('host', 'ROOT', null, { notNeeded: true })] }), []);
-  assert.deepEqual(codes({ handover: [item('host', null, null)] }), []);
   // A one-off is named by its id, and an extra by its key.
   assert.deepEqual(codes({ handover: [item('dep-123', 'CUSTOMER', null), item('gateway', 'CUSTOMER', null)] }), [
     'COMMITMENT_UNDATED:dep-123',
@@ -331,7 +335,8 @@ test('checkBriefInput: each refusal, and the first one in form order wins', () =
   assert.equal(checkBriefInput(input({ supportMonths: -1 })), 'INVALID_SUPPORT_MONTHS');
   assert.equal(checkBriefInput(input({ supportMonths: 121 })), 'INVALID_SUPPORT_MONTHS');
   assert.equal(checkBriefInput(input({ supportMonths: 1.5 })), 'INVALID_SUPPORT_MONTHS');
-  assert.equal(checkBriefInput(input({ allowances: [0, 2, null, null] })), 'INVALID_ALLOWANCE');
+  assert.equal(checkBriefInput(input({ allowances: [-1, 2, null, null] })), 'INVALID_ALLOWANCE');
+  assert.equal(checkBriefInput(input({ allowances: [0, 0, 0, 0] })), null, 'DX6: zero rounds is a valid count');
   assert.equal(checkBriefInput(input({ allowances: [null, 2, 101, null] })), 'INVALID_ALLOWANCE');
   // Site url is asked before the budget in the form, so it is reported first.
   assert.equal(checkBriefInput(input({ existingSiteUrl: 'x', budgetCap: '0' })), 'INVALID_SITE_URL');

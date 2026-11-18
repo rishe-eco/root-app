@@ -38,6 +38,7 @@ import { reviewThreadFields, reviewThreadMutations } from './reviewThreads.js';
 import { apiTokenMutations, apiTokenQueries } from './apiTokens.js';
 import { templateMutations, templateQueries } from './templates.js';
 import { handoverTypeMutations, handoverTypeQueries } from './handoverTypes.js';
+import { extraTypeMutations, extraTypeQueries } from './extraTypes.js';
 import { Theme, themeMutations, themeQueries } from './themes.js';
 import { Request, requestMutations, requestQueries } from './requests.js';
 import { peopleMutations, peopleQueries } from './people.js';
@@ -159,6 +160,7 @@ export const resolvers = {
     // holding either (or contracts.author) reads — see resolvers/templates.ts.
     ...templateQueries,
     ...handoverTypeQueries,
+    ...extraTypeQueries,
     // journeys build plan T2: the theme catalogue, same readers as the types.
     ...themeQueries,
     // journeys build plan J2: myRequests is ownership-gated, allRequests is
@@ -208,6 +210,7 @@ export const resolvers = {
     ...apiTokenMutations,
     ...templateMutations,
     ...handoverTypeMutations,
+    ...extraTypeMutations,
     // journeys build plan T2: templates.types writes — see resolvers/themes.ts.
     ...themeMutations,
     // journeys build plan J2: submitRequest/postRequestMessage are

@@ -21,7 +21,14 @@ export function slugOf(label: string): string {
  *
  * A sibling dialog, never nested in the brief's `<form>`.
  */
-export default function NewSiteTypeModal({ onClose, onCreated }: { onClose: () => void; onCreated: (typeId: string) => void }) {
+export default function NewSiteTypeModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  /** The type that was made, whole: the caller can select it before its list has caught up (DX6). */
+  onCreated: (type: { id: string; labelFa: string; labelEn: string }) => void;
+}) {
   const { t } = useTranslation();
   const [labelFa, setLabelFa] = useState('');
   const [labelEn, setLabelEn] = useState('');
@@ -46,7 +53,7 @@ export default function NewSiteTypeModal({ onClose, onCreated }: { onClose: () =
     setError(null);
     try {
       const res = await create({ variables: { slug, labelFa: labelFa.trim(), labelEn: labelEn.trim() } });
-      onCreated((res.data.createTemplateType as { id: string }).id);
+      onCreated(res.data.createTemplateType as { id: string; labelFa: string; labelEn: string });
       onClose();
     } catch (err) {
       setError(refusalMessage(t, err));

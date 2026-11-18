@@ -118,7 +118,7 @@ const BRIEF_INPUT = {
   kind: 'NEW_SITE',
   templateTypeId: '',
   designTier: 'THEME_PICK',
-  budgetCap: '150000000',
+  budgetCap: '180000000',
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
   supportMonths: 6,
@@ -723,7 +723,7 @@ test('a format-2 snapshot carries steps 1 and 2, and its hash is stable across t
     assert.ok(key in snapshot, key);
   }
   const brief = snapshot.brief as { budgetCap: string; templateType: { slug: string }; hardDeadline: string };
-  assert.deepEqual([brief.budgetCap, brief.templateType.slug, brief.hardDeadline], ['150000000', 'store', onDay('2026-10-23')]);
+  assert.deepEqual([brief.budgetCap, brief.templateType.slug, brief.hardDeadline], ['180000000', 'store', onDay('2026-10-23')]);
   assert.deepEqual(snapshot.allowances, { premadeRounds: 2, wireframeIterations: 2, mockupIterations: null, demoIterationsPerPhase: 2 });
   assert.deepEqual([snapshot.plannedStartAt, snapshot.plannedEndAt], [onDay('2026-10-12'), onDay('2026-12-20')]);
   const plan = snapshot.paymentPlan as { invoices: Array<{ amount: string; phaseNumber: number | null }> };
@@ -859,7 +859,7 @@ test('trap 1: the customer receives the sensitive bodies, the budget cap and the
   const fees = customer.articles.find((a) => a.number === 4)!;
   assert.deepEqual([fees.sensitive, fees.bodyEn], [true, 'The fee is 180,000,000 Toman'], 'the customer reads the body they sign');
   assert.equal(customer.revision.amount, '180000000');
-  assert.equal(customer.revision.agreement.brief.budgetCap, '150000000');
+  assert.equal(customer.revision.agreement.brief.budgetCap, '180000000');
   assert.deepEqual([customer.revision.agreement.paymentPlan?.total, customer.revision.agreement.paymentPlan?.invoices.length], ['180000000', 2]);
 
   const designer = await read(staff.DESIGNER);

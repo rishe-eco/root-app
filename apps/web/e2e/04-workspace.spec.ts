@@ -114,11 +114,11 @@ test('a contract goes from nothing to signed, then an amendment to signature', a
   await expect(page.getByRole('heading', { name: 'Amendments' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Issue amendment' }).click();
-  const amendForm = page.locator('form').filter({ has: page.locator('textarea[name="bodyFa"]') });
+  const amendForm = page.getByTestId('amendment-add');
   await fillTitle(amendForm, 'new-amendment', 'new-amendment-title', 'الحاقیه یک', 'Amendment One');
-  await amendForm.locator('textarea[name="bodyFa"]').fill('متنِ الحاقیه.');
-  await amendForm.locator('textarea[name="bodyEn"]').fill('The amendment text.');
-  await amendForm.getByRole('button', { name: 'Save' }).click();
+  await amendForm.locator('#new-amendment-body-fa').fill('متنِ الحاقیه.');
+  await amendForm.locator('#new-amendment-body-en').fill('The amendment text.');
+  await amendForm.getByRole('button', { name: 'Add', exact: true }).click();
 
   await expect(page.getByText('A1')).toBeVisible();
   await page.getByRole('button', { name: 'Publish', exact: true }).click();

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '@/lib/locale';
@@ -10,14 +10,15 @@ import { useAutosave } from '@/lib/useAutosave';
 import { hasOneTitle } from '@/lib/titleScript';
 import DayInput from '@/components/DayInput';
 import PillChoice from '@/components/PillChoice';
+import InlineAdd from '@/components/InlineAdd';
 import { choiceOf, handoverPatch, instantOf, type HandoverChoice } from '@/lib/brief';
 import { CREATE_DEPENDENCY, DELETE_DEPENDENCY, UPDATE_DEPENDENCY, type Contract, type Dependency } from '@/lib/queries';
 
 /**
  * Requirements' "Who provides what, by when" (DX3a, desk UX review 6–8, decision
  * log row 15): one row per handover item — the item, then who as pills (Root ·
- * Customer · Not needed, every one optional, a second press clears it), then a
- * due date, then remove (one-off rows only).
+ * Customer · Not needed, a second press clears it), then a due date, then remove
+ * (one-off rows only).
  *
  * **These are the Dependencies tab's rows, not a copy of them.** Every row here
  * is a `Dependency` with `inBrief` (`Contract.handover`), and Save writes it
@@ -29,9 +30,10 @@ import { CREATE_DEPENDENCY, DELETE_DEPENDENCY, UPDATE_DEPENDENCY, type Contract,
  * **The pills are one choice, not two fields.** The record has a side and a
  * not-needed flag; the panel shows the flag when it is set and the side
  * otherwise, and each press sets both (Not needed clears the side, Root or
- * Customer clears the flag). A row with neither is undecided, which is a
- * complete state: nobody has to name a provider, and a date is only asked of a
- * row someone provides (`briefCompleteness`).
+ * Customer clears the flag). **DX6:** a row with neither is *undecided*, and that
+ * is a gap (`COMMITMENT_UNDECIDED`) — before signing, every dependency says who
+ * provides it and by when, or that it is not needed. A date is asked of a row
+ * someone provides, not of one marked not needed (`briefCompleteness`).
  *
  * **DX4 (review 27): saved when a field is left**, like the brief above it, with
  * no Save button; a row added here is created at once, since adding is an act.
@@ -52,7 +54,6 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
   const locale = useLocale();
   const rows = contract.handover ?? [];
   const [edits, setEdits] = useState<Record<string, RowState>>({});
-  const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState({ fa: '', en: '' });
   // Founder walk 2026-11-18: a new item takes its who and its when as it is added, not in a second pass.
   const [newChoice, setNewChoice] = useState<Choice | null>(null);
@@ -109,29 +110,25 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
     }
   }
 
-  async function onAdd(e: FormEvent) {
-    e.preventDefault();
-    if (!hasOneTitle(newTitle.fa, newTitle.en)) return;
-    setError(null);
-    try {
-      await create({
-        variables: {
-          projectId: contract.project.id,
-          titleFa: newTitle.fa.trim(),
-          titleEn: newTitle.en.trim(),
-          ...handoverPatch(newChoice),
-          dueAt: newChoice === 'NOT_NEEDED' ? null : instantOf(newDue),
-          contractId: contract.id,
-        },
-      });
-      setNewTitle({ fa: '', en: '' });
-      setNewChoice(null);
-      setNewDue('');
-      setAdding(false);
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
+  /** The new item, through `createDependency` (rejects with the refusal, which `InlineAdd` shows under its buttons). */
+  async function onAdd() {
+    await create({
+      variables: {
+        projectId: contract.project.id,
+        titleFa: newTitle.fa.trim(),
+        titleEn: newTitle.en.trim(),
+        ...handoverPatch(newChoice),
+        dueAt: newChoice === 'NOT_NEEDED' ? null : instantOf(newDue),
+        contractId: contract.id,
+      },
+    });
+    resetNew();
   }
+  const resetNew = () => {
+    setNewTitle({ fa: '', en: '' });
+    setNewChoice(null);
+    setNewDue('');
+  };
 
   const pills = (what: string, id: string, value: Choice | null, onChange: (next: Choice | null) => void) => (
     <PillChoice<Choice>
@@ -150,14 +147,7 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
   );
 
   return (
-    <form
-      className="card editor-card auth-form"
-      onSubmit={(e) => e.preventDefault()}
-      onBlur={(e) => {
-        if (e.currentTarget.checkValidity()) autosave.onBlur();
-      }}
-      data-testid="handover-form"
-    >
+    <div className="card editor-card" data-testid="handover-card">
       <SectionHead title={t('brief.handover.title')} help={t('brief.handover.help')} />
       {locked ? <p className="t-small">{t('brief.handover.locked')}</p> : null}
 
@@ -167,46 +157,67 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
         </p>
       ) : null}
 
-      <div className="handover-list">
-        {rows.map((d) => {
-          const s = current(d);
-          const id = d.briefKey ?? d.id;
-          const what = pick(d, 'title', locale);
-          return (
-            <div className="handover-row" key={d.id} data-testid="handover-row" data-key={id}>
-              <p className="handover-item">{what}</p>
-              <div className="handover-who">
-                <span className="label" aria-hidden="true">{t('brief.handover.whoLabel')}</span>
-                {pills(what, id, s.choice, (choice) => choose(d, choice))}
+      <form
+        className="auth-form"
+        onSubmit={(e) => e.preventDefault()}
+        onBlur={(e) => {
+          if (e.currentTarget.checkValidity()) autosave.onBlur();
+        }}
+        data-testid="handover-form"
+      >
+        <div className="handover-list">
+          {rows.map((d) => {
+            const s = current(d);
+            const id = d.briefKey ?? d.id;
+            const what = pick(d, 'title', locale);
+            return (
+              <div className="handover-row" key={d.id} data-testid="handover-row" data-key={id}>
+                <p className="handover-item">{what}</p>
+                <div className="handover-who">
+                  <span className="label" aria-hidden="true">{t('brief.handover.whoLabel')}</span>
+                  {pills(what, id, s.choice, (choice) => choose(d, choice))}
+                </div>
+                <div className="handover-due">
+                  <span className="label" aria-hidden="true">{t('brief.handover.dueLabel')}</span>
+                  <DayInput
+                    value={s.choice === 'NOT_NEEDED' ? '' : s.due}
+                    onChange={(due) => setRow(d.id, stateOf(d), { due })}
+                    label={t('brief.handover.due', { what })}
+                    disabled={locked || s.choice === 'NOT_NEEDED'}
+                    testId={`handover-due-${id}`}
+                  />
+                </div>
+                {d.briefKey === null && !locked ? (
+                  <button
+                    className="btn btn-ghost btn-sm handover-remove"
+                    type="button"
+                    aria-label={t('brief.handover.removeWhat', { what })}
+                    onClick={() => onRemove(d)}
+                    data-testid={`handover-remove-${id}`}
+                  >
+                    {t('brief.handover.remove')}
+                  </button>
+                ) : null}
               </div>
-              <div className="handover-due">
-                <span className="label" aria-hidden="true">{t('brief.handover.dueLabel')}</span>
-                <DayInput
-                  value={s.choice === 'NOT_NEEDED' ? '' : s.due}
-                  onChange={(due) => setRow(d.id, stateOf(d), { due })}
-                  label={t('brief.handover.due', { what })}
-                  disabled={locked || s.choice === 'NOT_NEEDED'}
-                  testId={`handover-due-${id}`}
-                />
-              </div>
-              {d.briefKey === null && !locked ? (
-                <button
-                  className="btn btn-ghost btn-sm handover-remove"
-                  type="button"
-                  aria-label={t('brief.handover.removeWhat', { what })}
-                  onClick={() => onRemove(d)}
-                  data-testid={`handover-remove-${id}`}
-                >
-                  {t('brief.handover.remove')}
-                </button>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+        {locked ? null : <AutosaveNote autosave={autosave} testId="handover-autosave" />}
+      </form>
 
-      {locked ? null : adding ? (
-        <div className="handover-add" data-testid="handover-add-form">
+      {/* DX6: the desk's one way to add (`InlineAdd`), a sibling of the rows' form — a form never nests in a form. */}
+      {locked ? null : (
+        <InlineAdd
+          label={t('brief.handover.add')}
+          submitLabel={t('brief.handover.addConfirm')}
+          testId="handover-add"
+          ready={hasOneTitle(newTitle.fa, newTitle.en)}
+          busy={creating}
+          onSubmit={onAdd}
+          onCancel={resetNew}
+          errorText={(err) => refusalText(t, err)}
+          buttonClassName="btn btn-ghost btn-sm"
+        >
           <p className="t-eyebrow">{t('brief.handover.addTitle')}</p>
           <TitleField idBase="handover-new" testId="handover-new-title" fa={newTitle.fa} en={newTitle.en} onChange={setNewTitle} />
           <div className="handover-who">
@@ -226,21 +237,7 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
               testId="handover-due-new"
             />
           </div>
-          <div className="editor-card-actions">
-            <button className="btn btn-secondary btn-sm" type="button" disabled={creating || !hasOneTitle(newTitle.fa, newTitle.en)} onClick={onAdd} data-testid="handover-add-confirm">
-              {t('brief.handover.addConfirm')}
-            </button>
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding(false)}>
-              {t('brief.handover.cancel')}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding(true)} data-testid="handover-add">
-            {t('brief.handover.add')}
-          </button>
-        </div>
+        </InlineAdd>
       )}
 
       {error ? (
@@ -248,7 +245,6 @@ export default function HandoverPanel({ contract, locked = false }: { contract: 
           {error}
         </p>
       ) : null}
-      {locked ? null : <AutosaveNote autosave={autosave} testId="handover-autosave" />}
-    </form>
+    </div>
   );
 }

@@ -82,7 +82,7 @@ const briefInput = (over: Record<string, unknown> = {}) => ({
   kind: 'NEW_SITE',
   templateTypeId: typeId,
   designTier: 'THEME_PICK',
-  budgetCap: '150000000',
+  budgetCap: '180000000',
   hardDeadline: onDay('2026-10-23'),
   supportMonths: 6,
   premadeRounds: 2,
@@ -164,7 +164,7 @@ test('a new brief makes an inBrief row for every active default item; a second s
   );
   await setBriefOk({ budgetCap: '1' });
   assert.equal((await board()).length, 2);
-  assert.deepEqual(view.briefCompleteness, [], 'an undecided, undated list is complete: each provider is optional');
+  assert.deepEqual(view.briefCompleteness, [{ code: 'COMMITMENT_UNDECIDED', key: 'domain' }, { code: 'COMMITMENT_UNDECIDED', key: 'host' }], 'DX6: an undecided item is a gap — before signing every dependency says who provides it, or that it is not needed');
 });
 
 test('Requirements’ list and the Dependencies tab are the same rows: an edit from either shows in both; an item added before the lock is in both', async () => {
@@ -189,7 +189,7 @@ test('Requirements’ list and the Dependencies tab are the same rows: an edit f
 
   // …and one with a side and a date stays complete; clearing it is allowed while the step is open.
   ok(await update({ d: logo.id, side: 'CUSTOMER', due }));
-  assert.deepEqual((await read(staff.SALES)).briefCompleteness, []);
+  assert.ok(!(await read(staff.SALES)).briefCompleteness.some((m) => m.key === logo.id), 'the one-off is decided and dated; the keyed rows are still undecided');
   ok(await update({ d: logo.id, side: null, due: null }));
   // A one-off can be removed from Requirements; a keyed row cannot (BRIEF_OWNED) — mark it not needed.
   ok(await exec(DELETE_DEP, { as: staff.SALES, variables: { d: logo.id, c: f.contract.id } }));

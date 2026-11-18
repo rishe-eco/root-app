@@ -125,7 +125,7 @@ test('the customer reads, approves and signs the agreement, in English — steps
   await page.goto(`/en/desk/contracts/${contractId}/contract`);
   await expect(page.getByTestId('contract-locked-note')).toContainText('Locked on');
   await expect(page.getByRole('button', { name: 'Publish revision' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Add article' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Add article' })).toHaveCount(0); // DX6: a locked draft draws no add at all
 });
 
 test('the same, in Persian: right-to-left, translated, and locked', async ({ page }) => {

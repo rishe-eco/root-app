@@ -12,14 +12,13 @@ import { scopeSeeded, seedRows } from '../../../lib/scopeProposals.js';
 import {
   ARTICLES,
   SCOPE,
-  CHECKLIST,
   isPaymentScheduleArticle,
   isTemplateSensitiveArticle,
   partiesFor,
   renderArticleBody,
 } from '../../../lib/templates.js';
 import { contractInclude, loadForActor, log, nudgeStatus, reload, type FullContract } from '../contracts.js';
-import { assertStepOpenOn } from '../wizard.js';
+import { assertStepOpenOn, isStepOpenOn } from '../wizard.js';
 import { publishContentRefusals, refusalError } from '../publishGate.js';
 import { asConcurrentPublish } from './shared.js';
 import { notify } from '../../../lib/notify.js';
@@ -206,8 +205,10 @@ export const contractAdminMutations = {
         // its agreement from birth (T1's `ScopeItem.contractId`) — rather than
         // a follow-up `updateMany where contractId is null`, which on a
         // project that already held a proposed item would claim that too.
+        // DX6: the desk's default list of extras (`ExtraType`), the active rows.
+        const extras = await tx.extraType.findMany({ where: { active: true }, orderBy: [{ position: 'asc' }, { key: 'asc' }] });
         await tx.scopeItem.createMany({
-          data: CHECKLIST.map(([key, labelFa, labelEn], position) => ({
+          data: extras.map(({ key, labelFa, labelEn }, position) => ({
             projectId,
             key,
             labelFa,
@@ -357,8 +358,9 @@ export const contractAdminMutations = {
           if (mapped.length > 0) await setItemPhases(tx, made.id, mapped);
         }
         // As createContract seeds it, after the copied rows so the order reads scope first.
+        const extras = await tx.extraType.findMany({ where: { active: true }, orderBy: [{ position: 'asc' }, { key: 'asc' }] });
         await tx.scopeItem.createMany({
-          data: CHECKLIST.map(([key, labelFa, labelEn], i) => ({
+          data: extras.map(({ key, labelFa, labelEn }, i) => ({
             projectId: project.id,
             key,
             labelFa,
@@ -575,14 +577,16 @@ export const contractAdminMutations = {
     await prisma.$transaction(async (tx) => {
       await lockContract(tx, args.contractId);
       await assertStepOpenOn(args.contractId, 'DRAFT', null, tx);
+      const amount = args.amount ? BigInt(args.amount) : null;
       await tx.contract.update({
         where: { id: args.contractId },
-        data: {
-          titleFa: title.fa,
-          titleEn: title.en,
-          amount: args.amount ? BigInt(args.amount) : null,
-        },
+        data: { titleFa: title.fa, titleEn: title.en, amount },
       });
+      // DX6: the fee and the brief's budget are one number. A fee saved here is the brief's budget too when there is a
+      // brief and Requirements is still open; if that step is locked, only the fee is written. No fee leaves the budget.
+      if (amount !== null && (await isStepOpenOn(args.contractId, 'REQUIREMENTS', tx))) {
+        await tx.contractBrief.updateMany({ where: { contractId: args.contractId }, data: { budgetCap: amount } });
+      }
     });
     return reload(args.contractId);
   },

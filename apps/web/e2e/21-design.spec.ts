@@ -186,6 +186,7 @@ test.describe('custom', () => {
     await expect(row.locator('.thumb img')).toBeVisible();
 
     // A colour and a typeface.
+    await page.getByTestId('palette-add-open').click();
     await page.getByTestId('palette-kind').selectOption('COLOR');
     await page.getByTestId('palette-role').fill('primary');
     await page.getByTestId('palette-new-value').fill('#1F3A5C');
@@ -194,12 +195,13 @@ test.describe('custom', () => {
     await page.getByTestId('palette-add-submit').click();
     await expect(page.getByTestId('palette-row')).toHaveCount(1);
     // An invalid colour is refused in words.
+    await page.getByTestId('palette-add-open').click();
     await page.getByTestId('palette-role').fill('accent');
     await page.getByTestId('palette-new-value').fill('blue');
     await page.getByTestId('palette-label-fa').fill('رنگ');
     await page.getByTestId('palette-label-en').fill('Accent');
     await page.getByTestId('palette-add-submit').click();
-    await expect(page.getByTestId('palette-add').getByTestId('design-error')).toContainText('A colour is a hex');
+    await expect(page.getByTestId('palette-add-error')).toContainText('A colour is a hex');
     await page.getByTestId('palette-kind').selectOption('FONT');
     await page.getByTestId('palette-role').fill('heading');
     await page.getByTestId('palette-new-value').fill('Vazirmatn');
