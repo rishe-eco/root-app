@@ -2580,7 +2580,8 @@
       }
     },
     "handover": {
-      "title": "Who provides what, by when",
+      "title": "Dependencies",
+      "aside": "who provides what, by when",
       "help": "One row for each thing the project needs handed over. Choose who provides it — or that it is not needed — and a due date. All of it is optional. These are the same rows as the Dependencies tab.",
       "side": {
         "ROOT": "Root",

@@ -597,3 +597,6 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
   .stepper-count-btn { min-inline-size: 2rem; }
   .stepper-count-value { min-inline-size: 1.5rem; }
 }
+
+/* Founder walk 2026-11-18: a muted gloss beside an accordion's title ("Dependencies (who provides what, by when)"). */
+.req-acc-aside { font-size: var(--text-small); font-weight: var(--weight-regular); color: var(--color-text-subtle); }

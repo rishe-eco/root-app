@@ -40,6 +40,7 @@ export function SectionHead({ title, help }: { title: string; help?: string }) {
 export function Accordion({
   id,
   title,
+  aside,
   open,
   onToggle,
   missing,
@@ -47,6 +48,8 @@ export function Accordion({
 }: {
   id: string;
   title: string;
+  /** A muted gloss beside the title, e.g. what "Dependencies" means here (founder walk 2026-11-18). */
+  aside?: string;
   open: boolean;
   onToggle: () => void;
   /** How many things this panel still lacks; 0 says "Complete". Null for a panel the completeness list says nothing about. */
@@ -60,7 +63,10 @@ export function Accordion({
     <section className="req-acc" data-testid={`acc-${id}`} data-open={open ? 'true' : 'false'}>
       <h4 className="req-acc-title">
         <button type="button" className="req-acc-head" aria-expanded={open} aria-controls={body} onClick={onToggle}>
-          <span className="req-acc-name">{title}</span>
+          <span className="req-acc-name">
+            {title}
+            {aside ? <span className="req-acc-aside"> ({aside})</span> : null}
+          </span>
           {missing === null ? null : (
             <span className={`req-acc-state${missing > 0 ? ' req-acc-missing' : ''}`} data-missing={missing}>
               {missing > 0 ? t('brief.accordion.missing', { count: missing, n: formatCount(missing, locale) }) : t('brief.accordion.complete')}

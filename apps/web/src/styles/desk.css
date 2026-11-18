@@ -159,6 +159,8 @@
 .workspace-tab-active { color: var(--color-text); border-block-end-color: var(--color-accent); font-weight: var(--weight-semibold); }
 
 .workspace-panel { display: flex; flex-direction: column; gap: var(--space-6); }
+/* Founder walk 2026-11-18: the boxes in every tab stand on the same lighter ground as the status box above them. */
+.workspace-panel .card { background: var(--color-raised); }
 
 .workspace-row {
   display: flex;
