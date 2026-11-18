@@ -124,6 +124,9 @@ test('a drafting contract: PHASES sits between SCOPE and DRAFT, and is done exac
 
   // The brief's list no longer names the phases or the plan.
   ok(await setBrief());
+  // DX6: every dependency in the brief is decided before the step is done.
+  assert.deepEqual((await read()).briefCompleteness.map((m) => m.code), ['COMMITMENT_UNDECIDED', 'COMMITMENT_UNDECIDED', 'COMMITMENT_UNDECIDED']);
+  await prisma.dependency.updateMany({ where: { inBrief: true }, data: { notNeeded: true } });
   const brief = await read();
   assert.deepEqual(brief.briefCompleteness, []);
   assert.equal(rowOf(brief, 'REQUIREMENTS').status, 'DONE');

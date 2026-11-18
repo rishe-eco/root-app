@@ -286,6 +286,8 @@ test('a contract typed in one language per row publishes, is approved and signed
   );
   ok(await sales('mutation($p: ID!, $fa: String!, $en: String!, $c: ID){ createDependency(projectId: $p, titleFa: $fa, titleEn: $en, contractId: $c) { id } }', { p: f.contract.projectId, fa: 'متن صفحه‌ها', en: '', c: f.contract.id }));
   ok(await sales(SET_DATES, { c: f.contract.id, s: onDay('2026-10-12'), e: onDay('2026-12-20') }));
+  // DX6: every dependency in the brief is decided before the contract goes out.
+  await prisma.dependency.updateMany({ where: { inBrief: true }, data: { notNeeded: true } });
   const ADD = 'mutation($c: ID!, $fa: String!, $en: String!){ addScopeItem(contractId: $c, labelFa: $fa, labelEn: $en, kind: PAGE) { id } }';
   ok(await sales(ADD, { c: f.contract.id, fa: '', en: 'Home page' }));
   ok(await sales(ADD, { c: f.contract.id, fa: 'درباره‌ی ما', en: '' }));

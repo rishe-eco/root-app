@@ -456,17 +456,26 @@ test('who provides what is edited on the row — flipping a side or a date chang
   assert.deepEqual([cleared.side, cleared.dueAt], [null, null]);
 });
 
-test('an item someone provides without a date is COMMITMENT_UNDATED; undecided or not needed owes none (DX3a — nobody must name a provider)', async () => {
+test('an item someone provides without a date is COMMITMENT_UNDATED; not needed owes none; an undecided one is COMMITMENT_UNDECIDED (DX6)', async () => {
   const c = await setBriefOk();
-  assert.equal(c.briefCompleteness.length, 0, 'a brief with three undecided items is complete — each provider is optional');
+  assert.deepEqual(
+    c.briefCompleteness.map((m) => m.code),
+    ['COMMITMENT_UNDECIDED', 'COMMITMENT_UNDECIDED', 'COMMITMENT_UNDECIDED'],
+    'a brief with three undecided items is not complete — DX6: before signing every dependency is decided',
+  );
 
   const [content, domain, host] = await boardRows();
   ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: domain.id, side: 'CUSTOMER' } }));
   ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: host.id, side: 'ROOT', nn: true } }));
   const undated = (await read(staff.SALES)).briefCompleteness;
-  assert.deepEqual(undated, [{ code: 'COMMITMENT_UNDATED', key: 'domain' }], 'a not-needed item owes no date; an undecided one owes none');
+  assert.deepEqual(
+    undated.map((m) => `${m.code}:${m.key}`).sort(),
+    ['COMMITMENT_UNDATED:domain', 'COMMITMENT_UNDECIDED:content'],
+    'a not-needed item owes no date; an undecided one owes a decision, not a date',
+  );
 
   ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: domain.id, due: iso(onDay('2026-10-05')) } }));
+  ok(await exec(UPDATE_DEP, { as: staff.SALES, variables: { d: content.id, nn: true } }));
   assert.deepEqual((await read(staff.SALES)).briefCompleteness, []);
   assert.ok(content);
 });
@@ -522,7 +531,7 @@ test('setBrief refuses, each with its own code, and writes nothing', async () =>
     ['ideal after hard', { idealDeadline: onDay('2026-11-01'), hardDeadline: onDay('2026-10-01') }, 'DEADLINES_OUT_OF_ORDER'],
     ['an existing site that is not a url', { kind: 'FEATURE_FOR_EXISTING', existingSiteUrl: 'nahal' }, 'INVALID_SITE_URL'],
     ['negative support', { supportMonths: -1 }, 'INVALID_SUPPORT_MONTHS'],
-    ['a zero allowance', { premadeRounds: 0 }, 'INVALID_ALLOWANCE'],
+    ['a negative allowance', { premadeRounds: -1 }, 'INVALID_ALLOWANCE'],
     ['a commitment date that is not a day', { commitments: [{ key: 'gateway', dueAt: '5 Aban' }] }, 'INVALID_DATE'],
     ['a type that does not exist', { templateTypeId: 'nope' }, 'NOT_FOUND'],
   ];
