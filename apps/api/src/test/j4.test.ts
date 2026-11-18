@@ -1110,6 +1110,9 @@ test('REQUIREMENTS is done exactly when briefCompleteness is empty, PHASES exact
   assert.equal(start.briefCompleteness.length > 0, true);
 
   await setBriefOk();
+  // DX6: the brief's dependencies are decided first (the three default rows are undecided).
+  assert.equal((await read(staff.SALES)).briefCompleteness.every((m) => m.code === 'COMMITMENT_UNDECIDED'), true);
+  await prisma.dependency.updateMany({ where: { inBrief: true }, data: { notNeeded: true } });
   // The brief is complete: REQUIREMENTS is done on the brief alone, before any phase or plan exists.
   const briefDone = await read(staff.SALES);
   assert.deepEqual(briefDone.briefCompleteness, []);
