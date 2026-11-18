@@ -82,7 +82,7 @@ const briefInput = (over: Record<string, unknown> = {}) => ({
   kind: 'NEW_SITE',
   templateTypeId: typeId,
   designTier: 'THEME_PICK',
-  budgetCap: '150000000',
+  budgetCap: '180000000',
   hardDeadline: onDay('2026-10-23'),
   supportMonths: 6,
   premadeRounds: 2,

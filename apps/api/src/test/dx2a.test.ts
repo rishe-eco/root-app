@@ -92,7 +92,7 @@ const briefInput = (tier: string) => ({
   kind: 'NEW_SITE',
   templateTypeId: type.id,
   designTier: tier,
-  budgetCap: '150000000',
+  budgetCap: '180000000',
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
   supportMonths: 6,

@@ -114,7 +114,7 @@ const BRIEF_INPUT = {
   kind: 'NEW_SITE',
   templateTypeId: '',
   designTier: 'SENIOR_DESIGNER',
-  budgetCap: '150000000',
+  budgetCap: '180000000',
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
   supportMonths: 6,

@@ -113,7 +113,7 @@ const briefInput = (over: Record<string, unknown> = {}) => ({
   kind: 'NEW_SITE',
   templateTypeId: type.id,
   designTier: 'THEME_PICK',
-  budgetCap: '150000000',
+  budgetCap: '180000000',
   idealDeadline: onDay('2026-10-01'),
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
@@ -378,7 +378,7 @@ test('setBrief writes the brief; dates come back as the day they were sent; the 
   assert.equal(c.brief!.kind, 'NEW_SITE');
   assert.equal(c.brief!.designTier, 'THEME_PICK');
   assert.deepEqual(c.brief!.templateType, { id: type.id, slug: 'store' });
-  assert.equal(c.brief!.budgetCap, '150000000');
+  assert.equal(c.brief!.budgetCap, '180000000');
   // A calendar day is midnight UTC on the wire, and a `date` in the table.
   assert.equal(c.brief!.hardDeadline, `${onDay('2026-10-23')}T00:00:00.000Z`);
   assert.equal(c.brief!.idealDeadline, `${onDay('2026-10-01')}T00:00:00.000Z`);
@@ -386,7 +386,8 @@ test('setBrief writes the brief; dates come back as the day they were sent; the 
   assert.equal(row.d, onDay('2026-10-23'));
   assert.equal(c.brief!.wireframeIterations, 2, 'the default');
 
-  // budgetCap is not Contract.amount: nothing prefills or moves one from the other, either way.
+  // DX6 reversed PD-14's "budgetCap is not Contract.amount": the brief's budget and the contract's fee are one number,
+  // each side's save writes the other (dx6.test.ts is the table). The fee here already equals the budget, so nothing moved.
   const after = await prisma.contract.findUniqueOrThrow({ where: { id: f.contract.id } });
   assert.equal(after.amount, before.amount);
   assert.equal(String(before.amount), '180000000');
@@ -396,7 +397,7 @@ test('setBrief writes the brief; dates come back as the day they were sent; the 
       variables: { c: f.contract.id },
     }),
   );
-  assert.equal(((await read(staff.SALES)).brief as { budgetCap: string }).budgetCap, '150000000');
+  assert.equal(((await read(staff.SALES)).brief as { budgetCap: string }).budgetCap, '999', 'the fee saved on the Contract tab is the budget too');
 });
 
 /** The wire's DateTime is a full ISO instant; a calendar day goes as its UTC midnight. */
@@ -813,7 +814,7 @@ test('every money field J4 adds is null for the designer and the developer and p
   const budget = (c: Contract) => (c.brief as { budgetCap: string | null }).budgetCap;
   for (const who of [staff.SALES, f.admin, f.customer]) {
     const c = await read(who);
-    assert.equal(budget(c), '150000000', `budgetCap for ${String(who.email)}`);
+    assert.equal(budget(c), '180000000', `budgetCap for ${String(who.email)}`);
     assert.equal(c.paymentPlan!.total, '180000000', `plan for ${String(who.email)}`);
     assert.equal(c.paymentPlan!.invoices.length, 2);
   }
@@ -827,7 +828,7 @@ test('every money field J4 adds is null for the designer and the developer and p
   }
   // View-as-customer is the customer's own read, through the same rule.
   const asCustomer = await read(staff.SALES, true);
-  assert.deepEqual([budget(asCustomer), asCustomer.paymentPlan?.total], ['150000000', '180000000']);
+  assert.deepEqual([budget(asCustomer), asCustomer.paymentPlan?.total], ['180000000', '180000000']);
   // …and sales viewing as the customer reads what the customer reads, nothing more.
   assert.deepEqual(await read(f.customer), asCustomer);
 });

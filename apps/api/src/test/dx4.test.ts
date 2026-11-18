@@ -271,7 +271,7 @@ test('a contract typed in one language per row publishes, is approved and signed
   ok(await sales(UPDATE, { c: f.contract.id, fa: 'سایت فروشگاهی نهال', en: '', a: '180000000' }));
   const SET = 'mutation($c: ID!, $n: Int!, $fa: String!, $en: String!){ setArticle(contractId: $c, number: $n, titleFa: $fa, titleEn: $en, bodyFa: "ب", bodyEn: "") { id } }';
   ok(await sales(SET, { c: f.contract.id, n: 3, fa: 'ماده‌ی سوم', en: '' }));
-  ok(await sales(SET_BRIEF, { c: f.contract.id, i: { kind: 'NEW_SITE', templateTypeId: type.id, designTier: 'NONE', budgetCap: '150000000', hardDeadline: onDay('2026-10-23'), domainName: 'nahal.ir', supportMonths: 6, demoIterationsPerPhase: 2 } }));
+  ok(await sales(SET_BRIEF, { c: f.contract.id, i: { kind: 'NEW_SITE', templateTypeId: type.id, designTier: 'NONE', budgetCap: '180000000', hardDeadline: onDay('2026-10-23'), domainName: 'nahal.ir', supportMonths: 6, demoIterationsPerPhase: 2 } }));
   const P = 'mutation($c: ID!, $n: Int!, $fa: String!, $en: String!){ createPhase(contractId: $c, number: $n, titleFa: $fa, titleEn: $en, plannedEndAt: "' + onDay('2026-11-10') + '") { id } }';
   ok(await sales(P, { c: f.contract.id, n: 1, fa: 'فاز اول', en: '' }));
   ok(await sales(P, { c: f.contract.id, n: 2, fa: '', en: 'Second phase' }));

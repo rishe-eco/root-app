@@ -115,7 +115,7 @@ const BRIEF_INPUT = {
   kind: 'NEW_SITE',
   templateTypeId: '',
   designTier: 'THEME_PICK',
-  budgetCap: '150000000',
+  budgetCap: '180000000',
   hardDeadline: onDay('2026-10-23'),
   domainName: 'nahal.ir',
   supportMonths: 6,
@@ -740,7 +740,7 @@ test('the money half is the customer’s and sales’ — the designer reads the
     const s = (await summaryAs(who))!;
     assert.equal(s.invoices!.count, 2, who.email ?? '');
     assert.equal(s.agreed.agreement!.paymentPlan!.total, '180000000');
-    assert.equal(s.agreed.agreement!.brief.budgetCap, '150000000');
+    assert.equal(s.agreed.agreement!.brief.budgetCap, '180000000');
   }
   // Before the close: delivered nothing, a support promise with no dates yet.
   const s = (await summaryAs(f.customer))!;
