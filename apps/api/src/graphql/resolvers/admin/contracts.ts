@@ -18,7 +18,7 @@ import {
   renderArticleBody,
 } from '../../../lib/templates.js';
 import { contractInclude, loadForActor, log, nudgeStatus, reload, type FullContract } from '../contracts.js';
-import { assertStepOpenOn } from '../wizard.js';
+import { assertStepOpenOn, isStepOpenOn } from '../wizard.js';
 import { publishContentRefusals, refusalError } from '../publishGate.js';
 import { asConcurrentPublish } from './shared.js';
 import { notify } from '../../../lib/notify.js';
@@ -577,14 +577,16 @@ export const contractAdminMutations = {
     await prisma.$transaction(async (tx) => {
       await lockContract(tx, args.contractId);
       await assertStepOpenOn(args.contractId, 'DRAFT', null, tx);
+      const amount = args.amount ? BigInt(args.amount) : null;
       await tx.contract.update({
         where: { id: args.contractId },
-        data: {
-          titleFa: title.fa,
-          titleEn: title.en,
-          amount: args.amount ? BigInt(args.amount) : null,
-        },
+        data: { titleFa: title.fa, titleEn: title.en, amount },
       });
+      // DX6: the fee and the brief's budget are one number. A fee saved here is the brief's budget too when there is a
+      // brief and Requirements is still open; if that step is locked, only the fee is written. No fee leaves the budget.
+      if (amount !== null && (await isStepOpenOn(args.contractId, 'REQUIREMENTS', tx))) {
+        await tx.contractBrief.updateMany({ where: { contractId: args.contractId }, data: { budgetCap: amount } });
+      }
     });
     return reload(args.contractId);
   },

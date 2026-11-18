@@ -107,6 +107,8 @@ test('rounds: used of allowed, and exhausted exactly when the next publish would
   assert.equal(isExhausted({ used: 3, total: 3 }), true);
   assert.equal(isExhausted({ used: 5, total: 3 }), true);
   assert.equal(isExhausted({ used: 9, total: null }), false, 'no limit set: never exhausted');
+  assert.equal(isExhausted({ used: 0, total: 0 }), false, 'DX6: zero rounds still allows the one presentation');
+  assert.equal(isExhausted({ used: 1, total: 0 }), true);
 });
 
 test('the current revision is the newest published one, not the draft', () => {

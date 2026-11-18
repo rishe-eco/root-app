@@ -2408,6 +2408,7 @@
       "PREMADE_ROUNDS": "how many rounds of changes the pre-made design includes",
       "MOCKUP_ITERATIONS": "how many rounds of mockup changes are included",
       "DEMO_ITERATIONS": "how many rounds of demo changes each phase includes",
+      "COMMITMENT_UNDECIDED": "who provides: {{what}} (or mark it not needed)",
       "COMMITMENT_UNDATED": "a due date for: {{what}}",
       "PHASES": "the phases",
       "PHASE_END_DATE": "a planned end date for phase {{n}}",

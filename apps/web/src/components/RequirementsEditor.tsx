@@ -447,7 +447,7 @@ export default function RequirementsEditor({ contract, me }: { contract: Contrac
   // DX2a: this list is the brief's alone now — the phases and the plan are the Phases and payment step's own.
   // DX3a: a handover item someone provides and nobody has dated belongs to the handover panel's count, not the brief's.
   const lacks = contract.briefCompleteness ?? [];
-  const handoverLacks = lacks.filter((m) => m.code === 'COMMITMENT_UNDATED').length;
+  const handoverLacks = lacks.filter((m) => m.code === 'COMMITMENT_UNDATED' || m.code === 'COMMITMENT_UNDECIDED').length;
   const briefLacks = lacks.length - handoverLacks;
 
   // Opened once, on arrival, and never refolded under the person typing in it. The brief is the only panel that can lack

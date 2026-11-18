@@ -23,7 +23,7 @@ import { checkPlanRows, planTotal, type PlanProblem } from '../../lib/plan.js';
 import { mayReadMoney } from '../../lib/visibility.js';
 import { reload, type FullContract } from './contracts.js';
 import { phasesWhere } from './fields.js';
-import { assertStepOpenOn } from './wizard.js';
+import { assertStepOpenOn, isStepOpenOn } from './wizard.js';
 import { contractOnProject } from './admin/shared.js';
 
 /**
@@ -56,7 +56,7 @@ const BRIEF_MESSAGES: Record<BriefInputProblem, string> = {
   DEADLINES_OUT_OF_ORDER: 'The ideal deadline cannot be after the hard deadline.',
   INVALID_SITE_URL: 'The existing site must be an http or https address.',
   INVALID_SUPPORT_MONTHS: 'Support months must be a whole number from 0 to 120.',
-  INVALID_ALLOWANCE: 'An allowance must be a whole number above zero.',
+  INVALID_ALLOWANCE: 'An allowance must be a whole number, zero or more.',
 };
 
 const PLAN_MESSAGES: Record<PlanProblem, string> = {
@@ -309,11 +309,21 @@ export const briefMutations = {
       const preset = presetApplies(current?.kind ?? null, input.kind);
       const data = preset ? { ...baseData, designTier: EXISTING_SITE_PRESET.designTier } : baseData;
 
+      // DX6: the brief's budget and the contract's fee are one number (founder: "these two fields seem to be the same").
+      // Saving a budget sets the fee, unless the draft step is locked, in which case only the brief is written. A brief
+      // made before it has a budget starts from the fee instead, and clearing the budget leaves the fee alone: the
+      // form sends nothing for staff who cannot see money, and that must not erase a price.
+      const feeOpen = await isStepOpenOn(contract.id, 'DRAFT', tx);
+      const fee = feeOpen ? (await tx.contract.findUniqueOrThrow({ where: { id: contract.id }, select: { amount: true } })).amount : null;
+      const briefData = !current && data.budgetCap === null && fee !== null ? { ...data, budgetCap: fee } : data;
       await tx.contractBrief.upsert({
         where: { contractId: contract.id },
-        create: { contractId: contract.id, ...data },
-        update: data,
+        create: { contractId: contract.id, ...briefData },
+        update: briefData,
       });
+      if (feeOpen && data.budgetCap !== null) {
+        await tx.contract.update({ where: { id: contract.id }, data: { amount: data.budgetCap } });
+      }
       if (!current) await seedHandoverRows(tx, contract.projectId, user.id);
       if (preset) {
         await tx.scopeItem.updateMany({

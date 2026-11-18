@@ -111,6 +111,19 @@ test('the guard: the round about to be published must fit — three of three ref
   assert.throws(() => assertWithinAllowance(at(4, [ext('DESIGN', 1)])), /rounds/);
 });
 
+test('an allowance of zero (DX6) is a number, not unset: the one presentation is admitted, the second is refused, nothing divides by it', () => {
+  const none = { ...premade, premadeRounds: 0 };
+  assert.equal(allowanceFor('DESIGN', null, none, []), 0, 'returned as it is, not as null');
+  const at = (used: number, extensions: ExtensionRow[] = []) => allowanceState('DESIGN', null, none, extensions, { design: used });
+  assert.equal(isExhausted(at(0)), false, 'the designer can still present once');
+  assert.doesNotThrow(() => assertWithinAllowance(at(0)));
+  assert.equal(isExhausted(at(1)), true);
+  assert.throws(() => assertWithinAllowance(at(1)), /rounds/);
+  // Sales can still extend a zero allowance: one more round on top of it.
+  assert.doesNotThrow(() => assertWithinAllowance(at(1, [ext('DESIGN', 2)])));
+  assert.throws(() => assertWithinAllowance(at(2, [ext('DESIGN', 2)])), /rounds/);
+});
+
 test('a step nobody counts yet is never refused', () => {
   const mockup = allowanceState('MOCKUP', null, custom, [], { design: 0 });
   assert.deepEqual(mockup, { used: null, allowance: 4 });

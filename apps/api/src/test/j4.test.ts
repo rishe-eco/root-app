@@ -193,17 +193,17 @@ test('ContractBrief_deadlines_ordered: an ideal deadline after the hard one is r
   }
 });
 
-test('ContractBrief_allowances_positive: any allowance that is set must be above zero — each of the four, by direct insert', async () => {
+test('ContractBrief_allowances_not_negative: any allowance that is set must be zero or more — each of the four, by direct insert (DX6: zero is "no rounds of change")', async () => {
   for (const column of ['premadeRounds', 'wireframeIterations', 'mockupIterations', 'demoIterationsPerPhase']) {
-    for (const value of [0, -1]) {
-      await assert.rejects(
-        () => prisma.contractBrief.create({ data: briefRow({ [column]: value }) }),
-        /ContractBrief_allowances_positive/,
-        `${column} = ${value}`,
-      );
+    await assert.rejects(
+      () => prisma.contractBrief.create({ data: briefRow({ [column]: -1 }) }),
+      /ContractBrief_allowances_not_negative/,
+      `${column} = -1`,
+    );
+    for (const value of [0, 3]) {
+      await prisma.contractBrief.deleteMany();
+      await assert.doesNotReject(() => prisma.contractBrief.create({ data: briefRow({ [column]: value }) }), `${column} = ${value}`);
     }
-    await prisma.contractBrief.deleteMany();
-    await assert.doesNotReject(() => prisma.contractBrief.create({ data: briefRow({ [column]: 3 }) }), `${column} = 3`);
     await prisma.contractBrief.deleteMany();
   }
   // Unset is fine, and the wireframe allowance defaults to two.
