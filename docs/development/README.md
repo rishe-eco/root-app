@@ -134,6 +134,7 @@ DX3a  handover items: one list from Requirements and the Dependencies tab; the e
 DX3c  duplicate a contract: brief, scope, phases, plan and handover rows into a new unsigned contract   ✔ built 2026-11-17 [DX3c.md]
 DX4   one title field (either language is enough) and fields that save when left (one migration, NOT VALID CHECKs)   ✔ built 2026-11-17 [DX4.md]
      milestone desk UX review (DX1–DX4) 2026-11-17 · typecheck clean · unit 1098 API + 368 web · integration 1333/1333 · e2e 174 passed, 2 failed (17-requirements, 35-handover: an autosave race and the preset; fixed, see DX4.md), then every autosave spec green (46) · Chrome, slot A
+DX6   the founder's walk, steps 1–3: zero counts, budget is the fee, dependencies decided before signing, managed extras, actions on each item, one way to add (one migration)   ✔ built 2026-11-18 [DX6.md]
 ```
 
 **R3 and the Persian pass each have their own build-ready file; L8 and the
@@ -442,6 +443,7 @@ plan did not know, and that list is the most useful thing each stage produces.
 | [`DX3a.md`](DX3a.md) | Change: desk UX review stage 3a — handover items, the default list, the preset | ✔ built |
 | [`DX3c.md`](DX3c.md) | Change: desk UX review stage 3c — duplicate a contract | ✔ built |
 | [`DX4.md`](DX4.md) | Change: desk UX review stage 4 — one title field, autosave | ✔ built |
+| [`DX6.md`](DX6.md) | Change: the founder's walk through steps 1–3 | ✔ built |
 | [`L1.md`](L1.md) | the scope registry moves to a `Project`, and gains a lifecycle | ✔ built |
 | [`L2.md`](L2.md) | phases, and a demo that is the live site itself | ✔ built |
 | [`L3.md`](L3.md) | the demo review loop — review frames and feedback intake | ✔ built |
