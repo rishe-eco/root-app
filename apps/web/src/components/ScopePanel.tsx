@@ -764,7 +764,7 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
 
   const detailsFor = (item: ScopeItem, neighbours: ScopeItem[]) => ({
     toggle: canDetail ? <DetailsToggle item={item} open={drawer === item.id} onToggle={() => (drawer === item.id ? closeDrawer(item) : setDrawer(item.id))} /> : null,
-    drawer: canDetail && drawer === item.id ? <ItemDrawer item={item} contract={contract} neighbours={neighbours} onClose={() => closeDrawer(item)} /> : undefined,
+    drawer: canDetail && drawer === item.id ? <ItemDrawer item={item} contract={contract} neighbours={neighbours} /> : undefined,
   });
 
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -910,7 +910,15 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
   );
 
   return (
-    <div className="scope-step" data-testid="scope-panel">
+    <div
+      className="scope-step"
+      data-testid="scope-panel"
+      onKeyDown={(e) => {
+        // Escape closes the open drawer (the add forms and the trade form take their own Escape first and stop it).
+        const open = drawer ? contract.scopeItems.find((i) => i.id === drawer) : null;
+        if (e.key === 'Escape' && open) closeDrawer(open);
+      }}
+    >
       <p className="t-small desk-muted">{staff ? t('scope.lede.staff') : t('scope.lede.customer')}</p>
 
       {staff ? (

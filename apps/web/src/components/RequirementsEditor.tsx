@@ -74,7 +74,12 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   const brief = contract.brief ?? null;
   const canMoney = can(me, 'money.read');
   const { data: typesData } = useQuery<{ templateTypes: TemplateType[] }>(TEMPLATE_TYPES);
-  const types = (typesData?.templateTypes ?? []).filter((x) => x.active || x.id === brief?.templateType.id);
+  // DX6 (the founder's walk: a type just made with "New site type" did not stay picked): the type that was made is kept
+  // here until the list has it, so the picker always has an option for the value it holds — a controlled select whose
+  // value has no option shows its first one, and what the person sees is then not what is saved.
+  const [made, setMade] = useState<Pick<TemplateType, 'id' | 'labelFa' | 'labelEn'> | null>(null);
+  const listed = (typesData?.templateTypes ?? []).filter((x) => x.active || x.id === brief?.templateType.id);
+  const types: Array<Pick<TemplateType, 'id' | 'labelFa' | 'labelEn'>> = made && !listed.some((x) => x.id === made.id) ? [...listed, made] : listed;
   const [setBrief] = useMutation(SET_BRIEF);
 
   const [kind, setKind] = useState<BriefKind>(brief?.kind ?? 'NEW_SITE');
@@ -394,9 +399,10 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
     {newType ? (
       <NewSiteTypeModal
         onClose={() => setNewType(false)}
-        onCreated={(id) => {
-          setTemplateTypeId(id);
-          autosave.commit(inputOf({ templateTypeId: id }));
+        onCreated={(type) => {
+          setMade(type);
+          setTemplateTypeId(type.id);
+          autosave.commit(inputOf({ templateTypeId: type.id }));
         }}
       />
     ) : null}

@@ -32,7 +32,7 @@ import {
  *   for a decided item and for the customer's own tick. The customer sees the status and phase chips, read-only, and
  *   never the drawer.
  * - `DetailsToggle` is a button with `aria-expanded`; **one drawer is open at a time** (the panel holds which) and
- *   Escape closes it, returning focus to its toggle.
+ *   Escape, pressed anywhere in the panel, closes it and returns focus to its toggle (the panel's key handler).
  * - `ItemDrawer` groups the controls: status and decision, phases, flags, trade, and name / order / delete. Every
  *   control saves as it is changed (a select, a pill, a blur) through the mutation the old tab used, so the chips
  *   follow through the cache. Same mutations, same capability (`contracts.author`, the caller gates the toggle).
@@ -135,13 +135,11 @@ export function ItemDrawer({
   item,
   contract,
   neighbours,
-  onClose,
 }: {
   item: ScopeItem;
   contract: Contract;
   /** The items listed with this one, in the order shown: what "move up" and "move down" step past. */
   neighbours: ScopeItem[];
-  onClose: () => void;
 }) {
   const { t } = useTranslation();
   const locale = useLocale();
@@ -231,12 +229,6 @@ export function ItemDrawer({
       role="group"
       aria-label={t('scope.details.label', { label: pick(item, 'label', locale) })}
       data-testid="scope-drawer"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.stopPropagation();
-          onClose();
-        }
-      }}
     >
       <p className="t-caption scope-drawer-live">
         <span className="t-eyebrow num-latin">{item.key}</span> {t('workspace.scopeLiveWarning')}
