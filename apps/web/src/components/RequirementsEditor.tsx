@@ -460,8 +460,8 @@ export default function RequirementsEditor({ contract, me }: { contract: Contrac
       else next.add(id);
       return next;
     });
-  const acc = (id: PanelId, title: string, missing: number | null, children: ReactNode) => (
-    <Accordion id={id} title={title} open={open.has(id)} onToggle={() => toggle(id)} missing={missing}>
+  const acc = (id: PanelId, title: string, missing: number | null, children: ReactNode, aside?: string) => (
+    <Accordion id={id} title={title} aside={aside} open={open.has(id)} onToggle={() => toggle(id)} missing={missing}>
       {children}
     </Accordion>
   );
@@ -473,7 +473,7 @@ export default function RequirementsEditor({ contract, me }: { contract: Contrac
           reading. (A change made elsewhere — a due date edited on the dependency
           board — shows on the next visit, not live.) */}
       {acc('brief', t('brief.form.title'), briefLacks, <BriefForm contract={contract} me={me} />)}
-      {acc('handover', t('brief.handover.title'), handoverLacks, <HandoverPanel contract={contract} />)}
+      {acc('handover', t('brief.handover.title'), handoverLacks, <HandoverPanel contract={contract} />, t('brief.handover.aside'))}
       {contract.publishedAt ? null : acc('handOver', t('brief.handOver.title'), null, <HandOver contract={contract} />)}
       <p className="t-caption desk-muted">{t('brief.form.savedSeparately')}</p>
     </div>

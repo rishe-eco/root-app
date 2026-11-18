@@ -429,8 +429,9 @@ export default function ContractTab() {
   // Which of the two publish rows the message belongs under (DX1 added the top one).
   const [errorAt, setErrorAt] = useState<'top' | 'foot'>('foot');
   const [handoverError, setHandoverError] = useState<string | null>(null);
-  // Which articles are folded to their titles (DX1, review 14). Local and light: it is a view, not data.
-  const [folded, setFolded] = useState<ReadonlySet<number>>(new Set());
+  // Which articles are open (DX1, review 14). Local and light: it is a view, not data. Founder walk 2026-11-18:
+  // they start folded to their titles — after "Add the standard contract" too — and open one at a time.
+  const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
 
   const [applyTemplate, { loading: applyingTemplate }] = useMutation(APPLY_CONTRACT_TEMPLATE);
   const [publishRevision, { loading: publishing }] = useMutation(PUBLISH_CONTRACT_REVISION);
@@ -532,10 +533,10 @@ export default function ContractTab() {
         <div className="editor-card-actions">
           {articles.length > 1 ? (
             <>
-              <button className="btn btn-ghost btn-sm" type="button" data-testid="fold-all" onClick={() => setFolded(new Set(articles.map((a) => a.number)))}>
+              <button className="btn btn-ghost btn-sm" type="button" data-testid="fold-all" onClick={() => setOpened(new Set())}>
                 {t('workspace.foldAll')}
               </button>
-              <button className="btn btn-ghost btn-sm" type="button" data-testid="open-all" onClick={() => setFolded(new Set())}>
+              <button className="btn btn-ghost btn-sm" type="button" data-testid="open-all" onClick={() => setOpened(new Set(articles.map((a) => a.number)))}>
                 {t('workspace.openAll')}
               </button>
             </>
@@ -581,9 +582,9 @@ export default function ContractTab() {
             nextNumber={a.number}
             locked={locked}
             newRoad={newRoad}
-            folded={folded.has(a.number)}
+            folded={!opened.has(a.number)}
             onToggle={() =>
-              setFolded((prev) => {
+              setOpened((prev) => {
                 const next = new Set(prev);
                 if (next.has(a.number)) next.delete(a.number);
                 else next.add(a.number);

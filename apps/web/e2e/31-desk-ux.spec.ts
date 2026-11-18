@@ -317,6 +317,9 @@ test.describe('with steps 1 and 2 done', () => {
 
     // An edit makes the draft dirty — the box says yes, and Publish at the top is live.
     const cards = page.getByTestId('article-card');
+    // Founder walk 2026-11-18: articles start folded to their titles; a press opens one.
+    for (let i = 0; i < (await cards.count()); i += 1) await expect(cards.nth(i)).toHaveAttribute('data-folded', 'true');
+    await cards.first().getByTestId('article-toggle').click();
     await expect(cards.first()).toHaveAttribute('data-folded', 'false');
     await cards.first().locator('textarea').nth(1).fill('Changed English text');
     await cards.first().locator('textarea').nth(1).blur();
@@ -330,7 +333,9 @@ test.describe('with steps 1 and 2 done', () => {
     await expect(cards.first()).toHaveAttribute('data-folded', 'true');
     await expect(cards.first().locator('textarea').first()).toBeHidden();
     await expect(cards.first().getByTestId('article-title')).toBeVisible();
-    await expect(cards.nth(1)).toHaveAttribute('data-folded', 'false');
+    await expect(cards.nth(1)).toHaveAttribute('data-folded', 'true');
+    await page.getByTestId('open-all').click();
+    for (let i = 0; i < (await cards.count()); i += 1) await expect(cards.nth(i)).toHaveAttribute('data-folded', 'false');
     await page.getByTestId('fold-all').click();
     for (let i = 0; i < (await cards.count()); i += 1) await expect(cards.nth(i)).toHaveAttribute('data-folded', 'true');
     await page.getByTestId('open-all').click();
