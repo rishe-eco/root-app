@@ -83,7 +83,7 @@ test('Requirements: Root · Customer · Not needed and a date for each item, a s
   await openRequirements(page, WIZARD_CONTRACT_REF);
   await openPanel(page, 'handover');
 
-  // The brief made one row for each item on the default list, undecided and undated — and that is a complete state.
+  // The brief made one row for each item on the default list, undecided and undated (DX6: a gap until each is decided).
   await expect(page.getByTestId('handover-row')).toHaveCount(3);
   for (const key of ['domain', 'host', 'content']) await expect(who(page, key)).toHaveAttribute('data-value', '');
   await expect(page.locator('[data-code="COMMITMENT_UNDATED"]')).toHaveCount(0);
@@ -130,10 +130,10 @@ test('a one-off item added on Requirements is the same row on the Dependencies t
   await openRequirements(page, WIZARD_CONTRACT_REF);
   await openPanel(page, 'handover');
 
-  await page.getByTestId('handover-add').click();
+  await page.getByTestId('handover-add-open').click();
   // DX4: one title field. Adding is an act, so the row is made at once and is then edited like the others.
-  await fillTitle(page.getByTestId('handover-add-form'), 'handover-new', 'handover-new-title', 'فایل‌های لوگو', 'Logo files');
-  await page.getByTestId('handover-add-confirm').click();
+  await fillTitle(page.getByTestId('handover-add'), 'handover-new', 'handover-new-title', 'فایل‌های لوگو', 'Logo files');
+  await page.getByTestId('handover-add-submit').click();
   await expect(page.getByTestId('handover-row')).toHaveCount(4);
   const newKey = (await page.getByTestId('handover-row').filter({ hasText: /Logo files|فایل‌های لوگو/ }).getAttribute('data-key'))!;
   await who(page, newKey).locator('button[data-value="CUSTOMER"]').click();

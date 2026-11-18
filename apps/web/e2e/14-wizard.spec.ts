@@ -183,8 +183,10 @@ test('sales reads the same steps in the workspace, writes a note, and "view as c
   // An internal note.
   await page.getByRole('link', { name: 'Notes', exact: true }).click();
   await expect(page.getByTestId('internal-notes').getByText('No notes yet.')).toBeVisible();
+  // DX6: Add note opens a small form, like every add on the desk.
+  await page.getByTestId('note-add-open').click();
   await page.getByPlaceholder('Write a note for the team…').fill(NOTE);
-  await page.getByRole('button', { name: 'Add note' }).click();
+  await page.getByTestId('note-add-submit').click();
   await expect(page.getByTestId('internal-note')).toContainText(NOTE);
 
   // View as customer: the portal's screen, read-only, and no note.

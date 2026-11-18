@@ -10,7 +10,6 @@ import {
   EXISTING_SITE_PRESET,
   handoverUndated,
   handoverUndecided,
-  handoverUndecided,
   presetApplies,
   briefCompleteness,
   planCompleteness,
