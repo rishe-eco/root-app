@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@apollo/client';
 import { useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -29,6 +29,7 @@ import { hasOneTitle } from '@/lib/titleScript';
 import ContractRefCard from '@/components/ContractRefCard';
 import PlannedDates from '@/components/PlannedDates';
 import ReadinessBox from './ReadinessBox';
+import InlineAdd from '@/components/InlineAdd';
 import type { WorkspaceContext } from './ContractWorkspace';
 
 function errorMessage(err: unknown, t?: (key: string, opts?: Record<string, unknown>) => string): string {
@@ -41,17 +42,13 @@ function errorMessage(err: unknown, t?: (key: string, opts?: Record<string, unkn
 function ArticleCard({
   contractId,
   article,
-  nextNumber,
-  onDone,
   locked,
   newRoad,
   folded = false,
   onToggle,
 }: {
   contractId: string;
-  article: Article | null;
-  nextNumber: number;
-  onDone?: () => void;
+  article: Article;
   /** DX1 (review 14): shown as its title alone. The form stays mounted, hidden, so a half-typed edit survives a fold. */
   folded?: boolean;
   onToggle?: () => void;
@@ -61,16 +58,16 @@ function ArticleCard({
   newRoad: boolean;
 }) {
   const { t } = useTranslation();
-  const [number] = useState(article?.number ?? nextNumber);
-  const [titleFa, setTitleFa] = useState(article?.titleFa ?? '');
-  const [titleEn, setTitleEn] = useState(article?.titleEn ?? '');
-  const [bodyFa, setBodyFa] = useState(article?.bodyFa ?? '');
-  const [bodyEn, setBodyEn] = useState(article?.bodyEn ?? '');
+  const number = article.number;
+  const [titleFa, setTitleFa] = useState(article.titleFa);
+  const [titleEn, setTitleEn] = useState(article.titleEn);
+  const [bodyFa, setBodyFa] = useState(article.bodyFa ?? '');
+  const [bodyEn, setBodyEn] = useState(article.bodyEn ?? '');
   // PD-14 (J4): this article's prose is about money. The API had the argument
   // since J4 and the desk no way to set it — J7 owed the toggle.
-  const [sensitive, setSensitive] = useState(article?.sensitive ?? false);
+  const [sensitive, setSensitive] = useState(article.sensitive ?? false);
   const [error, setError] = useState<string | null>(null);
-  const [setArticle, { loading: saving }] = useMutation(SET_ARTICLE);
+  const [setArticle] = useMutation(SET_ARTICLE);
   const [deleteArticle, { loading: deleting }] = useMutation(DELETE_ARTICLE);
   // The payment schedule is generated from the plan on the new road (J7's second
   // trap): a body typed here would be a second schedule, so there is no field.
@@ -83,41 +80,23 @@ function ArticleCard({
     titleEn: v.titleEn,
     bodyFa: scheduleGenerated ? null : v.bodyFa || null,
     bodyEn: scheduleGenerated ? null : v.bodyEn || null,
-    // A new article that is not ticked defers to the template's rule
-    // (Fees and Payment Schedule are sensitive by number and title);
-    // an existing one sends exactly what the box says.
-    sensitive: article ? v.sensitive : v.sensitive ? true : null,
+    // An existing article sends exactly what the box says.
+    sensitive: v.sensitive,
   });
 
-  // The add form keeps its button (it is an act, not an edit); an article that exists saves when a field is left (DX4, review 27).
-  async function onSave(e: FormEvent) {
-    e.preventDefault();
-    if (article) return;
-    setError(null);
-    if (!hasOneTitle(titleFa, titleEn)) {
-      setError(t('workspace.error.TITLE_REQUIRED'));
-      return;
-    }
-    try {
-      await setArticle({ variables: vars({ titleFa, titleEn, bodyFa, bodyEn, sensitive }) });
-      onDone?.();
-    } catch (err) {
-      setError(errorMessage(err, t));
-    }
-  }
-
+  // An article saves when a field is left (DX4, review 27); adding one is `AddArticleForm`'s (DX6).
   const autosave = useAutosave({
     value: { titleFa, titleEn, bodyFa, bodyEn, sensitive },
     baseline: {
-      titleFa: article?.titleFa ?? '',
-      titleEn: article?.titleEn ?? '',
-      bodyFa: article?.bodyFa ?? '',
-      bodyEn: article?.bodyEn ?? '',
-      sensitive: article?.sensitive ?? false,
+      titleFa: article.titleFa,
+      titleEn: article.titleEn,
+      bodyFa: article.bodyFa ?? '',
+      bodyEn: article.bodyEn ?? '',
+      sensitive: article.sensitive ?? false,
     },
     valid: (v) => hasOneTitle(v.titleFa, v.titleEn),
     save: (v) => setArticle({ variables: vars(v) }),
-    disabled: !article || locked,
+    disabled: locked,
     errorText: (err) => errorMessage(err, t),
   });
 
@@ -138,7 +117,7 @@ function ArticleCard({
   return (
     <div className="card editor-card" data-testid="article-card" data-number={number} data-folded={folded ? 'true' : 'false'}>
       <div className="editor-card-head">
-        {article && onToggle ? (
+        {onToggle ? (
           <button
             type="button"
             className="article-toggle"
@@ -155,20 +134,18 @@ function ArticleCard({
         ) : (
           <span className="t-eyebrow num-latin">{number}</span>
         )}
-        {article ? (
-          <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete} disabled={deleting || locked}>
-            {t('workspace.delete')}
-          </button>
-        ) : null}
+        <button className="btn btn-ghost btn-sm" type="button" onClick={onDelete} disabled={deleting || locked}>
+          {t('workspace.delete')}
+        </button>
       </div>
       <div id={bodyId} hidden={folded}>
-      <form className="auth-form" onSubmit={onSave} onBlur={autosave.onBlur}>
+      <form className="auth-form" onSubmit={(e) => e.preventDefault()} onBlur={autosave.onBlur}>
         <TitleField
           idBase={`article-${number}`}
           testId="article-title-field"
           fa={titleFa}
           en={titleEn}
-          disabled={!!article && locked}
+          disabled={locked}
           onChange={(v) => {
             setTitleFa(v.fa);
             setTitleEn(v.en);
@@ -195,7 +172,7 @@ function ArticleCard({
             type="checkbox"
             data-testid="article-sensitive"
             checked={sensitive}
-            disabled={!!article && locked}
+            disabled={locked}
             onChange={(e) => {
               setSensitive(e.target.checked);
               autosave.commit({ titleFa, titleEn, bodyFa, bodyEn, sensitive: e.target.checked });
@@ -206,21 +183,85 @@ function ArticleCard({
             <span className="t-caption desk-muted"> {t('workspace.sensitiveHelp')}</span>
           </span>
         </label>
-        {article ? (
-          <AutosaveNote autosave={autosave} testId="article-autosave" />
-        ) : (
-          <>
-            {error ? <p className="error">{error}</p> : null}
-            <div>
-              <button className="btn btn-secondary btn-sm" type="submit" disabled={saving || locked}>
-                {t('workspace.save')}
-              </button>
-            </div>
-          </>
-        )}
+        <AutosaveNote autosave={autosave} testId="article-autosave" />
+        {error ? <p className="error">{error}</p> : null}
       </form>
       </div>
     </div>
+  );
+}
+
+/**
+ * "Add article" (DX6: the desk's one way to add, `InlineAdd`): a button, then a small form with a title, the two texts
+ * and the money flag, with Add and Cancel. The article takes the next number; one whose number and English title are the
+ * payment schedule's gets no body on the new road (the schedule is generated from the plan, J7's second trap).
+ */
+function AddArticleForm({ contractId, nextNumber, locked, newRoad }: { contractId: string; nextNumber: number; locked: boolean; newRoad: boolean }) {
+  const { t } = useTranslation();
+  const [title, setTitle] = useState({ fa: '', en: '' });
+  const [bodyFa, setBodyFa] = useState('');
+  const [bodyEn, setBodyEn] = useState('');
+  const [sensitive, setSensitive] = useState(false);
+  const [setArticle, { loading }] = useMutation(SET_ARTICLE);
+  const scheduleGenerated = newRoad && isPaymentScheduleArticle(nextNumber, title.en);
+  const reset = () => {
+    setTitle({ fa: '', en: '' });
+    setBodyFa('');
+    setBodyEn('');
+    setSensitive(false);
+  };
+  if (locked) return null;
+  return (
+    <InlineAdd
+      label={t('workspace.addArticle')}
+      testId="article-add"
+      ready={hasOneTitle(title.fa, title.en)}
+      busy={loading}
+      onCancel={reset}
+      errorText={(err) => errorMessage(err, t)}
+      onSubmit={async () => {
+        await setArticle({
+          variables: {
+            contractId,
+            number: nextNumber,
+            titleFa: title.fa,
+            titleEn: title.en,
+            bodyFa: scheduleGenerated ? null : bodyFa || null,
+            bodyEn: scheduleGenerated ? null : bodyEn || null,
+            // Unticked defers to the template's rule (Fees and Payment Schedule are sensitive by number and title).
+            sensitive: sensitive ? true : null,
+          },
+        });
+        reset();
+      }}
+    >
+      <TitleField idBase="article-add" testId="article-add-title" fa={title.fa} en={title.en} onChange={setTitle} />
+      {scheduleGenerated ? (
+        <p className="t-small desk-muted">{t('workspace.scheduleGenerated')}</p>
+      ) : (
+        <div className="editor-grid-2">
+          <div className="field">
+            <label className="label" htmlFor="article-add-body-fa">
+              {t('workspace.bodyFa')}
+            </label>
+            <textarea id="article-add-body-fa" className="textarea" dir="rtl" value={bodyFa} onChange={(e) => setBodyFa(e.target.value)} />
+          </div>
+          <div className="field">
+            <label className="label" htmlFor="article-add-body-en">
+              {t('workspace.bodyEn')}
+            </label>
+            <textarea id="article-add-body-en" className="textarea" dir="ltr" value={bodyEn} onChange={(e) => setBodyEn(e.target.value)} />
+          </div>
+        </div>
+      )}
+      <label className="req-check">
+        <input type="checkbox" data-testid="article-add-sensitive" checked={sensitive} onChange={(e) => setSensitive(e.target.checked)} />
+        <span>
+          {t('workspace.sensitive')}
+          <span className="t-caption desk-muted"> {t('workspace.sensitiveHelp')}</span>
+        </span>
+      </label>
+    </InlineAdd>
   );
 }
 
@@ -422,9 +463,10 @@ export default function ContractTab() {
   const { t } = useTranslation();
   const { contract, me } = useOutletContext<WorkspaceContext>();
   const locale = useLocale();
-  const [addingArticle, setAddingArticle] = useState(false);
-  const [issuingAmendment, setIssuingAmendment] = useState(false);
   const [newTitle, setNewTitle] = useState({ fa: '', en: '' });
+  const [amendBodyFa, setAmendBodyFa] = useState('');
+  const [amendBodyEn, setAmendBodyEn] = useState('');
+  const [amendSensitive, setAmendSensitive] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   // Which of the two publish rows the message belongs under (DX1 added the top one).
   const [errorAt, setErrorAt] = useState<'top' | 'foot'>('foot');
@@ -487,27 +529,26 @@ export default function ContractTab() {
     }
   }
 
-  async function onIssueAmendment(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setErrorAt('foot');
-    const form = new FormData(e.currentTarget);
-    try {
-      await issueAmendment({
-        variables: {
-          contractId: contract.id,
-          titleFa: newTitle.fa,
-          titleEn: newTitle.en,
-          bodyFa: form.get('bodyFa'),
-          bodyEn: form.get('bodyEn'),
-          // Unticked defers to the API, which follows the article it relates to.
-          sensitive: form.get('sensitive') === 'on' ? true : null,
-        },
-      });
-      setIssuingAmendment(false);
-      setNewTitle({ fa: '', en: '' });
-    } catch (err) {
-      setPublishError(errorMessage(err, t));
-    }
+  const resetAmendment = () => {
+    setNewTitle({ fa: '', en: '' });
+    setAmendBodyFa('');
+    setAmendBodyEn('');
+    setAmendSensitive(false);
+  };
+
+  async function onIssueAmendment() {
+    await issueAmendment({
+      variables: {
+        contractId: contract.id,
+        titleFa: newTitle.fa,
+        titleEn: newTitle.en,
+        bodyFa: amendBodyFa,
+        bodyEn: amendBodyEn,
+        // Unticked defers to the API, which follows the article it relates to.
+        sensitive: amendSensitive ? true : null,
+      },
+    });
+    resetAmendment();
   }
 
   return (
@@ -546,9 +587,6 @@ export default function ContractTab() {
               {t('workspace.applyTemplate')}
             </button>
           ) : null}
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingArticle(true)} disabled={locked}>
-            {t('workspace.addArticle')}
-          </button>
           {/* DX1 (review 17): publish where the articles are edited, as well as at the foot. */}
           <button
             className="btn btn-primary btn-sm"
@@ -564,22 +602,11 @@ export default function ContractTab() {
       {publishError && errorAt === 'top' ? <p className="error" role="alert" data-testid="publish-error-top">{publishError}</p> : null}
 
       <div className="editor-list">
-        {addingArticle ? (
-          <ArticleCard
-            contractId={contract.id}
-            article={null}
-            nextNumber={nextNumber}
-            onDone={() => setAddingArticle(false)}
-            locked={locked}
-            newRoad={newRoad}
-          />
-        ) : null}
         {articles.map((a) => (
           <ArticleCard
             key={a.number}
             contractId={contract.id}
             article={a}
-            nextNumber={a.number}
             locked={locked}
             newRoad={newRoad}
             folded={!opened.has(a.number)}
@@ -594,6 +621,8 @@ export default function ContractTab() {
           />
         ))}
       </div>
+
+      <AddArticleForm contractId={contract.id} nextNumber={nextNumber} locked={locked} newRoad={newRoad} />
 
       <div className="workspace-row">
         <div className="dirty-note">
@@ -625,37 +654,41 @@ export default function ContractTab() {
         <>
           <div className="workspace-row">
             <h3 className="t-h3">{t('workspace.amendmentsTitle')}</h3>
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setIssuingAmendment((v) => !v)}>
-              {t('workspace.issueAmendment')}
-            </button>
           </div>
-          {issuingAmendment ? (
-            <form className="card editor-card auth-form" onSubmit={onIssueAmendment}>
-              <TitleField idBase="new-amendment" testId="new-amendment-title" fa={newTitle.fa} en={newTitle.en} onChange={setNewTitle} />
-              <div className="editor-grid-2">
-                <div className="field">
-                  <label className="label">{t('workspace.bodyFa')}</label>
-                  <textarea className="textarea" name="bodyFa" dir="rtl" required />
-                </div>
-                <div className="field">
-                  <label className="label">{t('workspace.bodyEn')}</label>
-                  <textarea className="textarea" name="bodyEn" dir="ltr" required />
-                </div>
+          {/* DX6: the desk's one way to add (`InlineAdd`) — the bodies are required, so they are controlled fields like the rest. */}
+          <InlineAdd
+            label={t('workspace.issueAmendment')}
+            testId="amendment-add"
+            ready={hasOneTitle(newTitle.fa, newTitle.en) && amendBodyFa.trim() !== '' && amendBodyEn.trim() !== ''}
+            busy={issuing}
+            onCancel={resetAmendment}
+            errorText={(err) => errorMessage(err, t)}
+            onSubmit={onIssueAmendment}
+            buttonClassName="btn btn-ghost btn-sm"
+          >
+            <TitleField idBase="new-amendment" testId="new-amendment-title" fa={newTitle.fa} en={newTitle.en} onChange={setNewTitle} />
+            <div className="editor-grid-2">
+              <div className="field">
+                <label className="label" htmlFor="new-amendment-body-fa">
+                  {t('workspace.bodyFa')}
+                </label>
+                <textarea id="new-amendment-body-fa" className="textarea" dir="rtl" required value={amendBodyFa} onChange={(e) => setAmendBodyFa(e.target.value)} />
               </div>
-              <label className="req-check">
-                <input type="checkbox" name="sensitive" />
-                <span>
-                  {t('workspace.amendmentSensitive')}
-                  <span className="t-caption desk-muted"> {t('workspace.amendmentSensitiveHelp')}</span>
-                </span>
-              </label>
-              <div>
-                <button className="btn btn-primary btn-sm" type="submit" disabled={issuing || !hasOneTitle(newTitle.fa, newTitle.en)}>
-                  {t('workspace.save')}
-                </button>
+              <div className="field">
+                <label className="label" htmlFor="new-amendment-body-en">
+                  {t('workspace.bodyEn')}
+                </label>
+                <textarea id="new-amendment-body-en" className="textarea" dir="ltr" required value={amendBodyEn} onChange={(e) => setAmendBodyEn(e.target.value)} />
               </div>
-            </form>
-          ) : null}
+            </div>
+            <label className="req-check">
+              <input type="checkbox" checked={amendSensitive} onChange={(e) => setAmendSensitive(e.target.checked)} />
+              <span>
+                {t('workspace.amendmentSensitive')}
+                <span className="t-caption desk-muted"> {t('workspace.amendmentSensitiveHelp')}</span>
+              </span>
+            </label>
+          </InlineAdd>
           <div className="editor-list">
             {amendments.map((a) => (
               <AmendmentCard key={a.id} amendment={a} articles={contract.articles} />

@@ -58,8 +58,8 @@ import {
  * them, and the fields are not drawn.
  */
 
-/** The support terms offered as pills (DX1, review 5); anything else is "Other". */
-const SUPPORT_PILLS = ['1', '3', '6', '12'];
+/** The support terms offered as pills (DX1, review 5; DX6 added 0, no support after delivery); anything else is "Other". */
+const SUPPORT_PILLS = ['0', '1', '3', '6', '12'];
 
 const numberOrNull = (text: string) => (text.trim() === '' ? null : Number(text));
 const str = (n: number | null | undefined) => (n === null || n === undefined ? '' : String(n));
@@ -81,7 +81,9 @@ function BriefForm({ contract, me }: { contract: Contract; me: User }) {
   const [existingSiteUrl, setExistingSiteUrl] = useState(brief?.existingSiteUrl ?? '');
   const [templateTypeId, setTemplateTypeId] = useState(brief?.templateType.id ?? '');
   const [designTier, setDesignTier] = useState<DesignTier>(brief?.designTier ?? 'THEME_PICK');
-  const [budgetCap, setBudgetCap] = useState(brief?.budgetCap ?? '');
+  // DX6: the budget and the contract's fee are one number (the API writes each from the other), so a brief that has no
+  // budget yet starts from the fee the contract was made with.
+  const [budgetCap, setBudgetCap] = useState(brief?.budgetCap ?? contract.draft?.amount ?? contract.amount ?? '');
   const [idealDeadline, setIdealDeadline] = useState(day(brief?.idealDeadline));
   const [hardDeadline, setHardDeadline] = useState(day(brief?.hardDeadline));
   const [domainName, setDomainName] = useState(brief?.domainName ?? '');

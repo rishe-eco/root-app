@@ -207,15 +207,18 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
   padding-block: var(--space-2);
   border-block-end: 1px solid var(--color-border);
 }
-.req-phase > .input, .req-phase > .dayinput { flex: 1 1 8rem; min-inline-size: 0; }
+.req-phase > .field, .req-phase > .input, .req-phase > .dayinput { flex: 1 1 8rem; min-inline-size: 0; }
+.req-phase > .req-check { flex: 0 0 auto; align-self: flex-end; padding-block-end: var(--space-2); }
 .req-phase .error { flex-basis: 100%; margin: 0; }
 .plan-table { display: flex; flex-direction: column; gap: var(--space-2); }
 .plan-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
   gap: var(--space-2);
-  align-items: center;
+  align-items: start;
 }
+.plan-row > .field { min-inline-size: 0; }
+.plan-row-actions { align-self: end; }
 
 /* The day input (DX1): one text field and a calendar popover — Jalali in the
    Persian panel, Gregorian in English. The popover opens under the field, from
@@ -600,3 +603,24 @@ button.stepper-hit:hover { border-color: var(--color-border-strong); color: var(
 
 /* Founder walk 2026-11-18: a muted gloss beside an accordion's title ("Dependencies (who provides what, by when)"). */
 .req-acc-aside { font-size: var(--text-small); font-weight: var(--weight-regular); color: var(--color-text-subtle); }
+
+/* ---- DX6: a scope item's chips and its Details drawer (ScopeItemDetails) ---- */
+.scope-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.scope-details-toggle { margin-inline-start: auto; }
+.scope-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin-block-start: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-inline-start: 3px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel);
+  min-inline-size: 0;
+}
+.scope-drawer p { margin: 0; }
+.scope-drawer-group { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; border: 0; min-inline-size: 0; }
+.scope-drawer-group > legend { padding: 0; margin-block-end: var(--space-1); }
+.scope-extra .req-check { align-items: flex-start; }
+.inline-add { gap: var(--space-3); }

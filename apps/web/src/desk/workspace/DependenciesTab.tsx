@@ -9,6 +9,7 @@ import { useLocale } from '@/lib/locale';
 import { can } from '@/lib/access';
 import { pick, fullDateTime, calendarDate } from '@/lib/format';
 import { day, refusalText } from '@/components/EditorKit';
+import InlineAdd from '@/components/InlineAdd';
 import { instantOf } from '@/lib/brief';
 import {
   CREATE_DEPENDENCY,
@@ -265,12 +266,10 @@ export default function DependenciesTab() {
   // holding neither, and each row asks for its own.
   const canManage = can(me, 'contracts.author');
 
-  const [adding, setAdding] = useState(false);
   const [side, setSide] = useState<DependencySide | ''>('CUSTOMER');
   const [titleFa, setTitleFa] = useState('');
   const [titleEn, setTitleEn] = useState('');
   const [dueAt, setDueAt] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [createDependency, { loading }] = useWorkspaceMutation(CREATE_DEPENDENCY);
   // Before the agreement is approved a row added here is a requirements row too, and may be left undecided and
   // undated; after, it is the board's alone and needs both (`DEPENDENCY_INCOMPLETE`).
@@ -288,57 +287,54 @@ export default function DependenciesTab() {
     return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
   });
 
-  async function onAdd(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!hasOneTitle(titleFa, titleEn) || (!optional && (!dueAt || !side))) return;
-    try {
-      await createDependency({
-        variables: { projectId: project!.id, side: side || null, titleFa: titleFa.trim(), titleEn: titleEn.trim(), dueAt: instantOf(dueAt) },
-      });
-      setAdding(false);
-      setTitleFa('');
-      setTitleEn('');
-      setDueAt('');
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
+  const reset = () => {
+    setSide('CUSTOMER');
+    setTitleFa('');
+    setTitleEn('');
+    setDueAt('');
+  };
 
   return (
     <div className="dependency-board">
       <div className="workspace-row">
         <h3 className="t-h3">{t('workspace.dependenciesTitle')}</h3>
-        {canManage ? (
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAdding((v) => !v)}>
-            {t('workspace.addDependency')}
-          </button>
-        ) : null}
       </div>
       <p className="sec-help">{t('workspace.dependenciesHelp')}</p>
 
-      {adding && canManage ? (
-        <form className="card editor-card auth-form" onSubmit={onAdd}>
+      {/* DX6: the desk's one way to add (`InlineAdd`): a button, then a small form with Add and Cancel. */}
+      {canManage ? (
+        <InlineAdd
+          label={t('workspace.addDependency')}
+          testId="dependency-add"
+          ready={hasOneTitle(titleFa, titleEn) && (optional || (!!dueAt && !!side))}
+          busy={loading}
+          onCancel={reset}
+          errorText={(err) => refusalText(t, err)}
+          onSubmit={async () => {
+            await createDependency({
+              variables: { projectId: project!.id, side: side || null, titleFa: titleFa.trim(), titleEn: titleEn.trim(), dueAt: instantOf(dueAt) },
+            });
+            reset();
+          }}
+        >
           <div className="field">
-            <label className="label">{t('workspace.dependencySideLabel')}</label>
-            <select className="input" required={!optional} value={side} onChange={(e) => setSide(e.target.value as DependencySide | '')}>
+            <label className="label" htmlFor="dependency-add-side">
+              {t('workspace.dependencySideLabel')}
+            </label>
+            <select id="dependency-add-side" className="input" required={!optional} value={side} onChange={(e) => setSide(e.target.value as DependencySide | '')}>
               {optional ? <option value="">{t('workspace.dependencyUndecided')}</option> : null}
               <option value="CUSTOMER">{t('workspace.dependencySide.CUSTOMER')}</option>
               <option value="ROOT">{t('workspace.dependencySide.ROOT')}</option>
             </select>
           </div>
-          <TitleField idBase="tf-2" fa={titleFa} en={titleEn} onChange={(v) => { setTitleFa(v.fa); setTitleEn(v.en); }} />
           <div className="field">
-            <label className="label">{optional ? t('workspace.dependencyDueOptional') : t('workspace.dependencyDueAt')}</label>
-            <input className="input num-latin" type="date" required={!optional} value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+            <label className="label" htmlFor="dependency-add-due">
+              {optional ? t('workspace.dependencyDueOptional') : t('workspace.dependencyDueAt')}
+            </label>
+            <input id="dependency-add-due" className="input num-latin" type="date" required={!optional} value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
           </div>
-          {error ? <p className="error">{error}</p> : null}
-          <div>
-            <button className="btn btn-primary btn-sm" type="submit" disabled={loading || !hasOneTitle(titleFa, titleEn)}>
-              {t('workspace.save')}
-            </button>
-          </div>
-        </form>
+          <TitleField idBase="dependency-add" testId="dependency-add-title" fa={titleFa} en={titleEn} onChange={(v) => { setTitleFa(v.fa); setTitleEn(v.en); }} />
+        </InlineAdd>
       ) : null}
 
       {rows.length === 0 ? (

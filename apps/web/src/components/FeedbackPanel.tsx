@@ -58,6 +58,8 @@ export type FeedbackTarget = {
   actions?: ReactNode;
   /** Replaces the label row while a target is being edited in place. */
   editor?: ReactNode;
+  /** Opens under this target's row alone, above its thread (DX6: the scope item's details). */
+  drawer?: ReactNode;
   input: FeedbackTargetInput;
   item: FeedbackItem | null;
 };
@@ -67,6 +69,8 @@ export type FeedbackPanelProps = {
   step: StepKind;
   phaseId?: string | null;
   targets: FeedbackTarget[];
+  /** Drawn after the last target of the group with this heading (DX6: the extras group's "Add extra"). */
+  groupFooters?: Record<string, ReactNode>;
   /** The step's shared thread, if anyone has started it. */
   generalItem: FeedbackItem | null;
   /** Offer the step-as-a-whole thread. Default true. */
@@ -423,6 +427,7 @@ export default function FeedbackPanel({
   step,
   phaseId = null,
   targets,
+  groupFooters,
   generalItem,
   showGeneral = true,
   canRaise,
@@ -525,7 +530,9 @@ export default function FeedbackPanel({
   let lastGroup: string | undefined;
   return (
     <div className="feedback-panel" data-testid="feedback-panel" data-step={step}>
-      {all.map((target) => {
+      {all.map((target, at) => {
+        const nextGroup = all[at + 1]?.group;
+        const footer = target.group !== undefined && target.group !== nextGroup ? groupFooters?.[target.group] : undefined;
         const showGroup = target.group !== undefined && target.group !== lastGroup;
         lastGroup = target.group ?? lastGroup;
         const p = pending[target.key];
@@ -540,6 +547,8 @@ export default function FeedbackPanel({
                   {target.actions ?? null}
                 </div>
               )}
+
+              {target.drawer ?? null}
 
               {target.item ? (
                 <Thread
@@ -595,6 +604,7 @@ export default function FeedbackPanel({
               {errors[target.key] && !target.item ? <p className="error">{errors[target.key]}</p> : null}
               {errors[target.key] && target.item && !canAnswer ? <p className="error">{errors[target.key]}</p> : null}
             </div>
+            {footer ?? null}
           </div>
         );
       })}

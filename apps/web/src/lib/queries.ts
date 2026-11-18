@@ -4293,6 +4293,63 @@ export const MY_OVERDUE_DEPENDENCIES = gql`
 // The desk's default list of handover items (DX3a; Templates > Handover items).
 // ---------------------------------------------------------------------------
 
+/** DX6: one entry on the desk's default list of extras (Templates > Extras). */
+export type ExtraType = {
+  id: string;
+  key: string;
+  labelFa: string;
+  labelEn: string;
+  position: number;
+  active: boolean;
+};
+
+export const EXTRA_TYPE_FIELDS = gql`
+  fragment ExtraTypeFields on ExtraType {
+    id
+    key
+    labelFa
+    labelEn
+    position
+    active
+  }
+`;
+
+export const EXTRA_TYPES = gql`
+  ${EXTRA_TYPE_FIELDS}
+  query ExtraTypes {
+    extraTypes {
+      ...ExtraTypeFields
+    }
+  }
+`;
+
+export const CREATE_EXTRA_TYPE = gql`
+  ${EXTRA_TYPE_FIELDS}
+  mutation CreateExtraType($slug: String!, $labelFa: String!, $labelEn: String!) {
+    createExtraType(slug: $slug, labelFa: $labelFa, labelEn: $labelEn) {
+      ...ExtraTypeFields
+    }
+  }
+`;
+
+export const UPDATE_EXTRA_TYPE = gql`
+  ${EXTRA_TYPE_FIELDS}
+  mutation UpdateExtraType($id: ID!, $labelFa: String, $labelEn: String, $active: Boolean) {
+    updateExtraType(id: $id, labelFa: $labelFa, labelEn: $labelEn, active: $active) {
+      ...ExtraTypeFields
+    }
+  }
+`;
+
+export const REORDER_EXTRA_TYPES = gql`
+  ${EXTRA_TYPE_FIELDS}
+  mutation ReorderExtraTypes($ids: [ID!]!) {
+    reorderExtraTypes(ids: $ids) {
+      ...ExtraTypeFields
+    }
+  }
+`;
+
 export const HANDOVER_ITEM_TYPE_FIELDS = gql`
   fragment HandoverItemTypeFields on HandoverItemType {
     id

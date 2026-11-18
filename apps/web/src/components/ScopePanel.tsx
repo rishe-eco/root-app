@@ -24,6 +24,7 @@ import {
   ADD_SCOPE_ITEM,
   APPLY_SCOPE_TEMPLATE,
   CONFIRM_SCOPE_TRADE_CUSTOMER,
+  CONFIRM_SCOPE_TRADE_ROOT,
   CONTRACT_FEEDBACK,
   DECIDE_SCOPE_PROPOSAL,
   PROPOSE_RESTORE,
@@ -40,7 +41,8 @@ import {
 } from '@/lib/queries';
 import FeedbackPanel, { errorCode, type FeedbackTarget } from '@/components/FeedbackPanel';
 import { Accordion, refusalText as briefRefusalText } from '@/components/EditorKit';
-import ScopeRegistry from '@/components/ScopeRegistry';
+import InlineAdd from '@/components/InlineAdd';
+import { DetailsToggle, ItemChips, ItemDrawer, toggleId, useDeleteItem } from '@/components/ScopeItemDetails';
 import type { StepPanelProps } from '@/components/StepPanels';
 
 /**
@@ -68,11 +70,16 @@ import type { StepPanelProps } from '@/components/StepPanels';
  *
  * **DX2a (desk UX review 9) made this the one home of the build list.** The
  * *Extras* (SEO, analytics, the checklist's areas) are a group here, moved out of
- * Requirements: a checkbox each for staff while the step is open, a read-out for
- * the customer, and a note on each like any other item. And the desk's Scope tab
- * is gone from a new-road contract, so its controls — status, flags, deciding,
- * order, phase, rename, delete, trades — are `ScopeRegistry`, in an accordion
- * under the list for staff.
+ * Requirements. **DX6 (the founder's walk) finished the move.** For staff the list
+ * is an accordion, "Pages and features", and the block of every item's controls
+ * under it (`ScopeRegistry`, the old Scope tab) is gone: each row reads at a
+ * glance — the title and chips for its status, its phases and any flag — and a
+ * **Details** button opens a drawer under that row alone (`ScopeItemDetails`),
+ * one at a time, with the status and decision, phases, flags, trade, and
+ * name / order / delete. An unticked extra is only its checkbox row; the
+ * customer sees the status and phase chips and never the drawer. Each extra is
+ * one checkbox whose words are its label, and "Add extra" makes a one-off for
+ * this contract (Templates → Extras is the desk's default list).
  *
  * A locked step (`step.locked`) draws no form: a control that can only fail is
  * worse than one that is not there, and the API refuses with `STEP_LOCKED`
@@ -250,31 +257,28 @@ function AddItemForm({ contract }: { contract: Contract }) {
   const [key, setKey] = useState('');
   const [labelFa, setLabelFa] = useState('');
   const [labelEn, setLabelEn] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [added, setAdded] = useState(false);
   const [add, { loading }] = useMutation(ADD_SCOPE_ITEM);
-  const ready = hasOneTitle(labelFa, labelEn);
+  const reset = () => {
+    setKey('');
+    setLabelFa('');
+    setLabelEn('');
+  };
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setAdded(false);
-    if (!ready) return;
-    try {
-      // The key is optional (the old Scope tab's "add" asked for one): without it the API names the item `custom.<n>`.
-      await add({ variables: { contractId: contract.id, key: key.trim() || null, labelFa: labelFa.trim(), labelEn: labelEn.trim(), kind } });
-      setKey('');
-      setLabelFa('');
-      setLabelEn('');
-      setAdded(true);
-    } catch (err) {
-      setError(refusalText(t, err));
-    }
-  }
-
+  // DX6: the desk's one way to add (`InlineAdd`): a button, then a small form with Add and Cancel; Enter submits, Escape cancels.
   return (
-    <form className="card editor-card scope-add" onSubmit={submit} data-testid="scope-add">
-      <h4 className="t-h4">{t('scope.add.title')}</h4>
+    <InlineAdd
+      label={t('scope.add.title')}
+      testId="scope-add"
+      ready={hasOneTitle(labelFa, labelEn)}
+      busy={loading}
+      onCancel={reset}
+      errorText={(err) => refusalText(t, err)}
+      onSubmit={async () => {
+        // The key is optional (the old Scope tab's "add" asked for one): without it the API names the item `custom.<n>`.
+        await add({ variables: { contractId: contract.id, key: key.trim() || null, labelFa: labelFa.trim(), labelEn: labelEn.trim(), kind } });
+        reset();
+      }}
+    >
       <p className="sec-help">{t('scope.add.help')}</p>
       <div className="field">
         <label className="label" htmlFor="scope-add-kind">
@@ -294,29 +298,37 @@ function AddItemForm({ contract }: { contract: Contract }) {
         </label>
         <input id="scope-add-key" className="input num-latin" dir="ltr" value={key} onChange={(e) => setKey(e.target.value)} />
       </div>
-      <TitleField
-        idBase="scope-add"
-        testId="scope-add-label"
-        label={t('scope.decide.label')}
-        fa={labelFa}
-        en={labelEn}
-        onChange={(v) => {
-          setLabelFa(v.fa);
-          setLabelEn(v.en);
-        }}
-      />
-      <div>
-        <button className="btn btn-primary btn-sm" type="submit" disabled={loading || !ready} data-testid="scope-add-submit">
-          {t('scope.add.submit')}
-        </button>
-      </div>
-      {added ? (
-        <p className="t-small" role="status" data-testid="scope-add-done">
-          {t('scope.add.done')}
-        </p>
-      ) : null}
-      {error ? <p className="error" role="alert" data-testid="scope-add-error">{error}</p> : null}
-    </form>
+      <TitleField idBase="scope-add" testId="scope-add-label" label={t('scope.decide.label')} fa={labelFa} en={labelEn} onChange={(v) => { setLabelFa(v.fa); setLabelEn(v.en); }} />
+    </InlineAdd>
+  );
+}
+
+/** DX6: "Add extra" in the extras group — a one-off extra for this contract only (the desk's default list is Templates > Extras). */
+function AddExtraForm({ contract }: { contract: Contract }) {
+  const { t } = useTranslation();
+  const [labelFa, setLabelFa] = useState('');
+  const [labelEn, setLabelEn] = useState('');
+  const [add, { loading }] = useMutation(ADD_SCOPE_ITEM);
+  const reset = () => {
+    setLabelFa('');
+    setLabelEn('');
+  };
+  return (
+    <InlineAdd
+      label={t('scope.extras.add')}
+      testId="extra-add"
+      ready={hasOneTitle(labelFa, labelEn)}
+      busy={loading}
+      onCancel={reset}
+      errorText={(err) => refusalText(t, err)}
+      onSubmit={async () => {
+        await add({ variables: { contractId: contract.id, key: null, labelFa: labelFa.trim(), labelEn: labelEn.trim(), kind: 'EXTRA' } });
+        reset();
+      }}
+    >
+      <p className="sec-help">{t('scope.extras.addHelp')}</p>
+      <TitleField idBase="extra-add" testId="extra-add-label" label={t('scope.decide.label')} fa={labelFa} en={labelEn} onChange={(v) => { setLabelFa(v.fa); setLabelEn(v.en); }} />
+    </InlineAdd>
   );
 }
 
@@ -591,7 +603,7 @@ function SeedCard({ contract }: { contract: Contract }) {
 // A scope trade waiting
 // ---------------------------------------------------------------------------
 
-function TradeRow({ trade, contractId, customer }: { trade: ScopeTrade; contractId: string; customer: boolean }) {
+function TradeRow({ trade, contractId, customer, rootCanConfirm = false }: { trade: ScopeTrade; contractId: string; customer: boolean; rootCanConfirm?: boolean }) {
   const { t } = useTranslation();
   const locale = useLocale();
   const [confirm, { loading }] = useMutation(CONFIRM_SCOPE_TRADE_CUSTOMER);
@@ -620,13 +632,14 @@ function TradeRow({ trade, contractId, customer }: { trade: ScopeTrade; contract
           </button>
         </div>
       ) : null}
+      {rootCanConfirm ? <RootConfirm trade={trade} contractId={contractId} /> : null}
       {error ? <p className="error" role="alert">{error}</p> : null}
     </li>
   );
 }
 
 // ---------------------------------------------------------------------------
-// An extra's switch (DX2a: moved here from Requirements)
+// An extra's row (DX2a: moved here from Requirements; DX6: one checkbox, and its words are its label)
 // ---------------------------------------------------------------------------
 
 /**
@@ -634,36 +647,74 @@ function TradeRow({ trade, contractId, customer }: { trade: ScopeTrade; contract
  * Extras panel made, now on the step that owns the build list. Switching one off
  * is refused once work has started on it (`EXTRA_IN_PROGRESS`); the sentence is
  * the brief's own (`brief.error.*`).
+ *
+ * **One checkbox per extra, and the whole text is its `<label>`** (DX6): this used to draw a ☑/☐ glyph beside the
+ * label and a real checkbox at the row's end, so each extra showed two and only one worked. The checkbox sits inside the
+ * label, so a click on the words ticks it. A reader who cannot switch it (the customer, a locked step) gets the words and
+ * a text mark instead of a control.
  */
-function ExtraSwitch({ item, contract }: { item: ScopeItem; contract: Contract }) {
+function ExtraRow({ item, contract, canSwitch }: { item: ScopeItem; contract: Contract; canSwitch: boolean }) {
   const { t } = useTranslation();
   const locale = useLocale();
   const [setExtra, { loading }] = useMutation(SET_EXTRA);
   const [error, setError] = useState<string | null>(null);
+  const included = isIncludedExtra(item.status);
 
-  async function toggle(included: boolean) {
+  async function toggle(next: boolean) {
     setError(null);
     try {
-      await setExtra({ variables: { scopeItemId: item.id, included, contractId: contract.id } });
+      await setExtra({ variables: { scopeItemId: item.id, included: next, contractId: contract.id } });
     } catch (err) {
       setError(briefRefusalText(t, err));
     }
   }
 
   return (
-    <>
-      <label className="req-check">
-        <input
-          type="checkbox"
-          disabled={loading}
-          checked={isIncludedExtra(item.status)}
-          onChange={(e) => toggle(e.target.checked)}
-          data-key={item.key}
-          aria-label={t('scope.extras.include', { label: pick(item, 'label', locale) })}
-        />
-      </label>
+    <span className="scope-item scope-extra" data-testid="scope-extra" data-key={item.key} data-included={included}>
+      {canSwitch ? (
+        <label className="req-check">
+          <input type="checkbox" disabled={loading} checked={included} onChange={(e) => toggle(e.target.checked)} data-key={item.key} />
+          <span className="scope-item-label">{pick(item, 'label', locale)}</span>
+        </label>
+      ) : (
+        <span className="scope-item-label">
+          {pick(item, 'label', locale)} <span className="t-caption">({included ? t('brief.extras.included') : t('brief.extras.notIncluded')})</span>
+        </span>
+      )}
+      {error ? <span className="error" role="alert">{error}</span> : null}
+    </span>
+  );
+}
+
+/** A one-off extra can be removed; a seeded one (`checklist.*`) is switched off, never deleted. */
+const isOneOff = (item: ScopeItem) => !item.key.startsWith('checklist.');
+
+// A Root-side confirm for a trade, from the old Scope tab (the customer's is `TradeRow`'s own).
+function RootConfirm({ trade, contractId }: { trade: ScopeTrade; contractId: string }) {
+  const { t } = useTranslation();
+  const [confirm, { loading }] = useMutation(CONFIRM_SCOPE_TRADE_ROOT, { variables: { contractId } });
+  const [error, setError] = useState<string | null>(null);
+  if (trade.rootConfirmedAt) return null;
+  return (
+    <div>
+      <button
+        className="btn btn-secondary btn-sm"
+        type="button"
+        disabled={loading}
+        data-testid="scope-trade-confirm-root"
+        onClick={async () => {
+          setError(null);
+          try {
+            await confirm({ variables: { tradeId: trade.id } });
+          } catch (err) {
+            setError(refusalText(t, err));
+          }
+        }}
+      >
+        {t('workspace.scopeTradeConfirmRoot')}
+      </button>
       {error ? <p className="error" role="alert">{error}</p> : null}
-    </>
+    </div>
   );
 }
 
@@ -680,6 +731,14 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
   const trades = openTrades(contract);
   const canPropose = !staff && !step.locked && !!contract.publishedAt;
   const canDecide = staff && can(me, 'contracts.author') && !step.locked;
+  // The Details drawer is the old Scope tab's controls: its own capability (`contracts.author`), and live after the
+  // agreement too (a status moves as the build does), though not a rename or a delete (the API says `STEP_LOCKED`).
+  const canDetail = staff && can(me, 'contracts.author');
+  const [drawer, setDrawer] = useState<string | null>(null);
+  const closeDrawer = (item: ScopeItem) => {
+    setDrawer(null);
+    document.getElementById(toggleId(item))?.focus();
+  };
 
   // One model for every step: this step's feedback is this contract's SCOPE
   // feedback. `asCustomer` asks as the customer would be asked.
@@ -694,57 +753,96 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
   const leftOut = items.filter(isLeftOut);
   // The extras (DX2a): the checklist's areas and the like, as a group of their own.
   const extras = contract.scopeItems.filter((s) => s.kind === 'EXTRA').sort((a, b) => a.position - b.position);
-  const [registryOpen, setRegistryOpen] = useState(false);
-
-  const targetFor = (item: ScopeItem, group: string): FeedbackTarget => ({
-    key: item.id,
-    group,
-    label: (
-      <span className="scope-item" data-testid="scope-item" data-key={item.key} data-status={item.status}>
-        <span className="scope-item-label">{pick(item, 'label', locale)}</span>
-        {item.status === 'DECLINED' && item.declinedReason ? (
-          <span className="t-caption">{t('scope.leftOut.reason', { reason: item.declinedReason })}</span>
-        ) : item.status === 'TRADED' ? (
-          <span className="t-caption">{t('scope.leftOut.traded')}</span>
-        ) : null}
-      </span>
-    ),
-    actions: canDecide ? (
-      <StaffItemActions item={item} contract={contract} />
-    ) : (
-      <ItemActions item={item} waiting={waitingProposalFor(proposals, item.id)} canPropose={canPropose} />
-    ),
-    input: { scopeItemId: item.id },
-    item: noteFor(item.id),
-  });
-
-  const extraTarget = (item: ScopeItem): FeedbackTarget => ({
-    key: item.id,
-    group: t('scope.group.EXTRA'),
-    label: (
-      <span className="scope-item" data-testid="scope-extra" data-key={item.key} data-included={isIncludedExtra(item.status)}>
-        <span aria-hidden="true">{isIncludedExtra(item.status) ? '☑' : '☐'}</span>
-        <span className="scope-item-label">{pick(item, 'label', locale)}</span>
-        <span className="visually-hidden">{isIncludedExtra(item.status) ? t('brief.extras.included') : t('brief.extras.notIncluded')}</span>
-      </span>
-    ),
-    actions: canDecide ? <ExtraSwitch item={item} contract={contract} /> : undefined,
-    input: { scopeItemId: item.id },
-    item: noteFor(item.id),
-  });
-
-  const targets: FeedbackTarget[] = [
-    ...groupByKind(inScope).flatMap((g) => g.items.map((i) => targetFor(i, t(`scope.group.${g.kind}`)))),
-    ...extras.map(extraTarget),
-    ...leftOut.map((i) => targetFor(i, t('scope.leftOut.title'))),
-  ];
 
   const waiting = undecidedProposals(proposals);
   const decided = newestFirst(proposals.filter((p) => p.decidedAt !== null));
 
-  return (
-    <div className="scope-step" data-testid="scope-panel">
-      <p className="t-small desk-muted">{staff ? t('scope.lede.staff') : t('scope.lede.customer')}</p>
+  // DX6 (item 8): for staff the list is an accordion like the panels of the other steps; it opens by itself when it
+  // has something to do — an empty list, a request waiting for Root, a site-type list not yet applied.
+  const lacking = (items.length === 0 ? 1 : 0) + waiting.length + (canDecide && !contract.scopeTemplateApplied ? 1 : 0);
+  const [listOpen, setListOpen] = useState(lacking > 0);
+
+  const detailsFor = (item: ScopeItem, neighbours: ScopeItem[]) => ({
+    toggle: canDetail ? <DetailsToggle item={item} open={drawer === item.id} onToggle={() => (drawer === item.id ? closeDrawer(item) : setDrawer(item.id))} /> : null,
+    drawer: canDetail && drawer === item.id ? <ItemDrawer item={item} contract={contract} neighbours={neighbours} onClose={() => closeDrawer(item)} /> : undefined,
+  });
+
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const del = useDeleteItem(contract, setRemoveError);
+
+  const targetFor = (item: ScopeItem, group: string, neighbours: ScopeItem[]): FeedbackTarget => {
+    const d = detailsFor(item, neighbours);
+    return {
+      key: item.id,
+      group,
+      label: (
+        <span className="scope-item" data-testid="scope-item" data-key={item.key} data-status={item.status}>
+          <span className="scope-item-label">{pick(item, 'label', locale)}</span>
+          <ItemChips item={item} contract={contract} staff={staff} />
+          {item.status === 'DECLINED' && item.declinedReason ? (
+            <span className="t-caption">{t('scope.leftOut.reason', { reason: item.declinedReason })}</span>
+          ) : item.status === 'TRADED' ? (
+            <span className="t-caption">{t('scope.leftOut.traded')}</span>
+          ) : null}
+        </span>
+      ),
+      actions: (
+        <>
+          {canDecide ? <StaffItemActions item={item} contract={contract} /> : <ItemActions item={item} waiting={waitingProposalFor(proposals, item.id)} canPropose={canPropose} />}
+          {d.toggle}
+        </>
+      ),
+      drawer: d.drawer,
+      input: { scopeItemId: item.id },
+      item: noteFor(item.id),
+    };
+  };
+
+  // An unticked extra is only its checkbox row; a ticked one, like every page, feature and deliverable, has the chips and the drawer.
+  const extraTarget = (item: ScopeItem): FeedbackTarget => {
+    const included = isIncludedExtra(item.status);
+    const d = included ? detailsFor(item, extras.filter((x) => isIncludedExtra(x.status))) : { toggle: null, drawer: undefined };
+    return {
+      key: item.id,
+      group: t('scope.group.EXTRA'),
+      label: (
+        <span className="scope-item" data-status={item.status}>
+          <ExtraRow item={item} contract={contract} canSwitch={canDecide} />
+          {included ? <ItemChips item={item} contract={contract} staff={staff} /> : null}
+        </span>
+      ),
+      actions: (
+        <>
+          {canDecide && isOneOff(item) ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={del.deleting}
+              onClick={() => del.run(item, pick(item, 'label', locale))}
+              data-testid="extra-remove"
+            >
+              {t('scope.extras.remove')}
+            </button>
+          ) : null}
+          {d.toggle}
+        </>
+      ),
+      drawer: d.drawer,
+      input: { scopeItemId: item.id },
+      item: noteFor(item.id),
+    };
+  };
+
+  const groups = groupByKind(inScope);
+  const outList = leftOut;
+  const targets: FeedbackTarget[] = [
+    ...groups.flatMap((g) => g.items.map((i) => targetFor(i, t(`scope.group.${g.kind}`), g.items))),
+    ...extras.map(extraTarget),
+    ...outList.map((i) => targetFor(i, t('scope.leftOut.title'), outList)),
+  ];
+
+  const body = (
+    <>
       {staff && !contract.publishedAt ? (
         <p className="t-small req-notice" data-testid="not-handed-over">
           {t('brief.notHandedOver')}
@@ -772,7 +870,7 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
           <p className="sec-help">{t('scope.trade.help')}</p>
           <ul className="scope-requests">
             {trades.map((tr) => (
-              <TradeRow key={tr.id} trade={tr} contractId={contract.id} customer={!staff} />
+              <TradeRow key={tr.id} trade={tr} contractId={contract.id} customer={!staff} rootCanConfirm={canDetail} />
             ))}
           </ul>
         </section>
@@ -789,6 +887,7 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
           contractId={contract.id}
           step="SCOPE"
           targets={targets}
+          groupFooters={canDecide && extras.length > 0 ? { [t('scope.group.EXTRA')]: <AddExtraForm contract={contract} /> } : undefined}
           generalItem={notes.find((i) => i.general) ?? null}
           canRaise={!staff && !step.locked && !!contract.publishedAt}
           canAnswer={staff && can(me, 'feedback.answer')}
@@ -797,6 +896,7 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
           onChanged={() => void refetch()}
         />
       ) : null}
+      {removeError ? <p className="error" role="alert">{removeError}</p> : null}
 
       {step.locked ? (
         <p className="t-small locknote" data-testid="scope-locked-note">
@@ -805,14 +905,21 @@ export default function ScopePanel({ contract, step, audience, me, asCustomer = 
       ) : null}
 
       {canDecide ? <AddItemForm contract={contract} /> : null}
+      {canDecide && extras.length === 0 ? <AddExtraForm contract={contract} /> : null}
+    </>
+  );
 
-      {/* DX2a: the desk's Scope tab, moved — see `ScopeRegistry`. Readers without `contracts.author` get the read-only cards. */}
+  return (
+    <div className="scope-step" data-testid="scope-panel">
+      <p className="t-small desk-muted">{staff ? t('scope.lede.staff') : t('scope.lede.customer')}</p>
+
       {staff ? (
-        <Accordion id="registry" title={t('scope.registry.title')} open={registryOpen} onToggle={() => setRegistryOpen((v) => !v)} missing={null}>
-          <p className="sec-help">{t('scope.registry.help')}</p>
-          <ScopeRegistry contract={contract} editable={can(me, 'contracts.author')} />
+        <Accordion id="scope-list" title={t('scope.list.title')} open={listOpen} onToggle={() => setListOpen((v) => !v)} missing={lacking}>
+          <div className="scope-step">{body}</div>
         </Accordion>
-      ) : null}
+      ) : (
+        body
+      )}
 
       {canPropose ? <AskForm contract={contract} /> : null}
 

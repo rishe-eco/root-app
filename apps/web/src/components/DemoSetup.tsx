@@ -17,6 +17,7 @@ import {
   type User,
 } from '@/lib/queries';
 import DemoViewport from '@/components/DemoViewport';
+import InlineAdd from '@/components/InlineAdd';
 import TitleField from '@/components/TitleField';
 import AutosaveNote from '@/components/AutosaveNote';
 import { useAutosave } from '@/lib/useAutosave';
@@ -204,12 +205,10 @@ export default function DemoSetup({
   const [update, { loading }] = useMutation(UPDATE_DEMO, { variables: { contractId: contract.id } });
   const [remove] = useMutation(DELETE_DEMO, { variables: { contractId: contract.id } });
 
-  const [addingPage, setAddingPage] = useState(false);
   const [pageKey, setPageKey] = useState('');
   const [pageLabelFa, setPageLabelFa] = useState('');
   const [pageLabelEn, setPageLabelEn] = useState('');
   const [pagePath, setPagePath] = useState('');
-  const [pageError, setPageError] = useState<string | null>(null);
   const [declarePage, { loading: declaring }] = useMutation(DECLARE_DEMO_PAGE, { variables: { contractId: contract.id } });
 
   async function onSaveDemo(e: FormEvent) {
@@ -235,22 +234,12 @@ export default function DemoSetup({
     await remove({ variables: { demoId: demo.id } });
   }
 
-  async function onDeclarePage(e: FormEvent) {
-    e.preventDefault();
-    setPageError(null);
-    try {
-      await declarePage({
-        variables: { demoId: demo.id, key: pageKey, labelFa: pageLabelFa, labelEn: pageLabelEn, canonicalPath: pagePath },
-      });
-      setAddingPage(false);
-      setPageKey('');
-      setPageLabelFa('');
-      setPageLabelEn('');
-      setPagePath('');
-    } catch (err) {
-      setPageError(errorMessage(err, t));
-    }
-  }
+  const resetPage = () => {
+    setPageKey('');
+    setPageLabelFa('');
+    setPageLabelEn('');
+    setPagePath('');
+  };
 
   return (
     <div className="demo-card">
@@ -340,31 +329,37 @@ export default function DemoSetup({
 
       <div className="workspace-row">
         <h4 className="t-h3">{t('workspace.demoPagesTitle')}</h4>
-        {editable ? (
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAddingPage((v) => !v)}>
-            {t('workspace.addDemoPage')}
-          </button>
-        ) : null}
       </div>
 
-      {addingPage && editable ? (
-        <form className="card editor-card auth-form" onSubmit={onDeclarePage}>
+      {/* DX6: the desk's one way to add (`InlineAdd`): a button, then a small form with Add and Cancel. */}
+      {editable ? (
+        <InlineAdd
+          label={t('workspace.addDemoPage')}
+          testId="demo-page-add"
+          ready={hasOneTitle(pageLabelFa, pageLabelEn) && pageKey.trim() !== '' && pagePath.trim() !== ''}
+          busy={declaring}
+          onCancel={resetPage}
+          errorText={(err) => errorMessage(err, t)}
+          buttonClassName="btn btn-ghost btn-sm"
+          onSubmit={async () => {
+            await declarePage({ variables: { demoId: demo.id, key: pageKey, labelFa: pageLabelFa, labelEn: pageLabelEn, canonicalPath: pagePath } });
+            resetPage();
+          }}
+        >
           <div className="field">
-            <label className="label">{t('workspace.scopeKey')}</label>
-            <input className="input num-latin" dir="ltr" required value={pageKey} onChange={(e) => setPageKey(e.target.value)} />
+            <label className="label" htmlFor="demo-page-key">
+              {t('workspace.scopeKey')}
+            </label>
+            <input id="demo-page-key" className="input num-latin" dir="ltr" required value={pageKey} onChange={(e) => setPageKey(e.target.value)} />
+          </div>
+          <div className="field">
+            <label className="label" htmlFor="demo-page-path">
+              {t('workspace.demoPagePath')}
+            </label>
+            <input id="demo-page-path" className="input num-latin" dir="ltr" required value={pagePath} onChange={(e) => setPagePath(e.target.value)} />
           </div>
           <TitleField idBase="demo-page-new" testId="demo-page-new-title" fa={pageLabelFa} en={pageLabelEn} onChange={(v) => { setPageLabelFa(v.fa); setPageLabelEn(v.en); }} />
-          <div className="field">
-            <label className="label">{t('workspace.demoPagePath')}</label>
-            <input className="input num-latin" dir="ltr" required value={pagePath} onChange={(e) => setPagePath(e.target.value)} />
-          </div>
-          {pageError ? <p className="error">{pageError}</p> : null}
-          <div>
-            <button className="btn btn-primary btn-sm" type="submit" disabled={declaring || !hasOneTitle(pageLabelFa, pageLabelEn)}>
-              {t('workspace.save')}
-            </button>
-          </div>
-        </form>
+        </InlineAdd>
       ) : null}
 
       <div className="editor-list">
